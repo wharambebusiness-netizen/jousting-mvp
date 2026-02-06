@@ -128,7 +128,7 @@ export function MatchSummary({ match, onRematch }: {
             </tbody>
           </table>
           <p style={{ fontSize: '0.8rem', color: 'var(--ink-faint)', marginBottom: 16 }}>
-            Melee wins — P1: {match.meleeWins1}, P2: {match.meleeWins2} (first to 3 or 1 critical)
+            Melee wins — P1: {match.meleeWins1}, P2: {match.meleeWins2} (first to 4, criticals count as 2)
           </p>
         </>
       )}

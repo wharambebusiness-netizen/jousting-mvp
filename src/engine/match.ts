@@ -15,9 +15,9 @@ import {
 import { resolveJoustPass } from './phase-joust';
 import { resolveMeleeRoundFn } from './phase-melee';
 import { calcCarryoverPenalties } from './calculator';
+import { BALANCE } from './balance-config';
 
 const MAX_PASSES = 5;
-const MELEE_WINS_NEEDED = 3;
 
 // --- Create initial match state ---
 
@@ -180,11 +180,14 @@ export function submitMeleeRound(
     p2Attack,
   );
 
+  const isCrit = result.outcome === MeleeOutcome.Critical;
+  const winsGained = isCrit ? BALANCE.criticalWinsValue : 1;
+
   let newWins1 = state.meleeWins1;
   let newWins2 = state.meleeWins2;
 
-  if (result.winner === 'player1') newWins1++;
-  if (result.winner === 'player2') newWins2++;
+  if (result.winner === 'player1') newWins1 += winsGained;
+  if (result.winner === 'player2') newWins2 += winsGained;
 
   const newState: MatchState = {
     ...state,
@@ -201,31 +204,25 @@ export function submitMeleeRound(
     },
   };
 
-  // Check critical → instant win
-  if (result.outcome === MeleeOutcome.Critical && result.winner !== 'none') {
-    return {
-      ...newState,
-      phase: Phase.MatchEnd,
-      winner: result.winner,
-      winReason: `${result.winner} wins by CRITICAL (margin ${result.margin.toFixed(2)})`,
-    };
-  }
-
-  // Check 3 round wins
-  if (newWins1 >= MELEE_WINS_NEEDED) {
+  // Check round wins (criticals count for 2 via winsGained)
+  if (newWins1 >= BALANCE.meleeWinsNeeded) {
     return {
       ...newState,
       phase: Phase.MatchEnd,
       winner: 'player1',
-      winReason: `P1 wins melee (${newWins1} round wins)`,
+      winReason: isCrit && result.winner === 'player1'
+        ? `P1 wins melee by CRITICAL (${newWins1} round wins, margin ${result.margin.toFixed(2)})`
+        : `P1 wins melee (${newWins1} round wins)`,
     };
   }
-  if (newWins2 >= MELEE_WINS_NEEDED) {
+  if (newWins2 >= BALANCE.meleeWinsNeeded) {
     return {
       ...newState,
       phase: Phase.MatchEnd,
       winner: 'player2',
-      winReason: `P2 wins melee (${newWins2} round wins)`,
+      winReason: isCrit && result.winner === 'player2'
+        ? `P2 wins melee by CRITICAL (${newWins2} round wins, margin ${result.margin.toFixed(2)})`
+        : `P2 wins melee (${newWins2} round wins)`,
     };
   }
 

@@ -105,7 +105,7 @@ describe('v4.1 Worked Example — 3 passes', () => {
 });
 
 describe('Melee phase', () => {
-  it('tracks round wins and declares winner at 3 (or critical)', () => {
+  it('tracks round wins and declares winner at 4 (criticals count as 2)', () => {
     // Duelist vs Duelist: equal base stats.
     // P1 plays MC (Bal), P2 plays OC (Agg). MC beats OC in counters.
     // P1 also drains slower (MC -10 STA vs OC -18 STA) → compounding advantage.
@@ -121,8 +121,8 @@ describe('Melee phase', () => {
 
     expect(match.phase).toBe(Phase.MatchEnd);
     expect(match.winner).toBe('player1');
-    // P1 should win via round accumulation or critical
-    expect(match.meleeWins1).toBeGreaterThanOrEqual(2);
+    // P1 should win via round accumulation (criticals count as 2 wins)
+    expect(match.meleeWins1).toBeGreaterThanOrEqual(3);
   });
 
   it('melee rounds with counter advantage produce hits (margin >= 5)', () => {

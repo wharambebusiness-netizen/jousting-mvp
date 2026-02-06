@@ -60,7 +60,7 @@ export function MeleeTransition({ match, lastPassResult, onContinue }: {
           </div>
         </div>
         <p style={{ fontSize: '0.8rem', color: 'var(--ink-faint)', marginTop: 8, textAlign: 'center' }}>
-          First to 3 round wins, or 1 critical hit (margin &ge; 25)
+          First to 4 round wins. Critical hits count as 2 wins!
         </p>
       </div>
 

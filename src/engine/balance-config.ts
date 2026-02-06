@@ -48,4 +48,13 @@ export const BALANCE = {
   meleeHitGrdScale: 0.031,
   meleeCritBase: 15,
   meleeCritGrdScale: 0.154,
+
+  // --- Melee Win Conditions ---
+  // meleeWinsNeeded: round wins required to take the melee.
+  // criticalWinsValue: how many round wins a Critical hit counts for.
+  // At 4 needed / 2 per crit: a crit is a massive swing but not instant-win.
+  // A player at 2 wins who lands a crit reaches 4 and closes it out.
+  // A player at 0 who lands a crit goes to 2 — momentum, not match over.
+  meleeWinsNeeded: 4,
+  criticalWinsValue: 2,
 } as const;
