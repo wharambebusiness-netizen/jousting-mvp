@@ -36,8 +36,6 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label={`Pass ${match.passNumber}`}
-        p1Cap={match.p1Caparison}
-        p2Cap={match.p2Caparison}
       />
 
       <h2 className="text-center mb-16">Lances Revealed!</h2>

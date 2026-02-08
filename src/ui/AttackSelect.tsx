@@ -58,8 +58,6 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label={`Pass ${match.passNumber}`}
-        p1Cap={match.p1Caparison}
-        p2Cap={match.p2Caparison}
       />
 
       <h2 className="text-center">Choose Your Attack</h2>
@@ -94,8 +92,6 @@ export function MeleeAttackSelect({ match, onSelect }: {
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label={`Melee R${match.meleeRoundResults.length + 1}`}
-        p1Cap={match.p1Caparison}
-        p2Cap={match.p2Caparison}
       />
 
       <div className="melee-wins">

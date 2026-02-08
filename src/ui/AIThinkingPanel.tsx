@@ -22,16 +22,6 @@ export function AIThinkingPanel({ reasoning, isMelee }: {
             </div>
           )}
 
-          {/* Caparison reasoning */}
-          {reasoning.caparison && (
-            <div className="ai-thinking__section">
-              <h4 className="ai-thinking__heading">Caparison</h4>
-              <div className="ai-thinking__detail">
-                {reasoning.caparison.reason}
-              </div>
-            </div>
-          )}
-
           {/* Speed weights (joust only) */}
           {!isMelee && (
             <div className="ai-thinking__section">

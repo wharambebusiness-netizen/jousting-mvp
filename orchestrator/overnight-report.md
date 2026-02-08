@@ -1,91 +1,87 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-08 09:00:41
+> Generated: 2026-02-08 19:03:41
 
 ## Summary
-- **Started**: 2026-02-08 08:25:41
-- **Ended**: 2026-02-08 09:00:41
-- **Total runtime**: 35.0 minutes (0.6 hours)
-- **Rounds completed**: 4
+- **Started**: 2026-02-08 18:42:58
+- **Ended**: 2026-02-08 19:03:41
+- **Total runtime**: 20.7 minutes (0.3 hours)
+- **Rounds completed**: 2
 - **Stop reason**: all agents exhausted their task lists
-- **Final test status**: ALL PASSING (5 tests)
+- **Final test status**: ALL PASSING (6 tests)
 
 ## Agent Results
 
 | Agent | Type | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
 |-------|------|-------------|---------------|----------|--------|----------------|
-| ui-polish | feature | all-done | 1 | 0 | 0 | 4 |
-| ai-engine | feature | all-done | 1 | 0 | 0 | 2 |
-| ai-reasoning | feature | all-done | 1 | 0 | 0 | 4 |
-| balance-sim | continuous | all-done | 3 | 0 | 0 | 6 |
+| engine-refactor | feature | all-done | 0 | 0 | 0 | 6 |
+| gear-system | feature | all-done | 1 | 0 | 0 | 5 |
+| ui-loadout | feature | all-done | 1 | 0 | 0 | 8 |
 | quality-review | continuous | all-done | 2 | 0 | 0 | 3 |
 
 ### Agent Details
 
-#### UI Polish Agent (ui-polish)
+#### Engine Refactor Agent (engine-refactor)
+- **Status**: all-done
+- **Rounds active**: 0
+- **Files modified**: src/engine/types.ts, src/engine/phase-joust.ts, src/engine/phase-melee.ts, src/engine/balance-config.ts, src/engine/calculator.ts, src/engine/caparison.test.ts
+- **Notes**: All caparison gameplay effects stripped from engine. Types expanded for 6 steed + 6 player gear slots. Phase resolution functions (resolveJoustPass, resolveMeleeRoundFn) no longer accept caparison parameters. match.ts still has stale CaparisonInput imports and caparison pipeline code — gear-system agent needs to clean this up. gigling-gear.ts still references old CaparisonEffect/CaparisonEffectId types and GearSlot — gear-system agent owns these. tsc --noEmit passes clean due to verbatimModuleSyntax erasing type-only imports. All 297 tests pass.
+
+#### Gear System Agent (gear-system)
 - **Status**: all-done
 - **Rounds active**: 1
-- **Files modified**: src/ui/helpers.tsx, src/ui/PassResult.tsx, src/ui/MatchSummary.tsx, src/App.css
-- **Notes**: Scoreboard now accepts optional `passNumber` and `totalPasses` props for pass progress pips. Other screens (SpeedSelect, AttackSelect, RevealScreen) could pass these props too for consistent progress display — those files aren't owned by this agent.
+- **Files modified**: src/engine/gigling-gear.ts, src/engine/player-gear.ts, src/engine/match.ts, src/engine/gigling-gear.test.ts, src/engine/player-gear.test.ts
+- **Notes**: All 4 passes complete + all 3 stretch goals. 6-slot steed gear, 6-slot player gear, match integration, caparison code fully stripped. 348 tests passing (was 297). UI-loadout agent is unblocked — player-gear.ts exports `createPlayerGear`, `createFullPlayerLoadout`, `applyPlayerLoadout`, `getGearSummary`, `describePlayerSlot`, `validatePlayerGear`. Gigling-gear.ts exports `createStatGear`, `createFullLoadout`, `applyGiglingLoadout`, `describeSteedSlot`, `validateSteedGear`.
 
-#### AI Engine Agent (ai-engine)
+#### UI & Loadout Agent (ui-loadout)
 - **Status**: all-done
 - **Rounds active**: 1
-- **Files modified**: src/ai/basic-ai.ts, src/engine/balance-config.ts
-- **Notes**: basic-ai.ts signatures finalized with optional history/commentary params, ai-reasoning can proceed. New exports: OpponentHistory class, generateCommentary(), aiPickJoustChoiceWithCommentary(), aiPickMeleeAttackWithCommentary(), AIJoustResult, AIMeleeResult interfaces. All existing signatures remain backwards-compatible (new params are optional).
+- **Files modified**: src/ui/helpers.tsx, src/ui/PassResult.tsx, src/ui/MeleeResult.tsx, src/ui/MatchSummary.tsx, src/ai/basic-ai.ts, src/App.css, src/ui/LoadoutScreen.tsx, src/App.tsx
+- **Notes**: All work DONE — primary milestone (3 passes) + all 4 stretch goals complete. 370 tests pass. **IMPORTANT for quality-review**: Several UI files NOT owned by this agent still reference removed caparison props — see "What's Left" section below. These need cleanup.
 
-#### AI Reasoning Agent (ai-reasoning)
-- **Status**: all-done
-- **Rounds active**: 1
-- **Files modified**: src/ai/basic-ai.ts, src/ui/AIThinkingPanel.tsx, src/ui/AIEndScreenPanels.tsx, src/App.css
-- **Notes**: New exports from basic-ai.ts: `AIReasoning`, `SpeedReasoning`, `AttackReasoning`, `AttackScoreEntry`, `ShiftReasoning` types, plus `aiPickJoustChoiceWithReasoning()` and `aiPickMeleeAttackWithReasoning()` functions. Three new UI components ready: AIThinkingPanel (mid-game), DifficultyFeedback + StrategyTips + MatchReplay (end screen). All need wiring into App.tsx — see Deferred App.tsx Changes below. All existing AI signatures remain backwards-compatible.
-
-#### Balance & Simulation Agent (balance-sim)
-- **Status**: all-done
-- **Rounds active**: 3
-- **Files modified**: src/engine/balance-config.ts, src/engine/calculator.ts, src/engine/calculator.test.ts, src/engine/match.test.ts, src/engine/caparison.test.ts, orchestrator/analysis/balance-sim-round-4.md
-- **Notes**: Guard coefficients now live in balance-config.ts as `guardImpactCoeff` (0.2, was hardcoded 0.3) and `guardUnseatDivisor` (15, was hardcoded 10). Formula changes reduced Bulwark dominance from 72%→69% and improved Charger from 33%→36%. Strongest-weakest spread narrowed from 48pp to 33pp across 4 rounds. **Charger now wins Pass 1 impact vs Technician** (reversed from before) — this is intentional, glass cannons should hit hard. Further balance requires Breaker guard-penetration mechanic in phase-joust.ts.
-
-#### Quality & Format Review Agent (quality-review)
+#### Quality & Review Agent (quality-review)
 - **Status**: all-done
 - **Rounds active**: 2
-- **Files modified**: src/engine/calculator.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-2.md
-- **Notes**: 327 tests all passing. Bug found in PassResult.tsx lines 111-112 and 116-117: counter bonus display hardcoded as "+10"/"-10" but actual value scales with CTL (range ~4-14). UI-polish agent should fix by replacing hardcoded strings with actual `counters.player1Bonus` / `counters.player2Bonus` values. AI shift cost in evaluateShift() line 376 is hardcoded (5/12) — sync risk if balance constants change.
+- **Files modified**: src/engine/playtest.test.ts, src/tools/simulate.ts, orchestrator/analysis/quality-review-round-2.md
+- **Notes**: ALL 370 TESTS PASS (6 suites). 0 TypeScript errors. Property-based tests added (12 new tests covering random gear at all rarities, stat invariants, stress testing). Simulation tool updated for 12-slot gear: `npx tsx src/tools/simulate.ts [bare|uncommon|rare|epic|legendary|relic|giga|mixed]`. Giga gear compresses win rate spread from 32.7pp to 14.4pp — softCap working as intended. All stretch goals complete. Only remaining work is ui-loadout (3 passes to strip caparison from UI + redesign loadout screen).
 
 ## Round-by-Round Timeline
 
 | Round | Agents | Test Result | Notes |
 |-------|--------|-------------|-------|
-| 1 | ui-polish(OK, 4m), ai-engine(OK, 4m), quality-review(OK, 5m) | PASS (5) | |
-| 2 | ai-reasoning(OK, 8m), balance-sim(OK, 8m), quality-review(OK, 5m) | PASS (5) | |
-| 3 | balance-sim(OK, 15m) | PASS (5) | |
-| 4 | balance-sim(OK, 7m) | PASS (5) | |
+| 1 | gear-system(OK, 6m), quality-review(OK, 7m) | PASS (6) | |
+| 2 | ui-loadout(OK, 13m), quality-review(OK, 6m) | PASS (6) | |
 
 ## All Files Modified
-- orchestrator/analysis/balance-sim-round-4.md
 - orchestrator/analysis/quality-review-round-2.md
 - src/App.css
+- src/App.tsx
 - src/ai/basic-ai.ts
 - src/engine/balance-config.ts
-- src/engine/calculator.test.ts
 - src/engine/calculator.ts
 - src/engine/caparison.test.ts
-- src/engine/match.test.ts
-- src/ui/AIEndScreenPanels.tsx
-- src/ui/AIThinkingPanel.tsx
+- src/engine/gigling-gear.test.ts
+- src/engine/gigling-gear.ts
+- src/engine/match.ts
+- src/engine/phase-joust.ts
+- src/engine/phase-melee.ts
+- src/engine/player-gear.test.ts
+- src/engine/player-gear.ts
+- src/engine/playtest.test.ts
+- src/engine/types.ts
+- src/tools/simulate.ts
+- src/ui/LoadoutScreen.tsx
 - src/ui/MatchSummary.tsx
+- src/ui/MeleeResult.tsx
 - src/ui/PassResult.tsx
 - src/ui/helpers.tsx
 
 ## Test Trajectory
-- Round 1: PASS (5 passed)
-- Round 2: PASS (5 passed)
-- Round 3: PASS (5 passed)
-- Round 4: PASS (5 passed)
+- Round 1: PASS (6 passed)
+- Round 2: PASS (6 passed)
 
 ## Analysis Reports Generated
 - balance-sim round 2: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\balance-sim-round-2.md`
 - balance-sim round 3: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\balance-sim-round-3.md`
-- balance-sim round 4: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\balance-sim-round-4.md`
 - quality-review round 1: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\quality-review-round-1.md`
 - quality-review round 2: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\quality-review-round-2.md`
 

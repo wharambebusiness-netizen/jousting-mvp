@@ -30,8 +30,6 @@ export function MeleeTransition({ match, lastPassResult, onContinue }: {
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label="Melee"
-        p1Cap={match.p1Caparison}
-        p2Cap={match.p2Caparison}
       />
 
       <div className="melee-transition">
