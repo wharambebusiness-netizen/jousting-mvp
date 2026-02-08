@@ -225,8 +225,8 @@ describe('Thunderweave', () => {
 // 4. Irongrip Drape — -5 shift threshold
 // ============================================================
 describe('Irongrip Drape', () => {
-  // Technician has CTL 70, good for shift tests
-  const p1 = makePlayerState('charger'); // CTL 45 — low control, shift-challenged
+  // Tactician has CTL 65, useful for threshold-edge shift tests
+  const p1 = makePlayerState('charger'); // CTL 50 — moderate control, shift-challenged
   const p2 = makePlayerState('duelist');
   const cap = makeCapInput('irongrip_drape');
 
@@ -244,43 +244,26 @@ describe('Irongrip Drape', () => {
   });
 
   it('enables shift that would otherwise be denied', () => {
-    // Technician at Standard speed: threshold 60, CTL-based effective with +10 delta
-    // Technician base CTL = 70, Standard deltaCTL = 0, CDL deltaCTL = +10
-    // effCTL = softCap(70 + 0 + 10) * ff = softCap(80) * 1.0 = 80
-    // Standard threshold = 60 → shift allowed without irongrip
-    // Let's use a scenario where it's closer to threshold...
-
-    // Charger at Fast speed: threshold 70, base CTL = 45
-    // Fast deltaCTL = -15, CF deltaCTL = -10
-    // effCTL = softCap(45 - 15 - 10) * 1.0 = 20 — too low for 70 or 65
-    // Need someone with CTL closer to threshold
-
-    // Duelist at Fast speed: threshold 70, base CTL = 60
-    // Fast deltaCTL = -15, CDL deltaCTL = +10
-    // pre-shift effCTL = softCap(60 - 15 + 10) * 1.0 = 55 — below 70
-    // With irongrip: threshold = 65 — still below
-    // Hmm, let's use Standard speed threshold 60
-
-    // Charger at Standard: threshold 60, base CTL = 45
-    // Standard deltaCTL = 0, CDL deltaCTL = +10
-    // pre-shift effCTL = softCap(45 + 0 + 10) * 1.0 = 55 — below 60
-    // With irongrip: threshold = 55 — exactly equal! canShift requires >=
-    const charger = makePlayerState('charger');
+    // Tactician at Fast speed: threshold 70, base CTL = 65
+    // Fast deltaCTL = -15, CEP deltaCTL = +15
+    // effCTL = softCap(65 - 15 + 15) * 1.0 = 65 — below 70
+    // With irongrip: threshold = 65 — exactly equal! canShift requires >=
+    const tactician = makePlayerState('tactician');
     const opp = makePlayerState('duelist');
 
     const choice1: PassChoice = {
-      speed: SpeedType.Standard, // threshold 60, irongrip → 55
-      attack: CDL,               // deltaCTL = +10
+      speed: SpeedType.Fast,   // threshold 70, irongrip → 65
+      attack: CEP,             // deltaCTL = +15
       shiftAttack: PDL,
     };
     const choice2: PassChoice = { speed: SpeedType.Standard, attack: CDL };
 
-    // Without irongrip: effCTL 55 < threshold 60 → shift denied
-    const without = resolveJoustPass(1, charger, opp, choice1, choice2);
+    // Without irongrip: effCTL 65 < threshold 70 → shift denied
+    const without = resolveJoustPass(1, tactician, opp, choice1, choice2);
     expect(without.player1.shifted).toBe(false);
 
-    // With irongrip: effCTL 55 >= threshold 55 → shift allowed
-    const withCap = resolveJoustPass(1, charger, opp, choice1, choice2, cap);
+    // With irongrip: effCTL 65 >= threshold 65 → shift allowed
+    const withCap = resolveJoustPass(1, tactician, opp, choice1, choice2, cap);
     expect(withCap.player1.shifted).toBe(true);
   });
 });

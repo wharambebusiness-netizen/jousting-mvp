@@ -242,14 +242,14 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     expect(fatigueFactor(55, 55)).toBe(1.0);
   });
 
-  it('Charger Fast+CF momentum is soft-capped (110 → 108.33)', () => {
+  it('Charger Fast+CF momentum is soft-capped (115 → 111.54)', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 55);
-    // Raw MOM = 70+15+25 = 110, softCap → 108.33, * ff 1.0
-    expect(r(stats.momentum, 2)).toBe(108.33);
-    // CTL = 45-15-10 = 20 (below knee, no cap)
-    expect(stats.control).toBe(20);
-    // GRD = 55-5 = 50, guardFF = 1.0 (full stamina)
-    expect(stats.guard).toBe(50);
+    // Raw MOM = 75+15+25 = 115, softCap → 111.54, * ff 1.0
+    expect(r(stats.momentum, 2)).toBe(r(100 + 15 * 50 / 65, 2));
+    // CTL = 50-15-10 = 25 (below knee, no cap)
+    expect(stats.control).toBe(25);
+    // GRD = 50-5 = 45, guardFF = 1.0 (full stamina)
+    expect(stats.guard).toBe(45);
     expect(stats.initiative).toBe(80);
   });
 
@@ -312,12 +312,12 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 40);
     const ff = 40 / 48;
     const guardFF = 0.5 + 0.5 * ff;
-    // MOM: (70-15+10) = 65 * ff
-    expect(r(stats.momentum, 2)).toBe(r(65 * ff, 2));
-    // CTL: (45+15+15) = 75 * ff
-    expect(r(stats.control, 2)).toBe(r(75 * ff, 2));
-    // GRD: (55-5) = 50 * guardFF
-    expect(r(stats.guard, 2)).toBe(r(50 * guardFF, 2));
+    // MOM: (75-15+10) = 70 * ff
+    expect(r(stats.momentum, 2)).toBe(r(70 * ff, 2));
+    // CTL: (50+15+15) = 80 * ff
+    expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
+    // GRD: (50-5) = 45 * guardFF
+    expect(r(stats.guard, 2)).toBe(r(45 * guardFF, 2));
     expect(stats.initiative).toBe(60);
   });
 
@@ -360,12 +360,12 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 30);
     const ff = 30 / 48;
     const guardFF = 0.5 + 0.5 * ff;
-    // GRD: (55+5) = 60 * guardFF
-    expect(r(stats.guard, 2)).toBe(r(60 * guardFF, 2));
-    // MOM: (70-15+5) = 60 * ff
-    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));
-    // CTL: (45+15+10) = 70 * ff
-    expect(r(stats.control, 2)).toBe(r(70 * ff, 2));
+    // GRD: (50+5) = 55 * guardFF
+    expect(r(stats.guard, 2)).toBe(r(55 * guardFF, 2));
+    // MOM: (75-15+5) = 65 * ff
+    expect(r(stats.momentum, 2)).toBe(r(65 * ff, 2));
+    // CTL: (50+15+10) = 75 * ff
+    expect(r(stats.control, 2)).toBe(r(75 * ff, 2));
   });
 
   it('Technician stats at deeper fatigue', () => {
@@ -442,8 +442,8 @@ describe('resolvePass — integration', () => {
     expect(result.p1.staminaAfter).toBe(35);
     expect(result.p2.staminaAfter).toBe(29);
 
-    // Charger momentum is soft-capped
-    expect(result.p1.effectiveStats.momentum).toBeLessThan(110);
+    // Charger momentum is soft-capped (raw 115 → ~111.5)
+    expect(result.p1.effectiveStats.momentum).toBeLessThan(115);
     expect(result.p1.effectiveStats.momentum).toBeGreaterThan(100);
   });
 
@@ -552,14 +552,14 @@ describe('Scaling Properties', () => {
   });
 
   it('guard fatigue prevents infinite turtle', () => {
-    // Bulwark at 0 stamina with Guard High: raw guard = 95
+    // Bulwark at 0 stamina with Guard High: raw guard = 85
     const stats = computeMeleeEffectiveStats(bulwark, GH, 0);
     // ff = 0, guardFF = 0.5
-    expect(stats.guard).toBe(95 * 0.5);
-    expect(stats.guard).toBe(47.5);
+    expect(stats.guard).toBe(85 * 0.5);
+    expect(stats.guard).toBe(42.5);
     // Compare to full stamina
     const fullStats = computeMeleeEffectiveStats(bulwark, GH, 65);
-    expect(fullStats.guard).toBe(95); // guardFF = 1.0 at full stamina
+    expect(fullStats.guard).toBe(85); // guardFF = 1.0 at full stamina
     // Guard dropped by 50% — turtle no longer invincible
     expect(stats.guard).toBeLessThan(fullStats.guard * 0.6);
   });
@@ -599,8 +599,8 @@ describe('Edge Cases — Zero Stamina', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Standard], CF, 0);
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // Guard = softCap(55-5) * guardFatigueFloor = 50 * 0.5 = 25
-    expect(stats.guard).toBe(50 * BALANCE.guardFatigueFloor);
+    // Guard = softCap(50-5) * guardFatigueFloor = 45 * 0.5 = 22.5
+    expect(stats.guard).toBe(45 * BALANCE.guardFatigueFloor);
     // Initiative is unaffected by fatigue
     expect(stats.initiative).toBe(70); // 60 + 10 (Standard)
   });
@@ -609,8 +609,8 @@ describe('Edge Cases — Zero Stamina', () => {
     const stats = computeMeleeEffectiveStats(charger, OC, 0);
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // Guard = softCap(55-5) * 0.5 = 50 * 0.5 = 25
-    expect(stats.guard).toBe(25);
+    // Guard = softCap(50-5) * 0.5 = 45 * 0.5 = 22.5
+    expect(stats.guard).toBe(22.5);
   });
 
   it('applySpeedStamina at 0 does not go negative', () => {
@@ -641,26 +641,24 @@ describe('Edge Cases — Zero Stamina', () => {
 // 16. Edge Cases: Extreme Stat Values (Giga Gear)
 // ============================================================
 describe('Edge Cases — Extreme Stat Values', () => {
-  // Simulate Bulwark with Giga gear: GRD 75 + 13 (rarity) + 15 (primary) = 103
+  // Simulate Bulwark with Giga gear: GRD 65 + 13 (rarity) + 15 (primary) = 93
   const gigaBulwark: Archetype = {
     id: 'giga_bulwark', name: 'Giga Bulwark',
-    momentum: 68, control: 68, guard: 103, initiative: 58, stamina: 78,
+    momentum: 68, control: 68, guard: 93, initiative: 63, stamina: 78,
     identity: 'Test',
   };
 
-  it('soft cap compresses Giga guard stat (103 → ~100.9)', () => {
-    const capped = softCap(103);
-    // excess = 3, result = 100 + 3*50/53 ≈ 100 + 2.83 = 102.83
-    expect(capped).toBeGreaterThan(100);
-    expect(capped).toBeLessThan(103);
-    expect(capped).toBeCloseTo(102.83, 1);
+  it('Giga guard stat below softCap knee is unchanged (93)', () => {
+    const capped = softCap(93);
+    // 93 < 100 (knee), no compression applied
+    expect(capped).toBe(93);
   });
 
-  it('Giga Bulwark guard with Guard High is heavily compressed', () => {
-    // guard = 103 + 20 (Guard High delta) = 123
+  it('Giga Bulwark guard with Guard High is compressed', () => {
+    // guard = 93 + 20 (Guard High delta) = 113
     const stats = computeMeleeEffectiveStats(gigaBulwark, GH, 78);
-    // softCap(123) * guardFF(1.0) = 100 + 23*50/73 ≈ 115.75
-    expect(stats.guard).toBeLessThan(123);
+    // softCap(113) * guardFF(1.0) = 100 + 13*50/63 ≈ 110.32
+    expect(stats.guard).toBeLessThan(113);
     expect(stats.guard).toBeGreaterThan(100);
   });
 
@@ -1029,8 +1027,8 @@ describe('Edge Cases — Melee at Guard 0 with Carryover', () => {
     // ff = 0 → MOM and CTL are 0
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // rawGuard = 55 + (-5) + (-6) = 44, softCap(44) * guardFF(0.5) = 22
-    expect(stats.guard).toBe(22);
+    // rawGuard = 50 + (-5) + (-6) = 39, softCap(39) * guardFF(0.5) = 19.5
+    expect(stats.guard).toBe(19.5);
   });
 });
 

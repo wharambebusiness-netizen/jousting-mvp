@@ -199,11 +199,11 @@ describe('applyGiglingLoadout', () => {
     };
     const result = applyGiglingLoadout(charger, loadout);
 
-    expect(result.momentum).toBe(charger.momentum + 7 + 10);       // 70 + 7 + 10 = 87
-    expect(result.control).toBe(charger.control + 7 + 11);         // 45 + 7 + 11 = 63
-    expect(result.guard).toBe(charger.guard + 7 + 12);             // 55 + 7 + 12 = 74
+    expect(result.momentum).toBe(charger.momentum + 7 + 10);       // 75 + 7 + 10 = 92
+    expect(result.control).toBe(charger.control + 7 + 11);         // 50 + 7 + 11 = 68
+    expect(result.guard).toBe(charger.guard + 7 + 12);             // 50 + 7 + 12 = 69
     expect(result.initiative).toBe(charger.initiative + 7 + 7);    // 60 + 7 + 7 = 74
-    expect(result.stamina).toBe(charger.stamina + 7 + 6 + 5);     // 50 + 7 + 6 + 5 = 68
+    expect(result.stamina).toBe(charger.stamina + 7 + 6 + 5);     // 60 + 7 + 6 + 5 = 78
   });
 
   it('preserves archetype identity fields (id, name)', () => {
@@ -287,24 +287,23 @@ describe('Gear + Soft Cap interaction', () => {
       chanfron: makeChanfron('giga', 15, 9), // momentum +15 (max primary)
     };
     const result = applyGiglingLoadout(charger, loadout);
-    // 70 + 13 + 15 = 98 — just under softCap
-    expect(result.momentum).toBe(98);
-    // No compression needed at 98
-    expect(softCap(result.momentum)).toBe(98);
+    // 75 + 13 + 15 = 103 — just over softCap knee
+    expect(result.momentum).toBe(103);
+    // softCap(103) = 100 + 3*50/53 ≈ 102.83
+    expect(softCap(result.momentum)).toBeCloseTo(102.83, 1);
   });
 
-  it('Bulwark guard at Giga with max barding just crosses softCap', () => {
+  it('Bulwark guard at Giga with max barding stays under softCap', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'giga', // +13
       barding: makeBarding('giga', 15, 9),   // guard +15
     };
     const result = applyGiglingLoadout(bulwark, loadout);
-    // bulwark guard 75 + 13 + 15 = 103
-    expect(result.guard).toBe(103);
+    // bulwark guard 65 + 13 + 15 = 93
+    expect(result.guard).toBe(93);
     const capped = softCap(result.guard);
-    // 100 + (3*50)/(3+50) = 100 + 2.83 = 102.83
-    expect(capped).toBeCloseTo(102.83, 1);
-    expect(capped).toBeLessThan(result.guard);
+    // 93 < 100 (knee), no compression applied
+    expect(capped).toBe(93);
   });
 
   it('realistic Epic loadout stays well under softCap knee', () => {
@@ -313,9 +312,9 @@ describe('Gear + Soft Cap interaction', () => {
       chanfron: makeChanfron('epic', 6, 3),
     };
     const result = applyGiglingLoadout(charger, loadout);
-    // 70 + 5 + 6 = 81 — well under 100
-    expect(result.momentum).toBe(81);
-    expect(softCap(result.momentum)).toBe(81); // no compression
+    // 75 + 5 + 6 = 86 — well under 100
+    expect(result.momentum).toBe(86);
+    expect(softCap(result.momentum)).toBe(86); // no compression
   });
 });
 
@@ -337,7 +336,7 @@ describe('createMatch with GiglingLoadout', () => {
     };
     const match = createMatch(charger, technician, loadout1);
 
-    // P1 boosted: momentum = 70 + 7 + 10, stamina = 50 + 7 + 5 (chanfron secondary)
+    // P1 boosted: momentum = 75 + 7 + 10, stamina = 60 + 7 + 5 (chanfron secondary)
     expect(match.player1.archetype.momentum).toBe(charger.momentum + 7 + 10);
     expect(match.player1.currentStamina).toBe(charger.stamina + 7 + 5);
     // P2 unchanged

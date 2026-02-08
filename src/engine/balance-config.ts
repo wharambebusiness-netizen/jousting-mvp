@@ -11,7 +11,7 @@ export const BALANCE = {
   // --- Diminishing Returns (Soft Cap) ---
   // Stats below the knee are linear (unchanged).
   // Stats above the knee are compressed: excess * K / (excess + K).
-  // No-gear max raw combat stat: ~110 (Charger Fast+CF momentum).
+  // No-gear max raw combat stat: ~115 (Charger Fast+CF momentum).
   // With Giga gear: Charger MOM base 98, +Fast+CF = 138 → softCap ~120.
   softCapKnee: 100,
   softCapK: 50,
@@ -19,7 +19,7 @@ export const BALANCE = {
   // --- Fatigue ---
   // Fatigue threshold is proportional to max stamina (archetype + gear).
   // Below threshold, Momentum and Control degrade linearly.
-  // 0.8 means: Charger (STA 50) threshold = 40, Bulwark (STA 65) = 52.
+  // 0.8 means: Charger (STA 60) threshold = 48, Bulwark (STA 65) = 52.
   fatigueRatio: 0.8,
 
   // --- Guard Fatigue ---
@@ -105,7 +105,7 @@ export const BALANCE = {
   // primary = main stat of the slot, secondary = off-stat.
   // Values are [min, max] inclusive. Rolled at craft time.
   // Compressed from previous values so Giga max primary (15) + rarity (13)
-  // + highest base (75 Bulwark GRD) = 103 → softCap effective 100.9.
+  // + highest base (75 Charger MOM) = 103 → softCap effective 100.9.
   gearStatRanges: {
     uncommon:  { primary: [1, 3],   secondary: [0, 1] },
     rare:      { primary: [2, 5],   secondary: [1, 2] },
