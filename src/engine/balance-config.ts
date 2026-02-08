@@ -45,8 +45,8 @@ export const BALANCE = {
   // systematically overvalued (double-dip on defense).
   //
   // ImpactScore = Eff_MOM * 0.5 + Accuracy * 0.4 - Opp_Guard * guardImpactCoeff
-  // Old 0.3 → 0.2: reduces guard's subtraction from opponent impact by 33%.
-  guardImpactCoeff: 0.2,
+  // Old 0.3 → 0.2 → 0.18: reduces guard's impact subtraction further to improve low-GRD archetypes.
+  guardImpactCoeff: 0.18,
   // UnseatThreshold = 20 + Eff_Guard / guardUnseatDivisor + CurrentSTA / 20
   // Old 10 → 15: makes high-guard archetypes ~33% easier to unseat.
   guardUnseatDivisor: 15,

@@ -246,8 +246,8 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 55);
     // Raw MOM = 75+15+25 = 115, softCap → 111.54, * ff 1.0
     expect(r(stats.momentum, 2)).toBe(r(100 + 15 * 50 / 65, 2));
-    // CTL = 50-15-10 = 25 (below knee, no cap)
-    expect(stats.control).toBe(25);
+    // CTL = 55-15-10 = 30 (below knee, no cap)
+    expect(stats.control).toBe(30);
     // GRD = 50-5 = 45, guardFF = 1.0 (full stamina)
     expect(stats.guard).toBe(45);
     expect(stats.initiative).toBe(80);
@@ -255,7 +255,7 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
 
   it('Technician pre-shift stats are below knee (unchanged)', () => {
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CdL, 55);
-    expect(stats.momentum).toBe(55); // 50+0+5 = 55
+    expect(stats.momentum).toBe(60); // 55+0+5 = 60
     expect(stats.control).toBe(80);  // 70+0+10 = 80
     expect(stats.guard).toBe(60);    // 55+5 = 60
     expect(stats.initiative).toBe(70);
@@ -278,7 +278,7 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     const ff = 43 / 44;
     const guardFF = 0.5 + 0.5 * ff;
 
-    expect(r(stats.momentum, 2)).toBe(r(55 * ff, 2));     // 53.75
+    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));     // 58.64
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));      // 83.07
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));    // 64.26
     expect(stats.initiative).toBe(60);
@@ -314,8 +314,8 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     const guardFF = 0.5 + 0.5 * ff;
     // MOM: (75-15+10) = 70 * ff
     expect(r(stats.momentum, 2)).toBe(r(70 * ff, 2));
-    // CTL: (50+15+15) = 80 * ff
-    expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
+    // CTL: (55+15+15) = 85 * ff
+    expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     // GRD: (50-5) = 45 * guardFF
     expect(r(stats.guard, 2)).toBe(r(45 * guardFF, 2));
     expect(stats.initiative).toBe(60);
@@ -325,8 +325,8 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     const ff = 29 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], PdL, 29);
-    // MOM: 45 * ff, CTL: 80 * ff, GRD: 75 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(45 * ff, 2));
+    // MOM: 50 * ff, CTL: 80 * ff, GRD: 75 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(50 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(75 * guardFF, 2));
     expect(stats.initiative).toBe(70);
@@ -364,16 +364,16 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
     expect(r(stats.guard, 2)).toBe(r(55 * guardFF, 2));
     // MOM: (75-15+5) = 65 * ff
     expect(r(stats.momentum, 2)).toBe(r(65 * ff, 2));
-    // CTL: (50+15+10) = 75 * ff
-    expect(r(stats.control, 2)).toBe(r(75 * ff, 2));
+    // CTL: (55+15+10) = 80 * ff
+    expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
   });
 
   it('Technician stats at deeper fatigue', () => {
     const ff = 21 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 21);
-    // MOM: 55 * ff, CTL: 85 * ff, GRD: 65 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(55 * ff, 2));
+    // MOM: 60 * ff, CTL: 85 * ff, GRD: 65 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));
   });
@@ -400,11 +400,11 @@ describe('Accuracy and ImpactScore', () => {
     expect(calcAccuracy(20, 80, 55, -10)).toBe(36.25);
   });
 
-  it('ImpactScore uses guardImpactCoeff (0.2)', () => {
-    // 55*0.5 + 97.5*0.4 - 50*0.2 = 27.5 + 39 - 10 = 56.5
-    expect(calcImpactScore(55, 97.5, 50)).toBe(56.5);
-    // 110*0.5 + 36.25*0.4 - 65*0.2 = 55 + 14.5 - 13 = 56.5
-    expect(calcImpactScore(110, 36.25, 65)).toBe(56.5);
+  it('ImpactScore uses guardImpactCoeff (0.18)', () => {
+    // 55*0.5 + 97.5*0.4 - 50*0.18 = 27.5 + 39 - 9 = 57.5
+    expect(calcImpactScore(55, 97.5, 50)).toBe(57.5);
+    // 110*0.5 + 36.25*0.4 - 65*0.18 = 55 + 14.5 - 11.7 = 57.8
+    expect(calcImpactScore(110, 36.25, 65)).toBe(57.8);
   });
 });
 
@@ -431,7 +431,7 @@ describe('resolvePass — integration', () => {
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
-    // Charger wins on ImpactScore (guard coefficient 0.2 lets raw MOM dominate)
+    // Charger wins on ImpactScore (guard coefficient 0.18 lets raw MOM dominate)
     expect(result.p1.impactScore).toBeGreaterThan(result.p2.impactScore);
 
     // No unseat
@@ -458,7 +458,7 @@ describe('resolvePass — integration', () => {
 
     // CEP beats CF. Winner is Technician with high CTL.
     // Counter bonus helps Technician accuracy, but Charger's raw MOM
-    // advantage (115 vs 55) dominates impact with reduced guard coeff (0.2).
+    // advantage (115 vs 60) dominates impact with reduced guard coeff (0.18).
     // Charger still wins overall on impact despite counter penalty.
     expect(result.p1.impactScore - result.p2.impactScore).toBeGreaterThan(0);
   });
@@ -1201,14 +1201,14 @@ describe('Guard Penetration — calcImpactScore', () => {
   });
 
   it('guardPenetration=0.35 reduces effective guard by 35%', () => {
-    // Without penetration: 60*0.5 + 50*0.4 - 40*0.2 = 30+20-8 = 42
+    // Without penetration: 60*0.5 + 50*0.4 - 40*0.18 = 30+20-7.2 = 42.8
     const noPen = calcImpactScore(60, 50, 40, 0);
-    expect(noPen).toBe(42);
+    expect(noPen).toBe(42.8);
 
     // With 35% penetration: effectiveGuard = 40 * 0.65 = 26
-    // 60*0.5 + 50*0.4 - 26*0.2 = 30+20-5.2 = 44.8
+    // 60*0.5 + 50*0.4 - 26*0.18 = 30+20-4.68 = 45.32
     const withPen = calcImpactScore(60, 50, 40, 0.35);
-    expect(withPen).toBeCloseTo(44.8, 5);
+    expect(withPen).toBeCloseTo(45.32, 5);
   });
 
   it('higher guard penetration always produces higher impact', () => {
@@ -1238,14 +1238,14 @@ describe('Guard Penetration — calcImpactScore', () => {
 
   it('guard penetration benefit scales with opponent guard level', () => {
     const pen = 0.35;
-    // Low guard: benefit = 20 * 0.35 * 0.2 = 1.4
+    // Low guard: benefit = 20 * 0.35 * 0.18 = 1.26
     const lowGuardBenefit = calcImpactScore(60, 50, 20, pen) - calcImpactScore(60, 50, 20, 0);
-    // High guard: benefit = 80 * 0.35 * 0.2 = 5.6
+    // High guard: benefit = 80 * 0.35 * 0.18 = 5.04
     const highGuardBenefit = calcImpactScore(60, 50, 80, pen) - calcImpactScore(60, 50, 80, 0);
 
     expect(highGuardBenefit).toBeGreaterThan(lowGuardBenefit);
-    expect(r(lowGuardBenefit, 1)).toBe(1.4);
-    expect(r(highGuardBenefit, 1)).toBe(5.6);
+    expect(r(lowGuardBenefit, 1)).toBe(1.3);
+    expect(r(highGuardBenefit, 1)).toBe(5.0);
   });
 
   it('guard penetration against 0 guard has no effect', () => {

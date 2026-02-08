@@ -8,7 +8,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
     id: 'charger',
     name: 'Charger',
     momentum: 75,
-    control: 50,
+    control: 55,
     guard: 50,
     initiative: 60,
     stamina: 60,
@@ -17,7 +17,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
   technician: {
     id: 'technician',
     name: 'Technician',
-    momentum: 50,
+    momentum: 55,
     control: 70,
     guard: 55,
     initiative: 60,

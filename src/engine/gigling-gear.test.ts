@@ -204,9 +204,9 @@ describe('applyGiglingLoadout', () => {
     };
     const result = applyGiglingLoadout(charger, loadout);
 
-    // charger: MOM=75, CTL=50, GRD=50, INIT=60, STA=60
+    // charger: MOM=75, CTL=55, GRD=50, INIT=60, STA=60
     expect(result.momentum).toBe(75 + 7 + 3 + 2 + 4);         // 91
-    expect(result.control).toBe(50 + 7 + 5 + 5);               // 67
+    expect(result.control).toBe(55 + 7 + 5 + 5);               // 72
     expect(result.guard).toBe(50 + 7 + 5 + 4);                 // 66
     expect(result.initiative).toBe(60 + 7 + 3 + 4 + 3);        // 77
     expect(result.stamina).toBe(60 + 7 + 2 + 3);               // 72

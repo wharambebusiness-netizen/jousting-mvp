@@ -91,9 +91,10 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Balance State
 
-Bulwark dominant (~67% bare, ~57% giga). Breaker needs guard-penetration mechanic.
-Key constants in balance-config.ts: guardImpactCoeff 0.2, guardUnseatDivisor 15, softCap knee 100 / K 50.
-Giga gear compresses win rate spread from 32.7pp to 14.4pp (softCap working as intended).
+S22 balance pass: Charger CTL 50→55, Technician MOM 50→55, guardImpactCoeff 0.2→0.18.
+Epic tier near-perfect (7.3pp spread). Bare spread 33pp→25pp. Giga spread 18pp→13pp.
+Key constants in balance-config.ts: guardImpactCoeff 0.18, guardUnseatDivisor 15, softCap knee 100 / K 50.
+Remaining: Charger still weak at bare (36%), Technician slightly below 45% across tiers.
 
 ## Orchestrator Rules (for orchestrated agents)
 
