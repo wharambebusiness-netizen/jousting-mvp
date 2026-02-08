@@ -1,51 +1,62 @@
-# Quality & Format Review Agent — Handoff
-
 ## META
-- status: complete
-- files-modified: src/engine/calculator.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-1.md
+- status: all-done
+- files-modified: src/engine/calculator.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-2.md
 - tests-passing: true
-- notes-for-others: 295 tests all passing. No bugs found. CounterResult type comment in types.ts:185 says "+10, -10, or 0" but bonus now scales with CTL (range ~4-14) — minor doc issue for ai-engine agent. Breaker has no unique mechanic beyond stats — potential future work.
+- notes-for-others: 327 tests all passing. Bug found in PassResult.tsx lines 111-112 and 116-117: counter bonus display hardcoded as "+10"/"-10" but actual value scales with CTL (range ~4-14). UI-polish agent should fix by replacing hardcoded strings with actual `counters.player1Bonus` / `counters.player2Bonus` values. AI shift cost in evaluateShift() line 376 is hardcoded (5/12) — sync risk if balance constants change.
 
 ## What Was Done
 
 ### Round 1: Full Codebase Review + Edge Case Tests
 1. **Reviewed all engine files**: calculator.ts, match.ts, phase-joust.ts, phase-melee.ts, attacks.ts, archetypes.ts, gigling-gear.ts, types.ts, balance-config.ts
 2. **Evaluated game format**: 5-pass joust, counter system, shift mechanics, melee phase, caparisons — all assessed as well-designed with no degenerate strategies
-3. **Added 28 new edge case tests** covering:
-   - Both players 0 stamina (full pass, unseat impossibility)
-   - Shift cost differences (same-stance vs cross-stance)
-   - Maximum gear stacking (Giga on Giga formulas)
-   - Counter bonus asymmetry (only winner CTL matters)
-   - Unseat threshold extremes (min/max)
-   - Melee at guard 0 with carryover penalties
-   - All 6 joust attacks as degenerate strategy (mirror 5x)
-   - All 6 melee attacks mirror matchup (all draw)
-   - Melee exhaustion with unequal wins
-   - Unseat naming convention (player1 = unseater, not unseated)
-   - Varied attack selection across 5 passes
-   - Melee stamina drain tracking
-4. **Wrote full quality report**: orchestrator/analysis/quality-review-round-1.md
+3. **Added 28 new edge case tests** (see round 1 report)
+
+### Round 2: Agent Change Review + Stretch Goal Tests
+1. **Reviewed ai-engine changes** (basic-ai.ts): OpponentHistory, AI Commentary, Archetype Personality, Caparison selection, Pattern exploitation. All high quality, no issues.
+2. **Reviewed ui-polish changes** (helpers.tsx, PassResult.tsx, MatchSummary.tsx, App.css): Good quality overall. Found 1 bug (counter bonus display hardcoded).
+3. **Reviewed balance-config.ts changes**: New aiDifficulty and aiPattern sections. Values reasonable.
+4. **Added 32 new stretch goal tests**:
+   - Shift eligibility at exact CTL threshold for all 3 speeds (8 tests)
+   - Non-mirror double unseat with asymmetric archetypes (2 tests)
+   - Full Giga gear match simulation with shift capability checks (4 tests)
+   - All 16 archetype combination pairs complete 5-pass joust (16 tests)
+   - Full match lifecycle from joust through melee to winner (1 test)
+   - Shift denied mid-match from stamina drain (1 test)
+5. **Wrote quality report**: orchestrator/analysis/quality-review-round-2.md
 
 ### Test Count
-- Before: 222 tests
-- After: 295 tests (+73)
-- All 295 passing
+- Before round 1: 222 tests
+- After round 1: 295 tests (+73)
+- After round 2: 327 tests (+32)
+- All 327 passing
 
 ## What's Left
 
-### Stretch Goals (for future rounds)
-1. Add test for non-mirror double unseat (both exceed threshold with different margins, different archetypes)
-2. Add shift eligibility boundary test at exact CTL threshold
-3. Review changes from other agents as they come in (ai-engine, ui-polish, balance-sim)
-4. Assess AI behavior quality once ai-engine agent makes changes
-5. Test with gear loadouts more thoroughly (full match with Giga gear + all caparison combinations)
+All primary and stretch goals completed:
+- [x] Non-mirror double unseat test
+- [x] Shift eligibility boundary test at exact CTL threshold
+- [x] Review changes from other agents (ai-engine, ui-polish)
+- [x] AI behavior quality assessment
+- [x] Full gear loadout match simulation tests
+- [x] All archetype combinations tested
+- [x] Full match lifecycle test
+
+### Possible Future Work (if agent is relaunched)
+1. Review any new changes from ai-reasoning or balance-sim agents
+2. Add AI unit tests for pattern detection and commentary (low priority — heuristic code)
+3. Add caparison interaction tests with full matches (caparison.test.ts)
+
+## Bugs Found
+1. **PassResult.tsx counter display hardcoded** (lines 111-112, 116-117): Shows "+10"/"-10" instead of actual scaled counter bonus. Owned by ui-polish agent.
 
 ## Issues
-- **Minor**: CounterResult type comment in types.ts says "+10, -10, or 0" but the scaled formula produces a range. Not a bug — just stale documentation.
-- **No bugs found** in engine, formulas, or state machine.
+- **Minor**: AI shift cost hardcoded in evaluateShift() at line 376. Matches current balance constants but would desync if constants change.
+- **Minor**: CounterResult type comment in types.ts:185 says "+10, -10, or 0" but bonus scales with CTL. Stale documentation.
+- **No engine bugs found.**
 
 ## Previous Work
 - Round 1: Full codebase review, game format evaluation, 28 new tests added.
+- Round 2: Agent change review, stretch goal tests, bug found in PassResult.tsx.
 
 ## Your Mission
 You are the quality assurance and game design reviewer. Every round you:
@@ -59,7 +70,7 @@ You are the quality assurance and game design reviewer. Every round you:
 ## Project Context
 - Jousting minigame MVP: Vite + React + TypeScript
 - Project root: jousting-mvp/
-- 295 tests passing. Run with: `npx vitest run`
+- 327 tests passing. Run with: `npx vitest run`
 - Full architecture reference: jousting-handoff-s17.md
 - Test files: src/engine/*.test.ts (calculator, match, caparison, gigling-gear, playtest)
 

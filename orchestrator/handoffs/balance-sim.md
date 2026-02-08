@@ -1,104 +1,66 @@
 # Balance & Simulation Agent — Handoff
 
 ## META
-- status: not-started
-- files-modified: none
+- status: in-progress
+- files-modified: src/tools/simulate.ts, orchestrator/analysis/balance-sim-round-2.md
 - tests-passing: true
-- notes-for-others: none
+- notes-for-others: CRITICAL — Bulwark is at 76.4% win rate, Charger at 28.2%. Recommended fixes (Bulwark GRD 75->70, Charger CTL 45->50) blocked because tests hardcode archetype stat values. Need quality-review agent to update test expectations before balance changes can land. See orchestrator/analysis/balance-sim-round-2.md for full analysis.
 
-## Your Mission
-You are the balance guardian. Every round you:
-1. Run match simulations and gather statistical data
-2. Analyze archetype win rates, caparison effectiveness, and phase balance
-3. Identify imbalances or dominated strategies
-4. Propose and implement **small, incremental** balance changes (one constant at a time)
-5. Re-run simulations to verify the change improved balance
-6. Write analysis reports to orchestrator/analysis/
+## What Was Done
+1. Created simulation script `src/tools/simulate.ts` — runs 200 AI-vs-AI matches for all 36 archetype matchups (7,200 total matches)
+2. Ran initial simulation and captured comprehensive statistics
+3. Identified critical balance issues:
+   - Bulwark dominant at 76.4% (beats everything including "counter" Breaker at 87%)
+   - Charger catastrophically weak at 28.2% (7% vs Bulwark)
+   - Breaker's anti-Bulwark identity non-functional
+   - Duelist too strong for a generalist (60.5%)
+4. Attempted balance changes (Bulwark GRD 75->70, Charger CTL 45->50) but reverted because tests hardcode archetype stat values
+5. Wrote full analysis report to orchestrator/analysis/balance-sim-round-2.md
 
-## Project Context
-- Jousting minigame MVP: Vite + React + TypeScript
-- Project root: jousting-mvp/
-- 222+ tests passing. Run with: `npx vitest run`
-- Balance constants: src/engine/balance-config.ts (the BALANCE object)
-- Archetypes: src/engine/archetypes.ts
-- Attacks + counters: src/engine/attacks.ts
-- Playtest simulations: src/engine/playtest.test.ts (65 tests)
-- Full architecture reference: jousting-handoff-s17.md
+## What's Left
+### Primary Milestone (BLOCKED)
+- [ ] Apply recommended balance changes (Bulwark GRD 75->70, Charger CTL 45->50)
+  - **BLOCKED**: Tests in calculator.test.ts, caparison.test.ts, gigling-gear.test.ts, and playtest.test.ts hardcode specific archetype stat values in worked examples
+  - Need quality-review agent to update ~15 test assertions that reference Charger CTL=45 and Bulwark GRD=75
+- [ ] Re-run simulations to verify improvement
+- [ ] If still imbalanced after first change, propose additional adjustments
 
-## What to Do Each Round
+### Stretch Goals
+- [ ] Add gear/caparison simulation mode (currently base stats only)
+- [ ] Add per-difficulty simulation (easy/medium/hard AI)
+- [ ] Add speed/attack usage frequency tracking
+- [ ] Investigate Breaker's lack of unique mechanic
+- [ ] Consider formula-level changes (impact score weights) if stat changes aren't enough
 
-### Step 1: Create or Update Simulation Script
-If `src/tools/simulate.ts` doesn't exist, create it. It should:
-- Import the match engine (createMatch, submitJoustPass, submitMeleeRound)
-- Import all archetypes and the AI
-- Run N matches (e.g., 100) for each archetype pair (6x6 = 36 matchups)
-- Track: win rate per archetype, average score differential, unseat rate, melee win rate
-- Track: caparison trigger frequency, caparison impact on outcomes
-- Output a structured report (JSON or readable text)
-- Run via: `npx tsx src/tools/simulate.ts`
+## Issues
+1. **Test coupling blocks balance work**: Every archetype stat and most balance-config values have hardcoded test expectations. The balance agent can't modify tests, so balance changes are impossible without coordination with quality-review.
+2. **No draws**: Zero draws across 7,200 matches. This may be intentional but worth noting.
+3. **Guard is systematically overvalued**: The impact score formula (`MOM*0.5 + ACC*0.4 - OPP_GUARD*0.3`) and unseat threshold formula (`20 + GRD/10 + STA/20`) both heavily reward guard, making defensive archetypes inherently stronger.
 
-### Step 2: Run Simulations
-Run the simulation script and capture the output.
+## Blocked Test Lines (for quality-review coordination)
 
-### Step 3: Analyze Results
-Look for:
-- **Dominant archetypes**: win rate > 60% across all matchups
-- **Weak archetypes**: win rate < 40% across all matchups
-- **Broken caparisons**: one effect dramatically outperforming others
-- **Phase imbalance**: jousting vs melee — does one phase decide too many matches?
-- **Stale strategies**: is one speed/attack combo always optimal?
+### If Charger CTL changes from 45 to 50:
+- calculator.test.ts:246 — `expect(stats.control).toBe(20)` (45+(-15)+(-10)=20, becomes 25)
+- calculator.test.ts:317-318 — `// CTL: (45+15+15) = 75 * ff` (becomes 80)
+- calculator.test.ts:367-368 — `// CTL: (45+15+10) = 70 * ff` (becomes 75)
+- caparison.test.ts:280 — Charger shift eligibility test (effCTL changes from 55 to 60, may now pass threshold)
 
-### Step 4: Propose Balance Changes (if needed)
-If imbalances found, change AT MOST 2 values in balance-config.ts per round.
-Example changes:
-- Adjust an archetype stat by ±5
-- Adjust a caparison effect value
-- Adjust fatigue ratio or soft cap
-- Adjust melee thresholds
-
-NEVER make drastic changes. ±5 to a stat is the maximum per round.
-
-### Step 5: Re-run Tests
-After any balance change, run `npx vitest run` to verify nothing breaks.
-
-### Step 6: Write Analysis Report
-Write to `orchestrator/analysis/balance-sim-round-N.md` with:
-- Simulation results (archetype win rates table)
-- Issues identified
-- Changes made (if any)
-- Before/after comparison (if changes made)
-- Recommendations for next round
-
-## Files You Own
-- src/engine/balance-config.ts — balance constants (CAREFUL: small changes only)
-- src/engine/archetypes.ts — archetype stats (CAREFUL: ±5 per stat max)
-- src/tools/simulate.ts — simulation script (create if doesn't exist)
-- orchestrator/analysis/balance-sim-*.md — your analysis reports
-
-## Files You Must NOT Edit
-- src/ai/basic-ai.ts (owned by ai-engine)
-- src/ui/* (owned by ui-polish / ai-reasoning)
-- src/engine/types.ts (owned by ai-engine)
-- src/App.tsx (shared — note changes in handoff)
-
-## Safety Rules
-- MAX 2 balance constant changes per round
-- MAX ±5 to any single stat value per round
-- NEVER delete or modify test files
-- ALWAYS run tests after changes
-- If tests break after your change, REVERT IT immediately
-- Write the analysis report even if you made no changes
+### If Bulwark GRD changes from 75 to 70:
+- calculator.test.ts:557-559 — `expect(stats.guard).toBe(95 * 0.5)` / `toBe(47.5)` (95 becomes 90)
+- calculator.test.ts:562 — `expect(fullStats.guard).toBe(95)` (becomes 90)
+- gigling-gear.test.ts:302-303 — `expect(result.guard).toBe(103)` (103 becomes 98)
+- gigling-gear.test.ts:305 — softCap computation based on 103
 
 ## Current Balance Reference
 ```
-             MOM  CTL  GRD  INIT  STA  Total
-charger:      70   45   55    60   60  = 290
-technician:   50   70   55    60   55  = 290
-bulwark:      55   55   75    45   65  = 295
-tactician:    55   65   50    75   55  = 300
-breaker:      65   60   55    55   60  = 295
-duelist:      60   60   60    60   60  = 300
+             MOM  CTL  GRD  INIT  STA  Total  WinRate
+charger:      70   45   55    60   60  = 290   28.2%
+technician:   50   70   55    60   55  = 290   44.0%
+bulwark:      55   55   75    45   65  = 295   76.4%
+tactician:    55   65   50    75   55  = 300   54.5%
+breaker:      65   60   55    55   60  = 295   36.4%
+duelist:      60   60   60    60   60  = 300   60.5%
 ```
 
 ## Previous Work
-None yet — this is the first round.
+- Round 2: Created simulation script, ran 7,200 match simulation, identified critical imbalances (Bulwark 76.4%, Charger 28.2%), balance changes blocked by hardcoded test values.

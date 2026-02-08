@@ -207,13 +207,32 @@ function getPersonality(archId: string): ArchetypePersonality {
 //   Balanced → Standard
 //   Also factor in stamina: low STA → lean Slow
 
-function pickSpeed(state: PlayerState, difficulty: AIDifficulty, history?: OpponentHistory): SpeedType {
+function pickSpeedWithReasoning(state: PlayerState, difficulty: AIDifficulty, history?: OpponentHistory): { speed: SpeedType; reasoning: SpeedReasoning } {
   const arch = state.archetype;
   const sta = state.currentStamina;
   const staRatio = sta / arch.stamina;
 
+  // Determine archetype bias string
+  const biases: string[] = [];
+  if (arch.momentum >= 65) biases.push('High MOM → Fast');
+  if (arch.guard >= 65) biases.push('High GRD → Slow');
+  if (arch.control >= 65) biases.push('High CTL → Standard');
+  if (arch.initiative >= 65) biases.push('High INIT → Standard');
+  const archetypeBias = biases.length > 0 ? biases.join(', ') : 'Balanced';
+
   // Emergency: very low stamina → always Slow
-  if (staRatio <= 0.25) return SpeedType.Slow;
+  if (staRatio <= 0.25) {
+    return {
+      speed: SpeedType.Slow,
+      reasoning: {
+        weights: { slow: 1, standard: 0, fast: 0 },
+        staminaRatio: staRatio,
+        archetypeBias,
+        chosen: SpeedType.Slow,
+        wasRandom: false,
+      },
+    };
+  }
 
   // Base weights
   let slowW = 1;
@@ -248,20 +267,112 @@ function pickSpeed(state: PlayerState, difficulty: AIDifficulty, history?: Oppon
     }
   }
 
-  // Difficulty-based optimal vs random
-  if (Math.random() < randomRatio(difficulty)) {
-    return pickRandom([SpeedType.Slow, SpeedType.Standard, SpeedType.Fast]);
-  }
+  const weights = { slow: slowW, standard: stdW, fast: fastW };
 
-  return weightedRandom(
-    [SpeedType.Slow, SpeedType.Standard, SpeedType.Fast],
-    [slowW, stdW, fastW],
-  );
+  // Difficulty-based optimal vs random
+  const wasRandom = Math.random() < randomRatio(difficulty);
+  const chosen = wasRandom
+    ? pickRandom([SpeedType.Slow, SpeedType.Standard, SpeedType.Fast])
+    : weightedRandom([SpeedType.Slow, SpeedType.Standard, SpeedType.Fast], [slowW, stdW, fastW]);
+
+  return {
+    speed: chosen,
+    reasoning: { weights, staminaRatio: staRatio, archetypeBias, chosen, wasRandom },
+  };
+}
+
+function pickSpeed(state: PlayerState, difficulty: AIDifficulty, history?: OpponentHistory): SpeedType {
+  return pickSpeedWithReasoning(state, difficulty, history).speed;
 }
 
 // --- Attack Selection (Joust) ---
 // Factors: archetype affinity, counter potential vs opponent's likely attack,
 // stamina cost, stance variety
+
+function pickJoustAttackWithReasoning(
+  state: PlayerState,
+  opponentLastAttack: Attack | undefined,
+  chosenSpeed: SpeedType,
+  difficulty: AIDifficulty,
+  history?: OpponentHistory,
+): { attack: Attack; reasoning: AttackReasoning } {
+  const arch = state.archetype;
+  const sta = state.currentStamina;
+  const staRatio = sta / arch.stamina;
+  const attacks = JOUST_ATTACK_LIST;
+
+  // Score each attack and track factors
+  const scoreEntries: AttackScoreEntry[] = [];
+  const rawScores: number[] = [];
+
+  let speedSynergy: string | undefined;
+
+  for (const atk of attacks) {
+    let score = 5; // base
+    const factors: string[] = ['Base: 5'];
+
+    // Stat affinity: if archetype is MOM-heavy, favor Agg attacks
+    if (arch.momentum >= 65 && atk.stance === Stance.Aggressive) { score += 3; factors.push('MOM affinity +3'); }
+    if (arch.guard >= 65 && atk.stance === Stance.Defensive) { score += 3; factors.push('GRD affinity +3'); }
+    if (arch.control >= 65 && atk.stance === Stance.Balanced) { score += 2; factors.push('CTL affinity +2'); }
+
+    // Speed-attack synergy: boost attacks that pair well with chosen speed
+    if (chosenSpeed === SpeedType.Fast && atk.stance === Stance.Aggressive) {
+      score += 2; factors.push('Fast+Aggressive synergy +2');
+      speedSynergy = 'Fast + Aggressive boost';
+    }
+    if (chosenSpeed === SpeedType.Slow && atk.stance === Stance.Defensive) {
+      score += 2; factors.push('Slow+Defensive synergy +2');
+      speedSynergy = 'Slow + Defensive boost';
+    }
+    if (chosenSpeed === SpeedType.Standard && atk.stance === Stance.Balanced) {
+      score += 1; factors.push('Standard+Balanced synergy +1');
+      speedSynergy = 'Standard + Balanced boost';
+    }
+
+    // Stamina awareness: penalize expensive attacks when low (percentage-based)
+    if (staRatio < 0.50 && atk.deltaStamina < -15) { score -= 3; factors.push('Low stamina penalty -3'); }
+    if (staRatio < 0.35 && atk.deltaStamina < -10) { score -= 2; factors.push('Very low stamina penalty -2'); }
+
+    // Counter potential: if we know opponent's last attack, favor counters
+    if (opponentLastAttack) {
+      if (atk.beats.includes(opponentLastAttack.id)) { score += 4; factors.push(`Counters ${opponentLastAttack.name} +4`); }
+      if (atk.beatenBy.includes(opponentLastAttack.id)) { score -= 2; factors.push(`Countered by ${opponentLastAttack.name} -2`); }
+    }
+
+    // Stance triangle: Agg > Def > Bal > Agg
+    if (opponentLastAttack) {
+      const oppStance = opponentLastAttack.stance;
+      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) { score += 2; factors.push('Stance triangle +2'); }
+      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) { score += 2; factors.push('Stance triangle +2'); }
+      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) { score += 2; factors.push('Stance triangle +2'); }
+    }
+
+    // Pattern exploitation (hard difficulty only)
+    if (difficulty === 'hard' && history) {
+      const predictedId = history.predictedAttackId();
+      if (predictedId) {
+        if (atk.beats.includes(predictedId)) { score += BALANCE.aiPattern.patternWeight; factors.push(`Pattern exploit +${BALANCE.aiPattern.patternWeight}`); }
+      }
+    }
+
+    const finalScore = Math.max(1, score);
+    rawScores.push(finalScore);
+    scoreEntries.push({ attackName: atk.name, attackId: atk.id, score: finalScore, factors });
+  }
+
+  // Difficulty-based optimal vs random
+  const wasRandom = Math.random() < randomRatio(difficulty);
+  const chosen = wasRandom ? pickRandom(attacks) : weightedRandom(attacks, rawScores);
+
+  // Sort score entries by score descending for display
+  const sortedScores = [...scoreEntries].sort((a, b) => b.score - a.score);
+
+  return {
+    attack: chosen,
+    reasoning: { scores: sortedScores, chosen: chosen.name, speedSynergy, wasRandom },
+  };
+}
 
 function pickJoustAttack(
   state: PlayerState,
@@ -270,74 +381,19 @@ function pickJoustAttack(
   difficulty: AIDifficulty,
   history?: OpponentHistory,
 ): Attack {
-  const arch = state.archetype;
-  const sta = state.currentStamina;
-  const staRatio = sta / arch.stamina;
-  const attacks = JOUST_ATTACK_LIST;
-
-  // Score each attack
-  const scores = attacks.map(atk => {
-    let score = 5; // base
-
-    // Stat affinity: if archetype is MOM-heavy, favor Agg attacks
-    if (arch.momentum >= 65 && atk.stance === Stance.Aggressive) score += 3;
-    if (arch.guard >= 65 && atk.stance === Stance.Defensive) score += 3;
-    if (arch.control >= 65 && atk.stance === Stance.Balanced) score += 2;
-
-    // Speed-attack synergy: boost attacks that pair well with chosen speed
-    if (chosenSpeed === SpeedType.Fast && atk.stance === Stance.Aggressive) score += 2;
-    if (chosenSpeed === SpeedType.Slow && atk.stance === Stance.Defensive) score += 2;
-    if (chosenSpeed === SpeedType.Standard && atk.stance === Stance.Balanced) score += 1;
-
-    // Stamina awareness: penalize expensive attacks when low (percentage-based)
-    if (staRatio < 0.50 && atk.deltaStamina < -15) score -= 3;
-    if (staRatio < 0.35 && atk.deltaStamina < -10) score -= 2;
-
-    // Counter potential: if we know opponent's last attack, favor counters
-    if (opponentLastAttack) {
-      if (atk.beats.includes(opponentLastAttack.id)) score += 4;
-      if (atk.beatenBy.includes(opponentLastAttack.id)) score -= 2;
-    }
-
-    // Stance triangle: Agg > Def > Bal > Agg
-    // Pick the stance that counters opponent's last stance
-    if (opponentLastAttack) {
-      const oppStance = opponentLastAttack.stance;
-      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) score += 2;
-      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) score += 2;
-      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) score += 2;
-    }
-
-    // Pattern exploitation (hard difficulty only)
-    if (difficulty === 'hard' && history) {
-      const predictedId = history.predictedAttackId();
-      if (predictedId) {
-        // Boost attacks that counter the predicted attack
-        if (atk.beats.includes(predictedId)) score += BALANCE.aiPattern.patternWeight;
-      }
-    }
-
-    return Math.max(1, score);
-  });
-
-  // Difficulty-based optimal vs random
-  if (Math.random() < randomRatio(difficulty)) {
-    return pickRandom(attacks);
-  }
-
-  return weightedRandom(attacks, scores);
+  return pickJoustAttackWithReasoning(state, opponentLastAttack, chosenSpeed, difficulty, history).attack;
 }
 
 // --- Shift Decision (Joust) ---
 // After seeing opponent's revealed attack, consider shifting.
 
-function evaluateShift(
+function evaluateShiftWithReasoning(
   state: PlayerState,
   speed: SpeedType,
   currentAttack: Attack,
   opponentAttack: Attack,
   difficulty: AIDifficulty,
-): Attack | undefined {
+): { shiftAttack: Attack | undefined; reasoning: ShiftReasoning } {
   const speedData = SPEEDS[speed];
   const sta = state.currentStamina;
 
@@ -346,14 +402,33 @@ function evaluateShift(
   const preStats = computeEffectiveStats(state.archetype, speedData, currentAttack, staAfterSpeed);
 
   if (!canShift(preStats.control, speedData, staAfterSpeed)) {
-    return undefined; // Can't shift
+    return {
+      shiftAttack: undefined,
+      reasoning: {
+        canShift: false,
+        currentCounterStatus: 'N/A',
+        decision: `Cannot shift (CTL ${Math.round(preStats.control)} < threshold ${speedData.shiftThreshold} or stamina too low)`,
+      },
+    };
   }
 
-  // Evaluate: should we shift?
   // Check if current attack is already beating the opponent
   const currentCounters = resolveCounters(currentAttack, opponentAttack);
+  const counterStatus = currentCounters.player1Bonus > 0
+    ? `Winning (${currentAttack.name} counters ${opponentAttack.name})`
+    : currentCounters.player1Bonus < 0
+      ? `Losing (${opponentAttack.name} counters ${currentAttack.name})`
+      : 'Neutral';
+
   if (currentCounters.player1Bonus > 0) {
-    return undefined; // Already winning counter matchup — stay
+    return {
+      shiftAttack: undefined,
+      reasoning: {
+        canShift: true,
+        currentCounterStatus: counterStatus,
+        decision: 'Already winning counter matchup — staying',
+      },
+    };
   }
 
   // Look for a better attack
@@ -363,17 +438,11 @@ function evaluateShift(
 
   for (const candidate of candidates) {
     let score = 0;
-
-    // Counter advantage
     const counters = resolveCounters(candidate, opponentAttack);
-    score += counters.player1Bonus * 2; // Weight counter bonus heavily
-
-    // Prefer same-stance shift (cheaper)
+    score += counters.player1Bonus * 2;
     if (candidate.stance === currentAttack.stance) score += 3;
-
-    // Stamina cost awareness
     const shiftCost = candidate.stance === currentAttack.stance ? 5 : 12;
-    if (staAfterSpeed - shiftCost < 10) score -= 10; // Too expensive
+    if (staAfterSpeed - shiftCost < 10) score -= 10;
 
     if (score > bestScore) {
       bestScore = score;
@@ -381,17 +450,122 @@ function evaluateShift(
     }
   }
 
-  // Only shift if it's clearly better (score > 5)
+  const bestAlt = bestAttack ? { attack: bestAttack.name, score: bestScore } : undefined;
+
   if (bestScore > 5 && bestAttack) {
-    // Difficulty-based: sometimes don't shift even when it's good (unpredictability)
-    if (Math.random() < randomRatio(difficulty)) return undefined;
-    return bestAttack;
+    if (Math.random() < randomRatio(difficulty)) {
+      return {
+        shiftAttack: undefined,
+        reasoning: {
+          canShift: true,
+          currentCounterStatus: counterStatus,
+          bestAlternative: bestAlt,
+          decision: `Could shift to ${bestAttack.name} (score ${bestScore}) but chose unpredictability`,
+        },
+      };
+    }
+    return {
+      shiftAttack: bestAttack,
+      reasoning: {
+        canShift: true,
+        currentCounterStatus: counterStatus,
+        bestAlternative: bestAlt,
+        decision: `Shifting to ${bestAttack.name} (score ${bestScore})`,
+      },
+    };
   }
 
-  return undefined;
+  return {
+    shiftAttack: undefined,
+    reasoning: {
+      canShift: true,
+      currentCounterStatus: counterStatus,
+      bestAlternative: bestAlt,
+      decision: bestAlt ? `Best alternative ${bestAlt.attack} (score ${bestAlt.score}) not good enough` : 'No better alternative found',
+    },
+  };
+}
+
+function evaluateShift(
+  state: PlayerState,
+  speed: SpeedType,
+  currentAttack: Attack,
+  opponentAttack: Attack,
+  difficulty: AIDifficulty,
+): Attack | undefined {
+  return evaluateShiftWithReasoning(state, speed, currentAttack, opponentAttack, difficulty).shiftAttack;
 }
 
 // --- Melee Attack Selection ---
+
+function pickMeleeAttackWithReasoning(
+  state: PlayerState,
+  opponentLastAttack: Attack | undefined,
+  difficulty: AIDifficulty,
+  history?: OpponentHistory,
+): { attack: Attack; reasoning: AttackReasoning } {
+  const arch = state.archetype;
+  const sta = state.currentStamina;
+  const staRatio = sta / arch.stamina;
+  const attacks = MELEE_ATTACK_LIST;
+
+  const scoreEntries: AttackScoreEntry[] = [];
+  const rawScores: number[] = [];
+
+  for (const atk of attacks) {
+    let score = 5;
+    const factors: string[] = ['Base: 5'];
+
+    // Archetype affinity
+    if (arch.momentum >= 65 && atk.stance === Stance.Aggressive) { score += 3; factors.push('MOM affinity +3'); }
+    if (arch.guard >= 65 && atk.stance === Stance.Defensive) { score += 3; factors.push('GRD affinity +3'); }
+    if (arch.control >= 65 && atk.stance === Stance.Balanced) { score += 2; factors.push('CTL affinity +2'); }
+
+    // Archetype personality: melee aggression modifier
+    const personality = getPersonality(arch.id);
+    if (atk.stance === Stance.Aggressive && personality.meleeAggression !== 0) {
+      score += personality.meleeAggression;
+      factors.push(`Melee aggression ${personality.meleeAggression > 0 ? '+' : ''}${personality.meleeAggression}`);
+    }
+
+    // Stamina awareness (percentage-based)
+    if (staRatio < 0.35 && atk.deltaStamina < -12) { score -= 3; factors.push('Low stamina penalty -3'); }
+
+    // Counter potential
+    if (opponentLastAttack) {
+      if (atk.beats.includes(opponentLastAttack.id)) { score += 4; factors.push(`Counters ${opponentLastAttack.name} +4`); }
+      if (atk.beatenBy.includes(opponentLastAttack.id)) { score -= 2; factors.push(`Countered by ${opponentLastAttack.name} -2`); }
+
+      const oppStance = opponentLastAttack.stance;
+      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) { score += 2; factors.push('Stance triangle +2'); }
+      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) { score += 2; factors.push('Stance triangle +2'); }
+      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) { score += 2; factors.push('Stance triangle +2'); }
+    }
+
+    // Pattern exploitation (hard difficulty only)
+    if (difficulty === 'hard' && history) {
+      const predictedId = history.predictedAttackId();
+      if (predictedId) {
+        if (atk.beats.includes(predictedId)) { score += BALANCE.aiPattern.patternWeight; factors.push(`Pattern exploit +${BALANCE.aiPattern.patternWeight}`); }
+      }
+    }
+
+    const finalScore = Math.max(1, score);
+    rawScores.push(finalScore);
+    scoreEntries.push({ attackName: atk.name, attackId: atk.id, score: finalScore, factors });
+  }
+
+  // Difficulty-based optimal vs random
+  const wasRandom = Math.random() < randomRatio(difficulty);
+  const chosen = wasRandom ? pickRandom(attacks) : weightedRandom(attacks, rawScores);
+
+  const sortedScores = [...scoreEntries].sort((a, b) => b.score - a.score);
+
+  return {
+    attack: chosen,
+    reasoning: { scores: sortedScores, chosen: chosen.name, wasRandom },
+  };
+}
 
 function pickMeleeAttack(
   state: PlayerState,
@@ -399,55 +573,7 @@ function pickMeleeAttack(
   difficulty: AIDifficulty,
   history?: OpponentHistory,
 ): Attack {
-  const arch = state.archetype;
-  const sta = state.currentStamina;
-  const staRatio = sta / arch.stamina;
-  const attacks = MELEE_ATTACK_LIST;
-
-  const scores = attacks.map(atk => {
-    let score = 5;
-
-    // Archetype affinity
-    if (arch.momentum >= 65 && atk.stance === Stance.Aggressive) score += 3;
-    if (arch.guard >= 65 && atk.stance === Stance.Defensive) score += 3;
-    if (arch.control >= 65 && atk.stance === Stance.Balanced) score += 2;
-
-    // Archetype personality: melee aggression modifier
-    const personality = getPersonality(arch.id);
-    if (atk.stance === Stance.Aggressive) score += personality.meleeAggression;
-
-    // Stamina awareness (percentage-based)
-    if (staRatio < 0.35 && atk.deltaStamina < -12) score -= 3;
-
-    // Counter potential
-    if (opponentLastAttack) {
-      if (atk.beats.includes(opponentLastAttack.id)) score += 4;
-      if (atk.beatenBy.includes(opponentLastAttack.id)) score -= 2;
-
-      // Stance triangle: Agg > Def > Bal > Agg
-      const oppStance = opponentLastAttack.stance;
-      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) score += 2;
-      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) score += 2;
-      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) score += 2;
-    }
-
-    // Pattern exploitation (hard difficulty only)
-    if (difficulty === 'hard' && history) {
-      const predictedId = history.predictedAttackId();
-      if (predictedId) {
-        if (atk.beats.includes(predictedId)) score += BALANCE.aiPattern.patternWeight;
-      }
-    }
-
-    return Math.max(1, score);
-  });
-
-  // Difficulty-based optimal vs random
-  if (Math.random() < randomRatio(difficulty)) {
-    return pickRandom(attacks);
-  }
-
-  return weightedRandom(attacks, scores);
+  return pickMeleeAttackWithReasoning(state, opponentLastAttack, difficulty, history).attack;
 }
 
 // --- Caparison Selection (Archetype-Weighted) ---
@@ -480,6 +606,45 @@ function pickCaparisonForArchetype(archetype: Archetype): { id: CaparisonEffectI
 
   const chosen = weightedRandom(ids, w);
   return { id: chosen, reason: `${archetype.name} ${CAP_REASONS[chosen]}` };
+}
+
+// --- Reasoning Types ---
+
+export interface SpeedReasoning {
+  weights: { slow: number; standard: number; fast: number };
+  staminaRatio: number;
+  archetypeBias: string;
+  chosen: SpeedType;
+  wasRandom: boolean;
+}
+
+export interface AttackScoreEntry {
+  attackName: string;
+  attackId: string;
+  score: number;
+  factors: string[];
+}
+
+export interface AttackReasoning {
+  scores: AttackScoreEntry[];
+  chosen: string;
+  speedSynergy?: string;
+  wasRandom: boolean;
+}
+
+export interface ShiftReasoning {
+  canShift: boolean;
+  currentCounterStatus: string;
+  bestAlternative?: { attack: string; score: number };
+  decision: string;
+}
+
+export interface AIReasoning {
+  speed: SpeedReasoning;
+  attack: AttackReasoning;
+  shift?: ShiftReasoning;
+  caparison?: { id: string | undefined; reason: string };
+  commentary: string;
 }
 
 // --- Public API ---
@@ -565,4 +730,69 @@ export function aiPickMeleeAttackWithCommentary(
   const patternDetected = difficulty === 'hard' && !!history?.predictedAttackId();
   const commentary = generateCommentary(state.archetype.id, staRatio, attack.stance, patternDetected);
   return { attack, commentary };
+}
+
+// --- Reasoning-Aware Public API ---
+
+/** Joust choice with full AI reasoning data for the thinking panel. */
+export function aiPickJoustChoiceWithReasoning(
+  state: PlayerState,
+  opponentLastAttack?: Attack,
+  opponentRevealedAttack?: Attack,
+  difficulty: AIDifficulty = 'medium',
+  history?: OpponentHistory,
+): { choice: PassChoice; reasoning: AIReasoning } {
+  const { speed, reasoning: speedReasoning } = pickSpeedWithReasoning(state, difficulty, history);
+  const { attack, reasoning: attackReasoning } = pickJoustAttackWithReasoning(state, opponentLastAttack, speed, difficulty, history);
+
+  let shiftAttack: Attack | undefined;
+  let shiftReasoning: ShiftReasoning | undefined;
+  if (opponentRevealedAttack) {
+    const result = evaluateShiftWithReasoning(state, speed, attack, opponentRevealedAttack, difficulty);
+    shiftAttack = result.shiftAttack;
+    shiftReasoning = result.reasoning;
+  }
+
+  const staRatio = state.currentStamina / state.archetype.stamina;
+  const patternDetected = difficulty === 'hard' && !!history?.predictedAttackId();
+  const commentary = generateCommentary(state.archetype.id, staRatio, attack.stance, patternDetected);
+
+  return {
+    choice: { speed, attack, shiftAttack },
+    reasoning: {
+      speed: speedReasoning,
+      attack: attackReasoning,
+      shift: shiftReasoning,
+      commentary,
+    },
+  };
+}
+
+/** Melee attack with full AI reasoning data for the thinking panel. */
+export function aiPickMeleeAttackWithReasoning(
+  state: PlayerState,
+  opponentLastAttack?: Attack,
+  difficulty: AIDifficulty = 'medium',
+  history?: OpponentHistory,
+): { attack: Attack; reasoning: AIReasoning } {
+  const { attack, reasoning: attackReasoning } = pickMeleeAttackWithReasoning(state, opponentLastAttack, difficulty, history);
+
+  const staRatio = state.currentStamina / state.archetype.stamina;
+  const patternDetected = difficulty === 'hard' && !!history?.predictedAttackId();
+  const commentary = generateCommentary(state.archetype.id, staRatio, attack.stance, patternDetected);
+
+  return {
+    attack,
+    reasoning: {
+      speed: {
+        weights: { slow: 0, standard: 0, fast: 0 },
+        staminaRatio: staRatio,
+        archetypeBias: 'N/A (melee)',
+        chosen: SpeedType.Standard,
+        wasRandom: false,
+      },
+      attack: attackReasoning,
+      commentary,
+    },
+  };
 }

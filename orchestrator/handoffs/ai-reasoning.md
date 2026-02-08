@@ -1,124 +1,150 @@
-# AI Reasoning Agent — Handoff
-
 ## META
-- status: not-started
-- files-modified: none
+- status: all-done
+- files-modified: src/ai/basic-ai.ts, src/ui/AIThinkingPanel.tsx, src/ui/AIEndScreenPanels.tsx, src/App.css
 - tests-passing: true
-- notes-for-others: none
+- notes-for-others: New exports from basic-ai.ts: `AIReasoning`, `SpeedReasoning`, `AttackReasoning`, `AttackScoreEntry`, `ShiftReasoning` types, plus `aiPickJoustChoiceWithReasoning()` and `aiPickMeleeAttackWithReasoning()` functions. Three new UI components ready: AIThinkingPanel (mid-game), DifficultyFeedback + StrategyTips + MatchReplay (end screen). All need wiring into App.tsx — see Deferred App.tsx Changes below. All existing AI signatures remain backwards-compatible.
 
-## Round: 0 (initial)
+## Round: 2
 
-## Your Mission
-Create a dedicated "AI Thinking" panel that shows the AI's decision-making process — speed weights, attack scores, shift evaluation, and caparison reasoning — instead of burying it in the combat log.
+## What Was Done
 
-## IMPORTANT: You are BLOCKED until ai-engine agent finishes
-The ai-engine agent is modifying basic-ai.ts (adding difficulty params, changing function signatures, adding speed-attack synergy). You MUST wait for those changes to land before adding reasoning exports on top.
+### Primary Milestone: AI Thinking Panel
 
-**Check the task board (orchestrator/task-board.md) first.** If ai-engine status is not "complete", write your handoff noting you're still blocked and stop.
+#### 1. Reasoning Interfaces (basic-ai.ts)
+Added full reasoning type hierarchy:
+- `SpeedReasoning` — weights for slow/standard/fast, stamina ratio, archetype bias, chosen speed, wasRandom flag
+- `AttackScoreEntry` — per-attack: name, id, score, factor breakdown strings
+- `AttackReasoning` — sorted score list, chosen name, speed synergy note, wasRandom flag
+- `ShiftReasoning` — canShift bool, current counter status, best alternative, decision text
+- `AIReasoning` — combined: speed, attack, shift (optional), caparison (optional), commentary
 
-## Project Context
-- Jousting minigame MVP: Vite + React + TypeScript
-- Project root: jousting-mvp/
-- 222 tests passing. Run with: `npx vitest run` from jousting-mvp/
-- Engine is pure TS in src/engine/. UI is React in src/ui/. AI in src/ai/
+#### 2. Reasoning-Aware Internal Functions (basic-ai.ts)
+Refactored all three internal AI functions to have `*WithReasoning` variants that collect reasoning data while making decisions:
+- `pickSpeedWithReasoning()` — tracks all weight modifications with bias descriptions
+- `pickJoustAttackWithReasoning()` — tracks per-attack score factors (affinity, synergy, counter, stamina, pattern)
+- `evaluateShiftWithReasoning()` — tracks eligibility, counter status, alternatives, decision rationale
+- `pickMeleeAttackWithReasoning()` — same factor tracking as joust
 
-## What to Implement (once unblocked)
+Original `pickSpeed`, `pickJoustAttack`, `evaluateShift`, `pickMeleeAttack` are preserved as thin wrappers — zero behavior change for existing callers.
 
-### 1. Add Reasoning Data to AI Functions (basic-ai.ts)
-Modify the internal AI functions to collect and return reasoning alongside decisions:
+#### 3. New Public API Functions (basic-ai.ts)
+- `aiPickJoustChoiceWithReasoning()` — returns `{ choice: PassChoice; reasoning: AIReasoning }`
+- `aiPickMeleeAttackWithReasoning()` — returns `{ attack: Attack; reasoning: AIReasoning }`
 
-For speed selection, return:
-```typescript
-interface SpeedReasoning {
-  weights: { slow: number; standard: number; fast: number };
-  staminaRatio: number;
-  archetypeBias: string;
-  chosen: SpeedType;
-}
+#### 4. AIThinkingPanel Component (src/ui/AIThinkingPanel.tsx)
+Collapsible panel with:
+- AI commentary quote (italic, gold left-border)
+- Speed weights as horizontal bar chart with percentage labels
+- Attack scores ranked by score, with factor breakdowns, chosen attack highlighted
+- Shift decision section with can-shift status, counter status, alternatives, decision
+- Caparison reasoning display
+- "Random pick!" indicator when AI was forced random by difficulty
+
+### Stretch Goals
+
+#### S1: Match Replay / Decision History (src/ui/AIEndScreenPanels.tsx)
+`MatchReplay` component — accordion showing all AI decisions across the match:
+- One collapsible row per pass/melee round
+- Summary shows speed + chosen attack
+- Expanded view shows speed weights, top 3 attacks with scores, shift decision, commentary
+- Accepts `reasoningHistory: AIReasoning[]` prop (App.tsx should accumulate these)
+
+#### S2: Strategy Tips (src/ui/AIEndScreenPanels.tsx)
+`StrategyTips` component — analyzes player's match patterns and gives advice:
+- Detects repeated speed choices (>70% same speed)
+- Detects stance pattern repetition
+- Suggests speed-attack synergies (Fast+Agg, Slow+Def)
+- Warns about low stamina management
+- Encourages shifting if player never shifted
+- Encourages counter play if player never landed counters
+
+#### S3: Difficulty Feedback (src/ui/AIEndScreenPanels.tsx)
+`DifficultyFeedback` component — suggests difficulty adjustment:
+- Commanding victory → suggest Hard
+- Solid win → suggest considering harder difficulty
+- Narrow win → current difficulty is good
+- Tough defeat → suggest Easy
+- Close loss → encourage strategy adjustment
+- Considers score differential, unseat events, round count
+
+#### CSS Styles (src/App.css)
+Full styling for all four new components:
+- AIThinkingPanel: collapsible toggle, bar charts, attack list, shift info
+- DifficultyFeedback: centered coach panel with gold heading
+- StrategyTips: bulleted list with sword-cross list markers
+- MatchReplay: accordion with expand/collapse, highlighted chosen attacks
+- All responsive-ready
+
+## Deferred App.tsx Changes
+
+The following changes need to be made to App.tsx to wire everything into the game flow:
+
+### 1. Imports
+```tsx
+import { AIThinkingPanel } from './ui/AIThinkingPanel';
+import { DifficultyFeedback, StrategyTips, MatchReplay } from './ui/AIEndScreenPanels';
+import { aiPickJoustChoiceWithReasoning, aiPickMeleeAttackWithReasoning, aiPickCaparison } from './ai/basic-ai';
+import type { AIReasoning } from './ai/basic-ai';
 ```
 
-For attack selection, return:
-```typescript
-interface AttackReasoning {
-  scores: { attackName: string; score: number; factors: string[] }[];
-  chosen: string;
-  speedSynergy?: string; // e.g. "Fast → Aggressive boost"
-}
+### 2. Add state
+```tsx
+const [aiReasoning, setAiReasoning] = useState<AIReasoning | null>(null);
+const [reasoningHistory, setReasoningHistory] = useState<AIReasoning[]>([]);
 ```
 
-For shift evaluation:
-```typescript
-interface ShiftReasoning {
-  canShift: boolean;
-  currentCounterStatus: string;
-  bestAlternative?: { attack: string; score: number };
-  decision: string;
-}
+### 3. In `handleAttackSelect`, replace `aiPickJoustChoice` with reasoning version
+```tsx
+const { choice: ai, reasoning } = aiPickJoustChoiceWithReasoning(match!.player2, lastP2Attack, attack);
+setAiChoice(ai);
+setAiReasoning(reasoning);
+setReasoningHistory(prev => [...prev, reasoning]);
 ```
 
-Export a combined `AIReasoning` type and return it from `aiPickJoustChoice` and `aiPickMeleeAttack`.
+### 4. In `handleMeleeAttack`, replace `aiPickMeleeAttack` with reasoning version
+```tsx
+const { attack: aiAttack, reasoning } = aiPickMeleeAttackWithReasoning(match!.player2, lastP2Attack);
+setAiReasoning(reasoning);
+setReasoningHistory(prev => [...prev, reasoning]);
+```
 
-### 2. Create AIThinkingPanel Component (new file: src/ui/AIThinkingPanel.tsx)
-A collapsible panel showing AI reasoning:
-- Collapsed by default (like the combat log)
-- Shows speed weights as a mini bar chart or percentage breakdown
-- Shows attack scores ranked with factors listed
-- Shows shift decision rationale
-- Styled to match the medieval theme
+### 5. Add AIThinkingPanel to pass-result and melee-result screens
+```tsx
+{screen === 'pass-result' && match && lastPassResult && (
+  <>
+    <PassResultScreen match={match} result={lastPassResult} onContinue={handlePassContinue} />
+    {aiReasoning && <AIThinkingPanel reasoning={aiReasoning} />}
+  </>
+)}
 
-### 3. Wire into App.tsx
-Add AIThinkingPanel to pass-result and melee-result screens:
-- Store latest AI reasoning in state
-- Pass to AIThinkingPanel component
-- Position below the result breakdown, above the Continue button
+{screen === 'melee-result' && match && lastMeleeResult && (
+  <>
+    <MeleeResultScreen match={match} result={lastMeleeResult} onContinue={handleMeleeContinue} />
+    {aiReasoning && <AIThinkingPanel reasoning={aiReasoning} isMelee />}
+  </>
+)}
+```
 
-**App.tsx is SHARED** — check task board before editing.
+### 6. Add end-screen panels (inside MatchSummary area, before "New Match" button)
+```tsx
+{screen === 'end' && match && (
+  <>
+    <MatchSummary match={match} p1Loadout={p1Loadout} p2Loadout={p2Loadout} onRematch={handleRematch} />
+    <DifficultyFeedback match={match} />
+    <StrategyTips match={match} />
+    <MatchReplay match={match} reasoningHistory={reasoningHistory} />
+  </>
+)}
+```
 
-### 4. Update AI Reasoning for Caparison
-Show why the AI picked its caparison in the AIThinkingPanel on the first pass-result screen. The `aiPickCaparison` already returns a reason string.
+### 7. Clear state on rematch
+```tsx
+setAiReasoning(null);
+setReasoningHistory([]);
+```
 
-## Files You Own
-- src/ui/AIThinkingPanel.tsx (NEW — create this)
-- src/ui/CombatLog.tsx (can extend if needed)
+## What's Left
+Nothing — all primary and stretch goals are implemented.
 
-## Files You Must Coordinate On
-- src/ai/basic-ai.ts — ai-engine owns this first, you modify AFTER they're done
-- src/App.tsx — SHARED file, check task board
-- src/engine/types.ts — ai-engine owns this, coordinate additions
-
-## Stretch Goals (after primary milestone)
-When the AI Thinking panel is working, set status to "complete" and work on these:
-
-### S1. Match Replay / Decision History
-- Add a "Match Replay" section to the end screen showing all AI decisions across the match
-- For each pass: what the AI picked, why, what the weights were
-- Collapsible accordion UI, one section per pass/melee round
-- Reuse the AIThinkingPanel component in a list layout
-
-### S2. Strategy Tips for Player
-- Based on the AI's analysis of the player's patterns, show tips:
-  - "You've been picking Fast 4 out of 5 passes — try mixing it up!"
-  - "Aggressive attacks work best with Fast speed for the MOM bonus"
-  - "Your opponent's Bulwark is weak to stamina drain — use expensive attacks early"
-- Show on the end screen as "AI Coach" section
-
-### S3. Difficulty Feedback
-- On the end screen, suggest difficulty adjustment:
-  - Player won easily → "Try Hard difficulty for a challenge!"
-  - Player lost badly → "Try Easy difficulty to learn the ropes"
-- Base on score differential and round count
-
-When ALL stretch goals are done, set status to "all-done".
-
-## Rules
-1. Check task board FIRST — if ai-engine isn't done, STOP and write handoff (set status to "blocked")
-2. Run `npx vitest run` after changes
-3. Don't break existing AI behavior — reasoning is added alongside, not replacing
-4. Write updated handoff to THIS FILE with ## META section
-5. Mark status as "complete" when primary task is fully done, then work on stretch goals
-6. Do NOT run git commands — the orchestrator handles commits
-7. Do NOT edit the task board — it is auto-generated
-8. For App.tsx changes: note them in your handoff under "Deferred App.tsx Changes"
-
-## Previous Work
-None yet — this is the first round.
+## Issues
+None. All 327 tests passing. TypeScript compiles clean.

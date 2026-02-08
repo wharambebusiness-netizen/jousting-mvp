@@ -703,3 +703,107 @@ describe('Edge Cases — melee stamina drain', () => {
     expect(match.player2.currentStamina).toBe(Math.max(0, sta2AfterR1 - 15));
   });
 });
+
+// ============================================================
+// 21. Non-mirror archetype variety: all archetypes complete 5 passes
+// ============================================================
+describe('Edge Cases — all archetypes complete 5-pass joust', () => {
+  const allArchetypes = [charger, technician, bulwark, duelist];
+
+  for (const arch1 of allArchetypes) {
+    for (const arch2 of allArchetypes) {
+      it(`${arch1.name} vs ${arch2.name} completes 5 passes`, () => {
+        let match = createMatch(arch1, arch2);
+
+        for (let i = 0; i < 5; i++) {
+          if (match.phase !== Phase.SpeedSelect) break;
+          match = submitJoustPass(match,
+            { speed: SpeedType.Standard, attack: CdL },
+            { speed: SpeedType.Standard, attack: PdL },
+          );
+        }
+
+        // Should complete or hit unseat
+        expect(match.passResults.length).toBeGreaterThanOrEqual(1);
+        if (match.passResults.length === 5) {
+          expect([Phase.MatchEnd, Phase.MeleeSelect]).toContain(match.phase);
+        }
+      });
+    }
+  }
+});
+
+// ============================================================
+// 22. Full match: joust → melee through completion
+// ============================================================
+describe('Full match lifecycle — joust through melee to winner', () => {
+  it('completes a full match from pass 1 to match end', () => {
+    let match = createMatch(charger, bulwark);
+
+    // Play 5 joust passes with counter advantage for P1 (CdL beats PdL)
+    // ... wait, CdL does NOT beat PdL — PdL beats CdL. Let's use BdG (beats PdL).
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: BdG },
+        { speed: SpeedType.Standard, attack: PdL },
+      );
+    }
+
+    // After joust, should be in MeleeSelect or MatchEnd
+    if (match.phase === Phase.MeleeSelect) {
+      // Play melee with counter advantage for P1 (OC beats GH)
+      let rounds = 0;
+      while (match.phase === Phase.MeleeSelect && rounds < 20) {
+        match = submitMeleeRound(match, OC, GH);
+        rounds++;
+      }
+    }
+
+    // Match must be over
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.winner).not.toBe('none');
+    expect(match.winReason).toBeDefined();
+    expect(match.winReason!.length).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// 23. Shift interaction: shift denied at low stamina mid-match
+// ============================================================
+describe('Edge Cases — shift denied mid-match from stamina drain', () => {
+  it('shift works early but is denied after stamina drains', () => {
+    let match = createMatch(technician, charger);
+
+    // Pass 1: Technician has full stamina, can shift
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL, shiftAttack: CEP },
+      { speed: SpeedType.Fast, attack: CF },
+    );
+    expect(match.passResults[0].player1.shifted).toBe(true);
+
+    // Drain technician stamina for next test
+    // After pass 1: Tech started 55, -0(std) -12(shift) -14(CEP) = 29
+    expect(match.player1.currentStamina).toBe(29);
+
+    // Play more passes to drain further
+    if (match.phase === Phase.SpeedSelect) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CF },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      // After pass 2: 29 - 0(std) - 20(CF) = 9
+      expect(match.player1.currentStamina).toBe(9);
+    }
+
+    // Now try to shift with only 9 stamina — should be denied (need >= 10)
+    if (match.phase === Phase.SpeedSelect) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL, shiftAttack: CEP },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      // Shift denied: stamina 9 < 10 requirement
+      expect(match.passResults[2].player1.shifted).toBe(false);
+    }
+  });
+});

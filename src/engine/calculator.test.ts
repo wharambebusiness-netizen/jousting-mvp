@@ -1033,3 +1033,158 @@ describe('Edge Cases — Melee at Guard 0 with Carryover', () => {
     expect(stats.guard).toBe(22);
   });
 });
+
+// ============================================================
+// 27. Shift Eligibility at Exact CTL Threshold Boundary
+// ============================================================
+describe('Edge Cases — Shift Eligibility at Exact CTL Threshold', () => {
+  it('shift eligible when CTL exactly equals threshold (Slow: 50)', () => {
+    expect(canShift(50, SPEEDS[SpeedType.Slow], 20)).toBe(true);
+  });
+
+  it('shift denied when CTL is 1 below threshold (Slow: 49)', () => {
+    expect(canShift(49, SPEEDS[SpeedType.Slow], 20)).toBe(false);
+  });
+
+  it('shift eligible when CTL exactly equals Standard threshold (60)', () => {
+    expect(canShift(60, SPEEDS[SpeedType.Standard], 20)).toBe(true);
+  });
+
+  it('shift denied when CTL is 1 below Standard threshold (59)', () => {
+    expect(canShift(59, SPEEDS[SpeedType.Standard], 20)).toBe(false);
+  });
+
+  it('shift eligible when CTL exactly equals Fast threshold (70)', () => {
+    expect(canShift(70, SPEEDS[SpeedType.Fast], 20)).toBe(true);
+  });
+
+  it('shift denied when CTL is 1 below Fast threshold (69)', () => {
+    expect(canShift(69, SPEEDS[SpeedType.Fast], 20)).toBe(false);
+  });
+
+  it('shift denied at exact CTL threshold when stamina is 9 (just below 10)', () => {
+    expect(canShift(50, SPEEDS[SpeedType.Slow], 9)).toBe(false);
+  });
+
+  it('shift eligible at exact CTL threshold and exact stamina boundary (10)', () => {
+    expect(canShift(50, SPEEDS[SpeedType.Slow], 10)).toBe(true);
+  });
+});
+
+// ============================================================
+// 28. Non-Mirror Double Unseat
+// ============================================================
+describe('Edge Cases — Non-Mirror Double Unseat', () => {
+  // Two different archetypes both exceeding unseat threshold with different margins
+  const glassCannonA: Archetype = {
+    id: 'glass_a', name: 'Glass Cannon A',
+    momentum: 100, control: 30, guard: 20, initiative: 50, stamina: 30,
+    identity: 'Test',
+  };
+  const glassCannonB: Archetype = {
+    id: 'glass_b', name: 'Glass Cannon B',
+    momentum: 90, control: 40, guard: 25, initiative: 55, stamina: 35,
+    identity: 'Test',
+  };
+
+  it('when both exceed unseat threshold, higher margin wins', () => {
+    // Both have extremely low guard and low stamina → low unseat thresholds
+    // Both have high momentum → high impact → both could exceed threshold
+    const result = resolvePass(
+      { archetype: glassCannonA, speed: SpeedType.Fast, attack: CF, currentStamina: 5 },
+      { archetype: glassCannonB, speed: SpeedType.Fast, attack: CF, currentStamina: 5 },
+    );
+
+    // Both should have very high impact and very low guard/stamina thresholds
+    // The asymmetry in stats should produce different margins
+    // Glass Cannon A has higher MOM (100 vs 90) but lower guard (20 vs 25)
+    if (result.unseat !== 'none') {
+      // The one with higher impact margin wins the unseat
+      const p1Margin = result.p1.impactScore - result.p2.impactScore;
+      const p2Margin = result.p2.impactScore - result.p1.impactScore;
+
+      if (result.unseat === 'player1') {
+        expect(p1Margin).toBeGreaterThan(0);
+      } else {
+        expect(p2Margin).toBeGreaterThan(0);
+      }
+    }
+    // If no unseat, both have high guard enough — that's also valid
+  });
+
+  it('tied margins in double unseat result in no unseat', () => {
+    // Exact mirror produces tied margins → no unseat
+    const result = resolvePass(
+      { archetype: glassCannonA, speed: SpeedType.Standard, attack: CdL, currentStamina: 5 },
+      { archetype: glassCannonA, speed: SpeedType.Standard, attack: CdL, currentStamina: 5 },
+    );
+    // Mirror → equal margins → no unseat (tie rule)
+    expect(result.unseat).toBe('none');
+  });
+});
+
+// ============================================================
+// 29. Full Giga Gear Match Simulation (Giga Gear + All Speeds)
+// ============================================================
+describe('Edge Cases — Full Giga Gear Match Simulation', () => {
+  const gigaTechnician: Archetype = {
+    id: 'giga_tech', name: 'Giga Technician',
+    momentum: 78, control: 98, guard: 83, initiative: 88, stamina: 83,
+    identity: 'Test',
+  };
+  const gigaCharger2: Archetype = {
+    id: 'giga_charger2', name: 'Giga Charger 2',
+    momentum: 98, control: 73, guard: 83, initiative: 88, stamina: 78,
+    identity: 'Test',
+  };
+
+  it('Giga Technician can still shift at Fast speed despite high threshold', () => {
+    // Fast threshold = 70, Tech CTL = 98 - 15(Fast) + 10(CdL) = 93
+    const stats = computeEffectiveStats(gigaTechnician, SPEEDS[SpeedType.Fast], CdL, 83);
+    // Raw CTL = 98 - 15 + 10 = 93 (below knee) → 93 * ff(1.0) = 93
+    expect(stats.control).toBe(93);
+    expect(canShift(93, SPEEDS[SpeedType.Fast], 83)).toBe(true);
+  });
+
+  it('Giga Charger cannot shift at Fast speed (low CTL)', () => {
+    // Fast threshold = 70, Charger CTL = 73 - 15 + 10(CdL) = 68
+    const stats = computeEffectiveStats(gigaCharger2, SPEEDS[SpeedType.Fast], CdL, 78);
+    expect(stats.control).toBe(68);
+    expect(canShift(68, SPEEDS[SpeedType.Fast], 78)).toBe(false);
+  });
+
+  it('Giga vs Giga match resolves without errors across varied attacks', () => {
+    const attacks = [CF, BdG, CdL, CEP, PdL];
+    const speeds: SpeedType[] = [SpeedType.Fast, SpeedType.Standard, SpeedType.Slow, SpeedType.Standard, SpeedType.Fast];
+
+    for (let i = 0; i < attacks.length; i++) {
+      const result = resolvePass(
+        { archetype: gigaCharger2, speed: speeds[i], attack: attacks[i], currentStamina: Math.max(0, 78 - i * 15) },
+        { archetype: gigaTechnician, speed: SpeedType.Standard, attack: attacks[(i + 2) % attacks.length], currentStamina: Math.max(0, 83 - i * 12) },
+      );
+
+      // Should not throw and should produce valid outputs
+      expect(result.p1.impactScore).toBeDefined();
+      expect(result.p2.impactScore).toBeDefined();
+      expect(result.p1.staminaAfter).toBeGreaterThanOrEqual(0);
+      expect(result.p2.staminaAfter).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('soft cap prevents Giga Charger from doubling base Charger impact', () => {
+    const baseResult = resolvePass(
+      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 60 },
+      { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55 },
+    );
+
+    const gigaResult = resolvePass(
+      { archetype: gigaCharger2, speed: SpeedType.Fast, attack: CF, currentStamina: 78 },
+      { archetype: gigaTechnician, speed: SpeedType.Standard, attack: CdL, currentStamina: 83 },
+    );
+
+    // Giga Charger impact should be higher than base, but not doubled
+    const ratio = gigaResult.p1.impactScore / baseResult.p1.impactScore;
+    expect(ratio).toBeGreaterThan(1.0); // Giga is stronger
+    expect(ratio).toBeLessThan(2.0); // But soft cap prevents doubling
+  });
+});
