@@ -1,5 +1,5 @@
 import { MeleeOutcome, type MeleeRoundResult, type MatchState } from '../engine/types';
-import { Scoreboard, StanceTag } from './helpers';
+import { Scoreboard, StanceTag, CaparisonBadge, meleeCapTriggered } from './helpers';
 
 export function MeleeResultScreen({ match, result, onContinue }: {
   match: MatchState;
@@ -14,6 +14,9 @@ export function MeleeResultScreen({ match, result, onContinue }: {
     : result.winner === 'player2' ? 'Opponent wins this round!'
     : 'Draw — no winner';
 
+  const p1Trig = meleeCapTriggered(match.p1Caparison, result.player1Attack.stance, result.p1BannerConsumed);
+  const p2Trig = meleeCapTriggered(match.p2Caparison, result.player2Attack.stance, result.p2BannerConsumed);
+
   return (
     <div className="screen">
       <Scoreboard
@@ -26,6 +29,8 @@ export function MeleeResultScreen({ match, result, onContinue }: {
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label={`Melee R${result.roundNumber}`}
+        p1Cap={match.p1Caparison}
+        p2Cap={match.p2Caparison}
       />
 
       <div className="melee-wins">
@@ -46,6 +51,23 @@ export function MeleeResultScreen({ match, result, onContinue }: {
           </div>
         </div>
       </div>
+
+      {(p1Trig || p2Trig) && (
+        <div className="cap-triggers">
+          {p1Trig && match.p1Caparison && (
+            <div className="cap-trigger cap-trigger--p1">
+              <CaparisonBadge effect={match.p1Caparison} triggered />
+              <span className="cap-trigger__text">{match.p1Caparison.description}</span>
+            </div>
+          )}
+          {p2Trig && match.p2Caparison && (
+            <div className="cap-trigger cap-trigger--p2">
+              <CaparisonBadge effect={match.p2Caparison} triggered />
+              <span className="cap-trigger__text">{match.p2Caparison.description}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="text-center mb-16">
         <span className={`outcome-badge ${outcomeClass}`}>{result.outcome}</span>

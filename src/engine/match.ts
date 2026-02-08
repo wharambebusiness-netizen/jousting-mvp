@@ -1,11 +1,13 @@
 // ============================================================
-// Jousting MVP — Match State Machine (v4.1 spec)
+// Jousting MVP — Match State Machine (v4.1 spec + Caparison)
 // ============================================================
 import {
   MeleeOutcome,
   Phase,
   type Archetype,
   type Attack,
+  type CaparisonInput,
+  type GiglingLoadout,
   type MatchState,
   type MeleeRoundResult,
   type PassChoice,
@@ -16,25 +18,34 @@ import { resolveJoustPass } from './phase-joust';
 import { resolveMeleeRoundFn } from './phase-melee';
 import { calcCarryoverPenalties } from './calculator';
 import { BALANCE } from './balance-config';
+import { applyGiglingLoadout, getCaparisonEffect } from './gigling-gear';
 
 const MAX_PASSES = 5;
 
 // --- Create initial match state ---
 
-export function createMatch(archetype1: Archetype, archetype2: Archetype): MatchState {
+export function createMatch(
+  archetype1: Archetype,
+  archetype2: Archetype,
+  loadout1?: GiglingLoadout,
+  loadout2?: GiglingLoadout,
+): MatchState {
+  const boosted1 = applyGiglingLoadout(archetype1, loadout1);
+  const boosted2 = applyGiglingLoadout(archetype2, loadout2);
+
   return {
     phase: Phase.SpeedSelect,
     passNumber: 1,
     player1: {
-      archetype: archetype1,
-      currentStamina: archetype1.stamina,
+      archetype: boosted1,
+      currentStamina: boosted1.stamina,
       carryoverMomentum: 0,
       carryoverControl: 0,
       carryoverGuard: 0,
     },
     player2: {
-      archetype: archetype2,
-      currentStamina: archetype2.stamina,
+      archetype: boosted2,
+      currentStamina: boosted2.stamina,
       carryoverMomentum: 0,
       carryoverControl: 0,
       carryoverGuard: 0,
@@ -47,6 +58,22 @@ export function createMatch(archetype1: Archetype, archetype2: Archetype): Match
     meleeWins2: 0,
     winner: 'none',
     winReason: '',
+    // Caparison tracking
+    p1Caparison: getCaparisonEffect(loadout1),
+    p2Caparison: getCaparisonEffect(loadout2),
+    p1BannerUsed: false,
+    p2BannerUsed: false,
+  };
+}
+
+// --- Build CaparisonInput for a player ---
+
+function capInput(state: MatchState, player: 'player1' | 'player2'): CaparisonInput | undefined {
+  const effect = player === 'player1' ? state.p1Caparison : state.p2Caparison;
+  if (!effect) return undefined;
+  return {
+    effect,
+    bannerUsed: player === 'player1' ? state.p1BannerUsed : state.p2BannerUsed,
   };
 }
 
@@ -67,6 +94,8 @@ export function submitJoustPass(
     state.player2,
     p1Choice,
     p2Choice,
+    capInput(state, 'player1'),
+    capInput(state, 'player2'),
   );
 
   // Update state
@@ -84,6 +113,9 @@ export function submitJoustPass(
       currentStamina: result.player2.staminaAfter,
     },
     passNumber: state.passNumber + 1,
+    // Track banner consumption
+    p1BannerUsed: state.p1BannerUsed || !!result.p1BannerConsumed,
+    p2BannerUsed: state.p2BannerUsed || !!result.p2BannerConsumed,
   };
 
   // Check unseat → transition to melee
@@ -109,7 +141,6 @@ function transitionToMelee(state: MatchState, lastPass: PassResult): MatchState 
 
   // The unseated player gets penalties.
   // If player1 unseats player2 → player2 was unseated → player2 gets penalties
-  // (because player1 "wins" the unseat, meaning player2 fell off)
   const unseatedPlayer = lastPass.unseat === 'player1' ? 'player2' : 'player1';
 
   const newState = { ...state };
@@ -178,6 +209,8 @@ export function submitMeleeRound(
     state.player2,
     p1Attack,
     p2Attack,
+    capInput(state, 'player1'),
+    capInput(state, 'player2'),
   );
 
   const isCrit = result.outcome === MeleeOutcome.Critical;
@@ -202,6 +235,9 @@ export function submitMeleeRound(
       ...state.player2,
       currentStamina: result.player2StaminaAfter,
     },
+    // Track banner consumption in melee too
+    p1BannerUsed: state.p1BannerUsed || !!result.p1BannerConsumed,
+    p2BannerUsed: state.p2BannerUsed || !!result.p2BannerConsumed,
   };
 
   // Check round wins (criticals count for 2 via winsGained)

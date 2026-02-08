@@ -10,6 +10,8 @@ import {
   type Attack,
   type PassChoice,
   type PlayerState,
+  type Archetype,
+  type CaparisonEffectId,
 } from '../engine/types';
 import {
   SPEEDS,
@@ -112,12 +114,13 @@ function pickJoustAttack(
       if (atk.beatenBy.includes(opponentLastAttack.id)) score -= 2;
     }
 
-    // Stance triangle: if opponent used a stance, favor the dominant one
+    // Stance triangle: Agg > Def > Bal > Agg
+    // Pick the stance that counters opponent's last stance
     if (opponentLastAttack) {
       const oppStance = opponentLastAttack.stance;
-      if (oppStance === Stance.Defensive && atk.stance === Stance.Balanced) score += 2;
-      if (oppStance === Stance.Aggressive && atk.stance === Stance.Defensive) score += 2;
-      if (oppStance === Stance.Balanced && atk.stance === Stance.Aggressive) score += 2;
+      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) score += 2;
+      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) score += 2;
+      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) score += 2;
     }
 
     return Math.max(1, score);
@@ -219,11 +222,11 @@ function pickMeleeAttack(
       if (atk.beats.includes(opponentLastAttack.id)) score += 4;
       if (atk.beatenBy.includes(opponentLastAttack.id)) score -= 2;
 
-      // Stance triangle
+      // Stance triangle: Agg > Def > Bal > Agg
       const oppStance = opponentLastAttack.stance;
-      if (oppStance === Stance.Defensive && atk.stance === Stance.Balanced) score += 2;
-      if (oppStance === Stance.Aggressive && atk.stance === Stance.Defensive) score += 2;
-      if (oppStance === Stance.Balanced && atk.stance === Stance.Aggressive) score += 2;
+      if (oppStance === Stance.Defensive && atk.stance === Stance.Aggressive) score += 2;
+      if (oppStance === Stance.Aggressive && atk.stance === Stance.Balanced) score += 2;
+      if (oppStance === Stance.Balanced && atk.stance === Stance.Defensive) score += 2;
     }
 
     return Math.max(1, score);
@@ -236,12 +239,48 @@ function pickMeleeAttack(
   return weightedRandom(attacks, scores);
 }
 
+// --- Caparison Selection (Archetype-Weighted) ---
+
+const CAP_WEIGHTS: Record<string, Record<CaparisonEffectId, number>> = {
+  charger:    { thunderweave: 5, stormcloak: 2, banner_of_the_giga: 2, pennant_of_haste: 1, woven_shieldcloth: 0, irongrip_drape: 1 },
+  technician: { irongrip_drape: 5, woven_shieldcloth: 2, stormcloak: 2, banner_of_the_giga: 1, pennant_of_haste: 1, thunderweave: 0 },
+  bulwark:    { woven_shieldcloth: 5, stormcloak: 3, banner_of_the_giga: 1, pennant_of_haste: 1, thunderweave: 0, irongrip_drape: 1 },
+  tactician:  { pennant_of_haste: 4, irongrip_drape: 3, stormcloak: 2, banner_of_the_giga: 2, woven_shieldcloth: 1, thunderweave: 0 },
+  breaker:    { stormcloak: 4, thunderweave: 3, banner_of_the_giga: 2, pennant_of_haste: 1, woven_shieldcloth: 0, irongrip_drape: 1 },
+  duelist:    { banner_of_the_giga: 3, stormcloak: 2, irongrip_drape: 2, woven_shieldcloth: 2, thunderweave: 2, pennant_of_haste: 2 },
+};
+
+const CAP_REASONS: Record<CaparisonEffectId, string> = {
+  pennant_of_haste: 'wants early Initiative advantage',
+  woven_shieldcloth: 'plays Defensive — needs extra Guard',
+  thunderweave: 'prefers Fast speed — more Momentum',
+  irongrip_drape: 'high Control — leverages easier shifts',
+  stormcloak: 'endurance fighter — delays fatigue',
+  banner_of_the_giga: 'expects to win a counter — huge first-strike bonus',
+};
+
+function pickCaparisonForArchetype(archetype: Archetype): { id: CaparisonEffectId | undefined; reason: string } {
+  // 20% chance of no caparison (budget/variety)
+  if (Math.random() < 0.2) return { id: undefined, reason: 'AI chose no caparison' };
+
+  const weights = CAP_WEIGHTS[archetype.id] ?? CAP_WEIGHTS.duelist;
+  const ids = Object.keys(weights) as CaparisonEffectId[];
+  const w = ids.map(id => weights[id]);
+
+  const chosen = weightedRandom(ids, w);
+  return { id: chosen, reason: `${archetype.name} ${CAP_REASONS[chosen]}` };
+}
+
 // --- Public API ---
 
 export interface AIDecision {
   speed: SpeedType;
   attack: Attack;
   shiftAttack?: Attack;
+}
+
+export function aiPickCaparison(archetype: Archetype): { id: CaparisonEffectId | undefined; reason: string } {
+  return pickCaparisonForArchetype(archetype);
 }
 
 export function aiPickJoustChoice(

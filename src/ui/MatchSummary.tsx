@@ -1,8 +1,10 @@
-import type { MatchState } from '../engine/types';
-import { StanceTag } from './helpers';
+import type { MatchState, GiglingLoadout } from '../engine/types';
+import { StanceTag, CaparisonBadge } from './helpers';
 
-export function MatchSummary({ match, onRematch }: {
+export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
   match: MatchState;
+  p1Loadout?: GiglingLoadout | null;
+  p2Loadout?: GiglingLoadout | null;
   onRematch: () => void;
 }) {
   const winnerName = match.winner === 'player1' ? match.player1.archetype.name
@@ -133,11 +135,80 @@ export function MatchSummary({ match, onRematch }: {
         </>
       )}
 
+      {/* Loadout summary */}
+      {(p1Loadout || p2Loadout) && (
+        <>
+          <h3>Loadouts</h3>
+          <div className="reveal-sides mb-16">
+            <LoadoutMini label="You" loadout={p1Loadout} caparison={match.p1Caparison} />
+            <LoadoutMini label="Opponent" loadout={p2Loadout} caparison={match.p2Caparison} />
+          </div>
+        </>
+      )}
+
+      {/* Caparison trigger summary */}
+      {(match.p1Caparison || match.p2Caparison) && (
+        <>
+          <h3>Caparison Triggers</h3>
+          <div className="cap-summary mb-16">
+            {match.p1Caparison && (
+              <div className="cap-summary__row">
+                <CaparisonBadge effect={match.p1Caparison} />
+                <span>P1: {match.p1Caparison.description}</span>
+                {match.p1Caparison.id === 'banner_of_the_giga' && (
+                  <span className="cap-summary__used">{match.p1BannerUsed ? 'Used' : 'Not used'}</span>
+                )}
+              </div>
+            )}
+            {match.p2Caparison && (
+              <div className="cap-summary__row">
+                <CaparisonBadge effect={match.p2Caparison} />
+                <span>P2: {match.p2Caparison.description}</span>
+                {match.p2Caparison.id === 'banner_of_the_giga' && (
+                  <span className="cap-summary__used">{match.p2BannerUsed ? 'Used' : 'Not used'}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="text-center">
         <button className="btn btn--primary btn--large" onClick={onRematch}>
           New Match
         </button>
       </div>
+    </div>
+  );
+}
+
+function LoadoutMini({ label, loadout, caparison }: {
+  label: string;
+  loadout?: GiglingLoadout | null;
+  caparison?: MatchState['p1Caparison'];
+}) {
+  if (!loadout) return <div style={{ textAlign: 'center', color: 'var(--ink-faint)' }}>No gear</div>;
+  const statSlots = (['barding', 'chanfron', 'saddle'] as const).filter(s => loadout[s]);
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div className="player-label" style={{ marginBottom: 4 }}>{label}</div>
+      <div className={`rarity-badge rarity-badge--${loadout.giglingRarity}`} style={{ marginBottom: 6 }}>
+        {loadout.giglingRarity}
+      </div>
+      {statSlots.map(slot => {
+        const gear = loadout[slot]!;
+        return (
+          <div key={slot} style={{ fontSize: '0.75rem', color: 'var(--ink-light)' }}>
+            {slot}: {gear.primaryStat ? `+${gear.primaryStat.value} ${gear.primaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
+            {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${gear.secondaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
+          </div>
+        );
+      })}
+      {caparison && (
+        <div style={{ marginTop: 4 }}>
+          <CaparisonBadge effect={caparison} />
+        </div>
+      )}
     </div>
   );
 }

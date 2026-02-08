@@ -9,10 +9,13 @@ import {
   type Archetype,
   type PassResult,
   type MeleeRoundResult,
+  type GiglingLoadout,
 } from './engine/types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './engine/match';
-import { aiPickJoustChoice, aiPickMeleeAttack } from './ai/basic-ai';
+import { createFullLoadout } from './engine/gigling-gear';
+import { aiPickJoustChoice, aiPickMeleeAttack, aiPickCaparison } from './ai/basic-ai';
 import { SetupScreen } from './ui/SetupScreen';
+import { LoadoutScreen } from './ui/LoadoutScreen';
 import { SpeedSelect } from './ui/SpeedSelect';
 import { JoustAttackSelect, MeleeAttackSelect } from './ui/AttackSelect';
 import { RevealScreen } from './ui/RevealScreen';
@@ -24,6 +27,7 @@ import { MeleeTransition } from './ui/MeleeTransition';
 
 type Screen =
   | 'setup'
+  | 'loadout'
   | 'speed'
   | 'attack'
   | 'reveal'
@@ -36,18 +40,40 @@ type Screen =
 function App() {
   const [match, setMatch] = useState<MatchState | null>(null);
   const [screen, setScreen] = useState<Screen>('setup');
+  const [p1Archetype, setP1Archetype] = useState<Archetype | null>(null);
+  const [p2Archetype, setP2Archetype] = useState<Archetype | null>(null);
   const [playerSpeed, setPlayerSpeed] = useState<SpeedType>(SpeedType.Standard);
   const [playerAttack, setPlayerAttack] = useState<Attack | null>(null);
   const [aiChoice, setAiChoice] = useState<PassChoice | null>(null);
   const [lastPassResult, setLastPassResult] = useState<PassResult | null>(null);
   const [lastMeleeResult, setLastMeleeResult] = useState<MeleeRoundResult | null>(null);
   const [combatLog, setCombatLog] = useState<string[][]>([]);
+  const [p1Loadout, setP1Loadout] = useState<GiglingLoadout | null>(null);
+  const [p2Loadout, setP2Loadout] = useState<GiglingLoadout | null>(null);
 
   // --- Setup ---
   const handleStart = (p1: Archetype, p2: Archetype) => {
-    const m = createMatch(p1, p2);
-    setMatch(m);
+    setP1Archetype(p1);
+    setP2Archetype(p2);
     setCombatLog([]);
+    setScreen('loadout');
+  };
+
+  // --- Loadout confirm ---
+  const handleLoadoutConfirm = (playerLoadout: GiglingLoadout) => {
+    if (!p1Archetype || !p2Archetype) return;
+    // AI gets a random loadout at the same rarity tier, with archetype-weighted caparison
+    const aiRarity = playerLoadout.giglingRarity;
+    const aiCapChoice = aiPickCaparison(p2Archetype);
+    const aiLoadout = createFullLoadout(aiRarity, aiRarity, aiCapChoice.id);
+    setP1Loadout(playerLoadout);
+    setP2Loadout(aiLoadout);
+    const m = createMatch(p1Archetype, p2Archetype, playerLoadout, aiLoadout);
+    setMatch(m);
+    // Log AI loadout reasoning
+    if (aiCapChoice.id) {
+      setCombatLog([[`AI Loadout: ${aiCapChoice.reason}`]]);
+    }
     setScreen('speed');
   };
 
@@ -129,17 +155,21 @@ function App() {
   // --- Rematch ---
   const handleRematch = () => {
     setMatch(null);
+    setP1Archetype(null);
+    setP2Archetype(null);
     setAiChoice(null);
     setPlayerAttack(null);
     setLastPassResult(null);
     setLastMeleeResult(null);
+    setP1Loadout(null);
+    setP2Loadout(null);
     setCombatLog([]);
     setScreen('setup');
   };
 
   return (
     <div>
-      {screen !== 'setup' && screen !== 'end' && (
+      {screen !== 'setup' && screen !== 'loadout' && screen !== 'end' && (
         <div className="app-header">
           <h1>Joust & Melee</h1>
         </div>
@@ -147,6 +177,14 @@ function App() {
 
       {screen === 'setup' && (
         <SetupScreen onStart={handleStart} />
+      )}
+
+      {screen === 'loadout' && p1Archetype && p2Archetype && (
+        <LoadoutScreen
+          archetype={p1Archetype}
+          opponentName={p2Archetype.name}
+          onConfirm={handleLoadoutConfirm}
+        />
       )}
 
       {screen === 'speed' && match && (
@@ -197,7 +235,7 @@ function App() {
       )}
 
       {screen === 'end' && match && (
-        <MatchSummary match={match} onRematch={handleRematch} />
+        <MatchSummary match={match} p1Loadout={p1Loadout} p2Loadout={p2Loadout} onRematch={handleRematch} />
       )}
 
       {screen !== 'setup' && <CombatLog entries={combatLog} />}

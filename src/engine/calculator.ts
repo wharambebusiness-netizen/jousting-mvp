@@ -242,8 +242,12 @@ export function calcCarryoverPenalties(unseatMargin: number): {
   };
 }
 
-// --- Full Pass Resolution (convenience) ---
-// Resolves a single joust pass for both players.
+/**
+ * @deprecated Use {@link resolveJoustPass} from phase-joust.ts instead.
+ * This legacy function lacks caparison support, initiative-priority shift
+ * ordering, and irongrip. Kept only for base-formula validation in
+ * calculator.test.ts.
+ */
 
 export interface PassInput {
   archetype: Archetype;

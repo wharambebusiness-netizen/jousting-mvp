@@ -1,6 +1,6 @@
 import type { PassResult as PassResultType, MatchState } from '../engine/types';
 import { resolveCounters } from '../engine/calculator';
-import { Scoreboard, StanceTag } from './helpers';
+import { Scoreboard, StanceTag, CaparisonBadge, joustCapTriggered } from './helpers';
 
 export function PassResultScreen({ match, result, onContinue }: {
   match: MatchState;
@@ -11,6 +11,9 @@ export function PassResultScreen({ match, result, onContinue }: {
   const p2 = result.player2;
   const scoreDiff = p1.impactScore - p2.impactScore;
   const counters = resolveCounters(p1.finalAttack, p2.finalAttack);
+
+  const p1Trig = joustCapTriggered(match.p1Caparison, result.passNumber, p1.speed, p1.finalAttack.stance, result.p1BannerConsumed);
+  const p2Trig = joustCapTriggered(match.p2Caparison, result.passNumber, p2.speed, p2.finalAttack.stance, result.p2BannerConsumed);
 
   return (
     <div className="screen">
@@ -24,6 +27,8 @@ export function PassResultScreen({ match, result, onContinue }: {
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
         label={`Pass ${result.passNumber} Result`}
+        p1Cap={match.p1Caparison}
+        p2Cap={match.p2Caparison}
       />
 
       {result.unseat !== 'none' && (
@@ -32,6 +37,23 @@ export function PassResultScreen({ match, result, onContinue }: {
           <div style={{ fontSize: '0.8rem', fontWeight: 400, marginTop: 4 }}>
             Margin: {result.unseatMargin.toFixed(1)} — Transitioning to Melee
           </div>
+        </div>
+      )}
+
+      {(p1Trig || p2Trig) && (
+        <div className="cap-triggers">
+          {p1Trig && match.p1Caparison && (
+            <div className="cap-trigger cap-trigger--p1">
+              <CaparisonBadge effect={match.p1Caparison} triggered />
+              <span className="cap-trigger__text">{match.p1Caparison.description}</span>
+            </div>
+          )}
+          {p2Trig && match.p2Caparison && (
+            <div className="cap-trigger cap-trigger--p2">
+              <CaparisonBadge effect={match.p2Caparison} triggered />
+              <span className="cap-trigger__text">{match.p2Caparison.description}</span>
+            </div>
+          )}
         </div>
       )}
 

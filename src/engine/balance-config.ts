@@ -11,7 +11,8 @@ export const BALANCE = {
   // --- Diminishing Returns (Soft Cap) ---
   // Stats below the knee are linear (unchanged).
   // Stats above the knee are compressed: excess * K / (excess + K).
-  // Current max raw stat is ~110 (Charger Fast+CF momentum).
+  // No-gear max raw combat stat: ~110 (Charger Fast+CF momentum).
+  // With Giga gear: Charger MOM base 98, +Fast+CF = 138 → softCap ~120.
   softCapKnee: 100,
   softCapK: 50,
 
@@ -57,4 +58,42 @@ export const BALANCE = {
   // A player at 0 who lands a crit goes to 2 — momentum, not match over.
   meleeWinsNeeded: 4,
   criticalWinsValue: 2,
+
+  // --- Gigling Rarity Bonus ---
+  // Flat bonus to all 5 jousting stats based on mount rarity.
+  // Flattened curve: every tier gives something, Giga peaks ~103 on
+  // best stat so softCap (knee=100) stays meaningful.
+  giglingRarityBonus: {
+    uncommon: 1,
+    rare: 3,
+    epic: 5,
+    legendary: 7,
+    relic: 10,
+    giga: 13,
+  },
+
+  // --- Caparison Effect Values ---
+  // All effect magnitudes live here for easy tuning.
+  caparison: {
+    hasteInitBonus: 2,           // Pennant of Haste: +INIT on pass 1
+    shieldclothGuardBonus: 3,    // Woven Shieldcloth: +GRD when Defensive
+    thunderweaveMomBonus: 4,     // Thunderweave: +MOM when Fast
+    irongripShiftReduction: 5,   // Irongrip Drape: -shift threshold
+    stormcloakFatigueReduction: 0.05, // Stormcloak: -fatigue ratio
+    gigaBannerCounterMultiplier: 1.5,  // Banner of the Giga: first counter multiplier
+  },
+
+  // --- Gear Stat Ranges (per rarity, for stat pieces) ---
+  // primary = main stat of the slot, secondary = off-stat.
+  // Values are [min, max] inclusive. Rolled at craft time.
+  // Compressed from previous values so Giga max primary (15) + rarity (13)
+  // + highest base (75 Bulwark GRD) = 103 → softCap effective 100.9.
+  gearStatRanges: {
+    uncommon:  { primary: [1, 3],   secondary: [0, 1] },
+    rare:      { primary: [2, 5],   secondary: [1, 2] },
+    epic:      { primary: [4, 7],   secondary: [2, 4] },
+    legendary: { primary: [6, 10],  secondary: [3, 5] },
+    relic:     { primary: [8, 12],  secondary: [4, 7] },
+    giga:      { primary: [10, 15], secondary: [6, 9] },
+  },
 } as const;

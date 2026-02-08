@@ -11,7 +11,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
     control: 45,
     guard: 55,
     initiative: 60,
-    stamina: 50,
+    stamina: 60,
     identity: 'Raw impact; wins fast or fades',
   },
   technician: {
@@ -49,9 +49,9 @@ export const ARCHETYPES: Record<string, Archetype> = {
     name: 'Breaker',
     momentum: 65,
     control: 60,
-    guard: 50,
+    guard: 55,
     initiative: 55,
-    stamina: 50,
+    stamina: 60,
     identity: 'Guard shatter; anti-Bulwark',
   },
   duelist: {

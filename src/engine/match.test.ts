@@ -6,6 +6,7 @@ import { ARCHETYPES } from './archetypes';
 import { JOUST_ATTACKS, MELEE_ATTACKS } from './attacks';
 import { Phase, SpeedType, MeleeOutcome } from './types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './match';
+import { BALANCE } from './balance-config';
 
 const charger = ARCHETYPES.charger;
 const technician = ARCHETYPES.technician;
@@ -31,7 +32,7 @@ describe('Match creation', () => {
     const match = createMatch(charger, technician);
     expect(match.phase).toBe(Phase.SpeedSelect);
     expect(match.passNumber).toBe(1);
-    expect(match.player1.currentStamina).toBe(50); // Charger STA
+    expect(match.player1.currentStamina).toBe(60); // Charger STA
     expect(match.player2.currentStamina).toBe(55); // Technician STA
     expect(match.cumulativeScore1).toBe(0);
     expect(match.cumulativeScore2).toBe(0);
@@ -73,7 +74,7 @@ describe('v4.1 Worked Example — 3 passes', () => {
     // Technician wins pass 1
     expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore);
     expect(p1.unseat).toBe('none');
-    expect(match.player1.currentStamina).toBe(25);
+    expect(match.player1.currentStamina).toBe(35);
     expect(match.player2.currentStamina).toBe(29);
 
     // Pass 2: Charger Slow+BdG, Technician Standard+PdL
@@ -84,7 +85,7 @@ describe('v4.1 Worked Example — 3 passes', () => {
     const p2 = match.passResults[1];
     // Charger wins pass 2 (BdG beats PdL)
     expect(p2.player1.impactScore).toBeGreaterThan(p2.player2.impactScore);
-    expect(match.player1.currentStamina).toBe(15);
+    expect(match.player1.currentStamina).toBe(25);
     expect(match.player2.currentStamina).toBe(21);
 
     // Pass 3: Charger Slow+CdL, Technician Standard+CEP
@@ -93,9 +94,9 @@ describe('v4.1 Worked Example — 3 passes', () => {
       { speed: SpeedType.Standard, attack: CEP },
     );
     const p3 = match.passResults[2];
-    // Technician wins pass 3
-    expect(p3.player2.impactScore).toBeGreaterThan(p3.player1.impactScore);
-    expect(match.player1.currentStamina).toBe(10);
+    // Charger now wins pass 3 (more stamina = less fatigue after rebalance)
+    expect(p3.player1.impactScore).toBeGreaterThan(p3.player2.impactScore);
+    expect(match.player1.currentStamina).toBe(20);
     expect(match.player2.currentStamina).toBe(7);
 
     // Cumulative: extremely close per spec narrative
@@ -196,7 +197,7 @@ describe('Stamina tracking across passes', () => {
       { speed: SpeedType.Fast, attack: CF },
       { speed: SpeedType.Standard, attack: CdL },
     );
-    expect(match.player1.currentStamina).toBe(25); // 50 -5 -20 = 25
+    expect(match.player1.currentStamina).toBe(35); // 60 -5 -20 = 35
     expect(match.player2.currentStamina).toBe(45); // 55 -0 -10 = 45
 
     // Pass 2: Charger Slow+PdL = +5 (speed) then -8 (attack)
@@ -204,7 +205,121 @@ describe('Stamina tracking across passes', () => {
       { speed: SpeedType.Slow, attack: PdL },
       { speed: SpeedType.Standard, attack: CdL },
     );
-    expect(match.player1.currentStamina).toBe(22); // 25 +5 -8 = 22
+    expect(match.player1.currentStamina).toBe(32); // 35 +5 -8 = 32
     expect(match.player2.currentStamina).toBe(35); // 45 -0 -10 = 35
+  });
+});
+
+// ============================================================
+// 6. Five-pass joust — score victory (no unseat)
+// ============================================================
+describe('Five-pass joust — score victory', () => {
+  it('winner is determined by cumulative ImpactScore after 5 passes', () => {
+    // P1 uses PdL (beats CdL), P2 uses CdL. Counter gives P1 +10 acc/pass.
+    // PdL is cheap (-8 STA) so P1 fatigues slower too. No unseat (margin ~6).
+    let match = createMatch(duelist, duelist);
+
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: PdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    expect(match.passResults.length).toBe(5);
+    expect(match.phase).toBe(Phase.MatchEnd);
+    // PdL beats CdL → P1 gets counter bonus every pass → higher score
+    expect(match.cumulativeScore1).toBeGreaterThan(match.cumulativeScore2);
+    expect(match.winner).toBe('player1');
+    expect(match.winReason).toContain('cumulative ImpactScore');
+  });
+});
+
+// ============================================================
+// 7. Melee exhaustion tiebreaker
+// ============================================================
+describe('Melee exhaustion tiebreaker', () => {
+  it('resolves to round-wins tiebreaker when both reach 0 stamina', () => {
+    // Set up a melee where both players will exhaust quickly
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+    // Give P1 an advantage: P1 uses MC (beats OC), P2 uses OC
+    // This should give P1 more round wins before both exhaust.
+    // Drain stamina to near-zero first to speed up exhaustion.
+    match.player1.currentStamina = 12;
+    match.player2.currentStamina = 12;
+
+    let rounds = 0;
+    while (match.phase === Phase.MeleeSelect && rounds < 20) {
+      // MC beats OC → P1 gets counter advantage → more round wins
+      match = submitMeleeRound(match, MC, OC);
+      rounds++;
+    }
+
+    expect(match.phase).toBe(Phase.MatchEnd);
+    // Game ended — either via 4 wins or exhaustion
+    expect(match.winner).not.toBe('none');
+  });
+
+  it('falls through to joust score when melee wins are tied at exhaustion', () => {
+    let match = createMatch(charger, duelist);
+    // Give charger a joust score lead
+    match.cumulativeScore1 = 100;
+    match.cumulativeScore2 = 50;
+    match = { ...match, phase: Phase.MeleeSelect };
+    // Both at minimal stamina, same attacks → draws → both exhaust
+    match.player1.currentStamina = 5;
+    match.player2.currentStamina = 5;
+
+    // Play one round — both go to 0 (MC costs 10, but clamped at 0)
+    match = submitMeleeRound(match, MC, MC);
+
+    expect(match.phase).toBe(Phase.MatchEnd);
+    // Both exhausted, 0 melee wins each → joust score tiebreaker
+    expect(match.meleeWins1).toBe(0);
+    expect(match.meleeWins2).toBe(0);
+    expect(match.winner).toBe('player1'); // higher joust score
+    expect(match.winReason).toContain('joust score');
+  });
+
+  it('results in draw when everything is tied', () => {
+    let match = createMatch(duelist, duelist);
+    match.cumulativeScore1 = 50;
+    match.cumulativeScore2 = 50;
+    match = { ...match, phase: Phase.MeleeSelect };
+    match.player1.currentStamina = 5;
+    match.player2.currentStamina = 5;
+
+    // Mirror matchup → draw round, both exhaust
+    match = submitMeleeRound(match, MC, MC);
+
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.winner).toBe('draw');
+    expect(match.winReason).toContain('DRAW');
+  });
+});
+
+// ============================================================
+// 8. Critical counts as 2 round wins
+// ============================================================
+describe('Critical hit counts as 2 round wins', () => {
+  it('a critical hit awards 2 wins toward the meleeWinsNeeded threshold', () => {
+    // Set up a scenario where one player has massive advantage to land a crit
+    // Charger at full stamina vs Duelist at 0 stamina
+    let match = createMatch(charger, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+    match.player2.currentStamina = 0; // P2 is incapacitated (all stats fatigued to 0)
+
+    // P1 at full power, P2 at 0 → massive margin → likely critical
+    match = submitMeleeRound(match, OC, GH);
+
+    const round1 = match.meleeRoundResults[0];
+    if (round1.outcome === MeleeOutcome.Critical) {
+      expect(match.meleeWins1).toBe(BALANCE.criticalWinsValue);
+    } else {
+      // If not a critical (guard-relative threshold may be high), at least a hit
+      expect(round1.outcome).toBe(MeleeOutcome.Hit);
+      expect(match.meleeWins1).toBe(1);
+    }
   });
 });

@@ -123,6 +123,8 @@ export interface PassResult {
   unseat: 'none' | 'player1' | 'player2';
   unseatMargin: number;
   log: string[];
+  p1BannerConsumed?: boolean;
+  p2BannerConsumed?: boolean;
 }
 
 export interface PassPlayerResult {
@@ -151,6 +153,8 @@ export interface MeleeRoundResult {
   player1StaminaAfter: number;
   player2StaminaAfter: number;
   log: string[];
+  p1BannerConsumed?: boolean;
+  p2BannerConsumed?: boolean;
 }
 
 // --- Match State ---
@@ -168,6 +172,11 @@ export interface MatchState {
   meleeWins2: number;
   winner: 'none' | 'player1' | 'player2' | 'draw';
   winReason: string;
+  // Caparison tracking
+  p1Caparison?: CaparisonEffect;
+  p2Caparison?: CaparisonEffect;
+  p1BannerUsed: boolean;
+  p2BannerUsed: boolean;
 }
 
 // --- Counter Result ---
@@ -176,3 +185,49 @@ export type CounterResult = {
   player1Bonus: number; // +10, -10, or 0
   player2Bonus: number; // +10, -10, or 0
 };
+
+// --- Gigling Gear System ---
+
+export type GiglingRarity = 'uncommon' | 'rare' | 'epic' | 'legendary' | 'relic' | 'giga';
+
+export type GearSlot = 'barding' | 'chanfron' | 'saddle' | 'caparison';
+
+export type JoustStat = 'momentum' | 'control' | 'guard' | 'initiative' | 'stamina';
+
+export type CaparisonEffectId =
+  | 'pennant_of_haste'
+  | 'woven_shieldcloth'
+  | 'thunderweave'
+  | 'irongrip_drape'
+  | 'stormcloak'
+  | 'banner_of_the_giga';
+
+export interface CaparisonEffect {
+  id: CaparisonEffectId;
+  name: string;
+  description: string;
+  rarity: GiglingRarity;
+}
+
+export interface GiglingGear {
+  slot: GearSlot;
+  rarity: GiglingRarity;
+  primaryStat?: { stat: JoustStat; value: number };
+  secondaryStat?: { stat: JoustStat; value: number };
+  effect?: CaparisonEffect; // caparison only
+}
+
+export interface GiglingLoadout {
+  giglingRarity: GiglingRarity;
+  barding?: GiglingGear;
+  chanfron?: GiglingGear;
+  saddle?: GiglingGear;
+  caparison?: GiglingGear;
+}
+
+// --- Caparison Pipeline Types ---
+
+export interface CaparisonInput {
+  effect?: CaparisonEffect;
+  bannerUsed?: boolean; // only relevant for banner_of_the_giga
+}

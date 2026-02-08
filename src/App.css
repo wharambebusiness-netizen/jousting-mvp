@@ -133,7 +133,196 @@
   color: var(--ink-light); letter-spacing: 0.05em;
 }
 
+/* Loadout screen — Rarity grid */
+.rarity-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.rarity-card { padding: 10px; text-align: center; min-height: 60px; }
+.rarity-card__name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9rem; font-weight: 700; margin-bottom: 2px;
+}
+.rarity-card__bonus { font-size: 0.75rem; }
+
+/* Rarity color variants */
+.rarity-card--uncommon { border-color: var(--rarity-uncommon); }
+.rarity-card--uncommon.card--selected { background: var(--rarity-uncommon-bg); box-shadow: 0 0 0 2px var(--rarity-uncommon), 0 3px 12px var(--shadow); }
+.rarity-card--uncommon .rarity-card__name { color: var(--rarity-uncommon); }
+
+.rarity-card--rare { border-color: var(--rarity-rare); }
+.rarity-card--rare.card--selected { background: var(--rarity-rare-bg); box-shadow: 0 0 0 2px var(--rarity-rare), 0 3px 12px var(--shadow); }
+.rarity-card--rare .rarity-card__name { color: var(--rarity-rare); }
+
+.rarity-card--epic { border-color: var(--rarity-epic); }
+.rarity-card--epic.card--selected { background: var(--rarity-epic-bg); box-shadow: 0 0 0 2px var(--rarity-epic), 0 3px 12px var(--shadow); }
+.rarity-card--epic .rarity-card__name { color: var(--rarity-epic); }
+
+.rarity-card--legendary { border-color: var(--rarity-legendary); }
+.rarity-card--legendary.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-legendary), 0 3px 12px var(--shadow); }
+.rarity-card--legendary .rarity-card__name { color: var(--rarity-legendary); }
+
+.rarity-card--relic { border-color: var(--rarity-relic); }
+.rarity-card--relic.card--selected { background: var(--rarity-relic-bg); box-shadow: 0 0 0 2px var(--rarity-relic), 0 3px 12px var(--shadow); }
+.rarity-card--relic .rarity-card__name { color: var(--rarity-relic); }
+
+.rarity-card--giga { border-color: var(--rarity-giga); }
+.rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 3px 12px var(--shadow); }
+.rarity-card--giga .rarity-card__name { color: var(--rarity-giga); }
+
+/* Loadout section (gear + stats) */
+.loadout-section { }
+.loadout-section__header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.loadout-section__header h3 { margin-bottom: 0; }
+
+/* Gear list */
+.gear-list {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.gear-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px;
+  background: var(--parchment-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+}
+.gear-item__slot {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.85rem; font-weight: 700;
+  min-width: 70px; color: var(--ink-light);
+}
+.gear-item__stats { display: flex; gap: 10px; }
+.gear-stat {
+  font-size: 0.8rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 3px;
+}
+.gear-stat--primary { background: var(--gold-light); color: var(--ink); }
+.gear-stat--secondary { background: var(--parchment-dark); color: var(--ink-light); }
+
+/* Caparison label (inside equipment section) */
+.caparison-label {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9rem; font-weight: 700;
+  color: var(--ink-light);
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+}
+
+/* Caparison grid */
+.caparison-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+}
+.caparison-card {
+  padding: 10px; min-height: 70px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.caparison-card__name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.85rem; font-weight: 700;
+}
+.caparison-card__desc {
+  font-size: 0.75rem; color: var(--ink-light); line-height: 1.4;
+}
+
+/* Caparison rarity tints */
+.caparison-card--uncommon.card--selected { border-color: var(--rarity-uncommon); }
+.caparison-card--rare.card--selected { border-color: var(--rarity-rare); }
+.caparison-card--epic.card--selected { border-color: var(--rarity-epic); }
+.caparison-card--legendary.card--selected { border-color: var(--rarity-legendary); }
+.caparison-card--relic.card--selected { border-color: var(--rarity-relic); }
+.caparison-card--giga.card--selected { border-color: var(--rarity-giga); }
+
+/* Rarity badge */
+.rarity-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; width: fit-content;
+}
+.rarity-badge--uncommon { background: var(--rarity-uncommon-bg); color: var(--rarity-uncommon); }
+.rarity-badge--rare { background: var(--rarity-rare-bg); color: var(--rarity-rare); }
+.rarity-badge--epic { background: var(--rarity-epic-bg); color: var(--rarity-epic); }
+.rarity-badge--legendary { background: var(--rarity-legendary-bg); color: var(--rarity-legendary); }
+.rarity-badge--relic { background: var(--rarity-relic-bg); color: var(--rarity-relic); }
+.rarity-badge--giga { background: var(--rarity-legendary-bg); color: var(--rarity-giga); }
+
+/* Stats preview (base → boosted) */
+.stats-preview {
+  display: flex; align-items: center; gap: 12px;
+}
+.stats-preview__column { flex: 1; }
+.stats-preview__label {
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  color: var(--ink-faint); letter-spacing: 0.04em; margin-bottom: 4px;
+}
+.stats-preview__arrow {
+  font-size: 1.5rem; color: var(--gold-dark); font-weight: 700;
+  padding: 0 4px;
+}
+.stats-preview__note {
+  font-size: 0.8rem; color: var(--ink-light); text-align: center; margin-top: 8px;
+}
+
+/* Caparison badges (in scoreboard + triggers) */
+.cap-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 3px;
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; cursor: help;
+  background: var(--parchment-dark); color: var(--ink-light);
+  border: 1px solid var(--border-light);
+}
+.cap-badge--uncommon { border-color: var(--rarity-uncommon); color: var(--rarity-uncommon); }
+.cap-badge--rare { border-color: var(--rarity-rare); color: var(--rarity-rare); }
+.cap-badge--epic { border-color: var(--rarity-epic); color: var(--rarity-epic); }
+.cap-badge--legendary { border-color: var(--rarity-legendary); color: var(--rarity-legendary); }
+.cap-badge--relic { border-color: var(--rarity-relic); color: var(--rarity-relic); }
+.cap-badge--giga { border-color: var(--rarity-giga); color: var(--rarity-giga); }
+
+.cap-badge--triggered {
+  animation: cap-pulse 0.6s ease-out;
+  box-shadow: 0 0 6px currentColor;
+}
+
+@keyframes cap-pulse {
+  0% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Caparison trigger notifications */
+.cap-triggers {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 12px;
+}
+.cap-trigger {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: var(--radius);
+  font-size: 0.8rem;
+  background: var(--parchment-light); border: 1px dashed var(--border);
+}
+.cap-trigger--p1 { border-left: 3px solid var(--p1); }
+.cap-trigger--p2 { border-left: 3px solid var(--p2); }
+.cap-trigger__text { color: var(--ink-light); }
+
+/* Caparison summary (match end) */
+.cap-summary {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 0.8rem;
+}
+.cap-summary__row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px;
+}
+.cap-summary__used {
+  font-size: 0.7rem; font-weight: 600;
+  padding: 1px 6px; border-radius: 3px;
+  background: var(--parchment-dark); color: var(--ink-faint);
+}
+
 @media (max-width: 480px) {
   .attack-grid, .speed-grid, .archetype-grid { grid-template-columns: 1fr; }
   .reveal-sides { grid-template-columns: 1fr; }
+  .rarity-grid { grid-template-columns: repeat(2, 1fr); }
+  .caparison-grid { grid-template-columns: 1fr; }
+  .stats-preview { flex-direction: column; }
+  .stats-preview__arrow { transform: rotate(90deg); }
 }

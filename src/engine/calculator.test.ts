@@ -230,19 +230,19 @@ describe('Melee Thresholds (Guard-Relative)', () => {
 // ============================================================
 describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL→CEP', () => {
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(50, SPEEDS[SpeedType.Fast])).toBe(45);
+    expect(applySpeedStamina(60, SPEEDS[SpeedType.Fast])).toBe(55);
     expect(applySpeedStamina(55, SPEEDS[SpeedType.Standard])).toBe(55);
   });
 
   it('fatigue is 1.0 for both (above respective thresholds)', () => {
-    // Charger threshold = 40, sta = 45 → 1.0
-    expect(fatigueFactor(45, 50)).toBe(1.0);
+    // Charger threshold = 48, sta = 55 → 1.0
+    expect(fatigueFactor(55, 60)).toBe(1.0);
     // Technician threshold = 44, sta = 55 → 1.0
     expect(fatigueFactor(55, 55)).toBe(1.0);
   });
 
   it('Charger Fast+CF momentum is soft-capped (110 → 108.33)', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 45);
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 55);
     // Raw MOM = 70+15+25 = 110, softCap → 108.33, * ff 1.0
     expect(r(stats.momentum, 2)).toBe(108.33);
     // CTL = 45-15-10 = 20 (below knee, no cap)
@@ -284,7 +284,7 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(45, CF)).toBe(25);
+    expect(applyAttackStaminaCost(55, CF)).toBe(35);
     expect(applyAttackStaminaCost(43, CEP)).toBe(29);
   });
 });
@@ -293,30 +293,30 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
 // 7. Effective Stats — Worked Example Pass 2
 // ============================================================
 describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+PdL', () => {
-  // Starting STA: Charger 25, Technician 29
+  // Starting STA: Charger 35, Technician 29
 
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(25, SPEEDS[SpeedType.Slow])).toBe(30);
+    expect(applySpeedStamina(35, SPEEDS[SpeedType.Slow])).toBe(40);
     expect(applySpeedStamina(29, SPEEDS[SpeedType.Standard])).toBe(29);
   });
 
   it('fatigue factors are below threshold for both', () => {
-    // Charger: threshold=40, sta=30 → ff = 30/40 = 0.75
-    expect(fatigueFactor(30, 50)).toBe(0.75);
+    // Charger: threshold=48, sta=40 → ff = 40/48 ≈ 0.833
+    expect(r(fatigueFactor(40, 60), 3)).toBe(r(40 / 48, 3));
     // Technician: threshold=44, sta=29 → ff = 29/44 ≈ 0.659
     expect(r(fatigueFactor(29, 55), 3)).toBe(r(29 / 44, 3));
   });
 
   it('Charger stats use fatigue correctly', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 30);
-    const ff = 0.75;
-    const guardFF = 0.5 + 0.5 * ff; // 0.875
-    // MOM: (70-15+10) = 65 * 0.75 = 48.75
-    expect(stats.momentum).toBe(48.75);
-    // CTL: (45+15+15) = 75 * 0.75 = 56.25
-    expect(stats.control).toBe(56.25);
-    // GRD: (55-5) = 50 * 0.875 = 43.75
-    expect(stats.guard).toBe(43.75);
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 40);
+    const ff = 40 / 48;
+    const guardFF = 0.5 + 0.5 * ff;
+    // MOM: (70-15+10) = 65 * ff
+    expect(r(stats.momentum, 2)).toBe(r(65 * ff, 2));
+    // CTL: (45+15+15) = 75 * ff
+    expect(r(stats.control, 2)).toBe(r(75 * ff, 2));
+    // GRD: (55-5) = 50 * guardFF
+    expect(r(stats.guard, 2)).toBe(r(50 * guardFF, 2));
     expect(stats.initiative).toBe(60);
   });
 
@@ -332,7 +332,7 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(30, BdG)).toBe(15);
+    expect(applyAttackStaminaCost(40, BdG)).toBe(25);
     expect(applyAttackStaminaCost(29, PdL)).toBe(21);
   });
 });
@@ -341,30 +341,30 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
 // 8. Effective Stats — Worked Example Pass 3
 // ============================================================
 describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CEP', () => {
-  // Starting STA: Charger 15, Technician 21
+  // Starting STA: Charger 25, Technician 21
 
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(15, SPEEDS[SpeedType.Slow])).toBe(20);
+    expect(applySpeedStamina(25, SPEEDS[SpeedType.Slow])).toBe(30);
     expect(applySpeedStamina(21, SPEEDS[SpeedType.Standard])).toBe(21);
   });
 
   it('fatigue factors correct', () => {
-    // Charger: threshold=40, sta=20 → 20/40 = 0.5
-    expect(fatigueFactor(20, 50)).toBe(0.5);
+    // Charger: threshold=48, sta=30 → 30/48 = 0.625
+    expect(r(fatigueFactor(30, 60), 3)).toBe(r(30 / 48, 3));
     // Technician: threshold=44, sta=21 → 21/44 ≈ 0.477
     expect(r(fatigueFactor(21, 55), 3)).toBe(r(21 / 44, 3));
   });
 
   it('Charger guard now partially fatigued', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 20);
-    const ff = 0.5;
-    const guardFF = 0.5 + 0.5 * ff; // 0.75
-    // GRD: (55+5) = 60 * 0.75 = 45
-    expect(stats.guard).toBe(45);
-    // MOM still correct: (70-15+5) = 60 * 0.5 = 30
-    expect(stats.momentum).toBe(30);
-    // CTL: (45+15+10) = 70 * 0.5 = 35
-    expect(stats.control).toBe(35);
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 30);
+    const ff = 30 / 48;
+    const guardFF = 0.5 + 0.5 * ff;
+    // GRD: (55+5) = 60 * guardFF
+    expect(r(stats.guard, 2)).toBe(r(60 * guardFF, 2));
+    // MOM: (70-15+5) = 60 * ff
+    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));
+    // CTL: (45+15+10) = 70 * ff
+    expect(r(stats.control, 2)).toBe(r(70 * ff, 2));
   });
 
   it('Technician stats at deeper fatigue', () => {
@@ -384,7 +384,7 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(20, CdL)).toBe(10);
+    expect(applyAttackStaminaCost(30, CdL)).toBe(20);
     expect(applyAttackStaminaCost(21, CEP)).toBe(7);
   });
 });
@@ -423,7 +423,7 @@ describe('Unseat Check', () => {
 describe('resolvePass — integration', () => {
   it('resolves Pass 1 with correct directional outcome', () => {
     const result = resolvePass(
-      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 50 },
+      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 60 },
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
@@ -437,8 +437,8 @@ describe('resolvePass — integration', () => {
     expect(result.p2.shifted).toBe(true);
     expect(result.p2.finalAttack.id).toBe('coupEnPassant');
 
-    // End stamina unchanged (stamina math doesn't change)
-    expect(result.p1.staminaAfter).toBe(25);
+    // End stamina: Charger 60-5(Fast)-20(CF)=35, Tech 55-12(shift)-14(CEP)=29
+    expect(result.p1.staminaAfter).toBe(35);
     expect(result.p2.staminaAfter).toBe(29);
 
     // Charger momentum is soft-capped
@@ -448,7 +448,7 @@ describe('resolvePass — integration', () => {
 
   it('counter bonus in resolvePass scales with CTL', () => {
     const result = resolvePass(
-      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 50 },
+      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 60 },
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
@@ -515,9 +515,9 @@ describe('Counter table symmetry', () => {
 // ============================================================
 describe('Stamina budget sanity checks', () => {
   it('Charger 5x Coup Fort: incapacitated by pass 3', () => {
-    let sta = 50;
-    sta = Math.max(0, sta - 20); expect(sta).toBe(30);
-    sta = Math.max(0, sta - 20); expect(sta).toBe(10);
+    let sta = 60;
+    sta = Math.max(0, sta - 20); expect(sta).toBe(40);
+    sta = Math.max(0, sta - 20); expect(sta).toBe(20);
     sta = Math.max(0, sta - 20); expect(sta).toBe(0);
   });
 
