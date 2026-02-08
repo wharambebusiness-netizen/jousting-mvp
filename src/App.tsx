@@ -7,13 +7,15 @@ import {
   type Attack,
   type PassChoice,
   type Archetype,
+  type AIDifficulty,
   type PassResult,
   type MeleeRoundResult,
   type GiglingLoadout,
 } from './engine/types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './engine/match';
 import { createFullLoadout } from './engine/gigling-gear';
-import { aiPickJoustChoice, aiPickMeleeAttack, aiPickCaparison } from './ai/basic-ai';
+import { aiPickJoustChoiceWithReasoning, aiPickMeleeAttackWithReasoning, aiPickCaparison } from './ai/basic-ai';
+import type { AIReasoning } from './ai/basic-ai';
 import { SetupScreen } from './ui/SetupScreen';
 import { LoadoutScreen } from './ui/LoadoutScreen';
 import { SpeedSelect } from './ui/SpeedSelect';
@@ -24,6 +26,8 @@ import { MeleeResultScreen } from './ui/MeleeResult';
 import { MatchSummary } from './ui/MatchSummary';
 import { CombatLog } from './ui/CombatLog';
 import { MeleeTransition } from './ui/MeleeTransition';
+import { AIThinkingPanel } from './ui/AIThinkingPanel';
+import { DifficultyFeedback, StrategyTips, MatchReplay } from './ui/AIEndScreenPanels';
 
 type Screen =
   | 'setup'
@@ -50,11 +54,15 @@ function App() {
   const [combatLog, setCombatLog] = useState<string[][]>([]);
   const [p1Loadout, setP1Loadout] = useState<GiglingLoadout | null>(null);
   const [p2Loadout, setP2Loadout] = useState<GiglingLoadout | null>(null);
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
+  const [aiReasoning, setAiReasoning] = useState<AIReasoning | null>(null);
+  const [reasoningHistory, setReasoningHistory] = useState<AIReasoning[]>([]);
 
   // --- Setup ---
-  const handleStart = (p1: Archetype, p2: Archetype) => {
+  const handleStart = (p1: Archetype, p2: Archetype, diff: AIDifficulty) => {
     setP1Archetype(p1);
     setP2Archetype(p2);
+    setDifficulty(diff);
     setCombatLog([]);
     setScreen('loadout');
   };
@@ -64,7 +72,7 @@ function App() {
     if (!p1Archetype || !p2Archetype) return;
     // AI gets a random loadout at the same rarity tier, with archetype-weighted caparison
     const aiRarity = playerLoadout.giglingRarity;
-    const aiCapChoice = aiPickCaparison(p2Archetype);
+    const aiCapChoice = aiPickCaparison(p2Archetype, difficulty);
     const aiLoadout = createFullLoadout(aiRarity, aiRarity, aiCapChoice.id);
     setP1Loadout(playerLoadout);
     setP2Loadout(aiLoadout);
@@ -91,8 +99,10 @@ function App() {
     const lastP2Attack = match!.passResults.length > 0
       ? match!.passResults[match!.passResults.length - 1].player2.finalAttack
       : undefined;
-    const ai = aiPickJoustChoice(match!.player2, lastP2Attack, attack);
+    const { choice: ai, reasoning } = aiPickJoustChoiceWithReasoning(match!.player2, lastP2Attack, attack, difficulty);
     setAiChoice(ai);
+    setAiReasoning(reasoning);
+    setReasoningHistory(prev => [...prev, reasoning]);
     setScreen('reveal');
   };
 
@@ -131,7 +141,9 @@ function App() {
     const lastP2Attack = match!.meleeRoundResults.length > 0
       ? match!.meleeRoundResults[match!.meleeRoundResults.length - 1].player2Attack
       : undefined;
-    const aiAttack = aiPickMeleeAttack(match!.player2, lastP2Attack);
+    const { attack: aiAttack, reasoning } = aiPickMeleeAttackWithReasoning(match!.player2, lastP2Attack, difficulty);
+    setAiReasoning(reasoning);
+    setReasoningHistory(prev => [...prev, reasoning]);
 
     const newMatch = submitMeleeRound(match!, attack, aiAttack);
     const roundResult = newMatch.meleeRoundResults[newMatch.meleeRoundResults.length - 1];
@@ -163,6 +175,8 @@ function App() {
     setLastMeleeResult(null);
     setP1Loadout(null);
     setP2Loadout(null);
+    setAiReasoning(null);
+    setReasoningHistory([]);
     setCombatLog([]);
     setScreen('setup');
   };
@@ -207,11 +221,14 @@ function App() {
       )}
 
       {screen === 'pass-result' && match && lastPassResult && (
-        <PassResultScreen
-          match={match}
-          result={lastPassResult}
-          onContinue={handlePassContinue}
-        />
+        <>
+          <PassResultScreen
+            match={match}
+            result={lastPassResult}
+            onContinue={handlePassContinue}
+          />
+          {aiReasoning && <AIThinkingPanel reasoning={aiReasoning} />}
+        </>
       )}
 
       {screen === 'melee-transition' && match && lastPassResult && (
@@ -227,15 +244,23 @@ function App() {
       )}
 
       {screen === 'melee-result' && match && lastMeleeResult && (
-        <MeleeResultScreen
-          match={match}
-          result={lastMeleeResult}
-          onContinue={handleMeleeContinue}
-        />
+        <>
+          <MeleeResultScreen
+            match={match}
+            result={lastMeleeResult}
+            onContinue={handleMeleeContinue}
+          />
+          {aiReasoning && <AIThinkingPanel reasoning={aiReasoning} isMelee />}
+        </>
       )}
 
       {screen === 'end' && match && (
-        <MatchSummary match={match} p1Loadout={p1Loadout} p2Loadout={p2Loadout} onRematch={handleRematch} />
+        <>
+          <MatchSummary match={match} p1Loadout={p1Loadout} p2Loadout={p2Loadout} onRematch={handleRematch} />
+          <DifficultyFeedback match={match} />
+          <StrategyTips match={match} />
+          <MatchReplay match={match} reasoningHistory={reasoningHistory} />
+        </>
       )}
 
       {screen !== 'setup' && <CombatLog entries={combatLog} />}

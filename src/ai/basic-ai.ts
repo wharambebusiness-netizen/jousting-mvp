@@ -441,7 +441,7 @@ function evaluateShiftWithReasoning(
     const counters = resolveCounters(candidate, opponentAttack);
     score += counters.player1Bonus * 2;
     if (candidate.stance === currentAttack.stance) score += 3;
-    const shiftCost = candidate.stance === currentAttack.stance ? 5 : 12;
+    const shiftCost = candidate.stance === currentAttack.stance ? BALANCE.shiftSameStanceCost : BALANCE.shiftCrossStanceCost;
     if (staAfterSpeed - shiftCost < 10) score -= 10;
 
     if (score > bestScore) {

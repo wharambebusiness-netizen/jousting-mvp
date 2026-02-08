@@ -1,136 +1,73 @@
 ## META
-- status: all-done
-- files-modified: src/engine/calculator.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-2.md
+- status: in-progress
+- files-modified: orchestrator/analysis/quality-review-round-1.md
 - tests-passing: true
-- notes-for-others: 327 tests all passing. Bug found in PassResult.tsx lines 111-112 and 116-117: counter bonus display hardcoded as "+10"/"-10" but actual value scales with CTL (range ~4-14). UI-polish agent should fix by replacing hardcoded strings with actual `counters.player1Bonus` / `counters.player2Bonus` values. AI shift cost in evaluateShift() line 376 is hardcoded (5/12) — sync risk if balance constants change.
+- notes-for-others: IMPORTANT: types.ts changes are already applied in working tree (from prior session). tsc reports 156 errors because types.ts removed caparison types but other files still import them. Vitest passes because esbuild skips type checking. Engine-refactor should focus on phase-joust.ts, phase-melee.ts, caparison.test.ts, and balance-config.ts cleanup (types.ts is DONE). Gear-system: gigling-gear.ts still has chanfron (old spelling) and all caparison code. simulate.ts still imports old AI function names (aiPickJoustChoice, aiPickMeleeAttack) -- may break if those exports are removed.
 
-## What Was Done
-
-### Round 1: Full Codebase Review + Edge Case Tests
-1. **Reviewed all engine files**: calculator.ts, match.ts, phase-joust.ts, phase-melee.ts, attacks.ts, archetypes.ts, gigling-gear.ts, types.ts, balance-config.ts
-2. **Evaluated game format**: 5-pass joust, counter system, shift mechanics, melee phase, caparisons — all assessed as well-designed with no degenerate strategies
-3. **Added 28 new edge case tests** (see round 1 report)
-
-### Round 2: Agent Change Review + Stretch Goal Tests
-1. **Reviewed ai-engine changes** (basic-ai.ts): OpponentHistory, AI Commentary, Archetype Personality, Caparison selection, Pattern exploitation. All high quality, no issues.
-2. **Reviewed ui-polish changes** (helpers.tsx, PassResult.tsx, MatchSummary.tsx, App.css): Good quality overall. Found 1 bug (counter bonus display hardcoded).
-3. **Reviewed balance-config.ts changes**: New aiDifficulty and aiPattern sections. Values reasonable.
-4. **Added 32 new stretch goal tests**:
-   - Shift eligibility at exact CTL threshold for all 3 speeds (8 tests)
-   - Non-mirror double unseat with asymmetric archetypes (2 tests)
-   - Full Giga gear match simulation with shift capability checks (4 tests)
-   - All 16 archetype combination pairs complete 5-pass joust (16 tests)
-   - Full match lifecycle from joust through melee to winner (1 test)
-   - Shift denied mid-match from stamina drain (1 test)
-5. **Wrote quality report**: orchestrator/analysis/quality-review-round-2.md
-
-### Test Count
-- Before round 1: 222 tests
-- After round 1: 295 tests (+73)
-- After round 2: 327 tests (+32)
-- All 327 passing
+## What Was Done (Round 1)
+1. Ran full test suite: **327 tests, ALL PASSING** (5 suites, 390ms)
+2. Ran TypeScript check: **156 errors** (expected -- types.ts updated ahead of other files)
+3. Reviewed all 3 other agent handoffs for coordination issues
+4. Catalogued all caparison references across the codebase (18+ files affected)
+5. Identified 5 coordination risks (see analysis report)
+6. Documented per-file error counts with responsible agent assignments
+7. Wrote detailed analysis: `orchestrator/analysis/quality-review-round-1.md`
 
 ## What's Left
 
-All primary and stretch goals completed:
-- [x] Non-mirror double unseat test
-- [x] Shift eligibility boundary test at exact CTL threshold
-- [x] Review changes from other agents (ai-engine, ui-polish)
-- [x] AI behavior quality assessment
-- [x] Full gear loadout match simulation tests
-- [x] All archetype combinations tested
-- [x] Full match lifecycle test
+### After engine-refactor completes:
+- Verify caparison effects fully stripped from phase-joust.ts and phase-melee.ts
+- Verify resolveJoustPass/resolveMeleeRoundFn work without caparison params
+- Update MY file playtest.test.ts: remove CaparisonEffectId import and caparison test sections (sections 2, 3)
+- Replace removed tests with gear-based full match simulations
+- Verify caparison.test.ts is properly rewritten
 
-### Possible Future Work (if agent is relaunched)
-1. Review any new changes from ai-reasoning or balance-sim agents
-2. Add AI unit tests for pattern detection and commentary (low priority — heuristic code)
-3. Add caparison interaction tests with full matches (caparison.test.ts)
+### After gear-system completes:
+- Verify 6-slot steed gear creates correct stat bonuses
+- Verify player gear creates correct stat bonuses
+- Verify combined steed + player gear in match creation
+- Add integration tests in match.test.ts:
+  - Full match with both steed and player loadouts at various rarities
+  - All 12 slots empty (no gear)
+  - Mixed rarities across slots
+  - Maximum stat stacking (all Giga gear) -- verify softCap keeps things in check
+  - Single slot occupied, rest empty
 
-## Bugs Found
-1. **PassResult.tsx counter display hardcoded** (lines 111-112, 116-117): Shows "+10"/"-10" instead of actual scaled counter bonus. Owned by ui-polish agent.
+### After ui-loadout completes:
+- Verify no caparison references remain in any UI file
+- Verify basic-ai.ts no longer references caparison
+- Verify no orphaned CSS classes
+- Full integration check: compile, test, no warnings
+
+### Balance verification (after all agents complete):
+- Run simulation tool: `npx tsx src/tools/simulate.ts`
+- Verify win rates reasonable (no archetype > 70% or < 30%)
+- Update simulation tool if needed for new gear system
 
 ## Issues
-- **Minor**: AI shift cost hardcoded in evaluateShift() at line 376. Matches current balance constants but would desync if constants change.
-- **Minor**: CounterResult type comment in types.ts:185 says "+10, -10, or 0" but bonus scales with CTL. Stale documentation.
-- **No engine bugs found.**
+1. **156 TypeScript errors**: Expected -- types.ts was updated ahead of other files. Each agent will fix their owned files.
+2. **playtest.test.ts**: My file imports removed `CaparisonEffectId` type -- will fix after engine-refactor completes and I know the new API shape.
+3. **simulate.ts fragility**: May break when AI function names change. Not my file to fix but worth tracking.
 
-## Previous Work
-- Round 1: Full codebase review, game format evaluation, 28 new tests added.
-- Round 2: Agent change review, stretch goal tests, bug found in PassResult.tsx.
+## File Ownership
+- `src/engine/playtest.test.ts` (integration/playtest tests)
+- `src/engine/match.test.ts` (match-level tests -- test additions only)
+- `orchestrator/analysis/quality-review-*.md` (reports)
 
-## Your Mission
-You are the quality assurance and game design reviewer. Every round you:
-1. Review recent changes made by other agents (check task board for files-modified)
-2. Evaluate overall game format and flow quality
-3. Test edge cases and look for bugs
-4. Assess test coverage gaps and add tests where needed
-5. Review the gameplay loop — does the speed->attack->reveal->shift->resolve flow feel right?
-6. Write quality reports and action items
+## Stretch Goals
+1. Add performance regression test (ensure match creation + 5 passes runs under X ms)
+2. Add property-based tests (random gear at all rarities, verify no crashes)
+3. Update simulation tool if needed for new gear system
 
-## Project Context
-- Jousting minigame MVP: Vite + React + TypeScript
-- Project root: jousting-mvp/
-- 327 tests passing. Run with: `npx vitest run`
-- Full architecture reference: jousting-handoff-s17.md
-- Test files: src/engine/*.test.ts (calculator, match, caparison, gigling-gear, playtest)
+## Context: What's Changing
+The gear system is being overhauled:
+- **Old**: 3 steed gear slots (barding, chanfron, saddle) + 6 caparison gameplay effects
+- **New**: 6 steed gear slots (chamfron, barding, saddle, stirrups, reins, horseshoes) + 6 player gear slots (helm, shield, lance, armor, gauntlets, melee_weapon) + cosmetic-only caparison
+- Read `gear-overhaul-milestones.md` for full design
 
-## What to Do Each Round
-
-### Step 1: Review Changes
-Read the task board to see what other agents modified. Read those files and assess:
-- Code quality (clean, readable, no dead code)
-- Consistency with existing patterns
-- Type safety (no `any` types, proper interfaces)
-- No accidental regressions
-
-### Step 2: Evaluate Game Format
-Think critically about the jousting format:
-- Is the 5-pass joust -> melee transition compelling?
-- Does the speed/attack/shift decision tree give enough meaningful choices?
-- Are there degenerate strategies (always pick X and win)?
-- Does the counter system create interesting risk/reward?
-- Is the melee phase (first to 4 wins) too long or too short?
-- Do caparisons add meaningful strategic depth or just noise?
-
-Write your assessment to the analysis report.
-
-### Step 3: Test Edge Cases
-Write new test cases for scenarios that aren't covered.
-Add tests to the appropriate test file (match.test.ts for integration, calculator.test.ts for formula edge cases).
-
-### Step 4: Format Improvement Proposals
-If you identify format issues, propose concrete changes.
-Write proposals to your analysis report. Do NOT implement format changes — just propose them.
-
-### Step 5: Write Quality Report
-Write to `orchestrator/analysis/quality-review-round-N.md`.
-
-## Files You Own
-- src/engine/calculator.test.ts — can ADD new test cases
-- src/engine/match.test.ts — can ADD new test cases
-- src/engine/caparison.test.ts — can ADD new test cases
-- src/engine/playtest.test.ts — can ADD new test cases
-- orchestrator/analysis/quality-review-*.md — your reports
-
-## Files You Must NOT Edit
-- src/engine/balance-config.ts (owned by balance-sim)
-- src/engine/archetypes.ts (owned by balance-sim)
-- src/ai/basic-ai.ts (owned by ai-engine)
-- src/ui/* (owned by ui-polish / ai-reasoning)
-- src/App.tsx (shared)
-- src/engine/types.ts (owned by ai-engine)
-
-## IMPORTANT: You May Only ADD Tests, Not Modify Engine Code
-Your role is review and testing, not implementation. If you find bugs:
-1. Write a failing test that demonstrates the bug
-2. Note it in your handoff under "Bugs Found"
-3. The relevant agent will fix it in the next round
-
-The only code you should write is NEW TEST CASES in existing test files.
-
-## Safety Rules
+## IMPORTANT Rules
 - NEVER modify engine code (calculator.ts, phase-joust.ts, phase-melee.ts, match.ts)
 - NEVER modify UI code
-- ONLY add new test cases (append to existing test files)
+- ONLY add new test cases (append to existing test files) or write quality reports
 - ALWAYS run the full test suite after adding tests
-- If your new test reveals a bug, that's GOOD — document it, don't try to fix it
+- If your new test reveals a bug, document it in handoff, don't try to fix it

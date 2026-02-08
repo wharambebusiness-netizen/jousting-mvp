@@ -1,12 +1,9 @@
 // ============================================================
-// Jousting — Melee Phase Resolution (Scaling-Ready + Caparison)
+// Jousting — Melee Phase Resolution
 // ============================================================
 import {
-  Stance,
   type Archetype,
   type Attack,
-  type CaparisonEffect,
-  type CaparisonInput,
   type MeleeRoundResult,
   type PlayerState,
 } from './types';
@@ -19,39 +16,10 @@ import {
   applyAttackStaminaCost,
   resolveMeleeRound,
 } from './calculator';
-import { BALANCE } from './balance-config';
-
-// --- Caparison Archetype Adjustment (Melee) ---
-// Only Shieldcloth and Stormcloak apply in melee.
-// Pennant (pass-based), Thunderweave (speed-based), Irongrip (shift-based) are joust-only.
-
-function adjustArchetypeForMelee(
-  archetype: Archetype,
-  cap: CaparisonEffect | undefined,
-  attack: Attack,
-): Archetype {
-  if (!cap) return archetype;
-
-  let adj = { ...archetype };
-
-  // Woven Shieldcloth: +GRD when Defensive stance
-  if (cap.id === 'woven_shieldcloth' && attack.stance === Stance.Defensive) {
-    adj.guard += BALANCE.caparison.shieldclothGuardBonus;
-  }
-
-  // Stormcloak: reduce effective maxStamina for fatigue calculation
-  if (cap.id === 'stormcloak') {
-    adj.stamina = adj.stamina *
-      (BALANCE.fatigueRatio - BALANCE.caparison.stormcloakFatigueReduction) / BALANCE.fatigueRatio;
-  }
-
-  return adj;
-}
 
 /**
  * Resolves a single melee round:
  *  - Both players select attack simultaneously
- *  - Apply relevant caparison effects (Shieldcloth, Stormcloak, Banner)
  *  - Compute ImpactScore for both (same formula as joust)
  *  - Differential scoring with thresholds relative to defender's guard
  *  - No speed selection, no shifts in melee
@@ -62,32 +30,24 @@ export function resolveMeleeRoundFn(
   p2State: PlayerState,
   p1Attack: Attack,
   p2Attack: Attack,
-  p1Cap?: CaparisonInput,
-  p2Cap?: CaparisonInput,
 ): MeleeRoundResult {
   const log: string[] = [];
-  const p1Effect = p1Cap?.effect;
-  const p2Effect = p2Cap?.effect;
 
   log.push(`=== Melee Round ${roundNumber} ===`);
   log.push(`P1: ${p1Attack.name} | P2: ${p2Attack.name}`);
 
-  // Adjust archetypes for caparison effects
-  const adj1 = adjustArchetypeForMelee(p1State.archetype, p1Effect, p1Attack);
-  const adj2 = adjustArchetypeForMelee(p2State.archetype, p2Effect, p2Attack);
-
-  // Fatigue (uses adjusted archetype for Stormcloak)
-  const ff1 = fatigueFactor(p1State.currentStamina, adj1.stamina);
-  const ff2 = fatigueFactor(p2State.currentStamina, adj2.stamina);
+  // Fatigue
+  const ff1 = fatigueFactor(p1State.currentStamina, p1State.archetype.stamina);
+  const ff2 = fatigueFactor(p2State.currentStamina, p2State.archetype.stamina);
   log.push(`STA: P1 ${p1State.currentStamina} (FF ${ff1.toFixed(3)}), P2 ${p2State.currentStamina} (FF ${ff2.toFixed(3)})`);
 
   // Effective stats (melee — no speed)
   const stats1 = computeMeleeEffectiveStats(
-    adj1, p1Attack, p1State.currentStamina,
+    p1State.archetype, p1Attack, p1State.currentStamina,
     p1State.carryoverMomentum, p1State.carryoverControl, p1State.carryoverGuard,
   );
   const stats2 = computeMeleeEffectiveStats(
-    adj2, p2Attack, p2State.currentStamina,
+    p2State.archetype, p2Attack, p2State.currentStamina,
     p2State.carryoverMomentum, p2State.carryoverControl, p2State.carryoverGuard,
   );
 
@@ -97,30 +57,13 @@ export function resolveMeleeRoundFn(
   // Counters (scaled by winner's CTL)
   const counters = resolveCounters(p1Attack, p2Attack, stats1.control, stats2.control);
 
-  // Banner of the Giga: boost first successful counter
-  let counterBonus1 = counters.player1Bonus;
-  let counterBonus2 = counters.player2Bonus;
-  let p1BannerConsumed = false;
-  let p2BannerConsumed = false;
-
-  if (p1Effect?.id === 'banner_of_the_giga' && !p1Cap?.bannerUsed && counterBonus1 > 0) {
-    counterBonus1 *= BALANCE.caparison.gigaBannerCounterMultiplier;
-    p1BannerConsumed = true;
-    log.push(`P1 Banner of the Giga: counter bonus ${counters.player1Bonus.toFixed(2)}→${counterBonus1.toFixed(2)}`);
-  }
-  if (p2Effect?.id === 'banner_of_the_giga' && !p2Cap?.bannerUsed && counterBonus2 > 0) {
-    counterBonus2 *= BALANCE.caparison.gigaBannerCounterMultiplier;
-    p2BannerConsumed = true;
-    log.push(`P2 Banner of the Giga: counter bonus ${counters.player2Bonus.toFixed(2)}→${counterBonus2.toFixed(2)}`);
-  }
-
-  if (counterBonus1 !== 0 || counterBonus2 !== 0) {
-    log.push(`Counter: ${p1Attack.name} vs ${p2Attack.name} → P1 ${counterBonus1 > 0 ? '+' : ''}${counterBonus1.toFixed(2)}, P2 ${counterBonus2 > 0 ? '+' : ''}${counterBonus2.toFixed(2)}`);
+  if (counters.player1Bonus !== 0 || counters.player2Bonus !== 0) {
+    log.push(`Counter: ${p1Attack.name} vs ${p2Attack.name} → P1 ${counters.player1Bonus > 0 ? '+' : ''}${counters.player1Bonus.toFixed(2)}, P2 ${counters.player2Bonus > 0 ? '+' : ''}${counters.player2Bonus.toFixed(2)}`);
   }
 
   // Accuracy
-  const acc1 = calcAccuracy(stats1.control, stats1.initiative, stats2.momentum, counterBonus1);
-  const acc2 = calcAccuracy(stats2.control, stats2.initiative, stats1.momentum, counterBonus2);
+  const acc1 = calcAccuracy(stats1.control, stats1.initiative, stats2.momentum, counters.player1Bonus);
+  const acc2 = calcAccuracy(stats2.control, stats2.initiative, stats1.momentum, counters.player2Bonus);
   log.push(`Accuracy: P1 ${acc1.toFixed(2)}, P2 ${acc2.toFixed(2)}`);
 
   // ImpactScore
@@ -156,7 +99,5 @@ export function resolveMeleeRoundFn(
     player1StaminaAfter: staAfter1,
     player2StaminaAfter: staAfter2,
     log,
-    p1BannerConsumed,
-    p2BannerConsumed,
   };
 }

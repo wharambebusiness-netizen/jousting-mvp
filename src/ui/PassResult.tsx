@@ -108,12 +108,12 @@ export function PassResultScreen({ match, result, onContinue }: {
               <span className="impact-row__p1" style={{
                 color: counters.player1Bonus > 0 ? 'var(--green)' : counters.player1Bonus < 0 ? 'var(--red)' : undefined,
               }}>
-                {counters.player1Bonus > 0 ? '+10' : counters.player1Bonus < 0 ? '-10' : '0'}
+                {counters.player1Bonus > 0 ? `+${counters.player1Bonus.toFixed(1)}` : counters.player1Bonus < 0 ? counters.player1Bonus.toFixed(1) : '0'}
               </span>
               <span className="impact-row__p2" style={{
                 color: counters.player2Bonus > 0 ? 'var(--green)' : counters.player2Bonus < 0 ? 'var(--red)' : undefined,
               }}>
-                {counters.player2Bonus > 0 ? '+10' : counters.player2Bonus < 0 ? '-10' : '0'}
+                {counters.player2Bonus > 0 ? `+${counters.player2Bonus.toFixed(1)}` : counters.player2Bonus < 0 ? counters.player2Bonus.toFixed(1) : '0'}
               </span>
             </div>
           </div>

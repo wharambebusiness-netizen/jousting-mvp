@@ -51,6 +51,14 @@ export const BALANCE = {
   // Old 10 → 15: makes high-guard archetypes ~33% easier to unseat.
   guardUnseatDivisor: 15,
 
+  // --- Shift Costs ---
+  // Stamina cost and initiative penalty for shifting mid-pass.
+  // Same-stance shifts are cheaper than cross-stance shifts.
+  shiftSameStanceCost: 5,
+  shiftCrossStanceCost: 12,
+  shiftSameStanceInitPenalty: 5,
+  shiftCrossStanceInitPenalty: 10,
+
   // --- Melee Thresholds (Relative to Defender Guard) ---
   // Hit and Critical thresholds scale with the defender's effective guard.
   // At average GRD ~65: hitThreshold ≈ 5, critThreshold ≈ 25 (old values).
@@ -84,17 +92,6 @@ export const BALANCE = {
     giga: 13,
   },
 
-  // --- Caparison Effect Values ---
-  // All effect magnitudes live here for easy tuning.
-  caparison: {
-    hasteInitBonus: 2,           // Pennant of Haste: +INIT on pass 1
-    shieldclothGuardBonus: 3,    // Woven Shieldcloth: +GRD when Defensive
-    thunderweaveMomBonus: 4,     // Thunderweave: +MOM when Fast
-    irongripShiftReduction: 5,   // Irongrip Drape: -shift threshold
-    stormcloakFatigueReduction: 0.05, // Stormcloak: -fatigue ratio
-    gigaBannerCounterMultiplier: 1.5,  // Banner of the Giga: first counter multiplier
-  },
-
   // --- AI Difficulty Ratios ---
   // optimalRatio: probability of using weighted-optimal decision vs random.
   // Higher = smarter AI. Easy is forgiving, hard is punishing.
@@ -113,17 +110,27 @@ export const BALANCE = {
     historyLength: 3,
   },
 
-  // --- Gear Stat Ranges (per rarity, for stat pieces) ---
+  // --- Steed Gear Stat Ranges (per rarity, for stat pieces) ---
   // primary = main stat of the slot, secondary = off-stat.
   // Values are [min, max] inclusive. Rolled at craft time.
-  // Compressed from previous values so Giga max primary (15) + rarity (13)
-  // + highest base (75 Charger MOM) = 103 → softCap effective 100.9.
+  // Reduced from 3-slot values since there are now 6 steed slots.
   gearStatRanges: {
-    uncommon:  { primary: [1, 3],   secondary: [0, 1] },
-    rare:      { primary: [2, 5],   secondary: [1, 2] },
-    epic:      { primary: [4, 7],   secondary: [2, 4] },
-    legendary: { primary: [6, 10],  secondary: [3, 5] },
-    relic:     { primary: [8, 12],  secondary: [4, 7] },
-    giga:      { primary: [10, 15], secondary: [6, 9] },
+    uncommon:  { primary: [1, 2],  secondary: [0, 1] },
+    rare:      { primary: [1, 3],  secondary: [1, 2] },
+    epic:      { primary: [2, 4],  secondary: [1, 3] },
+    legendary: { primary: [3, 5],  secondary: [2, 3] },
+    relic:     { primary: [4, 7],  secondary: [3, 5] },
+    giga:      { primary: [5, 9],  secondary: [4, 6] },
+  },
+
+  // --- Player Gear Stat Ranges (per rarity, for stat pieces) ---
+  // Same structure as steed gear. Can diverge after balance simulation.
+  playerGearStatRanges: {
+    uncommon:  { primary: [1, 2],  secondary: [0, 1] },
+    rare:      { primary: [1, 3],  secondary: [1, 2] },
+    epic:      { primary: [2, 4],  secondary: [1, 3] },
+    legendary: { primary: [3, 5],  secondary: [2, 3] },
+    relic:     { primary: [4, 7],  secondary: [3, 5] },
+    giga:      { primary: [5, 9],  secondary: [4, 6] },
   },
 } as const;

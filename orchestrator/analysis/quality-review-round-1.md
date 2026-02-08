@@ -1,83 +1,111 @@
-# Quality Review — Round 1
+# Quality Review — Round 1 Analysis (Gear Overhaul Session)
 
-## Code Quality Assessment
+## Summary
+Round 1 baseline assessment before gear overhaul begins. Tests pass via vitest but TypeScript compilation has **156 errors** due to types.ts being pre-updated with new gear types while the rest of the codebase still uses old types.
 
-### Engine (15 files reviewed)
-- **Overall**: Excellent quality. Clean, modular, well-separated concerns.
-- **Type safety**: Strong. No `any` types found. All interfaces properly defined in types.ts.
-- **Code patterns**: Consistent across all files. Pure functions, no side effects in engine.
-- **Dead code**: `resolvePass()` in calculator.ts is properly marked `@deprecated` with JSDoc. Still used in calculator.test.ts for base-formula validation — acceptable.
-- **Naming**: Consistent camelCase, descriptive names. Attack IDs match across attacks.ts and counter tables.
+## Test Results
+- **vitest**: 327 tests, 5 suites, ALL PASSING
+- **tsc --noEmit (tsconfig.app.json)**: 156 errors (see breakdown below)
 
-### Potential Issues Found
-1. **MeleeRoundResult.margin is absolute value** (phase-melee.ts:153 `Math.abs(margin)`) — the `margin` field loses sign information. The `winner` field compensates, but downstream code must use `winner` not `margin` to determine direction. This is by design but worth noting.
-2. **CounterResult type comment stale** (types.ts:185): Comment says `+10, -10, or 0` but bonus actually scales with CTL (e.g., 6 to 14). Minor doc issue.
+Note: vitest uses esbuild for TS transpilation, which skips type checking. Tests run fine despite type errors. The `npx tsc --noEmit` (composite) also reports 0 errors due to caching — only the explicit `npx tsc --noEmit -p tsconfig.app.json` reveals the real state.
 
-### No Bugs Found
-All formulas verified against handoff spec. Counter tables symmetric. Fatigue, soft cap, guard fatigue all working correctly.
+## Pre-existing Working Tree Changes
+The orchestrator's prior session already applied several changes that are uncommitted:
 
-## Game Format Evaluation
+### types.ts (engine-refactor scope)
+Already done:
+- Removed `CaparisonEffectId`, `CaparisonEffect`, `CaparisonInput` types
+- Removed `p1BannerConsumed`/`p2BannerConsumed` from PassResult and MeleeRoundResult
+- Removed `p1Caparison`/`p2Caparison`/`p1BannerUsed`/`p2BannerUsed` from MatchState
+- Removed old `GearSlot` type (included 'caparison')
+- Added `SteedGearSlot` (6 slots), `PlayerGearSlot` (6 slots)
+- Added `PlayerGear`, `PlayerLoadout` interfaces
+- Updated `GiglingGear.slot` to `SteedGearSlot`
+- Updated `GiglingLoadout` to use `chamfron` (not `chanfron`) and added 3 new slots
 
-### 5-Pass Joust Format
-- **Verdict: Compelling.** 5 passes is the right number — enough for stamina management to matter (cheap attacks survive 5, expensive ones exhaust by pass 3), but not so many that games drag.
-- The speed/attack decision tree gives 3x6 = 18 possible choices per pass, with shift adding another layer → meaningful decision space.
-- No degenerate "always-win" strategy found. All 6 attacks repeated 5x survive as mirror matchups. CF exhausts by pass 3 but still plays. PdL survives all 5 comfortably but deals less impact.
+### balance-config.ts (engine-refactor scope)
+- Added shift cost constants (`shiftSameStanceCost`, `shiftCrossStanceCost`, etc.)
 
-### Counter System
-- **Verdict: Well-balanced.** The Agg > Def > Bal > Agg triangle creates genuine rock-paper-scissors tension. No uncounterable attack (every attack is beaten by at least 1 other). The CTL-scaling counter bonus (4 + CTL*0.1) rewards high-control archetypes without making counters irrelevant for low-control ones.
+### calculator.ts (engine-refactor scope)
+- `applyShiftCost()` now uses BALANCE constants instead of hardcoded 5/12
 
-### Shift Mechanic
-- **Verdict: Good strategic depth.** Cross-stance shifts cost 2.4x more stamina (12 vs 5) and 2x more initiative (10 vs 5) than same-stance. This makes "reactive" shifts expensive, which is correct — they shouldn't be free. The initiative-priority ordering (lower INIT shifts first = disadvantage) rewards Tactician's high INIT.
+### basic-ai.ts (ui-loadout scope)
+- Shift evaluation now uses `BALANCE.shiftSameStanceCost` instead of hardcoded
 
-### Melee Phase
-- **Verdict: Appropriate length.** First-to-4 wins with criticals counting as 2 means matches can end in 2-8 rounds realistically. Guard fatigue floor (50%) prevents infinite turtling. The exhaustion tiebreaker chain (melee wins → joust score → draw) handles all edge cases cleanly.
+### PassResult.tsx (ui-loadout scope)
+- Fixed bug: counter bonus display now shows actual value instead of hardcoded "+10"/"-10"
 
-### Caparisons
-- **Verdict: Meaningful strategic depth.** Each caparison has a clear use case tied to playstyle. Thunderweave rewards aggressive play (Fast speed). Shieldcloth rewards defensive play. Stormcloak rewards attrition. Banner of the Giga is a one-shot spike. Irongrip enables otherwise-impossible shifts. No "noise" effects — all feel impactful.
+### App.tsx (shared)
+- Added AI reasoning integration (`aiPickJoustChoiceWithReasoning`, `aiPickMeleeAttackWithReasoning`)
+- Added difficulty state, AIThinkingPanel imports
+- Still references `aiPickCaparison` (will need removal)
 
-### Potential Degenerate Strategies
-- **PdL spam**: Cheapest attack (8 STA), survives 5 passes easily. But it beats only CdL and CEP — if opponent picks CF/BdG, PdL loses the counter. Not dominant.
-- **Always Slow+Defensive**: Gains +5 STA/pass, shift threshold only 50. But low momentum means low impact. Opponent outscores through aggressive play.
-- **No degenerate strategy found.** The counter triangle and stamina/momentum tradeoffs prevent any single approach from dominating.
+## TypeScript Error Breakdown (156 errors, by file)
 
-## Edge Cases Tested — All Pass
+| File | Errors | Owner | Notes |
+|------|--------|-------|-------|
+| caparison.test.ts | 48 | engine-refactor | All caparison test references broken |
+| gigling-gear.test.ts | 23 | gear-system | chanfron->chamfron, caparison refs |
+| match.ts | 18 | gear-system | CaparisonInput import, capInput(), banner tracking |
+| MatchSummary.tsx | 17 | ui-loadout | p1/p2Caparison, chanfron refs |
+| PassResult.tsx | 14 | ui-loadout | p1/p2Caparison, p1/p2BannerConsumed |
+| MeleeResult.tsx | 14 | ui-loadout | p1/p2Caparison, p1/p2BannerConsumed |
+| gigling-gear.ts | 9 | gear-system | CaparisonEffectId import, caparison slot |
+| AttackSelect.tsx | 4 | ui-loadout | p1/p2Caparison on MatchState |
+| SpeedSelect.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
+| RevealScreen.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
+| MeleeTransition.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
+| LoadoutScreen.tsx | 2 | ui-loadout | chanfron->chamfron |
+| helpers.tsx | 1 | ui-loadout | CaparisonBadge type ref |
+| playtest.test.ts | 1 | quality-review | CaparisonEffectId import |
+| basic-ai.ts | 1 | ui-loadout | CaparisonEffectId import |
 
-| Test Category | Tests Added | Result |
-|---|---|---|
-| Both players 0 stamina full pass | 2 | PASS |
-| Shift cost differences (same vs cross-stance) | 2 | PASS |
-| Maximum gear stacking (Giga on Giga) | 3 | PASS |
-| Counter bonus asymmetry | 2 | PASS |
-| Unseat threshold extremes | 2 | PASS |
-| Melee at guard 0 with carryover | 1 | PASS |
-| All 6 joust attacks as degenerate strategy | 6 | PASS |
-| All 6 melee attacks mirror matchup | 6 | PASS |
-| Melee exhaustion with unequal wins | 1 | PASS |
-| Unseat naming convention verification | 1 | PASS |
-| Varied attack selection across 5 passes | 1 | PASS |
-| Melee stamina drain tracking | 1 | PASS |
+## Coordination Risks Identified
 
-**Total new tests: 28** (calculator.test.ts: 12, match.test.ts: 16)
-**Total tests now: 295** (was 222)
+### RISK 1: types.ts Already Applied -- Agent Ordering Issue
+The engine-refactor agent's primary task (types.ts changes) is **already done** in the working tree. This means:
+- engine-refactor needs to focus on phase-joust.ts, phase-melee.ts, balance-config.ts, and caparison.test.ts
+- gear-system is listed as blocked on engine-refactor, but types.ts is already ready
+- If engine-refactor doesn't clean up ALL its files in round 1, gear-system may be blocked unnecessarily
 
-## Test Coverage Gaps Remaining
-1. **AI unit tests**: No tests for basic-ai.ts. AI validated indirectly through playtests.
-2. **React component tests**: No UI tests exist.
-3. **Unseat with both exceeding threshold with different margins**: Partially tested in calculator.test.ts (section 17, "double unseat: higher margin wins") but only as mirror matchup. A non-mirror double-unseat scenario would be valuable.
-4. **Shift eligibility at exact threshold boundary**: canShift uses `>=`, boundary tested at 10 STA but not at exact CTL threshold.
+### RISK 2: gigling-gear.ts Still Has Old Code
+`gigling-gear.ts` still uses `'chanfron'` (old spelling) and has caparison-related code (CAPARISON_EFFECTS, createCaparison, getCaparisonEffect). The gear-system agent owns this file and needs to:
+- Rename chanfron->chamfron
+- Delete CAPARISON_EFFECTS, createCaparison, getCaparisonEffect
+- Expand from 3->6 slots
+But some of this cleanup overlaps with what engine-refactor is stripping from types.ts.
 
-## Improvement Proposals (NOT implemented — for discussion only)
+### RISK 3: playtest.test.ts Imports CaparisonEffectId (MY FILE)
+My file `playtest.test.ts` imports `CaparisonEffectId` from types.ts. This type no longer exists. I need to update my test file to remove caparison references once the engine-refactor agent finishes stripping caparison from the engine files. Currently the tests still pass because vitest doesn't type-check, but the import is broken.
 
-### Format Proposals
-1. **Consider Breaker unique mechanic**: Breaker is "anti-Bulwark" by identity but has no mechanical differentiation beyond stats. A "guard shatter" bonus on counter wins vs Defensive attacks would reinforce its identity.
-2. **Pass stamina visibility**: Consider showing estimated remaining passes at each attack's cost to help players plan.
+### RISK 4: App.tsx Has Multiple Owners' Concerns
+App.tsx has been modified with AI reasoning integration but still references `aiPickCaparison`. The ui-loadout agent owns this file but the change touches both AI and loadout concerns. The "Deferred App.tsx Changes" protocol should handle this but worth monitoring.
 
-### Balance Observation
-- Duelist (300 stat total, all 60s) is the strongest generalist — it never has a weakness to exploit. It might benefit from 295 total (e.g., -5 from one stat) to give other archetypes a clearer niche.
+### RISK 5: simulate.ts Uses Old AI Functions
+`src/tools/simulate.ts` imports `aiPickJoustChoice` and `aiPickMeleeAttack` -- these were renamed to `*WithReasoning` variants in the App.tsx diff. The old function names may still exist as exports in basic-ai.ts, but if they're removed, simulate.ts will break.
 
-## Test Suite Summary
-```
-Tests: 295 passed (295)
-Files: 5 passed (5)
-Duration: 446ms
-```
+## My Files -- Current State
+
+### playtest.test.ts (65 tests)
+- Uses `CaparisonEffectId` type (BROKEN in tsc, works in vitest)
+- Sections 2 and 3 test all caparison effects in full matches -- will need rewriting
+- Section 1 (all archetype pairs) works fine without caparison
+- 1 TypeScript error: import of removed type
+
+### match.test.ts (59 tests)
+- No TypeScript errors currently
+- Tests don't reference caparison directly
+- Clean baseline -- good candidate for adding new gear integration tests
+
+## Action Items for Next Round
+
+1. **Wait for engine-refactor** to complete phase-joust.ts and phase-melee.ts cleanup
+2. **After engine-refactor completes**: Update playtest.test.ts to remove caparison test sections (sections 2, 3) and replace with gear-based tests
+3. **After gear-system completes**: Add integration tests for 12-slot gear system in match.test.ts
+4. **Monitor** whether the pre-applied types.ts changes cause confusion for other agents
+
+## Baseline Metrics
+- Test count: 327 (5 suites)
+- TypeScript errors: 156 (expected -- types.ts updated ahead of other files)
+- Test files I own: playtest.test.ts (65 tests), match.test.ts (59 tests)
+- Vitest duration: ~390ms

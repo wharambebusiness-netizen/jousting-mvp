@@ -123,8 +123,6 @@ export interface PassResult {
   unseat: 'none' | 'player1' | 'player2';
   unseatMargin: number;
   log: string[];
-  p1BannerConsumed?: boolean;
-  p2BannerConsumed?: boolean;
 }
 
 export interface PassPlayerResult {
@@ -153,8 +151,6 @@ export interface MeleeRoundResult {
   player1StaminaAfter: number;
   player2StaminaAfter: number;
   log: string[];
-  p1BannerConsumed?: boolean;
-  p2BannerConsumed?: boolean;
 }
 
 // --- Match State ---
@@ -172,11 +168,6 @@ export interface MatchState {
   meleeWins2: number;
   winner: 'none' | 'player1' | 'player2' | 'draw';
   winReason: string;
-  // Caparison tracking
-  p1Caparison?: CaparisonEffect;
-  p2Caparison?: CaparisonEffect;
-  p1BannerUsed: boolean;
-  p2BannerUsed: boolean;
 }
 
 // --- Counter Result ---
@@ -190,48 +181,50 @@ export type CounterResult = {
 
 export type GiglingRarity = 'uncommon' | 'rare' | 'epic' | 'legendary' | 'relic' | 'giga';
 
-export type GearSlot = 'barding' | 'chanfron' | 'saddle' | 'caparison';
+/** 6 steed gear slots — mount equipment affecting jousting stats */
+export type SteedGearSlot = 'chamfron' | 'barding' | 'saddle' | 'stirrups' | 'reins' | 'horseshoes';
+
+/** 6 player gear slots — knight equipment affecting jousting + melee stats */
+export type PlayerGearSlot = 'helm' | 'shield' | 'lance' | 'armor' | 'gauntlets' | 'melee_weapon';
 
 export type JoustStat = 'momentum' | 'control' | 'guard' | 'initiative' | 'stamina';
 
-export type CaparisonEffectId =
-  | 'pennant_of_haste'
-  | 'woven_shieldcloth'
-  | 'thunderweave'
-  | 'irongrip_drape'
-  | 'stormcloak'
-  | 'banner_of_the_giga';
-
-export interface CaparisonEffect {
-  id: CaparisonEffectId;
-  name: string;
-  description: string;
-  rarity: GiglingRarity;
-}
-
 export interface GiglingGear {
-  slot: GearSlot;
+  slot: SteedGearSlot;
   rarity: GiglingRarity;
   primaryStat?: { stat: JoustStat; value: number };
   secondaryStat?: { stat: JoustStat; value: number };
-  effect?: CaparisonEffect; // caparison only
 }
 
+/** Player gear — knight's personal equipment */
+export interface PlayerGear {
+  slot: PlayerGearSlot;
+  rarity: GiglingRarity;
+  primaryStat?: { stat: JoustStat; value: number };
+  secondaryStat?: { stat: JoustStat; value: number };
+}
+
+/** Steed loadout — 6 gear slots for the mount */
 export interface GiglingLoadout {
   giglingRarity: GiglingRarity;
+  chamfron?: GiglingGear;
   barding?: GiglingGear;
-  chanfron?: GiglingGear;
   saddle?: GiglingGear;
-  caparison?: GiglingGear;
+  stirrups?: GiglingGear;
+  reins?: GiglingGear;
+  horseshoes?: GiglingGear;
+}
+
+/** Player loadout — 6 gear slots for the knight */
+export interface PlayerLoadout {
+  helm?: PlayerGear;
+  shield?: PlayerGear;
+  lance?: PlayerGear;
+  armor?: PlayerGear;
+  gauntlets?: PlayerGear;
+  melee_weapon?: PlayerGear;
 }
 
 // --- AI Difficulty ---
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
-
-// --- Caparison Pipeline Types ---
-
-export interface CaparisonInput {
-  effect?: CaparisonEffect;
-  bannerUsed?: boolean; // only relevant for banner_of_the_giga
-}

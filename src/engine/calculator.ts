@@ -189,8 +189,8 @@ export function applyShiftCost(
   toAttack: Attack,
 ): { stamina: number; initiativePenalty: number } {
   const sameStance = fromAttack.stance === toAttack.stance;
-  const staminaCost = sameStance ? 5 : 12;
-  const initPenalty = sameStance ? 5 : 10;
+  const staminaCost = sameStance ? BALANCE.shiftSameStanceCost : BALANCE.shiftCrossStanceCost;
+  const initPenalty = sameStance ? BALANCE.shiftSameStanceInitPenalty : BALANCE.shiftCrossStanceInitPenalty;
 
   return {
     stamina: Math.max(0, currentStamina - staminaCost),
@@ -244,9 +244,8 @@ export function calcCarryoverPenalties(unseatMargin: number): {
 
 /**
  * @deprecated Use {@link resolveJoustPass} from phase-joust.ts instead.
- * This legacy function lacks caparison support, initiative-priority shift
- * ordering, and irongrip. Kept only for base-formula validation in
- * calculator.test.ts.
+ * This legacy function lacks initiative-priority shift ordering.
+ * Kept only for base-formula validation in calculator.test.ts.
  */
 
 export interface PassInput {
