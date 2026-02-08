@@ -19,7 +19,7 @@ export const BALANCE = {
   // --- Fatigue ---
   // Fatigue threshold is proportional to max stamina (archetype + gear).
   // Below threshold, Momentum and Control degrade linearly.
-  // 0.8 means: Charger (STA 60) threshold = 48, Bulwark (STA 65) = 52.
+  // 0.8 means: Charger (STA 60) threshold = 48, Bulwark (STA 62) = 49.6.
   fatigueRatio: 0.8,
 
   // --- Guard Fatigue ---
@@ -53,9 +53,9 @@ export const BALANCE = {
 
   // --- Breaker Guard Penetration ---
   // Fraction of opponent's effective guard that Breaker ignores during
-  // impact calculation (both joust and melee). 0.35 = 35% guard ignored.
+  // impact calculation (both joust and melee). 0.20 = 20% guard ignored.
   // Only applies when the ATTACKER is a Breaker archetype.
-  breakerGuardPenetration: 0.25,
+  breakerGuardPenetration: 0.20,
 
   // --- Shift Costs ---
   // Stamina cost and initiative penalty for shifting mid-pass.

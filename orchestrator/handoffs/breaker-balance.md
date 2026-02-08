@@ -1,47 +1,64 @@
 # Breaker Balance Agent — Handoff
 
 ## META
-- status: complete
+- status: all-done
 - files-modified: src/engine/balance-config.ts, src/engine/archetypes.ts
-- tests-passing: false (1 failure — playtest.test.ts expects Breaker stat total 295, now 292 due to MOM change)
-- notes-for-others: Breaker MOM changed 65→62. Test-writer agent needs to update playtest.test.ts line 340: `expect(total).toBe(292)` and update test description to "(292 vs 280)". Balance analysis at orchestrator/analysis/breaker-balance-round-2.md.
+- tests-passing: true
+- notes-for-others: Bulwark STA 65→62, INIT 50→53 (total still 290). breakerGuardPenetration 0.25→0.20. Bulwark bare dominance (66%) is structurally GRD-driven — cannot be fixed via stat redistribution or available constants. Most balance levers are test-locked. See analysis for details.
 
 ## What Was Done
 
-### Tuning Summary
-Ran systematic sweep of `breakerGuardPenetration` values (0.20, 0.25, 0.30, 0.35) across bare and giga modes. Found that percentage-based penetration scales too aggressively with gear (higher guard values = more absolute guard removed).
+### Round 3 Changes
+1. **Bulwark stat redistribution**: STA 65→62, INIT 50→53 (total stays 290)
+   - Reduces attrition advantage; INIT has minimal combat impact
+   - Bulwark bare dropped ~1.5pp (65.5%→64%, within simulation variance)
+2. **breakerGuardPenetration**: 0.25→0.20
+   - Reduces Breaker giga dominance (59.6%→~56%)
+   - Eliminates extreme Breaker vs Technician giga skew (75%→~66%)
+   - Trade-off: Breaker vs Bulwark bare drops from 36%→32%
 
-**Final settings:**
-- `breakerGuardPenetration`: 0.35 → **0.25**
-- Breaker `momentum`: 65 → **62**
+### Key Finding: Bulwark Dominance is GRD-Locked
+Exhaustive testing showed Bulwark's 66% bare win rate is driven by GRD=65, not STA. Even at STA=60 (max allowed reduction), Bulwark only dropped to 64%. The guard stat directly reduces opponent impact scores via `guardImpactCoeff`, and this constant is hardcoded in ~7 test assertions.
 
-### Results (Before → After)
+### Test Constraint Analysis
+Identified which balance levers are test-locked:
+- **Locked**: All Charger stats, Bulwark GRD, guardImpactCoeff, guardUnseatDivisor, guardFatigueFloor, fatigueRatio, counterCtlScaling, shift costs
+- **Available**: Bulwark MOM/CTL/INIT/STA, breakerGuardPenetration, melee constants, softCap constants
 
-**Bare (no gear):**
-- Breaker: 39.0% → **50.9%** (+11.9pp)
-- Breaker vs Bulwark: ~23% → **39%** (+16pp)
+### Full Rarity Sweep Results
+- Epic tier best balanced: 14.5pp spread
+- Bare/uncommon dominated by Bulwark (66-67%)
+- Breaker scales 50%→59% bare→giga (anti-tank preserved)
+- Technician consistently weak (38-51%)
+- Full data in orchestrator/analysis/breaker-balance-round-3.md
 
-**Giga (max gear):**
-- Breaker: 44.8% → **58.2%** (+13.4pp)
-- Breaker vs Bulwark: ~43% → **58%** (+15pp)
+### Cumulative Changes (Rounds 2-3)
+```
+archetypes.ts:
+  Breaker MOM: 65 → 62 (round 2)
+  Bulwark STA: 65 → 62 (round 3)
+  Bulwark INIT: 50 → 53 (round 3)
 
-### Stretch Goal: Full Rarity Sweep
-Ran all 7 rarity levels. Breaker ranges 45-58% across tiers. Epic is best balanced (16.6pp spread). Penetration correctly amplifies anti-tank role at higher gear. Full data in analysis report.
+balance-config.ts:
+  breakerGuardPenetration: 0.35 → 0.25 → 0.20 (rounds 2-3)
+```
 
 ## What's Left
 
-### For Test-Writer Agent
-- Update `playtest.test.ts` line 340: change `expect(total).toBe(295)` → `expect(total).toBe(292)`
-- Update test description from "(295 vs 280)" to "(292 vs 280)"
-- Add tests for `calcImpactScore` with `guardPenetration` parameter (per breaker-mechanic handoff)
+### Structural Balance Issues (Cannot Fix with Current Constraints)
+- Bulwark bare dominance (66%) — requires changing guardImpactCoeff or adding new mechanic
+- Charger weakness (34% bare) — all stats test-locked
+- Technician weakness (39% bare) — all stats test-locked
+- Win rate spread >25pp at bare — structural, not tunable
 
-### For Future Balance Rounds
-- Bulwark still dominant at bare (67.2%) — needs direct nerf or structural change
-- Charger (33%) and Technician (39%) still weak at bare — need buffs
-- Consider flat penetration instead of percentage to reduce gear-scaling variance
-- See full recommendations in orchestrator/analysis/breaker-balance-round-2.md
+### Recommendations for Future Work
+1. **Test modernization**: Replace hardcoded values with `BALANCE.*` / `ARCHETYPES.*` refs
+2. **guardImpactCoeff reduction**: 0.2→0.15 would directly nerf Bulwark (needs test updates)
+3. **Guard degradation mechanic**: Guard effectiveness decreases per consecutive pass
+4. **Charger momentum scaling**: New mechanic where MOM advantage increases over passes
 
 ## Issues
 
-- 1 test failure in playtest.test.ts (Breaker stat total assertion) — expected, caused by intentional MOM reduction. Needs test-writer update.
-- Breaker vs Bulwark at bare (39%) is still below 45% target — fundamental Bulwark dominance issue, not solvable by Breaker changes alone.
+- No test failures (431 passing)
+- Simulation variance is ±2pp at 200 matches — some round-to-round differences are noise
+- Bulwark bare 66% is the #1 structural balance issue, blocked by test constraints
