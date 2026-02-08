@@ -1,20 +1,48 @@
 // ============================================================
-// Jousting MVP — Balance Simulation Tool
+// Jousting MVP — Balance Simulation Tool (12-Slot Gear)
 // ============================================================
 // Runs AI vs AI matches across all archetype matchups to gather
 // win rate, unseat rate, and phase balance statistics.
-// Usage: npx tsx src/tools/simulate.ts
+// Supports bare (no gear), uniform gear, and mixed-rarity gear modes.
+// Usage: npx tsx src/tools/simulate.ts [bare|uncommon|rare|epic|legendary|relic|giga|mixed]
 // ============================================================
 import { ARCHETYPES, ARCHETYPE_LIST } from '../engine/archetypes';
 import { createMatch, submitJoustPass, submitMeleeRound } from '../engine/match';
 import { aiPickJoustChoice, aiPickMeleeAttack } from '../ai/basic-ai';
 import { JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from '../engine/attacks';
 import { Phase } from '../engine/types';
-import type { Attack, MatchState, PassChoice } from '../engine/types';
+import type { Attack, MatchState, PassChoice, GiglingLoadout, PlayerLoadout, GiglingRarity } from '../engine/types';
+import { createFullLoadout } from '../engine/gigling-gear';
+import { createFullPlayerLoadout } from '../engine/player-gear';
 
 // --- Configuration ---
 const MATCHES_PER_MATCHUP = 200;
 const MAX_MELEE_ROUNDS = 30; // safety cap to prevent infinite loops
+
+// Parse gear mode from command line
+const GEAR_MODES = ['bare', 'uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga', 'mixed'] as const;
+type GearMode = typeof GEAR_MODES[number];
+const gearArg = process.argv[2] as GearMode | undefined;
+const GEAR_MODE: GearMode = gearArg && GEAR_MODES.includes(gearArg) ? gearArg : 'bare';
+
+const ALL_RARITIES: GiglingRarity[] = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'];
+
+function makeGear(mode: GearMode): { steed?: GiglingLoadout; player?: PlayerLoadout } {
+  if (mode === 'bare') return {};
+  if (mode === 'mixed') {
+    const rarity = ALL_RARITIES[Math.floor(Math.random() * ALL_RARITIES.length)];
+    return {
+      steed: createFullLoadout(rarity, rarity),
+      player: createFullPlayerLoadout(rarity),
+    };
+  }
+  // Uniform rarity
+  const rarity = mode as GiglingRarity;
+  return {
+    steed: createFullLoadout(rarity, rarity),
+    player: createFullPlayerLoadout(rarity),
+  };
+}
 
 // --- Types ---
 interface MatchupResult {
@@ -55,7 +83,12 @@ function runSingleMatch(arch1Id: string, arch2Id: string): {
 } {
   const arch1 = ARCHETYPES[arch1Id];
   const arch2 = ARCHETYPES[arch2Id];
-  let state = createMatch(arch1, arch2);
+
+  // Generate gear for both players
+  const gear1 = makeGear(GEAR_MODE);
+  const gear2 = makeGear(GEAR_MODE);
+
+  let state = createMatch(arch1, arch2, gear1.steed, gear2.steed, gear1.player, gear2.player);
 
   let lastP1Attack: Attack | undefined;
   let lastP2Attack: Attack | undefined;
@@ -220,6 +253,7 @@ function printResults(matchups: MatchupResult[], stats: ArchetypeStats[]): strin
 
   lines.push('='.repeat(70));
   lines.push('JOUSTING MVP — BALANCE SIMULATION REPORT');
+  lines.push(`Gear mode: ${GEAR_MODE}${GEAR_MODE === 'bare' ? ' (no gear)' : GEAR_MODE === 'mixed' ? ' (random rarity per match)' : ` (both players at ${GEAR_MODE} rarity)`}`);
   lines.push(`Matches per matchup: ${MATCHES_PER_MATCHUP}`);
   lines.push(`Total matches: ${matchups.length * MATCHES_PER_MATCHUP}`);
   lines.push('='.repeat(70));
@@ -327,7 +361,7 @@ function printResults(matchups: MatchupResult[], stats: ArchetypeStats[]): strin
 }
 
 // --- Main ---
-console.log('Running simulations...');
+console.log(`Running simulations (gear mode: ${GEAR_MODE})...`);
 const startTime = Date.now();
 const { matchups, archetypeStats } = runAllMatchups();
 const elapsed = Date.now() - startTime;

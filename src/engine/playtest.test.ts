@@ -409,3 +409,131 @@ describe('Full geared matches — melee entry via unseat', () => {
     }
   });
 });
+
+// ============================================================
+// 10. Property-based tests — random gear at all rarities, no crashes
+// ============================================================
+describe('Property-based — random gear at all rarities, all archetypes', () => {
+  const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
+  const archetypeIds = Object.keys(ARCHETYPES);
+
+  for (const rarity of rarities) {
+    it(`all archetypes with random ${rarity} 12-slot gear complete without error`, () => {
+      for (const archId of archetypeIds) {
+        // 5 random seeds per archetype per rarity
+        for (let seed = 1; seed <= 5; seed++) {
+          const rng = makeRng(seed * 1000 + rarities.indexOf(rarity) * 100);
+          const steed = createFullLoadout(rarity, rarity, rng);
+          const player = createFullPlayerLoadout(rarity, rng);
+          const match = simulateMatch(
+            ARCHETYPES[archId], ARCHETYPES.duelist,
+            steed, undefined, player, undefined,
+          );
+          expect(match.phase).toBe(Phase.MatchEnd);
+          expect(['player1', 'player2', 'draw']).toContain(match.winner);
+        }
+      }
+    });
+  }
+});
+
+// ============================================================
+// 11. Property-based — gear stat invariants hold after createMatch
+// ============================================================
+describe('Property-based — gear stat invariants', () => {
+  const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
+  const statKeys = ['momentum', 'control', 'guard', 'initiative', 'stamina'] as const;
+
+  it('geared archetype stats are always >= bare archetype stats', () => {
+    for (const rarity of rarities) {
+      for (let seed = 1; seed <= 10; seed++) {
+        const rng = makeRng(seed * 7 + rarities.indexOf(rarity) * 31);
+        const steed = createFullLoadout(rarity, rarity, rng);
+        const player = createFullPlayerLoadout(rarity, rng);
+
+        for (const archId of Object.keys(ARCHETYPES)) {
+          const bare = ARCHETYPES[archId];
+          const geared = createMatch(bare, ARCHETYPES.duelist, steed, undefined, player, undefined);
+          for (const stat of statKeys) {
+            expect(
+              geared.player1.archetype[stat],
+              `${archId} ${rarity} seed=${seed}: ${stat} should be >= bare`,
+            ).toBeGreaterThanOrEqual(bare[stat]);
+          }
+        }
+      }
+    }
+  });
+
+  it('rarity bonus monotonically increases with rarity tier', () => {
+    const bonuses = rarities.map(r => BALANCE.giglingRarityBonus[r]);
+    for (let i = 1; i < bonuses.length; i++) {
+      expect(bonuses[i], `${rarities[i]} bonus > ${rarities[i-1]} bonus`).toBeGreaterThan(bonuses[i-1]);
+    }
+  });
+
+  it('gear stat ranges monotonically increase with rarity tier', () => {
+    for (let i = 1; i < rarities.length; i++) {
+      const prev = BALANCE.gearStatRanges[rarities[i-1]];
+      const curr = BALANCE.gearStatRanges[rarities[i]];
+      expect(curr.primary[1], `${rarities[i]} primary max >= ${rarities[i-1]}`).toBeGreaterThanOrEqual(prev.primary[1]);
+      expect(curr.secondary[1], `${rarities[i]} secondary max >= ${rarities[i-1]}`).toBeGreaterThanOrEqual(prev.secondary[1]);
+    }
+  });
+
+  it('player gear stat ranges monotonically increase with rarity tier', () => {
+    for (let i = 1; i < rarities.length; i++) {
+      const prev = BALANCE.playerGearStatRanges[rarities[i-1]];
+      const curr = BALANCE.playerGearStatRanges[rarities[i]];
+      expect(curr.primary[1], `${rarities[i]} primary max >= ${rarities[i-1]}`).toBeGreaterThanOrEqual(prev.primary[1]);
+      expect(curr.secondary[1], `${rarities[i]} secondary max >= ${rarities[i-1]}`).toBeGreaterThanOrEqual(prev.secondary[1]);
+    }
+  });
+
+  it('no NaN or Infinity in match stats after gear application', () => {
+    for (const rarity of rarities) {
+      const rng = makeRng(42 + rarities.indexOf(rarity));
+      const steed = createFullLoadout(rarity, rarity, rng);
+      const player = createFullPlayerLoadout(rarity, rng);
+      const match = createMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed, steed, player, player);
+
+      for (const stat of statKeys) {
+        expect(Number.isFinite(match.player1.archetype[stat]), `P1 ${stat} finite`).toBe(true);
+        expect(Number.isFinite(match.player2.archetype[stat]), `P2 ${stat} finite`).toBe(true);
+      }
+      expect(Number.isFinite(match.player1.currentStamina)).toBe(true);
+      expect(Number.isFinite(match.player2.currentStamina)).toBe(true);
+    }
+  });
+});
+
+// ============================================================
+// 12. Stress test — 50 random matches with 12-slot gear, no crashes
+// ============================================================
+describe('Stress — 50 random matches with random gear and archetypes', () => {
+  it('all 50 matches complete without errors', () => {
+    const archetypeIds = Object.keys(ARCHETYPES);
+    const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
+
+    for (let i = 0; i < 50; i++) {
+      const rng = makeRng(i * 13 + 7);
+      const pick = () => Math.floor(rng() * archetypeIds.length);
+      const pickRarity = () => rarities[Math.floor(rng() * rarities.length)];
+
+      const a1 = ARCHETYPES[archetypeIds[pick()]];
+      const a2 = ARCHETYPES[archetypeIds[pick()]];
+      const r1 = pickRarity();
+      const r2 = pickRarity();
+
+      const steed1 = createFullLoadout(r1, r1, rng);
+      const steed2 = createFullLoadout(r2, r2, rng);
+      const player1 = createFullPlayerLoadout(r1, rng);
+      const player2 = createFullPlayerLoadout(r2, rng);
+
+      const match = simulateMatch(a1, a2, steed1, steed2, player1, player2);
+      expect(match.phase).toBe(Phase.MatchEnd);
+      expect(['player1', 'player2', 'draw']).toContain(match.winner);
+      expect(match.winReason.length).toBeGreaterThan(0);
+    }
+  });
+});

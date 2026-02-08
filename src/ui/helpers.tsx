@@ -1,4 +1,4 @@
-import { Stance, SpeedType, type Attack, type CaparisonEffect } from '../engine/types';
+import { Stance, type Attack } from '../engine/types';
 import { JOUST_ATTACKS, MELEE_ATTACKS } from '../engine/attacks';
 
 // --- Archetype icons for scoreboard ---
@@ -13,26 +13,6 @@ const ARCHETYPE_ICON: Record<string, string> = {
 
 // All known attacks for name lookup
 const ALL_ATTACKS: Record<string, Attack> = { ...JOUST_ATTACKS, ...MELEE_ATTACKS };
-
-// --- Caparison short names for badges ---
-const CAP_SHORT: Record<string, string> = {
-  pennant_of_haste: 'Haste',
-  woven_shieldcloth: 'Shieldcloth',
-  thunderweave: 'Thunderweave',
-  irongrip_drape: 'Irongrip',
-  stormcloak: 'Stormcloak',
-  banner_of_the_giga: 'Banner',
-};
-
-// --- Caparison icons ---
-const CAP_ICON: Record<string, string> = {
-  pennant_of_haste: '\u26A1',    // lightning bolt
-  woven_shieldcloth: '\uD83D\uDEE1\uFE0F', // shield
-  thunderweave: '\u{1F329}\uFE0F',  // cloud with lightning
-  irongrip_drape: '\u270A',      // raised fist
-  stormcloak: '\uD83C\uDF00',   // cyclone
-  banner_of_the_giga: '\uD83C\uDFF4', // black flag
-};
 
 // --- Stat descriptions for tooltips ---
 const STAT_TIPS: Record<string, string> = {
@@ -69,64 +49,6 @@ export function deltaClass(val: number): string {
 
 export function attackName(id: string): string {
   return ALL_ATTACKS[id]?.name ?? id;
-}
-
-// --- Caparison Badge ---
-export function CaparisonBadge({ effect, triggered }: {
-  effect?: CaparisonEffect;
-  triggered?: boolean;
-}) {
-  if (!effect) return null;
-  const short = CAP_SHORT[effect.id] ?? effect.name;
-  const icon = CAP_ICON[effect.id];
-  return (
-    <span
-      className={`cap-badge cap-badge--${effect.rarity}${triggered ? ' cap-badge--triggered' : ''}`}
-      title={`${effect.name}: ${effect.description}`}
-    >
-      {icon && <span className="cap-badge__icon">{icon}</span>}
-      {short}
-    </span>
-  );
-}
-
-/**
- * Determines which caparison effects triggered this joust pass for a given player.
- */
-export function joustCapTriggered(
-  effect: CaparisonEffect | undefined,
-  passNumber: number,
-  speed: SpeedType,
-  finalAttackStance: Stance,
-  bannerConsumed?: boolean,
-): boolean {
-  if (!effect) return false;
-  switch (effect.id) {
-    case 'pennant_of_haste': return passNumber === 1;
-    case 'woven_shieldcloth': return finalAttackStance === Stance.Defensive;
-    case 'thunderweave': return speed === SpeedType.Fast;
-    case 'irongrip_drape': return true; // passive, always active during joust
-    case 'stormcloak': return true; // passive, always active
-    case 'banner_of_the_giga': return !!bannerConsumed;
-    default: return false;
-  }
-}
-
-/**
- * Determines if a caparison triggered this melee round for a given player.
- */
-export function meleeCapTriggered(
-  effect: CaparisonEffect | undefined,
-  attackStance: Stance,
-  bannerConsumed?: boolean,
-): boolean {
-  if (!effect) return false;
-  switch (effect.id) {
-    case 'woven_shieldcloth': return attackStance === Stance.Defensive;
-    case 'stormcloak': return true;
-    case 'banner_of_the_giga': return !!bannerConsumed;
-    default: return false; // Pennant, Thunderweave, Irongrip don't apply in melee
-  }
 }
 
 export function Stars({ filled, max = 5 }: { filled: number; max?: number }) {
@@ -208,7 +130,7 @@ export function PassPips({ current, total }: { current: number; total: number })
   );
 }
 
-export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1MaxSta, p2MaxSta, label, p1Cap, p2Cap, passNumber, totalPasses }: {
+export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1MaxSta, p2MaxSta, label, passNumber, totalPasses }: {
   p1Name: string;
   p2Name: string;
   p1Score: number;
@@ -218,8 +140,6 @@ export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1M
   p1MaxSta: number;
   p2MaxSta: number;
   label: string;
-  p1Cap?: CaparisonEffect;
-  p2Cap?: CaparisonEffect;
   passNumber?: number;
   totalPasses?: number;
 }) {
@@ -232,7 +152,6 @@ export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1M
           {p1Icon && <span className="scoreboard__icon">{p1Icon}</span>}
           {p1Name}
         </div>
-        {p1Cap && <CaparisonBadge effect={p1Cap} />}
         <div className="scoreboard__score scoreboard__score--anim">{p1Score.toFixed(1)}</div>
         <StaminaBar current={p1Sta} max={p1MaxSta} />
       </div>
@@ -247,7 +166,6 @@ export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1M
           {p2Icon && <span className="scoreboard__icon">{p2Icon}</span>}
           {p2Name}
         </div>
-        {p2Cap && <CaparisonBadge effect={p2Cap} />}
         <div className="scoreboard__score scoreboard__score--anim">{p2Score.toFixed(1)}</div>
         <StaminaBar current={p2Sta} max={p2MaxSta} />
       </div>

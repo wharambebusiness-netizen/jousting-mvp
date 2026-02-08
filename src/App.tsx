@@ -11,10 +11,12 @@ import {
   type PassResult,
   type MeleeRoundResult,
   type GiglingLoadout,
+  type PlayerLoadout,
 } from './engine/types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './engine/match';
 import { createFullLoadout } from './engine/gigling-gear';
-import { aiPickJoustChoiceWithReasoning, aiPickMeleeAttackWithReasoning, aiPickCaparison } from './ai/basic-ai';
+import { createFullPlayerLoadout } from './engine/player-gear';
+import { aiPickJoustChoiceWithReasoning, aiPickMeleeAttackWithReasoning } from './ai/basic-ai';
 import type { AIReasoning } from './ai/basic-ai';
 import { SetupScreen } from './ui/SetupScreen';
 import { LoadoutScreen } from './ui/LoadoutScreen';
@@ -54,6 +56,8 @@ function App() {
   const [combatLog, setCombatLog] = useState<string[][]>([]);
   const [p1Loadout, setP1Loadout] = useState<GiglingLoadout | null>(null);
   const [p2Loadout, setP2Loadout] = useState<GiglingLoadout | null>(null);
+  const [p1PlayerLoadout, setP1PlayerLoadout] = useState<PlayerLoadout | null>(null);
+  const [p2PlayerLoadout, setP2PlayerLoadout] = useState<PlayerLoadout | null>(null);
   const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
   const [aiReasoning, setAiReasoning] = useState<AIReasoning | null>(null);
   const [reasoningHistory, setReasoningHistory] = useState<AIReasoning[]>([]);
@@ -68,20 +72,19 @@ function App() {
   };
 
   // --- Loadout confirm ---
-  const handleLoadoutConfirm = (playerLoadout: GiglingLoadout) => {
+  const handleLoadoutConfirm = (steedLoadout: GiglingLoadout, playerLoadout: PlayerLoadout) => {
     if (!p1Archetype || !p2Archetype) return;
-    // AI gets a random loadout at the same rarity tier, with archetype-weighted caparison
-    const aiRarity = playerLoadout.giglingRarity;
-    const aiCapChoice = aiPickCaparison(p2Archetype, difficulty);
-    const aiLoadout = createFullLoadout(aiRarity, aiRarity, aiCapChoice.id);
-    setP1Loadout(playerLoadout);
-    setP2Loadout(aiLoadout);
-    const m = createMatch(p1Archetype, p2Archetype, playerLoadout, aiLoadout);
+    // AI gets random loadouts at the same rarity tier
+    const aiRarity = steedLoadout.giglingRarity;
+    const aiSteedLoadout = createFullLoadout(aiRarity, aiRarity);
+    const aiPlayerLoadout = createFullPlayerLoadout(aiRarity);
+    setP1Loadout(steedLoadout);
+    setP2Loadout(aiSteedLoadout);
+    setP1PlayerLoadout(playerLoadout);
+    setP2PlayerLoadout(aiPlayerLoadout);
+    const m = createMatch(p1Archetype, p2Archetype, steedLoadout, aiSteedLoadout, playerLoadout, aiPlayerLoadout);
     setMatch(m);
-    // Log AI loadout reasoning
-    if (aiCapChoice.id) {
-      setCombatLog([[`AI Loadout: ${aiCapChoice.reason}`]]);
-    }
+    setCombatLog([]);
     setScreen('speed');
   };
 
@@ -175,6 +178,8 @@ function App() {
     setLastMeleeResult(null);
     setP1Loadout(null);
     setP2Loadout(null);
+    setP1PlayerLoadout(null);
+    setP2PlayerLoadout(null);
     setAiReasoning(null);
     setReasoningHistory([]);
     setCombatLog([]);
@@ -256,7 +261,14 @@ function App() {
 
       {screen === 'end' && match && (
         <>
-          <MatchSummary match={match} p1Loadout={p1Loadout} p2Loadout={p2Loadout} onRematch={handleRematch} />
+          <MatchSummary
+            match={match}
+            p1Loadout={p1Loadout}
+            p2Loadout={p2Loadout}
+            p1PlayerLoadout={p1PlayerLoadout}
+            p2PlayerLoadout={p2PlayerLoadout}
+            onRematch={handleRematch}
+          />
           <DifficultyFeedback match={match} />
           <StrategyTips match={match} />
           <MatchReplay match={match} reasoningHistory={reasoningHistory} />

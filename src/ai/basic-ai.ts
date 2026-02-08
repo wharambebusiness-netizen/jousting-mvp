@@ -11,8 +11,6 @@ import {
   type Attack,
   type PassChoice,
   type PlayerState,
-  type Archetype,
-  type CaparisonEffectId,
 } from '../engine/types';
 import {
   SPEEDS,
@@ -576,38 +574,6 @@ function pickMeleeAttack(
   return pickMeleeAttackWithReasoning(state, opponentLastAttack, difficulty, history).attack;
 }
 
-// --- Caparison Selection (Archetype-Weighted) ---
-
-const CAP_WEIGHTS: Record<string, Record<CaparisonEffectId, number>> = {
-  charger:    { thunderweave: 5, stormcloak: 2, banner_of_the_giga: 2, pennant_of_haste: 1, woven_shieldcloth: 0, irongrip_drape: 1 },
-  technician: { irongrip_drape: 5, woven_shieldcloth: 2, stormcloak: 2, banner_of_the_giga: 1, pennant_of_haste: 1, thunderweave: 0 },
-  bulwark:    { woven_shieldcloth: 5, stormcloak: 3, banner_of_the_giga: 1, pennant_of_haste: 1, thunderweave: 0, irongrip_drape: 1 },
-  tactician:  { pennant_of_haste: 4, irongrip_drape: 3, stormcloak: 2, banner_of_the_giga: 2, woven_shieldcloth: 1, thunderweave: 0 },
-  breaker:    { stormcloak: 4, thunderweave: 3, banner_of_the_giga: 2, pennant_of_haste: 1, woven_shieldcloth: 0, irongrip_drape: 1 },
-  duelist:    { banner_of_the_giga: 3, stormcloak: 2, irongrip_drape: 2, woven_shieldcloth: 2, thunderweave: 2, pennant_of_haste: 2 },
-};
-
-const CAP_REASONS: Record<CaparisonEffectId, string> = {
-  pennant_of_haste: 'wants early Initiative advantage',
-  woven_shieldcloth: 'plays Defensive — needs extra Guard',
-  thunderweave: 'prefers Fast speed — more Momentum',
-  irongrip_drape: 'high Control — leverages easier shifts',
-  stormcloak: 'endurance fighter — delays fatigue',
-  banner_of_the_giga: 'expects to win a counter — huge first-strike bonus',
-};
-
-function pickCaparisonForArchetype(archetype: Archetype): { id: CaparisonEffectId | undefined; reason: string } {
-  // 20% chance of no caparison (budget/variety)
-  if (Math.random() < 0.2) return { id: undefined, reason: 'AI chose no caparison' };
-
-  const weights = CAP_WEIGHTS[archetype.id] ?? CAP_WEIGHTS.duelist;
-  const ids = Object.keys(weights) as CaparisonEffectId[];
-  const w = ids.map(id => weights[id]);
-
-  const chosen = weightedRandom(ids, w);
-  return { id: chosen, reason: `${archetype.name} ${CAP_REASONS[chosen]}` };
-}
-
 // --- Reasoning Types ---
 
 export interface SpeedReasoning {
@@ -643,7 +609,6 @@ export interface AIReasoning {
   speed: SpeedReasoning;
   attack: AttackReasoning;
   shift?: ShiftReasoning;
-  caparison?: { id: string | undefined; reason: string };
   commentary: string;
 }
 
@@ -663,17 +628,6 @@ export interface AIJoustResult {
 export interface AIMeleeResult {
   attack: Attack;
   commentary: string;
-}
-
-export function aiPickCaparison(
-  archetype: Archetype,
-  difficulty: AIDifficulty = 'medium',
-): { id: CaparisonEffectId | undefined; reason: string } {
-  // Easy AI more likely to skip caparison (less optimal)
-  if (difficulty === 'easy' && Math.random() < 0.4) {
-    return { id: undefined, reason: 'AI chose no caparison' };
-  }
-  return pickCaparisonForArchetype(archetype);
 }
 
 export function aiPickJoustChoice(

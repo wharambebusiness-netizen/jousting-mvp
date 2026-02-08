@@ -1,64 +1,64 @@
 ## META
-- status: complete
-- files-modified: src/engine/playtest.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-1.md
+- status: all-done
+- files-modified: src/engine/playtest.test.ts, src/tools/simulate.ts, orchestrator/analysis/quality-review-round-2.md
 - tests-passing: true
-- notes-for-others: ALL 358 TESTS PASS (6 suites). Engine overhaul is essentially DONE. gigling-gear.ts (6 steed slots), player-gear.ts (6 player slots), match.ts (12-slot integration) all clean and working. TypeScript errors down from 156→67, all remaining 67 are in UI files (ui-loadout owns 66) + 1 in gigling-gear.test.ts. gear-system handoff status is stale (says not-started, but engine work + tests are done). ui-loadout can be unblocked — the engine API is finalized. Test count went from 232 passing → 358 passing this round.
+- notes-for-others: ALL 370 TESTS PASS (6 suites). 0 TypeScript errors. Property-based tests added (12 new tests covering random gear at all rarities, stat invariants, stress testing). Simulation tool updated for 12-slot gear: `npx tsx src/tools/simulate.ts [bare|uncommon|rare|epic|legendary|relic|giga|mixed]`. Giga gear compresses win rate spread from 32.7pp to 14.4pp — softCap working as intended. All stretch goals complete. Only remaining work is ui-loadout (3 passes to strip caparison from UI + redesign loadout screen).
 
-## What Was Done (Round 1 — Gear Overhaul Session)
+## What Was Done
 
-### Primary: playtest.test.ts Rewrite
-1. Ran full test suite: found 2 failing suites, 24 failed tests (232 passing)
-2. Ran TypeScript check: 67 errors (down from 156)
-3. **Rewrote playtest.test.ts sections 2-3**: replaced 12 caparison tests with 15 gear integration tests:
-   - Section 2: steed gear at all 6 rarities + both-player steed gear
-   - Section 3: player gear at all 6 rarities + both-player player gear
-   - Section 3b: 12-slot combined tests (full gear, giga vs ungeared, asymmetric, mixed rarities)
-4. Fixed section 9: updated `createFullLoadout` call from 4-arg to 3-arg signature
-5. Added fully-geared match lifecycle test (steed + player gear through joust → melee → end)
-6. Updated `simulateMatch()` helper to accept both steed and player loadouts
-7. Verified all engine files clean of caparison references
-8. Wrote analysis report: `orchestrator/analysis/quality-review-round-1.md`
+### Round 1 — Primary: playtest.test.ts Rewrite
+1. Rewrote playtest.test.ts sections 2-3: replaced 12 caparison tests with 15 gear integration tests
+2. Added section 3b: 12-slot combined tests (full gear, giga vs ungeared, asymmetric, mixed rarities)
+3. Fixed section 9: updated createFullLoadout call signature
+4. Added fully-geared match lifecycle test
+5. Updated simulateMatch() helper for both steed and player loadouts
+6. Wrote analysis report: orchestrator/analysis/quality-review-round-1.md
 
-### Stretch: match.test.ts 12-Slot Integration Tests
-9. Added section 24: 7 tests for createMatch with 12-slot gear
-   - All 12 slots filled, steed+player bonuses stack, empty loadout, steed-only, player-only, giga softCap trigger, asymmetric gear advantage
-10. Added section 25: 2 tests for full match completion with gear
-    - Geared match completes joust phase, gear stamina bonus affects match duration
-11. Added section 26: Performance regression test
-    - 100 full matches (createMatch + 5 passes with giga gear) in under 500ms
+### Round 1 — Stretch: match.test.ts 12-Slot Integration Tests
+7. Added section 24: 7 tests for createMatch with 12-slot gear
+8. Added section 25: 2 tests for full match completion with gear
+9. Added section 26: Performance regression test (100 matches in <500ms)
+
+### Round 2 — Stretch: Property-Based Tests
+10. Added section 10: 6 property-based tests — random gear at all 6 rarities, all archetypes, 5 seeds each (180 match sub-iterations total)
+11. Added section 11: 5 gear stat invariant tests — geared >= bare, rarity bonus monotonicity, gear range monotonicity (steed + player), no NaN/Infinity
+12. Added section 12: 1 stress test — 50 random matches with random gear and random archetypes
+
+### Round 2 — Stretch: Simulation Tool Update
+13. Updated src/tools/simulate.ts for 12-slot gear with CLI argument parsing
+14. Supports modes: bare, uncommon, rare, epic, legendary, relic, giga, mixed
+15. Ran balance comparison: giga gear compresses win rate spread from 32.7pp to 14.4pp
+16. Wrote analysis report: orchestrator/analysis/quality-review-round-2.md
 
 ### Final Results
-- **Test count**: 232 passing → 358 passing (+126 from all agents combined)
-- **My contributions**: playtest.test.ts 65→68 tests, match.test.ts 59→69 tests
-- **All 6 suites pass**: calculator(116), caparison(11), player-gear(46), gigling-gear(48), playtest(68), match(69)
+- **Test count**: 232 passing (start of round 1) → 370 passing (end of round 2)
+- **My contributions**: playtest.test.ts 65→80 tests (+15), match.test.ts 59→69 tests (+10)
+- **All 6 suites pass**: calculator(116), caparison(11), player-gear(46), gigling-gear(48), playtest(80), match(69)
+- **TypeScript**: 0 errors
 
 ## What's Left
 
-### After ui-loadout completes:
+### After ui-loadout completes (not my responsibility, just tracking):
 - Verify no caparison references remain in any UI file
 - Verify basic-ai.ts CaparisonEffectId import removed
 - Verify no orphaned CSS classes
 - Full integration check: compile, test, no warnings
 - Verify App.tsx caparison references cleaned up
 
-### Balance verification (after all agents complete):
-- Run simulation tool: `npx tsx src/tools/simulate.ts`
-- Verify win rates reasonable (no archetype > 70% or < 30%)
-- Update simulation tool if needed for new gear system
-
 ## Issues
-1. **67 TypeScript errors**: 66 in UI files (all `p1Caparison`/`p2Caparison`/banner/chanfron refs), 1 in gigling-gear.test.ts. All owned by ui-loadout or gear-system — not my files.
-2. **gear-system handoff stale**: Says `not-started` but ALL engine work is done (passes 1-4 complete in working tree). The orchestrator should update its status.
+1. **basic-ai.ts still imports CaparisonEffectId** from types — but CaparisonEffectId no longer exists in types.ts. This only compiles because of `verbatimModuleSyntax` erasing type-only imports. ui-loadout Pass 1 will fix this.
+2. **Bulwark dominance** (67.8% bare win rate) — pre-existing balance issue, not caused by gear overhaul. With giga gear it drops to 57.0%.
 
 ## File Ownership
 - `src/engine/playtest.test.ts` (integration/playtest tests)
 - `src/engine/match.test.ts` (match-level tests — test additions only)
+- `src/tools/simulate.ts` (balance simulation tool)
 - `orchestrator/analysis/quality-review-*.md` (reports)
 
-## Stretch Goals (Status)
+## Stretch Goals (All Complete)
 1. ~~Add performance regression test~~ DONE (section 26 in match.test.ts)
-2. Add property-based tests (random gear at all rarities, verify no crashes) — deferred
-3. Update simulation tool if needed for new gear system — deferred until ui-loadout done
+2. ~~Add property-based tests~~ DONE (sections 10-12 in playtest.test.ts, 12 tests)
+3. ~~Update simulation tool for new gear system~~ DONE (12-slot gear modes)
 4. ~~Add 12-slot integration tests in match.test.ts~~ DONE (sections 24-25, 9 tests)
 
 ## Context: What's Changing
