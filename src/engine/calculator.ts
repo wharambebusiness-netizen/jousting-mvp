@@ -139,22 +139,22 @@ export function calcAccuracy(
 }
 
 // --- 1.3 Impact Score ---
-// ImpactScore = (Eff_Momentum x 0.5) + (Accuracy x 0.4) - (Opponent_Eff_Guard x 0.3)
+// ImpactScore = (Eff_Momentum x 0.5) + (Accuracy x 0.4) - (Opponent_Eff_Guard x guardImpactCoeff)
 
 export function calcImpactScore(
   effMomentum: number,
   accuracy: number,
   opponentEffGuard: number,
 ): number {
-  return (effMomentum * 0.5) + (accuracy * 0.4) - (opponentEffGuard * 0.3);
+  return (effMomentum * 0.5) + (accuracy * 0.4) - (opponentEffGuard * BALANCE.guardImpactCoeff);
 }
 
 // --- 1.4 Unseat (Deterministic) ---
-// Threshold = 20 + (Defender_Eff_Guard / 10) + (Defender_Current_Stamina / 20)
+// Threshold = 20 + (Defender_Eff_Guard / guardUnseatDivisor) + (Defender_Current_Stamina / 20)
 // Unseat when: attacker ImpactScore - defender ImpactScore >= threshold
 
 export function calcUnseatThreshold(defenderEffGuard: number, defenderCurrentStamina: number): number {
-  return 20 + (defenderEffGuard / 10) + (defenderCurrentStamina / 20);
+  return 20 + (defenderEffGuard / BALANCE.guardUnseatDivisor) + (defenderCurrentStamina / 20);
 }
 
 export function checkUnseat(

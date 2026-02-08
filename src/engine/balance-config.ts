@@ -39,6 +39,18 @@ export const BALANCE = {
   counterBaseBonus: 4,
   counterCtlScaling: 0.1,
 
+  // --- Guard Coefficients ---
+  // Guard contributes defensively in two places. These were previously
+  // hardcoded at 0.3 and /10 respectively, causing guard to be
+  // systematically overvalued (double-dip on defense).
+  //
+  // ImpactScore = Eff_MOM * 0.5 + Accuracy * 0.4 - Opp_Guard * guardImpactCoeff
+  // Old 0.3 → 0.2: reduces guard's subtraction from opponent impact by 33%.
+  guardImpactCoeff: 0.2,
+  // UnseatThreshold = 20 + Eff_Guard / guardUnseatDivisor + CurrentSTA / 20
+  // Old 10 → 15: makes high-guard archetypes ~33% easier to unseat.
+  guardUnseatDivisor: 15,
+
   // --- Melee Thresholds (Relative to Defender Guard) ---
   // Hit and Critical thresholds scale with the defender's effective guard.
   // At average GRD ~65: hitThreshold ≈ 5, critThreshold ≈ 25 (old values).

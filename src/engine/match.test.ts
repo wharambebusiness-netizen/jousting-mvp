@@ -71,8 +71,8 @@ describe('v4.1 Worked Example — 3 passes', () => {
     );
     expect(match.passResults.length).toBe(1);
     const p1 = match.passResults[0];
-    // Technician wins pass 1
-    expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore);
+    // Charger wins pass 1 (raw MOM dominates with reduced guard coeff 0.2)
+    expect(p1.player1.impactScore).toBeGreaterThan(p1.player2.impactScore);
     expect(p1.unseat).toBe('none');
     expect(match.player1.currentStamina).toBe(35);
     expect(match.player2.currentStamina).toBe(29);

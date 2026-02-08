@@ -391,7 +391,7 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
 });
 
 // ============================================================
-// 9. Accuracy & ImpactScore (formulas unchanged)
+// 9. Accuracy & ImpactScore
 // ============================================================
 describe('Accuracy and ImpactScore', () => {
   it('Accuracy formula is unchanged', () => {
@@ -400,21 +400,24 @@ describe('Accuracy and ImpactScore', () => {
     expect(calcAccuracy(20, 80, 55, -10)).toBe(36.25);
   });
 
-  it('ImpactScore formula is unchanged', () => {
-    expect(calcImpactScore(55, 97.5, 50)).toBe(51.5);
-    expect(calcImpactScore(110, 36.25, 65)).toBe(50.0);
+  it('ImpactScore uses guardImpactCoeff (0.2)', () => {
+    // 55*0.5 + 97.5*0.4 - 50*0.2 = 27.5 + 39 - 10 = 56.5
+    expect(calcImpactScore(55, 97.5, 50)).toBe(56.5);
+    // 110*0.5 + 36.25*0.4 - 65*0.2 = 55 + 14.5 - 13 = 56.5
+    expect(calcImpactScore(110, 36.25, 65)).toBe(56.5);
   });
 });
 
 // ============================================================
-// 10. Unseat check (formula unchanged)
+// 10. Unseat check (uses guardUnseatDivisor = 15)
 // ============================================================
 describe('Unseat Check', () => {
-  it('unseat threshold formula is unchanged', () => {
+  it('unseat threshold uses guardUnseatDivisor (15)', () => {
+    // threshold = 20 + 50/15 + 45/20 = 20 + 3.333 + 2.25 ≈ 25.583
     const result = checkUnseat(51.5, 50.0, 50, 45);
     expect(result.unseated).toBe(false);
     expect(result.margin).toBe(1.5);
-    expect(result.threshold).toBe(27.25);
+    expect(result.threshold).toBeCloseTo(25.583, 2);
   });
 });
 
@@ -428,8 +431,8 @@ describe('resolvePass — integration', () => {
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
-    // Technician wins on ImpactScore (same as before)
-    expect(result.p2.impactScore).toBeGreaterThan(result.p1.impactScore);
+    // Charger wins on ImpactScore (guard coefficient 0.2 lets raw MOM dominate)
+    expect(result.p1.impactScore).toBeGreaterThan(result.p2.impactScore);
 
     // No unseat
     expect(result.unseat).toBe('none');
@@ -454,11 +457,10 @@ describe('resolvePass — integration', () => {
     );
 
     // CEP beats CF. Winner is Technician with high CTL.
-    // Technician accuracy should reflect scaled counter bonus > 10
-    // (Technician post-shift CTL ≈ 83, bonus ≈ 12.3)
-    // Charger accuracy should reflect scaled penalty < -10
-    // Net effect: Technician advantage is slightly LARGER than with flat ±10
-    expect(result.p2.impactScore - result.p1.impactScore).toBeGreaterThan(0);
+    // Counter bonus helps Technician accuracy, but Charger's raw MOM
+    // advantage (115 vs 55) dominates impact with reduced guard coeff (0.2).
+    // Charger still wins overall on impact despite counter penalty.
+    expect(result.p1.impactScore - result.p2.impactScore).toBeGreaterThan(0);
   });
 });
 
@@ -690,15 +692,16 @@ describe('Edge Cases — Extreme Stat Values', () => {
 // ============================================================
 describe('Edge Cases — Unseat Mechanics', () => {
   it('exactly at threshold is unseated (>= check)', () => {
-    // threshold = 20 + 50/10 + 50/20 = 20 + 5 + 2.5 = 27.5
-    const result = checkUnseat(37.5, 10, 50, 50);
-    expect(result.margin).toBe(27.5);
-    expect(result.threshold).toBe(27.5);
+    // Guard=60, STA=60: threshold = 20 + 60/15 + 60/20 = 20 + 4 + 3 = 27
+    const result = checkUnseat(37, 10, 60, 60);
+    expect(result.margin).toBe(27);
+    expect(result.threshold).toBe(27);
     expect(result.unseated).toBe(true);
   });
 
   it('just below threshold is not unseated', () => {
-    const result = checkUnseat(37.49, 10, 50, 50);
+    // threshold = 27, margin = 26.99 is below
+    const result = checkUnseat(36.99, 10, 60, 60);
     expect(result.unseated).toBe(false);
   });
 
@@ -729,9 +732,9 @@ describe('Edge Cases — Unseat Mechanics', () => {
     const low = checkUnseat(30, 0, 0, 0);
     expect(low.threshold).toBe(20);
 
-    // High stats: threshold = 20 + 10 + 5 = 35
+    // High stats: threshold = 20 + 100/15 + 100/20 = 20 + 6.667 + 5 ≈ 31.667
     const high = checkUnseat(30, 0, 100, 100);
-    expect(high.threshold).toBe(35);
+    expect(high.threshold).toBeCloseTo(31.667, 2);
 
     expect(high.threshold).toBeGreaterThan(low.threshold);
   });
@@ -1004,9 +1007,9 @@ describe('Edge Cases — Counter Bonus Asymmetry', () => {
 // ============================================================
 describe('Edge Cases — Unseat Threshold Extremes', () => {
   it('maximum threshold with high guard + stamina', () => {
-    // threshold = 20 + 115/10 + 91/20 = 20 + 11.5 + 4.55 = 36.05
+    // threshold = 20 + 115/15 + 91/20 = 20 + 7.667 + 4.55 ≈ 32.217
     const result = checkUnseat(50, 13, 115, 91);
-    expect(result.threshold).toBeCloseTo(36.05, 1);
+    expect(result.threshold).toBeCloseTo(32.217, 1);
     expect(result.margin).toBe(37);
     expect(result.unseated).toBe(true);
   });

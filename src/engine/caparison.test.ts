@@ -158,7 +158,7 @@ describe('Woven Shieldcloth', () => {
     const without = resolveMeleeRoundFn(1, p1, p2, GH, MC);
 
     // P1 uses Guard High (defensive) → shieldcloth activates → P1 guard +3
-    // Higher P1 guard reduces P2's ImpactScore (formula: -opponentGuard * 0.3)
+    // Higher P1 guard reduces P2's ImpactScore (formula: -opponentGuard * guardImpactCoeff)
     expect(withCap.player2ImpactScore).toBeLessThan(without.player2ImpactScore);
   });
 
