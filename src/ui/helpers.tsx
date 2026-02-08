@@ -1,6 +1,16 @@
 import { Stance, SpeedType, type Attack, type CaparisonEffect } from '../engine/types';
 import { JOUST_ATTACKS, MELEE_ATTACKS } from '../engine/attacks';
 
+// --- Archetype icons for scoreboard ---
+const ARCHETYPE_ICON: Record<string, string> = {
+  Charger: '\uD83C\uDFC7',    // horse racing
+  Technician: '\u2699\uFE0F',  // gear
+  Bulwark: '\uD83D\uDEE1\uFE0F', // shield
+  Tactician: '\u265F\uFE0F',   // chess pawn
+  Breaker: '\uD83D\uDD28',    // hammer
+  Duelist: '\u2694\uFE0F',     // crossed swords
+};
+
 // All known attacks for name lookup
 const ALL_ATTACKS: Record<string, Attack> = { ...JOUST_ATTACKS, ...MELEE_ATTACKS };
 
@@ -12,6 +22,16 @@ const CAP_SHORT: Record<string, string> = {
   irongrip_drape: 'Irongrip',
   stormcloak: 'Stormcloak',
   banner_of_the_giga: 'Banner',
+};
+
+// --- Caparison icons ---
+const CAP_ICON: Record<string, string> = {
+  pennant_of_haste: '\u26A1',    // lightning bolt
+  woven_shieldcloth: '\uD83D\uDEE1\uFE0F', // shield
+  thunderweave: '\u{1F329}\uFE0F',  // cloud with lightning
+  irongrip_drape: '\u270A',      // raised fist
+  stormcloak: '\uD83C\uDF00',   // cyclone
+  banner_of_the_giga: '\uD83C\uDFF4', // black flag
 };
 
 // --- Stat descriptions for tooltips ---
@@ -58,11 +78,13 @@ export function CaparisonBadge({ effect, triggered }: {
 }) {
   if (!effect) return null;
   const short = CAP_SHORT[effect.id] ?? effect.name;
+  const icon = CAP_ICON[effect.id];
   return (
     <span
       className={`cap-badge cap-badge--${effect.rarity}${triggered ? ' cap-badge--triggered' : ''}`}
       title={`${effect.name}: ${effect.description}`}
     >
+      {icon && <span className="cap-badge__icon">{icon}</span>}
       {short}
     </span>
   );
@@ -173,7 +195,20 @@ export function StaminaBar({ current, max }: { current: number; max: number }) {
   );
 }
 
-export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1MaxSta, p2MaxSta, label, p1Cap, p2Cap }: {
+export function PassPips({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="pass-pips">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={`pass-pip${i < current ? ' pass-pip--done' : i === current ? ' pass-pip--current' : ''}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1MaxSta, p2MaxSta, label, p1Cap, p2Cap, passNumber, totalPasses }: {
   p1Name: string;
   p2Name: string;
   p1Score: number;
@@ -185,22 +220,35 @@ export function Scoreboard({ p1Name, p2Name, p1Score, p2Score, p1Sta, p2Sta, p1M
   label: string;
   p1Cap?: CaparisonEffect;
   p2Cap?: CaparisonEffect;
+  passNumber?: number;
+  totalPasses?: number;
 }) {
+  const p1Icon = ARCHETYPE_ICON[p1Name];
+  const p2Icon = ARCHETYPE_ICON[p2Name];
   return (
     <div className="scoreboard">
       <div className="scoreboard__player">
-        <div className="scoreboard__name">{p1Name}</div>
+        <div className="scoreboard__name">
+          {p1Icon && <span className="scoreboard__icon">{p1Icon}</span>}
+          {p1Name}
+        </div>
         {p1Cap && <CaparisonBadge effect={p1Cap} />}
-        <div className="scoreboard__score">{p1Score.toFixed(1)}</div>
+        <div className="scoreboard__score scoreboard__score--anim">{p1Score.toFixed(1)}</div>
         <StaminaBar current={p1Sta} max={p1MaxSta} />
       </div>
       <div className="scoreboard__center">
         <div className="scoreboard__pass">{label}</div>
+        {passNumber != null && totalPasses != null && (
+          <PassPips current={passNumber - 1} total={totalPasses} />
+        )}
       </div>
       <div className="scoreboard__player">
-        <div className="scoreboard__name">{p2Name}</div>
+        <div className="scoreboard__name">
+          {p2Icon && <span className="scoreboard__icon">{p2Icon}</span>}
+          {p2Name}
+        </div>
         {p2Cap && <CaparisonBadge effect={p2Cap} />}
-        <div className="scoreboard__score">{p2Score.toFixed(1)}</div>
+        <div className="scoreboard__score scoreboard__score--anim">{p2Score.toFixed(1)}</div>
         <StaminaBar current={p2Sta} max={p2MaxSta} />
       </div>
     </div>

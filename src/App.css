@@ -265,12 +265,14 @@
 
 /* Caparison badges (in scoreboard + triggers) */
 .cap-badge {
-  display: inline-block; padding: 1px 8px; border-radius: 3px;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: 3px;
   font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.03em; cursor: help;
   background: var(--parchment-dark); color: var(--ink-light);
   border: 1px solid var(--border-light);
 }
+.cap-badge__icon { font-size: 0.8rem; line-height: 1; }
 .cap-badge--uncommon { border-color: var(--rarity-uncommon); color: var(--rarity-uncommon); }
 .cap-badge--rare { border-color: var(--rarity-rare); color: var(--rarity-rare); }
 .cap-badge--epic { border-color: var(--rarity-epic); color: var(--rarity-epic); }
@@ -279,13 +281,19 @@
 .cap-badge--giga { border-color: var(--rarity-giga); color: var(--rarity-giga); }
 
 .cap-badge--triggered {
-  animation: cap-pulse 0.6s ease-out;
-  box-shadow: 0 0 6px currentColor;
+  animation: cap-pulse 0.6s ease-out, cap-glow 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px currentColor, 0 0 16px currentColor;
 }
 
 @keyframes cap-pulse {
-  0% { transform: scale(1.2); opacity: 0.7; }
+  0% { transform: scale(1.3); opacity: 0.6; }
+  50% { transform: scale(0.95); }
   100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes cap-glow {
+  0%, 100% { box-shadow: 0 0 6px currentColor, 0 0 12px currentColor; }
+  50% { box-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
 }
 
 /* Caparison trigger notifications */
@@ -295,13 +303,30 @@
 }
 .cap-trigger {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px; border-radius: var(--radius);
+  padding: 8px 12px; border-radius: var(--radius);
   font-size: 0.8rem;
-  background: var(--parchment-light); border: 1px dashed var(--border);
+  border: 1px solid var(--border-light);
+  animation: cap-trigger-slide 0.4s ease-out;
 }
+
+@keyframes cap-trigger-slide {
+  0% { opacity: 0; transform: translateX(-20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Rarity-colored trigger backgrounds */
+.cap-trigger--uncommon { background: var(--rarity-uncommon-bg); border-color: var(--rarity-uncommon); }
+.cap-trigger--rare { background: var(--rarity-rare-bg); border-color: var(--rarity-rare); }
+.cap-trigger--epic { background: var(--rarity-epic-bg); border-color: var(--rarity-epic); }
+.cap-trigger--legendary { background: var(--rarity-legendary-bg); border-color: var(--rarity-legendary); }
+.cap-trigger--relic { background: var(--rarity-relic-bg); border-color: var(--rarity-relic); }
+.cap-trigger--giga { background: var(--rarity-legendary-bg); border-color: var(--rarity-giga);
+  background-image: linear-gradient(135deg, rgba(201,168,76,0.15), rgba(123,63,160,0.15), rgba(42,90,143,0.15));
+}
+
 .cap-trigger--p1 { border-left: 3px solid var(--p1); }
 .cap-trigger--p2 { border-left: 3px solid var(--p2); }
-.cap-trigger__text { color: var(--ink-light); }
+.cap-trigger__text { color: var(--ink-light); font-style: italic; }
 
 /* Caparison summary (match end) */
 .cap-summary {
@@ -318,6 +343,93 @@
   background: var(--parchment-dark); color: var(--ink-faint);
 }
 
+/* Pass progress pips */
+.pass-pips {
+  display: flex; gap: 4px; justify-content: center; margin-top: 4px;
+}
+.pass-pip {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(244, 228, 193, 0.25);
+  border: 1px solid rgba(244, 228, 193, 0.4);
+  transition: all 0.3s ease;
+}
+.pass-pip--done {
+  background: var(--gold); border-color: var(--gold-dark);
+  box-shadow: 0 0 4px rgba(201, 168, 76, 0.5);
+}
+.pass-pip--current {
+  background: var(--gold-light); border-color: var(--gold);
+  animation: pip-pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.6);
+}
+@keyframes pip-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.8; }
+}
+
+/* Victory / defeat banner animations */
+.winner-banner--victory {
+  animation: victory-entrance 0.6s ease-out;
+}
+@keyframes victory-entrance {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.winner-banner--defeat {
+  background: linear-gradient(135deg, #5c4033, #2c1810);
+  border-color: var(--ink-light);
+  animation: defeat-entrance 0.8s ease-out;
+}
+.winner-banner--defeat h2 { color: var(--parchment-dark); }
+.winner-banner--defeat p { color: var(--ink-faint); }
+@keyframes defeat-entrance {
+  0% { opacity: 0; transform: translateY(-20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.winner-banner--draw {
+  background: linear-gradient(135deg, var(--parchment-dark), var(--border-light));
+  border-color: var(--border);
+}
+
+/* Match timeline (mini horizontal pass results) */
+.match-timeline {
+  display: flex; align-items: center; justify-content: center;
+  gap: 4px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.timeline-pip {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 0.65rem; font-weight: 700;
+  border: 2px solid var(--border-light);
+  background: var(--parchment-dark);
+  color: var(--ink-faint);
+  animation: timeline-pop 0.3s ease-out backwards;
+}
+.timeline-pip--p1 { background: var(--p1-bg); border-color: var(--p1); color: var(--p1); }
+.timeline-pip--p2 { background: var(--p2-bg); border-color: var(--p2); color: var(--p2); }
+.timeline-pip--unseat { background: var(--red); border-color: var(--red); color: #fff; font-size: 0.8rem; }
+.timeline-pip--crit { background: var(--red); border-color: var(--red); color: #fff; }
+.timeline-separator {
+  width: 2px; height: 20px; background: var(--border-light); margin: 0 4px;
+}
+@keyframes timeline-pop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Animated final score reveal */
+.final-score--reveal .scoreboard__score {
+  animation: score-count 0.8s ease-out;
+}
+@keyframes score-count {
+  0% { transform: scale(0.5); opacity: 0; color: var(--gold); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @media (max-width: 480px) {
   .attack-grid, .speed-grid, .archetype-grid { grid-template-columns: 1fr; }
   .reveal-sides { grid-template-columns: 1fr; }
@@ -325,4 +437,25 @@
   .caparison-grid { grid-template-columns: 1fr; }
   .stats-preview { flex-direction: column; }
   .stats-preview__arrow { transform: rotate(90deg); }
+
+  /* Touch-friendly button sizes */
+  .btn { min-height: 44px; min-width: 44px; padding: 12px 20px; }
+  .btn--large { padding: 14px 28px; }
+  .btn--small { min-height: 44px; padding: 10px 14px; }
+
+  /* Stack melee wins vertically on narrow screens */
+  .melee-wins { flex-direction: column; gap: 8px; }
+
+  /* Tighter trigger rows */
+  .cap-trigger { padding: 8px 10px; font-size: 0.75rem; }
+
+  /* Scale scoreboard text */
+  .scoreboard { padding: 8px 10px; }
+  .scoreboard__player { min-width: 80px; }
+
+  /* Timeline pips smaller on mobile */
+  .timeline-pip { width: 24px; height: 24px; font-size: 0.6rem; }
+
+  /* Pass pips */
+  .pass-pip { width: 6px; height: 6px; }
 }

@@ -323,3 +323,383 @@ describe('Critical hit counts as 2 round wins', () => {
     }
   });
 });
+
+// ============================================================
+// 9. Edge Cases: Both players at 0 stamina in joust
+// ============================================================
+describe('Edge Cases — zero stamina joust', () => {
+  it('both players at 0 stamina can still play passes', () => {
+    let match = createMatch(charger, technician);
+    match.player1.currentStamina = 0;
+    match.player2.currentStamina = 0;
+
+    // Should not throw — just produce heavily fatigued results
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+    expect(match.passResults.length).toBe(1);
+    // Both at 0 stamina → MOM/CTL are 0, guard at floor
+    const p1Stats = match.passResults[0].player1.effectiveStats;
+    expect(p1Stats.momentum).toBe(0);
+    expect(p1Stats.control).toBe(0);
+    // Stamina can't go further below 0
+    expect(match.player1.currentStamina).toBe(0);
+  });
+
+  it('shift denied when both at 0 stamina', () => {
+    let match = createMatch(technician, charger);
+    match.player1.currentStamina = 0;
+    match.player2.currentStamina = 0;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL, shiftAttack: CEP },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    // Shift denied: stamina 0 < 10 requirement
+    expect(match.passResults[0].player1.shifted).toBe(false);
+  });
+});
+
+// ============================================================
+// 10. Edge Cases: Degenerate strategy — always same attack
+// ============================================================
+describe('Edge Cases — same attack every pass', () => {
+  it('always Port de Lance (cheapest) survives 5 passes', () => {
+    let match = createMatch(bulwark, duelist);
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: PdL },
+        { speed: SpeedType.Standard, attack: PdL },
+      );
+    }
+
+    // Bulwark PdL costs 8 STA/pass. 5 passes = 40 STA used. Start 65, end 25.
+    // Mirror matchup → tied → melee
+    expect(match.passResults.length).toBe(5);
+  });
+
+  it('always Coup Fort exhausts Duelist by pass 3', () => {
+    let match = createMatch(duelist, duelist);
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Fast, attack: CF },
+        { speed: SpeedType.Fast, attack: CF },
+      );
+    }
+
+    // Duelist STA=60. Fast+CF = -5 -20 = -25/pass.
+    // Pass 1: 35, Pass 2: 10, Pass 3: 0 (clamped). Should play all 5 passes.
+    expect(match.passResults.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ============================================================
+// 11. Edge Cases: Unseat with extreme stamina gap
+// ============================================================
+describe('Edge Cases — unseat scenarios', () => {
+  it('Charger Fast+CF vs 0-stamina opponent creates high impact gap', () => {
+    let match = createMatch(charger, duelist);
+    match.player2.currentStamina = 0;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: PdL },
+    );
+
+    const pass = match.passResults[0];
+    // P2 at 0 stamina → all combat stats at 0 → very low impact
+    // P1 at full power → very high impact
+    expect(pass.player1.impactScore).toBeGreaterThan(pass.player2.impactScore);
+    // Impact gap should be large enough for unseat
+    const margin = pass.player1.impactScore - pass.player2.impactScore;
+    expect(margin).toBeGreaterThan(20);
+  });
+
+  it('unseat on pass 1 transitions to melee immediately', () => {
+    let match = createMatch(charger, technician);
+    match.player2.currentStamina = 1;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    if (match.passResults[0].unseat !== 'none') {
+      expect(match.phase).toBe(Phase.MeleeSelect);
+      expect(match.passResults.length).toBe(1);
+      // Carryover penalties applied
+      const unseatedPlayer = match.passResults[0].unseat === 'player1' ? 'player2' : 'player1';
+      if (unseatedPlayer === 'player2') {
+        expect(match.player2.carryoverMomentum).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it('unseat on pass 5 transitions to melee (not match end)', () => {
+    let match = createMatch(charger, technician);
+
+    // Play passes 1-4 normally
+    for (let i = 0; i < 4; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    if (match.phase !== Phase.SpeedSelect) return;
+
+    // Drain P2 for pass 5
+    match.player2.currentStamina = 1;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: PdL },
+    );
+
+    // If unseat happened, should transition to melee
+    if (match.passResults[4]?.unseat !== 'none') {
+      expect(match.phase).toBe(Phase.MeleeSelect);
+    }
+  });
+});
+
+// ============================================================
+// 12. Edge Cases: Melee with max carryover penalties
+// ============================================================
+describe('Edge Cases — melee with carryover penalties', () => {
+  it('heavy carryover penalties make unseated player significantly weaker', () => {
+    let match = createMatch(duelist, duelist);
+    match.phase = Phase.MeleeSelect;
+    match.player2.carryoverMomentum = -10;
+    match.player2.carryoverControl = -7;
+    match.player2.carryoverGuard = -6;
+
+    // P1 full stats vs P2 penalized → P1 should win rounds
+    match = submitMeleeRound(match, MC, MC);
+
+    const round = match.meleeRoundResults[0];
+    // P1 should have higher impact (no penalties vs penalized)
+    expect(round.player1ImpactScore).toBeGreaterThan(round.player2ImpactScore);
+  });
+});
+
+// ============================================================
+// 13. Edge Cases: Phase validation
+// ============================================================
+describe('Edge Cases — phase validation', () => {
+  it('submitJoustPass throws in MeleeSelect phase', () => {
+    let match = createMatch(duelist, duelist);
+    match.phase = Phase.MeleeSelect;
+
+    expect(() => submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    )).toThrow();
+  });
+
+  it('submitMeleeRound throws in SpeedSelect phase', () => {
+    const match = createMatch(duelist, duelist);
+
+    expect(() => submitMeleeRound(match, MC, MC)).toThrow();
+  });
+
+  it('submitJoustPass throws in MatchEnd phase', () => {
+    let match = createMatch(duelist, duelist);
+    match.phase = Phase.MatchEnd;
+
+    expect(() => submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    )).toThrow();
+  });
+});
+
+// ============================================================
+// 14. Edge Cases: Cumulative scoring
+// ============================================================
+describe('Edge Cases — cumulative scoring correctness', () => {
+  it('cumulative scores accumulate across all 5 passes', () => {
+    let match = createMatch(duelist, duelist);
+
+    let expectedScore1 = 0;
+    let expectedScore2 = 0;
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: PdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      expectedScore1 += match.passResults[i].player1.impactScore;
+      expectedScore2 += match.passResults[i].player2.impactScore;
+    }
+
+    expect(match.cumulativeScore1).toBeCloseTo(expectedScore1, 5);
+    expect(match.cumulativeScore2).toBeCloseTo(expectedScore2, 5);
+  });
+});
+
+// ============================================================
+// 15. Edge Cases: All 6 joust attacks as degenerate strategy
+// ============================================================
+describe('Edge Cases — every joust attack repeated 5x survives', () => {
+  const allJoustAttacks = [CF, CdL, CEP, BdG, PdL, CdP];
+
+  for (const attack of allJoustAttacks) {
+    it(`5x ${attack.name} completes without throwing`, () => {
+      let match = createMatch(duelist, duelist);
+
+      for (let i = 0; i < 5; i++) {
+        if (match.phase !== Phase.SpeedSelect) break;
+        match = submitJoustPass(match,
+          { speed: SpeedType.Standard, attack },
+          { speed: SpeedType.Standard, attack },
+        );
+      }
+
+      // Mirror matchup should always complete 5 passes (no unseat possible)
+      expect(match.passResults.length).toBe(5);
+      // Mirror matchup → tied score → melee
+      expect(match.phase).toBe(Phase.MeleeSelect);
+    });
+  }
+});
+
+// ============================================================
+// 16. Edge Cases: All 6 melee attacks as degenerate strategy
+// ============================================================
+describe('Edge Cases — every melee attack repeated', () => {
+  const allMeleeAttacks = [OC, FB, MC, PT, GH, RS];
+
+  for (const attack of allMeleeAttacks) {
+    it(`mirror ${attack.name} draws every round`, () => {
+      let match = createMatch(duelist, duelist);
+      match.phase = Phase.MeleeSelect;
+
+      match = submitMeleeRound(match, attack, attack);
+      const round = match.meleeRoundResults[0];
+
+      // Mirror matchup → identical impacts → margin 0 → draw
+      expect(round.outcome).toBe(MeleeOutcome.Draw);
+      expect(round.margin).toBe(0);
+    });
+  }
+});
+
+// ============================================================
+// 17. Edge Cases: Melee exhaustion with unequal wins
+// ============================================================
+describe('Edge Cases — melee exhaustion with unequal wins', () => {
+  it('player with more melee wins at exhaustion wins the match', () => {
+    let match = createMatch(duelist, duelist);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 10;
+    match.player2.currentStamina = 10;
+    // Give P1 a round win before exhaustion
+    match.meleeWins1 = 1;
+
+    // Play mirror rounds until both exhaust
+    let rounds = 0;
+    while (match.phase === Phase.MeleeSelect && rounds < 20) {
+      match = submitMeleeRound(match, MC, MC);
+      rounds++;
+    }
+
+    expect(match.phase).toBe(Phase.MatchEnd);
+    // P1 had 1 win advantage going in → P1 wins on exhaustion tiebreaker
+    expect(match.winner).toBe('player1');
+    expect(match.winReason).toContain('melee round wins');
+  });
+});
+
+// ============================================================
+// 18. Edge Cases: Unseat naming convention
+// ============================================================
+describe('Edge Cases — unseat naming convention', () => {
+  it('unseat=player1 means player1 unseated player2', () => {
+    // Charger with full stamina vs opponent with near-zero stamina
+    let match = createMatch(charger, technician);
+    match.player2.currentStamina = 0;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: PdL },
+    );
+
+    const pass = match.passResults[0];
+    if (pass.unseat !== 'none') {
+      // P1 should unseat P2 (P2 is at 0 stamina, extremely weak)
+      expect(pass.unseat).toBe('player1');
+      // P2 (the unseated one) gets carryover penalties
+      expect(match.player2.carryoverMomentum).toBeLessThanOrEqual(0);
+      expect(match.player2.carryoverControl).toBeLessThanOrEqual(0);
+      expect(match.player2.carryoverGuard).toBeLessThanOrEqual(0);
+      // P1 has no penalties
+      expect(match.player1.carryoverMomentum).toBe(0);
+    }
+  });
+});
+
+// ============================================================
+// 19. Edge Cases: Five different attacks across 5 passes
+// ============================================================
+describe('Edge Cases — varied attack selection', () => {
+  it('using different attacks each pass completes normally', () => {
+    let match = createMatch(charger, bulwark);
+    const p1Attacks = [CF, BdG, CdL, PdL, CEP];
+    const p2Attacks = [PdL, CdL, CF, CEP, BdG];
+    const speeds: SpeedType[] = [
+      SpeedType.Fast, SpeedType.Standard, SpeedType.Slow,
+      SpeedType.Standard, SpeedType.Fast,
+    ];
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: speeds[i], attack: p1Attacks[i] },
+        { speed: SpeedType.Standard, attack: p2Attacks[i] },
+      );
+    }
+
+    // Should complete all passes or hit unseat
+    expect(match.passResults.length).toBeGreaterThanOrEqual(1);
+    if (match.passResults.length === 5) {
+      expect([Phase.MatchEnd, Phase.MeleeSelect]).toContain(match.phase);
+    }
+  });
+});
+
+// ============================================================
+// 20. Edge Cases: Melee stamina drain tracking
+// ============================================================
+describe('Edge Cases — melee stamina drain', () => {
+  it('tracks stamina drain correctly across multiple melee rounds', () => {
+    let match = createMatch(duelist, duelist);
+    match.phase = Phase.MeleeSelect;
+
+    const startSta1 = match.player1.currentStamina;
+    const startSta2 = match.player2.currentStamina;
+
+    // MC costs -10, OC costs -18
+    match = submitMeleeRound(match, MC, OC);
+    expect(match.player1.currentStamina).toBe(Math.max(0, startSta1 - 10));
+    expect(match.player2.currentStamina).toBe(Math.max(0, startSta2 - 18));
+
+    if (match.phase !== Phase.MeleeSelect) return;
+
+    // Second round
+    const sta1AfterR1 = match.player1.currentStamina;
+    const sta2AfterR1 = match.player2.currentStamina;
+    match = submitMeleeRound(match, GH, FB);
+    // GH costs -8, FB costs -15
+    expect(match.player1.currentStamina).toBe(Math.max(0, sta1AfterR1 - 8));
+    expect(match.player2.currentStamina).toBe(Math.max(0, sta2AfterR1 - 15));
+  });
+});

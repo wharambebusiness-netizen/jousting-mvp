@@ -1,14 +1,45 @@
-import type { Archetype } from '../engine/types';
+import { useState } from 'react';
+import type { Archetype, AIDifficulty } from '../engine/types';
 import { ARCHETYPE_LIST } from '../engine/archetypes';
 import { StatBar } from './helpers';
 
+const DIFFICULTIES: { value: AIDifficulty; label: string; desc: string }[] = [
+  { value: 'easy',   label: 'Easy',   desc: '40% optimal' },
+  { value: 'medium', label: 'Medium', desc: '70% optimal' },
+  { value: 'hard',   label: 'Hard',   desc: '90% optimal' },
+];
+
 export function SetupScreen({ onStart }: {
-  onStart: (p1: Archetype, p2: Archetype) => void;
+  onStart: (p1: Archetype, p2: Archetype, difficulty: AIDifficulty) => void;
 }) {
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
+
   return (
     <div className="screen">
       <h1>Joust & Melee</h1>
       <p className="subtitle">Choose your knight's archetype</p>
+
+      <div className="difficulty-selector" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+        {DIFFICULTIES.map(d => (
+          <button
+            key={d.value}
+            className={`btn ${difficulty === d.value ? 'btn--active' : ''}`}
+            onClick={() => setDifficulty(d.value)}
+            title={d.desc}
+            style={{
+              padding: '0.4rem 1rem',
+              border: difficulty === d.value ? '2px solid var(--ink)' : '1px solid var(--ink-faint)',
+              background: difficulty === d.value ? 'var(--ink)' : 'transparent',
+              color: difficulty === d.value ? 'var(--parchment)' : 'var(--ink)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: difficulty === d.value ? 'bold' : 'normal',
+            }}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
 
       <div className="archetype-grid">
         {ARCHETYPE_LIST.map(arch => (
@@ -19,7 +50,7 @@ export function SetupScreen({ onStart }: {
               // Pick a random opponent that isn't the same
               const others = ARCHETYPE_LIST.filter(a => a.id !== arch.id);
               const opponent = others[Math.floor(Math.random() * others.length)];
-              onStart(arch, opponent);
+              onStart(arch, opponent, difficulty);
             }}
           >
             <div className="archetype-card__name">{arch.name}</div>

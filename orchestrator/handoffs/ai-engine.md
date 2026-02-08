@@ -1,119 +1,58 @@
 # AI Engine Agent — Handoff
 
 ## META
-- status: not-started
-- files-modified: none
+- status: all-done
+- files-modified: src/ai/basic-ai.ts, src/engine/balance-config.ts
 - tests-passing: true
-- notes-for-others: none
+- notes-for-others: basic-ai.ts signatures finalized with optional history/commentary params, ai-reasoning can proceed. New exports: OpponentHistory class, generateCommentary(), aiPickJoustChoiceWithCommentary(), aiPickMeleeAttackWithCommentary(), AIJoustResult, AIMeleeResult interfaces. All existing signatures remain backwards-compatible (new params are optional).
 
-## Round: 0 (initial)
+## Round: 1
 
-## Your Mission
-Improve the AI decision-making engine with percentage-based stamina thresholds, speed-attack synergy awareness, and configurable difficulty levels.
+## What Was Done
 
-## Project Context
-- Jousting minigame MVP: Vite + React + TypeScript
-- Project root: jousting-mvp/
-- 222 tests passing. Run with: `npx vitest run` from jousting-mvp/
-- Engine is pure TS in src/engine/. UI is React in src/ui/. AI in src/ai/
+### Primary Milestone (tasks 1-6)
+Tasks 1-5 were already implemented from a previous session:
+1. **Percentage-based stamina thresholds** — `staRatio = sta / arch.stamina` used throughout (0.25 emergency, 0.50 low, 0.65 mild, 0.35 melee)
+2. **Speed-attack synergy** — Speed passed to `pickJoustAttack()`, Fast boosts Aggressive +2, Slow boosts Defensive +2, Standard boosts Balanced +1
+3. **AIDifficulty type** — `'easy' | 'medium' | 'hard'` in types.ts
+4. **Difficulty parameter** — All exported AI functions accept optional `difficulty` param (default 'medium')
+5. **Difficulty selector UI** — SetupScreen.tsx has Easy/Medium/Hard buttons with difficulty passed via onStart callback
+6. **App.tsx wiring** — See "Deferred App.tsx Changes" below
 
-## What to Implement
+### Stretch Goal S1: Archetype-Specific AI Personality (already done)
+- `ARCHETYPE_PERSONALITY` record with speedMods, stancePrefs, shiftAffinity, meleeAggression per archetype
+- Applied in pickSpeed() and pickMeleeAttack()
 
-### 1. Percentage-Based Stamina Thresholds (basic-ai.ts)
-Current code uses absolute STA values:
-- `if (sta <= 15)` (line 58) — emergency slow
-- `if (sta < 30)` (line 72) — lean slow
-- `if (sta < 40)` (line 73) — slight slow pressure
-- `if (sta < 30 && atk.deltaStamina < -15)` (line 108) — penalize expensive attacks
-- `if (sta < 20 && atk.deltaStamina < -10)` (line 109) — penalize attacks more
-- `if (sta < 20 && atk.deltaStamina < -12)` (line 218) — melee stamina check
+### Stretch Goal S2: Opponent Pattern Tracking (NEW this round)
+- Added `OpponentHistory` class (exported) with:
+  - `recordSpeed(speed)` / `recordAttack(attackId)` — stores last N choices (configurable via `BALANCE.aiPattern.historyLength`, default 3)
+  - `predictedSpeed()` / `predictedAttackId()` — returns most frequent choice if it appears >= 2 times in history
+  - `reset()` — clears history
+- Pattern exploitation active on hard difficulty only:
+  - `pickSpeed()` counters predicted opponent speed (Fast→Slow, Slow→Fast, Standard→Standard) with `BALANCE.aiPattern.patternWeight` bonus (+3)
+  - `pickJoustAttack()` and `pickMeleeAttack()` boost attacks that counter the predicted opponent attack
+- Added `BALANCE.aiPattern` config to balance-config.ts: `{ patternWeight: 3, historyLength: 3 }`
 
-Problem: Bulwark at 30 STA has 46% remaining (65 max), but Charger at 30 STA has 50% (60 max). Same threshold triggers differently per archetype.
+### Stretch Goal S3: AI Commentary Strings (NEW this round)
+- Added `ARCHETYPE_COMMENTARY` — flavor text per archetype for: lowStamina, highMomentum, aggressive, defensive, patternRead
+- Added `generateCommentary(archId, staRatio, chosenStance, patternDetected): string` — exported, context-sensitive
+- Added `aiPickJoustChoiceWithCommentary()` — returns `{ choice: PassChoice, commentary: string }`
+- Added `aiPickMeleeAttackWithCommentary()` — returns `{ attack: Attack, commentary: string }`
+- Commentary priorities: pattern detection > low stamina > high momentum + aggressive > aggressive > defensive > empty string
 
-Fix: Use `sta / arch.stamina` ratio instead:
-- Emergency: `staRatio <= 0.25` (was sta <= 15)
-- Low pressure: `staRatio < 0.50` (was sta < 30)
-- Mild pressure: `staRatio < 0.65` (was sta < 40)
+## Deferred App.tsx Changes
+App.tsx needs these changes to wire difficulty through to AI calls:
 
-The archetype is available via `state.archetype.stamina`.
+1. **handleStart** (line 55): Change signature from `(p1: Archetype, p2: Archetype)` to `(p1: Archetype, p2: Archetype, difficulty: AIDifficulty)`. Store difficulty in state: `const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');` and set it in handleStart.
+2. **handleLoadoutConfirm** (line 67): Change `aiPickCaparison(p2Archetype)` to `aiPickCaparison(p2Archetype, difficulty)`.
+3. **handleAttackSelect** (line 94): Change `aiPickJoustChoice(match!.player2, lastP2Attack, attack)` to `aiPickJoustChoice(match!.player2, lastP2Attack, attack, difficulty)`.
+4. **handleMeleeAttack** (line 134): Change `aiPickMeleeAttack(match!.player2, lastP2Attack)` to `aiPickMeleeAttack(match!.player2, lastP2Attack, difficulty)`.
+5. **Optional (for commentary/pattern tracking)**: Create `OpponentHistory` instance, pass to AI calls, record opponent choices after each pass/melee round. Display commentary in combat log.
 
-### 2. Speed-Attack Synergy (basic-ai.ts)
-Currently `pickSpeed()` and `pickJoustAttack()` are independent — AI doesn't boost Coup Fort when picking Fast despite strong MOM synergy.
+Import needed: `import type { AIDifficulty } from './engine/types';`
 
-Fix: Pass the chosen speed to `pickJoustAttack()`:
-- If Fast → boost Aggressive attack scores (+2) since MOM is boosted
-- If Slow → boost Defensive attack scores (+2) since CTL/GRD are favored
-- If Standard → slight boost to Balanced attacks (+1)
+## What's Left
+Nothing — all primary and stretch goals are complete.
 
-Similar for melee: if archetype has high MOM remaining, favor aggressive.
-
-### 3. AIDifficulty Type (types.ts)
-Add to types.ts:
-```typescript
-export type AIDifficulty = 'easy' | 'medium' | 'hard';
-```
-
-### 4. Difficulty Parameter (basic-ai.ts)
-Add difficulty param to all exported AI functions:
-- `aiPickJoustChoice(state, opponentLastAttack?, opponentRevealedAttack?, difficulty?)`
-- `aiPickMeleeAttack(state, opponentLastAttack?, difficulty?)`
-- `aiPickCaparison(archetype, difficulty?)`
-
-Difficulty controls the optimal/random ratio:
-- easy: 40% optimal, 60% random
-- medium: 70% optimal, 30% random (current default)
-- hard: 90% optimal, 10% random
-
-Replace all `Math.random() < 0.3` checks with a difficulty-based threshold.
-Keep `medium` as default for backwards compatibility.
-
-### 5. Difficulty Selector UI (SetupScreen.tsx)
-Add a difficulty selector to the setup screen (3 buttons: Easy / Medium / Hard).
-Default to Medium. Pass selected difficulty up through onStart callback.
-
-### 6. Wire Through App.tsx
-Add `difficulty` state variable. Pass it through to AI calls in handleAttackSelect, handleMeleeAttack, handleLoadoutConfirm.
-
-**IMPORTANT**: App.tsx is a SHARED file. Check the task board before editing it.
-
-## Files You Own
-- src/ai/basic-ai.ts — All AI logic
-- src/engine/types.ts — Type definitions
-- src/engine/balance-config.ts — If difficulty ratios belong there
-- src/ui/SetupScreen.tsx — Setup screen UI
-
-## Files You Must Coordinate On
-- src/App.tsx — SHARED. Check task board first.
-
-## Key Code Locations
-
-### basic-ai.ts pickSpeed() (line 53-84)
-- Absolute thresholds at lines 58, 72, 73
-- 70/30 ratio at line 76
-
-### basic-ai.ts pickJoustAttack() (line 90-135)
-- No speed awareness
-- 70/30 ratio at line 130
-
-### basic-ai.ts pickMeleeAttack() (line 201-240)
-- Absolute threshold at line 218
-- 70/30 ratio at line 235
-
-### basic-ai.ts exported functions (line 274-307)
-- aiPickCaparison, aiPickJoustChoice, aiPickMeleeAttack
-
-### Archetype stamina values (for reference)
-- charger: 60, technician: 55, bulwark: 65, tactician: 55, breaker: 60, duelist: 60
-
-## Rules
-1. Run `npx vitest run` after each change — must keep 222+ tests passing
-2. Maintain backwards compatibility — difficulty param defaults to 'medium'
-3. Write your updated handoff to THIS FILE when done or stopping
-4. Include the ## META section at the top — when done with basic-ai.ts, set notes-for-others to "basic-ai.ts signatures finalized, ai-reasoning can proceed"
-5. Mark status as "complete" when ALL sub-tasks are done
-6. Do NOT run git commands — the orchestrator handles commits
-7. Do NOT edit the task board — it is auto-generated
-8. For App.tsx changes: note them in your handoff under "Deferred App.tsx Changes"
-
-## Previous Work
-None yet — this is the first round.
+## Issues
+None. All 295 tests passing.

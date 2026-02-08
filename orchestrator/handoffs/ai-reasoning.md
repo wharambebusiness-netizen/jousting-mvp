@@ -86,12 +86,36 @@ Show why the AI picked its caparison in the AIThinkingPanel on the first pass-re
 - src/App.tsx — SHARED file, check task board
 - src/engine/types.ts — ai-engine owns this, coordinate additions
 
+## Stretch Goals (after primary milestone)
+When the AI Thinking panel is working, set status to "complete" and work on these:
+
+### S1. Match Replay / Decision History
+- Add a "Match Replay" section to the end screen showing all AI decisions across the match
+- For each pass: what the AI picked, why, what the weights were
+- Collapsible accordion UI, one section per pass/melee round
+- Reuse the AIThinkingPanel component in a list layout
+
+### S2. Strategy Tips for Player
+- Based on the AI's analysis of the player's patterns, show tips:
+  - "You've been picking Fast 4 out of 5 passes — try mixing it up!"
+  - "Aggressive attacks work best with Fast speed for the MOM bonus"
+  - "Your opponent's Bulwark is weak to stamina drain — use expensive attacks early"
+- Show on the end screen as "AI Coach" section
+
+### S3. Difficulty Feedback
+- On the end screen, suggest difficulty adjustment:
+  - Player won easily → "Try Hard difficulty for a challenge!"
+  - Player lost badly → "Try Easy difficulty to learn the ropes"
+- Base on score differential and round count
+
+When ALL stretch goals are done, set status to "all-done".
+
 ## Rules
 1. Check task board FIRST — if ai-engine isn't done, STOP and write handoff (set status to "blocked")
 2. Run `npx vitest run` after changes
 3. Don't break existing AI behavior — reasoning is added alongside, not replacing
 4. Write updated handoff to THIS FILE with ## META section
-5. Mark status as "complete" when fully done
+5. Mark status as "complete" when primary task is fully done, then work on stretch goals
 6. Do NOT run git commands — the orchestrator handles commits
 7. Do NOT edit the task board — it is auto-generated
 8. For App.tsx changes: note them in your handoff under "Deferred App.tsx Changes"

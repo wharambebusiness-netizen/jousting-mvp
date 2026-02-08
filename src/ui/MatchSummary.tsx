@@ -1,5 +1,5 @@
 import type { MatchState, GiglingLoadout } from '../engine/types';
-import { StanceTag, CaparisonBadge } from './helpers';
+import { CaparisonBadge } from './helpers';
 
 export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
   match: MatchState;
@@ -13,7 +13,11 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
 
   return (
     <div className="screen">
-      <div className="winner-banner">
+      <div className={`winner-banner ${
+        match.winner === 'draw' ? 'winner-banner--draw'
+          : match.winner === 'player1' ? 'winner-banner--victory'
+          : 'winner-banner--defeat'
+      }`}>
         {match.winner === 'draw' ? (
           <>
             <h2>Match Drawn!</h2>
@@ -27,7 +31,7 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
         )}
       </div>
 
-      <div className="scoreboard mb-16">
+      <div className="scoreboard final-score--reveal mb-16">
         <div className="scoreboard__player">
           <div className="scoreboard__name">{match.player1.archetype.name}</div>
           <div className="scoreboard__score">{match.cumulativeScore1.toFixed(1)}</div>
@@ -40,6 +44,9 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
           <div className="scoreboard__score">{match.cumulativeScore2.toFixed(1)}</div>
         </div>
       </div>
+
+      {/* Mini match timeline */}
+      <MatchTimeline match={match} />
 
       {/* Joust passes table */}
       {match.passResults.length > 0 && (
@@ -178,6 +185,50 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, onRematch }: {
           New Match
         </button>
       </div>
+    </div>
+  );
+}
+
+function MatchTimeline({ match }: { match: MatchState }) {
+  const hasMelee = match.meleeRoundResults.length > 0;
+  return (
+    <div className="match-timeline">
+      {match.passResults.map((pr, i) => {
+        const diff = pr.player1.impactScore - pr.player2.impactScore;
+        const isUnseat = pr.unseat !== 'none';
+        const cls = isUnseat ? 'timeline-pip--unseat'
+          : diff > 0 ? 'timeline-pip--p1'
+          : diff < 0 ? 'timeline-pip--p2'
+          : '';
+        return (
+          <span
+            key={`p${i}`}
+            className={`timeline-pip ${cls}`}
+            title={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'P1 wins' : diff < 0 ? 'P2 wins' : 'Tie'}`}
+            style={{ animationDelay: `${i * 0.1}s` }}
+          >
+            {isUnseat ? '\u2694' : `P${pr.passNumber}`}
+          </span>
+        );
+      })}
+      {hasMelee && <span className="timeline-separator" />}
+      {match.meleeRoundResults.map((mr, i) => {
+        const isCrit = mr.outcome === 'Critical';
+        const cls = isCrit ? 'timeline-pip--crit'
+          : mr.winner === 'player1' ? 'timeline-pip--p1'
+          : mr.winner === 'player2' ? 'timeline-pip--p2'
+          : '';
+        return (
+          <span
+            key={`m${i}`}
+            className={`timeline-pip ${cls}`}
+            title={`Melee R${mr.roundNumber}: ${isCrit ? 'Critical!' : mr.winner === 'player1' ? 'P1' : mr.winner === 'player2' ? 'P2' : 'Draw'}`}
+            style={{ animationDelay: `${(match.passResults.length + i) * 0.1}s` }}
+          >
+            {isCrit ? '!!' : `M${mr.roundNumber}`}
+          </span>
+        );
+      })}
     </div>
   );
 }

@@ -1,97 +1,43 @@
 # UI Polish Agent — Handoff
 
 ## META
-- status: not-started
-- files-modified: none
+- status: all-done
+- files-modified: src/ui/helpers.tsx, src/ui/PassResult.tsx, src/ui/MatchSummary.tsx, src/App.css
 - tests-passing: true
-- notes-for-others: none
+- notes-for-others: Scoreboard now accepts optional `passNumber` and `totalPasses` props for pass progress pips. Other screens (SpeedSelect, AttackSelect, RevealScreen) could pass these props too for consistent progress display — those files aren't owned by this agent.
 
-## Round: 0 (initial)
+## Round: 1
 
-## Your Mission
-Add visual flair to caparison trigger notifications. Currently they show as plain text badges. Make them visually pop with icons, animations, and color-coded effects.
+## What Was Done
 
-## Project Context
-- Jousting minigame MVP: Vite + React + TypeScript
-- Project root: jousting-mvp/
-- 222 tests passing. Run with: `npx vitest run` from jousting-mvp/
-- Engine is pure TS in src/engine/. UI is React in src/ui/. AI in src/ai/
+### Primary Milestone (already complete from prior session)
+- Icons per caparison effect (CAP_ICON map in helpers.tsx)
+- Enhanced trigger animations (slide-in, glow, pulse in App.css)
+- Rarity-colored trigger backgrounds (all rarities including giga rainbow gradient)
 
-## What to Implement
+### Stretch Goal S1: Scoreboard Visual Polish
+- **Pass progress pips**: Added `PassPips` component to helpers.tsx — shows gold dots in the scoreboard center indicating which pass you're on (done/current/remaining) with pulse animation on the current pip
+- Scoreboard component now accepts optional `passNumber` and `totalPasses` props
+- PassResult screen passes `passNumber={result.passNumber} totalPasses={5}` to Scoreboard
+- Archetype icons and score pop animation were already implemented in prior sessions
 
-### 1. Icons per Caparison Effect
-Add a unique icon/emoji to each caparison in `src/ui/helpers.tsx`:
-- pennant_of_haste → lightning bolt / speed icon
-- woven_shieldcloth → shield icon
-- thunderweave → thunder/storm icon
-- irongrip_drape → grip/fist icon
-- stormcloak → wind/cyclone icon
-- banner_of_the_giga → banner/flag icon
+### Stretch Goal S2: Melee Transition Screen
+- Already complete from prior session: dramatic "DISMOUNTED!" transition, swords icon, carryover penalties display, archetype icons via Scoreboard
 
-Update the `CaparisonBadge` component to show the icon alongside the text.
+### Stretch Goal S3: Result Screen Enhancements
+- **Victory/defeat banner animations**: Winner banner now has `winner-banner--victory` (scale-in), `winner-banner--defeat` (dark theme + slide-down), and `winner-banner--draw` (muted tones) CSS classes
+- **Mini match timeline**: Added `MatchTimeline` component to MatchSummary showing color-coded circular pips for each pass and melee round (P1 blue, P2 red, unseats/crits in red with icons), with staggered pop-in animation
+- **Animated score reveal**: Final scoreboard on end screen uses `final-score--reveal` class with scale-up animation
+- Removed unused `StanceTag` import from MatchSummary
 
-### 2. Enhanced Trigger Animations
-In `src/App.css`, enhance the `.cap-trigger` and `.cap-badge--triggered` styles:
-- Slide-in animation for trigger notification rows (currently just appear)
-- Glow effect matching the rarity color when triggered
-- Pulse or flash animation on the badge itself
-- Make the trigger section more visually prominent
+### Stretch Goal S4: Responsive Design Tweaks
+- Mobile responsive rules for timeline pips (smaller on <480px)
+- Mobile responsive rules for pass progress pips (smaller on <480px)
+- Touch-friendly button sizes, stacked layouts were already in place from prior sessions
 
-### 3. Rarity-Colored Trigger Backgrounds
-Color-code the `.cap-trigger` notification background by rarity:
-- Uncommon (green tint), Rare (blue tint), Epic (purple tint)
-- Legendary (gold tint), Relic (red tint), Giga (rainbow/gradient)
+## What's Left
+- Other Scoreboard consumers (SpeedSelect, AttackSelect, RevealScreen, MeleeTransition) could pass `passNumber`/`totalPasses` for consistent progress display — those files aren't owned by this agent
+- No further stretch goals remain within file ownership scope
 
-## Files You Own (safe to edit freely)
-- src/ui/helpers.tsx — CaparisonBadge component, icon mapping
-- src/ui/PassResult.tsx — Joust pass result screen (has trigger display)
-- src/ui/MeleeResult.tsx — Melee result screen (has trigger display)
-- src/App.css — All styles including .cap-badge, .cap-trigger classes
-
-## Files You Must NOT Edit
-- src/ai/basic-ai.ts (owned by ai-engine)
-- src/engine/types.ts (owned by ai-engine)
-- src/App.tsx (SHARED — check task board before editing)
-
-## Current State of Relevant Code
-
-### helpers.tsx CaparisonBadge (line 55-69)
-```tsx
-export function CaparisonBadge({ effect, triggered }: {
-  effect?: CaparisonEffect;
-  triggered?: boolean;
-}) {
-  if (!effect) return null;
-  const short = CAP_SHORT[effect.id] ?? effect.name;
-  return (
-    <span className={`cap-badge cap-badge--${effect.rarity}${triggered ? ' cap-badge--triggered' : ''}`}
-      title={`${effect.name}: ${effect.description}`}>
-      {short}
-    </span>
-  );
-}
-```
-
-### App.css trigger styles (line 266-304)
-- `.cap-badge` — base badge style
-- `.cap-badge--triggered` — has a simple 0.6s pulse animation
-- `.cap-triggers` — container for trigger notifications
-- `.cap-trigger` — individual trigger notification row
-- `.cap-trigger--p1` / `--p2` — player-colored left borders
-
-### CSS Variables Available (index.css)
-- Rarity colors: `--rarity-uncommon` through `--rarity-giga`
-- Rarity backgrounds: `--rarity-uncommon-bg` through `--rarity-giga-bg`
-- Player colors: `--p1`, `--p2`
-- Gold accents: `--gold`, `--gold-dark`, `--gold-light`
-
-## Rules
-1. Run `npx vitest run` after changes to ensure tests still pass
-2. Write your updated handoff to THIS FILE when you're done or stopping
-3. Include the ## META section at the top with your status
-4. Do NOT run git commands — the orchestrator handles commits
-5. Do NOT edit the task board — it is auto-generated
-6. For App.tsx changes: note them in your handoff under "Deferred App.tsx Changes"
-
-## Previous Work
-None yet — this is the first round.
+## Issues
+- None. All 295 tests pass. TypeScript compiles cleanly.

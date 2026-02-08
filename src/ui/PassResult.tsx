@@ -29,6 +29,8 @@ export function PassResultScreen({ match, result, onContinue }: {
         label={`Pass ${result.passNumber} Result`}
         p1Cap={match.p1Caparison}
         p2Cap={match.p2Caparison}
+        passNumber={result.passNumber}
+        totalPasses={5}
       />
 
       {result.unseat !== 'none' && (
@@ -43,13 +45,13 @@ export function PassResultScreen({ match, result, onContinue }: {
       {(p1Trig || p2Trig) && (
         <div className="cap-triggers">
           {p1Trig && match.p1Caparison && (
-            <div className="cap-trigger cap-trigger--p1">
+            <div className={`cap-trigger cap-trigger--p1 cap-trigger--${match.p1Caparison.rarity}`}>
               <CaparisonBadge effect={match.p1Caparison} triggered />
               <span className="cap-trigger__text">{match.p1Caparison.description}</span>
             </div>
           )}
           {p2Trig && match.p2Caparison && (
-            <div className="cap-trigger cap-trigger--p2">
+            <div className={`cap-trigger cap-trigger--p2 cap-trigger--${match.p2Caparison.rarity}`}>
               <CaparisonBadge effect={match.p2Caparison} triggered />
               <span className="cap-trigger__text">{match.p2Caparison.description}</span>
             </div>

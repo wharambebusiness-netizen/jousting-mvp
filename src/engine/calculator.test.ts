@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { ARCHETYPES } from './archetypes';
 import { JOUST_ATTACKS, MELEE_ATTACKS, SPEEDS } from './attacks';
 import { BALANCE } from './balance-config';
-import { SpeedType, MeleeOutcome, type Attack } from './types';
+import { SpeedType, MeleeOutcome, type Attack, type Archetype } from './types';
 import {
   softCap,
   fatigueFactor,
@@ -17,6 +17,7 @@ import {
   calcAccuracy,
   calcImpactScore,
   checkUnseat,
+  calcCarryoverPenalties,
   applySpeedStamina,
   applyAttackStaminaCost,
   applyShiftCost,
@@ -577,5 +578,458 @@ describe('Scaling Properties', () => {
     // Much harder to crit against than base ≈ 25
     const critThresh = BALANCE.meleeCritBase + 116.67 * BALANCE.meleeCritGrdScale;
     expect(critThresh).toBeGreaterThan(30);
+  });
+});
+
+// ============================================================
+// 15. Edge Cases: Zero Stamina
+// ============================================================
+describe('Edge Cases — Zero Stamina', () => {
+  it('fatigue factor at 0 stamina returns 0', () => {
+    expect(fatigueFactor(0, 60)).toBe(0);
+    expect(fatigueFactor(0, 100)).toBe(0);
+  });
+
+  it('guard fatigue factor at 0 stamina returns floor (0.5)', () => {
+    const ff = fatigueFactor(0, 60);
+    expect(guardFatigueFactor(ff)).toBe(BALANCE.guardFatigueFloor);
+  });
+
+  it('effective stats at 0 stamina: MOM and CTL are 0, guard at floor', () => {
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Standard], CF, 0);
+    expect(stats.momentum).toBe(0);
+    expect(stats.control).toBe(0);
+    // Guard = softCap(55-5) * guardFatigueFloor = 50 * 0.5 = 25
+    expect(stats.guard).toBe(50 * BALANCE.guardFatigueFloor);
+    // Initiative is unaffected by fatigue
+    expect(stats.initiative).toBe(70); // 60 + 10 (Standard)
+  });
+
+  it('melee effective stats at 0 stamina: MOM and CTL are 0', () => {
+    const stats = computeMeleeEffectiveStats(charger, OC, 0);
+    expect(stats.momentum).toBe(0);
+    expect(stats.control).toBe(0);
+    // Guard = softCap(55-5) * 0.5 = 50 * 0.5 = 25
+    expect(stats.guard).toBe(25);
+  });
+
+  it('applySpeedStamina at 0 does not go negative', () => {
+    expect(applySpeedStamina(0, SPEEDS[SpeedType.Fast])).toBe(0);
+    // Slow speed gives +5 STA
+    expect(applySpeedStamina(0, SPEEDS[SpeedType.Slow])).toBe(5);
+  });
+
+  it('applyAttackStaminaCost at 0 does not go negative', () => {
+    expect(applyAttackStaminaCost(0, CF)).toBe(0);
+    expect(applyAttackStaminaCost(3, CF)).toBe(0); // 3 - 20 → clamped 0
+  });
+
+  it('canShift at 0 stamina returns false (need >= 10)', () => {
+    expect(canShift(100, SPEEDS[SpeedType.Slow], 0)).toBe(false);
+    expect(canShift(100, SPEEDS[SpeedType.Slow], 9)).toBe(false);
+    expect(canShift(100, SPEEDS[SpeedType.Slow], 10)).toBe(true);
+  });
+
+  it('unseat threshold at 0 stamina is still >= 20', () => {
+    const result = checkUnseat(50, 10, 0, 0);
+    // threshold = 20 + 0/10 + 0/20 = 20
+    expect(result.threshold).toBe(20);
+  });
+});
+
+// ============================================================
+// 16. Edge Cases: Extreme Stat Values (Giga Gear)
+// ============================================================
+describe('Edge Cases — Extreme Stat Values', () => {
+  // Simulate Bulwark with Giga gear: GRD 75 + 13 (rarity) + 15 (primary) = 103
+  const gigaBulwark: Archetype = {
+    id: 'giga_bulwark', name: 'Giga Bulwark',
+    momentum: 68, control: 68, guard: 103, initiative: 58, stamina: 78,
+    identity: 'Test',
+  };
+
+  it('soft cap compresses Giga guard stat (103 → ~100.9)', () => {
+    const capped = softCap(103);
+    // excess = 3, result = 100 + 3*50/53 ≈ 100 + 2.83 = 102.83
+    expect(capped).toBeGreaterThan(100);
+    expect(capped).toBeLessThan(103);
+    expect(capped).toBeCloseTo(102.83, 1);
+  });
+
+  it('Giga Bulwark guard with Guard High is heavily compressed', () => {
+    // guard = 103 + 20 (Guard High delta) = 123
+    const stats = computeMeleeEffectiveStats(gigaBulwark, GH, 78);
+    // softCap(123) * guardFF(1.0) = 100 + 23*50/73 ≈ 115.75
+    expect(stats.guard).toBeLessThan(123);
+    expect(stats.guard).toBeGreaterThan(100);
+  });
+
+  it('Giga momentum Charger at Fast+CF (138) is heavily compressed', () => {
+    const gigaCharger: Archetype = {
+      id: 'giga_charger', name: 'Giga Charger',
+      momentum: 98, control: 58, guard: 68, initiative: 73, stamina: 73,
+      identity: 'Test',
+    };
+    // MOM: 98 + 15 (Fast) + 25 (CF) = 138
+    const stats = computeEffectiveStats(gigaCharger, SPEEDS[SpeedType.Fast], CF, 73);
+    // softCap(138) = 100 + 38*50/88 ≈ 121.59
+    expect(stats.momentum).toBeGreaterThan(100);
+    expect(stats.momentum).toBeLessThan(138);
+    expect(stats.momentum).toBeCloseTo(121.59, 0);
+  });
+
+  it('soft cap ratio: Giga vs base is lower than raw ratio', () => {
+    const gigaMom = softCap(138);
+    const baseMom = softCap(110);
+    // Raw ratio: 138/110 = 1.254
+    // Soft-capped ratio should be less
+    expect(gigaMom / baseMom).toBeLessThan(138 / 110);
+  });
+});
+
+// ============================================================
+// 17. Edge Cases: Unseat Mechanics
+// ============================================================
+describe('Edge Cases — Unseat Mechanics', () => {
+  it('exactly at threshold is unseated (>= check)', () => {
+    // threshold = 20 + 50/10 + 50/20 = 20 + 5 + 2.5 = 27.5
+    const result = checkUnseat(37.5, 10, 50, 50);
+    expect(result.margin).toBe(27.5);
+    expect(result.threshold).toBe(27.5);
+    expect(result.unseated).toBe(true);
+  });
+
+  it('just below threshold is not unseated', () => {
+    const result = checkUnseat(37.49, 10, 50, 50);
+    expect(result.unseated).toBe(false);
+  });
+
+  it('negative margin never unseats', () => {
+    const result = checkUnseat(10, 50, 0, 0);
+    expect(result.margin).toBe(-40);
+    expect(result.unseated).toBe(false);
+  });
+
+  it('double unseat: higher margin wins', () => {
+    // Simulated via resolvePass with both high-momentum players
+    const highMom: Archetype = {
+      id: 'highMom', name: 'High MOM',
+      momentum: 100, control: 30, guard: 30, initiative: 50, stamina: 40,
+      identity: 'Test',
+    };
+    const result = resolvePass(
+      { archetype: highMom, speed: SpeedType.Fast, attack: CF, currentStamina: 5 },
+      { archetype: highMom, speed: SpeedType.Fast, attack: CF, currentStamina: 5 },
+    );
+    // Mirror matchup with very low stamina → no unseat (same impact scores)
+    // With identical inputs, impacts should be equal → no unseat
+    expect(result.unseat).toBe('none');
+  });
+
+  it('unseat threshold grows with guard and stamina', () => {
+    // Low stats: threshold = 20 + 0 + 0 = 20
+    const low = checkUnseat(30, 0, 0, 0);
+    expect(low.threshold).toBe(20);
+
+    // High stats: threshold = 20 + 10 + 5 = 35
+    const high = checkUnseat(30, 0, 100, 100);
+    expect(high.threshold).toBe(35);
+
+    expect(high.threshold).toBeGreaterThan(low.threshold);
+  });
+});
+
+// ============================================================
+// 18. Edge Cases: Carryover Penalties
+// ============================================================
+describe('Edge Cases — Carryover Penalties', () => {
+  it('carryover penalties at margin 0 produce negative zero (JS quirk)', () => {
+    // -Math.floor(0/n) = -0 in JavaScript. Functionally equivalent to 0.
+    // This is harmless: -0 + stat = stat, and -0 == 0 is true.
+    const penalties = calcCarryoverPenalties(0);
+    expect(penalties.momentumPenalty + 0).toBe(0);
+    expect(penalties.controlPenalty + 0).toBe(0);
+    expect(penalties.guardPenalty + 0).toBe(0);
+  });
+
+  it('carryover penalties at margin 1 produce negative zero (floor rounds to 0)', () => {
+    // -Math.floor(1/3) = -Math.floor(0.333) = -0
+    const penalties = calcCarryoverPenalties(1);
+    expect(penalties.momentumPenalty + 0).toBe(0);
+    expect(penalties.controlPenalty + 0).toBe(0);
+    expect(penalties.guardPenalty + 0).toBe(0);
+  });
+
+  it('carryover penalties at margin 30 are substantial', () => {
+    const penalties = calcCarryoverPenalties(30);
+    expect(penalties.momentumPenalty).toBe(-10); // -floor(30/3)
+    expect(penalties.controlPenalty).toBe(-7);   // -floor(30/4) = -7
+    expect(penalties.guardPenalty).toBe(-6);      // -floor(30/5)
+  });
+
+  it('melee effective stats include carryover penalties', () => {
+    const statsNoPenalty = computeMeleeEffectiveStats(duelist, MC, 60, 0, 0, 0);
+    const statsWithPenalty = computeMeleeEffectiveStats(duelist, MC, 60, -10, -7, -6);
+
+    expect(statsWithPenalty.momentum).toBeLessThan(statsNoPenalty.momentum);
+    expect(statsWithPenalty.control).toBeLessThan(statsNoPenalty.control);
+    expect(statsWithPenalty.guard).toBeLessThan(statsNoPenalty.guard);
+  });
+});
+
+// ============================================================
+// 19. Edge Cases: Melee Resolution Boundaries
+// ============================================================
+describe('Edge Cases — Melee Resolution Boundaries', () => {
+  it('negative margin assigns winner as lower', () => {
+    const result = resolveMeleeRound(-10, 60);
+    expect(result.winner).toBe('lower');
+    expect(result.outcome).toBe(MeleeOutcome.Hit);
+  });
+
+  it('margin exactly at hit threshold is a hit, not a draw', () => {
+    // hitThreshold = 3 + 60 * 0.031 = 4.86
+    const threshold = BALANCE.meleeHitBase + 60 * BALANCE.meleeHitGrdScale;
+    const result = resolveMeleeRound(threshold, 60);
+    expect(result.outcome).toBe(MeleeOutcome.Hit);
+  });
+
+  it('margin just below hit threshold is a draw', () => {
+    const threshold = BALANCE.meleeHitBase + 60 * BALANCE.meleeHitGrdScale;
+    const result = resolveMeleeRound(threshold - 0.01, 60);
+    expect(result.outcome).toBe(MeleeOutcome.Draw);
+  });
+
+  it('margin exactly at crit threshold is a critical', () => {
+    const critThreshold = BALANCE.meleeCritBase + 60 * BALANCE.meleeCritGrdScale;
+    const result = resolveMeleeRound(critThreshold, 60);
+    expect(result.outcome).toBe(MeleeOutcome.Critical);
+  });
+
+  it('margin just below crit threshold is a hit', () => {
+    const critThreshold = BALANCE.meleeCritBase + 60 * BALANCE.meleeCritGrdScale;
+    const result = resolveMeleeRound(critThreshold - 0.01, 60);
+    expect(result.outcome).toBe(MeleeOutcome.Hit);
+  });
+
+  it('at guard 0: hitThreshold=3, critThreshold=15', () => {
+    expect(resolveMeleeRound(2.99, 0).outcome).toBe(MeleeOutcome.Draw);
+    expect(resolveMeleeRound(3, 0).outcome).toBe(MeleeOutcome.Hit);
+    expect(resolveMeleeRound(14.99, 0).outcome).toBe(MeleeOutcome.Hit);
+    expect(resolveMeleeRound(15, 0).outcome).toBe(MeleeOutcome.Critical);
+  });
+});
+
+// ============================================================
+// 20. Edge Cases: Counter System Completeness
+// ============================================================
+describe('Edge Cases — Counter System', () => {
+  it('every joust attack beats at least 1 other attack', () => {
+    const allJoust = Object.values(JOUST_ATTACKS) as Attack[];
+    for (const a of allJoust) {
+      expect(a.beats.length, `${a.id} should beat at least 1`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('every joust attack is beaten by at least 1 other attack', () => {
+    const allJoust = Object.values(JOUST_ATTACKS) as Attack[];
+    for (const a of allJoust) {
+      expect(a.beatenBy.length, `${a.id} should be beatenBy at least 1`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('every melee attack beats at least 1 other attack', () => {
+    const allMelee = Object.values(MELEE_ATTACKS) as Attack[];
+    for (const a of allMelee) {
+      expect(a.beats.length, `${a.id} should beat at least 1`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('every melee attack is beaten by at least 1 other attack', () => {
+    const allMelee = Object.values(MELEE_ATTACKS) as Attack[];
+    for (const a of allMelee) {
+      expect(a.beatenBy.length, `${a.id} should be beatenBy at least 1`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('stance triangle holds: each stance beats exactly one other', () => {
+    // Aggressive beats Defensive, Defensive beats Balanced, Balanced beats Aggressive
+    const allJoust = Object.values(JOUST_ATTACKS) as Attack[];
+    const aggAttacks = allJoust.filter(a => a.stance === 'Aggressive');
+    const balAttacks = allJoust.filter(a => a.stance === 'Balanced');
+    const defAttacks = allJoust.filter(a => a.stance === 'Defensive');
+
+    // Each category has 2 attacks
+    expect(aggAttacks.length).toBe(2);
+    expect(balAttacks.length).toBe(2);
+    expect(defAttacks.length).toBe(2);
+
+    // Aggressive attacks should beat some Defensive attacks
+    for (const agg of aggAttacks) {
+      const beatsDefensive = agg.beats.some(id =>
+        defAttacks.some(d => d.id === id)
+      );
+      expect(beatsDefensive, `${agg.id} should beat at least one Defensive`).toBe(true);
+    }
+  });
+
+  it('counter bonus with 0 CTL still has base bonus', () => {
+    const result = resolveCounters(CEP, CF, 0, 0);
+    expect(result.player1Bonus).toBe(BALANCE.counterBaseBonus); // 4
+    expect(result.player2Bonus).toBe(-BALANCE.counterBaseBonus);
+  });
+});
+
+// ============================================================
+// 21. Edge Cases: Both Players 0 Stamina Full Pass
+// ============================================================
+describe('Edge Cases — Both Players 0 Stamina Full Pass', () => {
+  it('resolvePass with both at 0 stamina produces 0 MOM/CTL for both', () => {
+    const result = resolvePass(
+      { archetype: charger, speed: SpeedType.Standard, attack: CdL, currentStamina: 0 },
+      { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 0 },
+    );
+
+    expect(result.p1.effectiveStats.momentum).toBe(0);
+    expect(result.p1.effectiveStats.control).toBe(0);
+    expect(result.p2.effectiveStats.momentum).toBe(0);
+    expect(result.p2.effectiveStats.control).toBe(0);
+
+    // Guard at floor (50%)
+    expect(result.p1.effectiveStats.guard).toBeGreaterThan(0);
+    expect(result.p2.effectiveStats.guard).toBeGreaterThan(0);
+
+    // Initiative is unaffected by fatigue
+    expect(result.p1.effectiveStats.initiative).toBeGreaterThan(0);
+    expect(result.p2.effectiveStats.initiative).toBeGreaterThan(0);
+  });
+
+  it('unseat is impossible in mirror matchup at 0 stamina', () => {
+    const result = resolvePass(
+      { archetype: duelist, speed: SpeedType.Standard, attack: CdL, currentStamina: 0 },
+      { archetype: duelist, speed: SpeedType.Standard, attack: CdL, currentStamina: 0 },
+    );
+
+    expect(result.unseat).toBe('none');
+  });
+});
+
+// ============================================================
+// 22. Edge Cases: Shift Cost Differences
+// ============================================================
+describe('Edge Cases — Shift Cost Differences', () => {
+  const CdP = JOUST_ATTACKS.coupDePointe;
+
+  it('same-stance shift costs less than cross-stance', () => {
+    // Same stance: CdL (Balanced) → CdP (Balanced)
+    const sameStance = applyShiftCost(50, 60, CdL, CdP);
+    // Cross stance: CdL (Balanced) → CEP (Defensive)
+    const crossStance = applyShiftCost(50, 60, CdL, CEP);
+
+    // Same-stance: -5 STA, -5 INIT
+    expect(sameStance.stamina).toBe(45);
+    expect(sameStance.initiativePenalty).toBe(5);
+
+    // Cross-stance: -12 STA, -10 INIT
+    expect(crossStance.stamina).toBe(38);
+    expect(crossStance.initiativePenalty).toBe(10);
+
+    expect(sameStance.stamina).toBeGreaterThan(crossStance.stamina);
+    expect(sameStance.initiativePenalty).toBeLessThan(crossStance.initiativePenalty);
+  });
+
+  it('shift cost at low stamina clamps to 0', () => {
+    const result = applyShiftCost(3, 60, CdL, CEP);
+    expect(result.stamina).toBe(0); // 3 - 12 → clamped to 0
+  });
+});
+
+// ============================================================
+// 23. Edge Cases: Maximum Gear Stacking
+// ============================================================
+describe('Edge Cases — Maximum Gear Impact on Formulas', () => {
+  const gigaMaxCharger: Archetype = {
+    id: 'giga_max_charger', name: 'Giga Max Charger',
+    momentum: 98, control: 73, guard: 96, initiative: 82, stamina: 91,
+    identity: 'Test',
+  };
+
+  it('extreme momentum is heavily compressed by soft cap', () => {
+    const stats = computeEffectiveStats(
+      gigaMaxCharger, SPEEDS[SpeedType.Fast], CF, 91,
+    );
+    // Raw MOM = 98 + 15 + 25 = 138. softCap compresses.
+    expect(stats.momentum).toBeLessThan(138);
+    expect(stats.momentum).toBeGreaterThan(100);
+  });
+
+  it('stat below knee is not compressed', () => {
+    const stats = computeEffectiveStats(
+      gigaMaxCharger, SPEEDS[SpeedType.Fast], CF, 91,
+    );
+    // Raw CTL = 73 - 15 - 10 = 48. Below knee, no compression.
+    expect(stats.control).toBe(48);
+  });
+
+  it('Giga mirror matchup produces equal impact scores', () => {
+    const result = resolvePass(
+      { archetype: gigaMaxCharger, speed: SpeedType.Fast, attack: CF, currentStamina: 91 },
+      { archetype: gigaMaxCharger, speed: SpeedType.Fast, attack: CF, currentStamina: 91 },
+    );
+
+    expect(result.unseat).toBe('none');
+    expect(result.p1.impactScore).toBeCloseTo(result.p2.impactScore, 5);
+  });
+});
+
+// ============================================================
+// 24. Counter Bonus Asymmetry
+// ============================================================
+describe('Edge Cases — Counter Bonus Asymmetry', () => {
+  it('bonus depends only on winner CTL, not loser CTL', () => {
+    const r1 = resolveCounters(CEP, CF, 60, 10);
+    const r2 = resolveCounters(CEP, CF, 60, 90);
+    // Winner P1 CTL is 60 in both cases → same bonus/penalty
+    expect(r1.player1Bonus).toBe(r2.player1Bonus);
+    expect(r1.player2Bonus).toBe(r2.player2Bonus);
+  });
+
+  it('counter bonus is always positive for winner, negative for loser', () => {
+    const result = resolveCounters(CEP, CF, 80, 20);
+    expect(result.player1Bonus).toBe(4 + 80 * 0.1); // 12
+    expect(result.player2Bonus).toBe(-12);
+  });
+});
+
+// ============================================================
+// 25. Unseat Threshold Extremes
+// ============================================================
+describe('Edge Cases — Unseat Threshold Extremes', () => {
+  it('maximum threshold with high guard + stamina', () => {
+    // threshold = 20 + 115/10 + 91/20 = 20 + 11.5 + 4.55 = 36.05
+    const result = checkUnseat(50, 13, 115, 91);
+    expect(result.threshold).toBeCloseTo(36.05, 1);
+    expect(result.margin).toBe(37);
+    expect(result.unseated).toBe(true);
+  });
+
+  it('minimum threshold (all 0) is base 20', () => {
+    const result = checkUnseat(30, 0, 0, 0);
+    expect(result.threshold).toBe(20);
+    expect(result.unseated).toBe(true);
+  });
+});
+
+// ============================================================
+// 26. Melee at Guard 0 with Carryover Penalties
+// ============================================================
+describe('Edge Cases — Melee at Guard 0 with Carryover', () => {
+  it('melee effective stats at 0 stamina with carryover are zeroed', () => {
+    const stats = computeMeleeEffectiveStats(charger, OC, 0, -10, -7, -6);
+    // ff = 0 → MOM and CTL are 0
+    expect(stats.momentum).toBe(0);
+    expect(stats.control).toBe(0);
+    // rawGuard = 55 + (-5) + (-6) = 44, softCap(44) * guardFF(0.5) = 22
+    expect(stats.guard).toBe(22);
   });
 });

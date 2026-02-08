@@ -83,6 +83,24 @@ export const BALANCE = {
     gigaBannerCounterMultiplier: 1.5,  // Banner of the Giga: first counter multiplier
   },
 
+  // --- AI Difficulty Ratios ---
+  // optimalRatio: probability of using weighted-optimal decision vs random.
+  // Higher = smarter AI. Easy is forgiving, hard is punishing.
+  aiDifficulty: {
+    easy:   { optimalRatio: 0.4 },
+    medium: { optimalRatio: 0.7 },
+    hard:   { optimalRatio: 0.9 },
+  },
+
+  // --- AI Pattern Recognition ---
+  // patternWeight: bonus score applied when AI detects a repeated opponent choice.
+  // Only active on hard difficulty. Tracks last 3 opponent choices.
+  // historyLength: how many past choices to track for pattern detection.
+  aiPattern: {
+    patternWeight: 3,
+    historyLength: 3,
+  },
+
   // --- Gear Stat Ranges (per rarity, for stat pieces) ---
   // primary = main stat of the slot, secondary = off-stat.
   // Values are [min, max] inclusive. Rolled at craft time.

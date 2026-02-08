@@ -225,6 +225,10 @@ export interface GiglingLoadout {
   caparison?: GiglingGear;
 }
 
+// --- AI Difficulty ---
+
+export type AIDifficulty = 'easy' | 'medium' | 'hard';
+
 // --- Caparison Pipeline Types ---
 
 export interface CaparisonInput {

@@ -27,15 +27,45 @@ const ANALYSIS_DIR = join(ORCH_DIR, 'analysis');
 const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
 
 // ============================================================
+// Active Process Tracking & Graceful Shutdown (Windows)
+// ============================================================
+const activeProcs = new Set();
+
+function killProcessTree(pid) {
+  // Windows: taskkill /T kills the entire process tree (cmd.exe + child claude.exe)
+  // Without /T, only the shell dies and claude.exe becomes an orphan
+  try {
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { shell: true, stdio: 'ignore' });
+  } catch (_) { /* best-effort */ }
+}
+
+process.on('SIGINT', () => {
+  console.log(`\n[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] SIGINT received — killing all agents...`);
+  for (const pid of activeProcs) {
+    killProcessTree(pid);
+  }
+  process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log(`\n[${new Date().toISOString().replace('T', ' ').slice(0, 19)}] SIGTERM received — killing all agents...`);
+  for (const pid of activeProcs) {
+    killProcessTree(pid);
+  }
+  process.exit(1);
+});
+
+// ============================================================
 // Configuration
 // ============================================================
 const CONFIG = {
-  maxRounds: 12,
+  maxRounds: 30,
   agentTimeoutMs: 20 * 60 * 1000,     // 20 min per agent
-  maxRuntimeMs: 6 * 60 * 60 * 1000,   // 6 hours total
+  maxRuntimeMs: 10 * 60 * 60 * 1000,  // 10 hours total (overnight)
   circuitBreakerThreshold: 3,           // stop after 3 consecutive test failures
   testTimeoutMs: 3 * 60 * 1000,        // 3 min for test suite
   allowedTools: 'Edit,Read,Write,Glob,Grep,Bash',
+  reportFile: join(ORCH_DIR, 'overnight-report.md'),
 };
 
 // ============================================================
@@ -103,10 +133,16 @@ function ensureDirs() {
 // ============================================================
 // Agents write structured META at the top of their handoff:
 //   ## META
-//   - status: complete | in-progress | blocked
+//   - status: all-done | complete | in-progress | blocked
 //   - files-modified: file1.ts, file2.ts
 //   - tests-passing: true | false
 //   - notes-for-others: free text
+//
+// Status meanings:
+//   in-progress — working on primary milestone
+//   complete    — primary milestone done, satisfies dependencies, agent moves to stretch goals
+//   all-done    — all tasks exhausted (primary + stretch), agent is retired
+//   blocked     — waiting on dependency
 //
 function parseHandoffMeta(agentId) {
   const path = join(HANDOFF_DIR, `${agentId}.md`);
@@ -133,14 +169,19 @@ function parseHandoffMeta(agentId) {
 // ============================================================
 // Task Board Generation (orchestrator-owned, agents only READ)
 // ============================================================
+function isDepSatisfied(status) {
+  return status === 'complete' || status === 'all-done';
+}
+
 function generateTaskBoard(round, testStatus, consecutiveFailures) {
   const agentStatuses = AGENTS.map(agent => {
     const meta = parseHandoffMeta(agent.id);
     const depsMet = agent.dependsOn.every(depId => {
       const depMeta = parseHandoffMeta(depId);
-      return depMeta.status === 'complete';
+      return isDepSatisfied(depMeta.status);
     });
-    const effectiveStatus = meta.status === 'complete' ? 'complete'
+    const effectiveStatus = meta.status === 'all-done' ? 'all-done'
+      : meta.status === 'complete' ? 'complete (stretch goals)'
       : !depsMet ? `blocked (waiting for ${agent.dependsOn.join(', ')})`
       : meta.status;
 
@@ -215,10 +256,18 @@ function runAgent(agent, round) {
       `WHEN DONE — Write your updated handoff to orchestrator/handoffs/${agent.id}.md with this format at the top:`,
       ``,
       `## META`,
-      `- status: complete | in-progress`,
+      `- status: in-progress | complete | all-done`,
       `- files-modified: comma-separated list of files you changed`,
       `- tests-passing: true | false`,
       `- notes-for-others: any messages for other agents`,
+      ``,
+      `Status meanings:`,
+      `- in-progress: still working on primary milestone`,
+      `- complete: primary milestone done (unblocks dependent agents), moving to stretch goals`,
+      `- all-done: ALL tasks exhausted (primary + stretch goals), you will not be launched again`,
+      ``,
+      `If you finish your primary milestone, set status to "complete" and start on Stretch Goals from your handoff.`,
+      `If you finish stretch goals too, set status to "all-done".`,
       ``,
       `Then include sections: ## What Was Done, ## What's Left, ## Issues`,
       ``,
@@ -232,7 +281,7 @@ function runAgent(agent, round) {
       `- Keep changes incremental and focused`,
       agent.type === 'continuous'
         ? `- You are a CONTINUOUS agent — write analysis to orchestrator/analysis/${agent.id}-round-${round}.md`
-        : `- You are a FEATURE agent — mark status as "complete" when your task is fully done`,
+        : `- You are a FEATURE agent — mark "complete" when PRIMARY milestone is done, then work on Stretch Goals. Mark "all-done" when everything is finished.`,
     ].join('\n');
 
     log(`  Starting ${agent.id}...`);
@@ -254,12 +303,13 @@ function runAgent(agent, round) {
     let stderr = '';
     let timedOut = false;
 
-    // Timeout handler
+    activeProcs.add(proc.pid);
+
+    // Timeout handler — uses taskkill /T to kill entire process tree on Windows
     const timer = setTimeout(() => {
       timedOut = true;
-      log(`  ${agent.id} TIMED OUT after ${CONFIG.agentTimeoutMs / 60000} minutes — killing`);
-      proc.kill('SIGTERM');
-      setTimeout(() => proc.kill('SIGKILL'), 5000); // force kill after 5s
+      log(`  ${agent.id} TIMED OUT after ${CONFIG.agentTimeoutMs / 60000} minutes — killing process tree (PID ${proc.pid})`);
+      killProcessTree(proc.pid);
     }, CONFIG.agentTimeoutMs);
 
     proc.stdout.on('data', (data) => {
@@ -276,6 +326,7 @@ function runAgent(agent, round) {
 
     proc.on('close', (code) => {
       clearTimeout(timer);
+      activeProcs.delete(proc.pid);
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const elapsedMin = (elapsed / 60).toFixed(1);
       const status = timedOut ? 'TIMEOUT' : code === 0 ? 'OK' : `EXIT-${code}`;
@@ -285,6 +336,7 @@ function runAgent(agent, round) {
 
     proc.on('error', (err) => {
       clearTimeout(timer);
+      activeProcs.delete(proc.pid);
       log(`  ${agent.id} SPAWN ERROR: ${err.message}`);
       resolvePromise({ agentId: agent.id, code: -1, timedOut: false, elapsed: 0, stdout: '', stderr: err.message });
     });
@@ -379,11 +431,16 @@ async function main() {
 
   let consecutiveTestFailures = 0;
   let lastTestStatus = null;
+  let stopReason = 'max rounds reached';
+
+  // Round-level tracking for the overnight report
+  const roundLog = []; // { round, agents: [{id, status, elapsed}], testsPassed, testCount, failCount }
 
   for (let round = 1; round <= CONFIG.maxRounds; round++) {
     // --- Check max runtime ---
     const elapsed = Date.now() - globalStart;
     if (elapsed >= CONFIG.maxRuntimeMs) {
+      stopReason = `max runtime reached (${CONFIG.maxRuntimeMs / 3600000} hours)`;
       log(`\nMAX RUNTIME REACHED (${CONFIG.maxRuntimeMs / 3600000} hours). Stopping.`);
       break;
     }
@@ -400,36 +457,37 @@ async function main() {
     const activeAgents = AGENTS.filter(agent => {
       const meta = parseHandoffMeta(agent.id);
 
-      // Feature agents: skip if complete
-      if (agent.type === 'feature' && meta.status === 'complete') {
-        log(`  ${agent.id}: COMPLETE (skipping)`);
+      // Skip agents that have exhausted all tasks (primary + stretch)
+      if (meta.status === 'all-done') {
+        log(`  ${agent.id}: ALL DONE (skipping)`);
         return false;
       }
 
-      // Check dependencies
+      // Check dependencies — "complete" and "all-done" both satisfy
       const depsMet = agent.dependsOn.every(depId => {
         const depMeta = parseHandoffMeta(depId);
-        return depMeta.status === 'complete';
+        return isDepSatisfied(depMeta.status);
       });
       if (!depsMet) {
         log(`  ${agent.id}: BLOCKED (needs ${agent.dependsOn.join(', ')})`);
         return false;
       }
 
-      log(`  ${agent.id}: ACTIVE (${agent.type})`);
+      const phase = meta.status === 'complete' ? 'stretch goals' : agent.type;
+      log(`  ${agent.id}: ACTIVE (${phase})`);
       return true;
     });
 
     if (activeAgents.length === 0) {
-      // Check if any feature agents are left
-      const pendingFeatures = AGENTS.filter(a =>
-        a.type === 'feature' && parseHandoffMeta(a.id).status !== 'complete'
-      );
-      if (pendingFeatures.length === 0 && !AGENTS.some(a => a.type === 'continuous')) {
-        log('\nAll feature agents complete, no continuous agents. Done!');
+      // Check if every agent is all-done or blocked
+      const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
+      if (allRetired) {
+        stopReason = 'all agents exhausted their task lists';
+        log('\nAll agents have exhausted their task lists. Done!');
         break;
       }
-      log('\nNo agents can run this round (all blocked or complete). Waiting...');
+      log('\nNo agents can run this round (all blocked or all-done). Waiting...');
+      roundLog.push({ round, agents: [], testsPassed: null, testCount: '-', failCount: '-', note: 'skipped (all blocked)' });
       continue;
     }
 
@@ -439,9 +497,11 @@ async function main() {
 
     // --- Round summary ---
     log('\nRound results:');
+    const roundAgents = [];
     for (const r of results) {
       const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
       log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
+      roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
     }
 
     // --- Run tests ---
@@ -455,8 +515,17 @@ async function main() {
       log(`\n⚠ Tests failing! Consecutive failures: ${consecutiveTestFailures}/${CONFIG.circuitBreakerThreshold}`);
     }
 
+    roundLog.push({
+      round,
+      agents: roundAgents,
+      testsPassed: testResult.passed,
+      testCount: testResult.count,
+      failCount: testResult.failCount || '0',
+    });
+
     // --- Circuit breaker ---
     if (consecutiveTestFailures >= CONFIG.circuitBreakerThreshold) {
+      stopReason = `circuit breaker (${consecutiveTestFailures} consecutive test failures)`;
       log(`\n🛑 CIRCUIT BREAKER: Tests failed ${consecutiveTestFailures} rounds in a row. STOPPING.`);
       log(`Check logs at: ${LOG_DIR}`);
       log(`Last test output saved in test-results.log`);
@@ -466,20 +535,12 @@ async function main() {
     // --- Git backup ---
     await gitBackup(round);
 
-    // --- Check all features complete ---
-    const allFeaturesComplete = AGENTS
-      .filter(a => a.type === 'feature')
-      .every(a => parseHandoffMeta(a.id).status === 'complete');
-
-    if (allFeaturesComplete) {
-      log('\nAll feature agents complete!');
-      // If no continuous agents remain, stop
-      const hasContinuous = AGENTS.some(a => a.type === 'continuous');
-      if (!hasContinuous) {
-        log('No continuous agents. Orchestration finished.');
-        break;
-      }
-      log('Continuous agents will keep iterating...');
+    // --- Check if all agents are retired ---
+    const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
+    if (allRetired) {
+      stopReason = 'all agents exhausted their task lists';
+      log('\nAll agents have exhausted their task lists. Orchestration finished.');
+      break;
     }
   }
 
@@ -507,6 +568,116 @@ async function main() {
   log(`Logs: ${LOG_DIR}`);
   log(`Analysis: ${ANALYSIS_DIR}`);
   log(`Task board: ${TASK_BOARD}`);
+
+  // ============================================================
+  // Generate Overnight Report
+  // ============================================================
+  generateOvernightReport(globalStart, roundLog, stopReason, finalTests);
+}
+
+// ============================================================
+// Overnight Report Generation
+// ============================================================
+function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) {
+  const totalMin = ((Date.now() - globalStart) / 60000).toFixed(1);
+  const totalHrs = (totalMin / 60).toFixed(1);
+  const totalRounds = roundLog.length;
+  const startTime = new Date(globalStart).toISOString().replace('T', ' ').slice(0, 19);
+  const endTime = timestamp();
+
+  // Collect final agent states
+  const agentSummaries = AGENTS.map(agent => {
+    const meta = parseHandoffMeta(agent.id);
+    const roundsActive = roundLog.filter(r => r.agents.some(a => a.id === agent.id)).length;
+    const timeouts = roundLog.flatMap(r => r.agents).filter(a => a.id === agent.id && a.status === 'TIMEOUT').length;
+    const errors = roundLog.flatMap(r => r.agents).filter(a => a.id === agent.id && a.status.startsWith('ERROR')).length;
+    return { ...agent, meta, roundsActive, timeouts, errors };
+  });
+
+  // Collect all files modified across all agents
+  const allFiles = [...new Set(agentSummaries.flatMap(a => a.meta.filesModified))].sort();
+
+  // Test trajectory
+  const testTrajectory = roundLog
+    .filter(r => r.testsPassed !== null)
+    .map(r => `Round ${r.round}: ${r.testsPassed ? 'PASS' : 'FAIL'} (${r.testCount} passed${r.testsPassed ? '' : `, ${r.failCount} failed`})`);
+
+  // Read analysis reports if they exist
+  const analysisFiles = [];
+  try {
+    const entries = readFileSync; // we'll use existsSync + readFileSync
+    for (const agent of ['balance-sim', 'quality-review']) {
+      for (let r = 1; r <= totalRounds + 1; r++) {
+        const p = join(ANALYSIS_DIR, `${agent}-round-${r}.md`);
+        if (existsSync(p)) {
+          analysisFiles.push({ agent, round: r, path: p });
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Build report
+  let report = `# Overnight Orchestrator Report
+> Generated: ${endTime}
+
+## Summary
+- **Started**: ${startTime}
+- **Ended**: ${endTime}
+- **Total runtime**: ${totalMin} minutes (${totalHrs} hours)
+- **Rounds completed**: ${totalRounds}
+- **Stop reason**: ${stopReason}
+- **Final test status**: ${finalTests.passed ? `ALL PASSING (${finalTests.count} tests)` : `FAILING (${finalTests.count} passed, ${finalTests.failCount} failed)`}
+
+## Agent Results
+
+| Agent | Type | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
+|-------|------|-------------|---------------|----------|--------|----------------|
+${agentSummaries.map(a =>
+  `| ${a.id} | ${a.type} | ${a.meta.status} | ${a.roundsActive} | ${a.timeouts} | ${a.errors} | ${a.meta.filesModified.length || 0} |`
+).join('\n')}
+
+### Agent Details
+${agentSummaries.map(a => {
+  let s = `\n#### ${a.name} (${a.id})\n- **Status**: ${a.meta.status}\n- **Rounds active**: ${a.roundsActive}`;
+  if (a.meta.filesModified.length) s += `\n- **Files modified**: ${a.meta.filesModified.join(', ')}`;
+  if (a.meta.notes) s += `\n- **Notes**: ${a.meta.notes}`;
+  if (a.timeouts) s += `\n- **Timeouts**: ${a.timeouts}`;
+  if (a.errors) s += `\n- **Errors**: ${a.errors}`;
+  return s;
+}).join('\n')}
+
+## Round-by-Round Timeline
+
+| Round | Agents | Test Result | Notes |
+|-------|--------|-------------|-------|
+${roundLog.map(r => {
+  if (r.note) return `| ${r.round} | — | — | ${r.note} |`;
+  const agents = r.agents.map(a => `${a.id}(${a.status}, ${(a.elapsed/60).toFixed(0)}m)`).join(', ');
+  const tests = r.testsPassed ? `PASS (${r.testCount})` : `FAIL (${r.testCount}p, ${r.failCount}f)`;
+  return `| ${r.round} | ${agents} | ${tests} | |`;
+}).join('\n')}
+
+## All Files Modified
+${allFiles.length ? allFiles.map(f => `- ${f}`).join('\n') : '(none)'}
+
+## Test Trajectory
+${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no test data)'}
+
+## Analysis Reports Generated
+${analysisFiles.length
+  ? analysisFiles.map(a => `- ${a.agent} round ${a.round}: \`${a.path}\``).join('\n')
+  : '(none)'}
+
+## How to Review
+1. Read each agent's handoff for detailed work log: \`orchestrator/handoffs/<agent>.md\`
+2. Read analysis reports: \`orchestrator/analysis/\`
+3. Check git log for per-round commits: \`git log --oneline\`
+4. To revert to before the run: \`git log --oneline\` and find the pre-orchestrator commit
+5. Run tests: \`npx vitest run\`
+`;
+
+  writeFileSync(CONFIG.reportFile, report);
+  log(`\nOvernight report written to: ${CONFIG.reportFile}`);
 }
 
 main().catch(err => {
