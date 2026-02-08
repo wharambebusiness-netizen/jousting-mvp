@@ -2,9 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(npx vitest:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(node orchestrator:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
       "Bash(pnpm run deploy:*)",
       "Bash(pnpm dev)",
       "Bash(timeout:*)"

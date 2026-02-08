@@ -140,13 +140,17 @@ export function calcAccuracy(
 
 // --- 1.3 Impact Score ---
 // ImpactScore = (Eff_Momentum x 0.5) + (Accuracy x 0.4) - (Opponent_Eff_Guard x guardImpactCoeff)
+// guardPenetration (0-1): fraction of opponent guard ignored (Breaker mechanic).
+// effectiveGuard = opponentEffGuard * (1 - guardPenetration)
 
 export function calcImpactScore(
   effMomentum: number,
   accuracy: number,
   opponentEffGuard: number,
+  guardPenetration: number = 0,
 ): number {
-  return (effMomentum * 0.5) + (accuracy * 0.4) - (opponentEffGuard * BALANCE.guardImpactCoeff);
+  const effectiveGuard = opponentEffGuard * (1 - guardPenetration);
+  return (effMomentum * 0.5) + (accuracy * 0.4) - (effectiveGuard * BALANCE.guardImpactCoeff);
 }
 
 // --- 1.4 Unseat (Deterministic) ---
@@ -348,8 +352,11 @@ export function resolvePass(
   const acc2 = calcAccuracy(stats2.control, stats2.initiative, stats1.momentum, counters.player2Bonus);
   log.push(`Accuracy: P1 ${acc1.toFixed(2)}, P2 ${acc2.toFixed(2)}`);
 
-  const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard);
-  const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard);
+  // Breaker guard penetration
+  const pen1 = p1Input.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
+  const pen2 = p2Input.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
+  const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, pen1);
+  const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, pen2);
   log.push(`ImpactScore: P1 ${impact1.toFixed(2)}, P2 ${impact2.toFixed(2)}`);
 
   // Step 7: Unseat check both directions

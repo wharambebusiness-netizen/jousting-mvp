@@ -1,0 +1,70 @@
+{
+  "name": "Breaker Guard-Penetration Mechanic",
+  "description": "Add guard penetration to Breaker archetype to counter Bulwark dominance. Breaker should ignore X% of opponent guard during impact calculation. This is a formula-level change, not a stat tweak.",
+  "config": {
+    "maxRounds": 10,
+    "agentTimeoutMs": 1200000
+  },
+  "designDoc": "jousting-handoff-s20.md",
+  "agents": [
+    {
+      "id": "breaker-mechanic",
+      "name": "Breaker Mechanic Agent",
+      "type": "feature",
+      "dependsOn": [],
+      "role": "engine-dev",
+      "fileOwnership": [
+        "src/engine/phase-joust.ts",
+        "src/engine/phase-melee.ts",
+        "src/engine/calculator.ts",
+        "src/engine/types.ts",
+        "src/engine/balance-config.ts"
+      ],
+      "tasks": {
+        "primary": "Implement guard penetration mechanic for the Breaker archetype. Breaker should ignore a configurable percentage of opponent guard during impact calculation in both joust and melee phases. Add a `breakerGuardPenetration` constant to balance-config.ts (start around 0.30-0.40 = 30-40% guard ignored). Modify calcImpactScore() or the phase resolvers to apply penetration when the attacker is a Breaker. Must not break any existing tests.",
+        "stretch": [
+          "Add archetype identity field to Archetype type so phase resolvers can detect Breaker without string matching",
+          "Consider whether penetration should scale with MOM or be flat",
+          "Add penetration to melee phase if not already done in primary"
+        ]
+      }
+    },
+    {
+      "id": "breaker-tests",
+      "name": "Breaker Test Agent",
+      "type": "feature",
+      "dependsOn": ["breaker-mechanic"],
+      "role": "test-writer",
+      "fileOwnership": [
+        "src/engine/calculator.test.ts",
+        "src/engine/playtest.test.ts",
+        "src/engine/caparison.test.ts"
+      ],
+      "tasks": {
+        "primary": "Write comprehensive tests for the guard penetration mechanic: verify Breaker ignores correct % of guard, verify non-Breaker archetypes are unaffected, verify penetration works in both joust and melee phases, verify interaction with softCap and fatigue, test edge cases (0% penetration, 100% penetration, 0 guard).",
+        "stretch": [
+          "Property-based tests: Breaker impact always >= non-Breaker impact against same guard",
+          "Performance regression test with penetration mechanic"
+        ]
+      }
+    },
+    {
+      "id": "breaker-balance",
+      "name": "Breaker Balance Agent",
+      "type": "continuous",
+      "dependsOn": ["breaker-mechanic"],
+      "role": "balance-analyst",
+      "fileOwnership": [
+        "src/tools/simulate.ts",
+        "src/engine/archetypes.ts"
+      ],
+      "tasks": {
+        "primary": "Run bare and giga simulations to verify Breaker win rate improves toward 45-55% without making Breaker dominant. Adjust breakerGuardPenetration constant and Breaker base stats if needed. Target: no archetype above 60% or below 40% win rate. Document all changes with before/after data.",
+        "stretch": [
+          "Test all rarity levels to verify gear scaling doesn't break penetration balance",
+          "Analyze Breaker vs Bulwark matchup specifically — target 45-55%"
+        ]
+      }
+    }
+  ]
+}

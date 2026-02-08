@@ -11,6 +11,7 @@ import {
   type SpeedData,
 } from './types';
 import { SPEEDS } from './attacks';
+import { BALANCE } from './balance-config';
 import {
   fatigueFactor,
   computeEffectiveStats,
@@ -159,9 +160,11 @@ export function resolveJoustPass(
   const acc2 = calcAccuracy(stats2.control, stats2.initiative, stats1.momentum, counters.player2Bonus);
   log.push(`Accuracy: P1 ${acc1.toFixed(2)}, P2 ${acc2.toFixed(2)}`);
 
-  // Step 5: ImpactScore
-  const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard);
-  const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard);
+  // Step 5: ImpactScore (Breaker ignores a fraction of opponent guard)
+  const pen1 = p1State.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
+  const pen2 = p2State.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
+  const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, pen1);
+  const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, pen2);
   log.push(`ImpactScore: P1 ${impact1.toFixed(2)}, P2 ${impact2.toFixed(2)}`);
 
   // Step 6: Unseat check

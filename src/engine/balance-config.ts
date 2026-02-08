@@ -51,6 +51,12 @@ export const BALANCE = {
   // Old 10 → 15: makes high-guard archetypes ~33% easier to unseat.
   guardUnseatDivisor: 15,
 
+  // --- Breaker Guard Penetration ---
+  // Fraction of opponent's effective guard that Breaker ignores during
+  // impact calculation (both joust and melee). 0.35 = 35% guard ignored.
+  // Only applies when the ATTACKER is a Breaker archetype.
+  breakerGuardPenetration: 0.35,
+
   // --- Shift Costs ---
   // Stamina cost and initiative penalty for shifting mid-pass.
   // Same-stance shifts are cheaper than cross-stance shifts.

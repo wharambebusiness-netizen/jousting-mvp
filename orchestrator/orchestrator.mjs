@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v2
+// Jousting MVP — Multi-Agent Orchestrator v3
 // ============================================================
-// Improvements over v1:
+// v3 additions:
+// - Mission config files (orchestrator/missions/*.json)
+// - Role templates (orchestrator/roles/*.md)
+// - Auto-generated initial handoffs from mission tasks
+// - CLAUDE.md-aware prompts (shorter, less token waste)
+//
+// v2 features (retained):
 // - Prompts piped via stdin (no Windows command line limit)
 // - Orchestrator owns task board (no agent race conditions)
 // - Orchestrator owns git commits (no parallel commit races)
@@ -11,6 +17,10 @@
 // - Max runtime (default 6 hours)
 // - Recurring agents for continuous balance/quality work
 // - Structured handoff META parsing
+//
+// Usage:
+//   node orchestrator.mjs                              # Use default agents
+//   node orchestrator.mjs missions/breaker-mechanic.json  # Load mission config
 // ============================================================
 
 import { spawn } from 'child_process';
@@ -24,6 +34,7 @@ const MVP_DIR = resolve(ORCH_DIR, '..'); // jousting-mvp/ (orchestrator lives in
 const HANDOFF_DIR = join(ORCH_DIR, 'handoffs');
 const LOG_DIR = join(ORCH_DIR, 'logs');
 const ANALYSIS_DIR = join(ORCH_DIR, 'analysis');
+const ROLES_DIR = join(ORCH_DIR, 'roles');
 const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
 
 // ============================================================
@@ -69,14 +80,15 @@ const CONFIG = {
 };
 
 // ============================================================
-// Agent Definitions
+// Agent Definitions (default — overridden by mission config)
 // ============================================================
-const AGENTS = [
+let AGENTS = [
   {
     id: 'engine-refactor',
     name: 'Engine Refactor Agent',
     type: 'feature',          // finite — completes and stops
     dependsOn: [],
+    role: 'engine-dev',
     handoff: join(HANDOFF_DIR, 'engine-refactor.md'),
   },
   {
@@ -84,6 +96,7 @@ const AGENTS = [
     name: 'Gear System Agent',
     type: 'feature',
     dependsOn: ['engine-refactor'],
+    role: 'engine-dev',
     handoff: join(HANDOFF_DIR, 'gear-system.md'),
   },
   {
@@ -91,6 +104,7 @@ const AGENTS = [
     name: 'UI & Loadout Agent',
     type: 'feature',
     dependsOn: ['gear-system'],
+    role: 'ui-dev',
     handoff: join(HANDOFF_DIR, 'ui-loadout.md'),
   },
   {
@@ -98,9 +112,111 @@ const AGENTS = [
     name: 'Quality & Review Agent',
     type: 'continuous',       // runs every round
     dependsOn: [],
+    role: 'test-writer',
     handoff: join(HANDOFF_DIR, 'quality-review.md'),
   },
 ];
+
+// ============================================================
+// Mission Config Loading
+// ============================================================
+// Load agents + config from a JSON mission file.
+// Usage: node orchestrator.mjs missions/breaker-mechanic.json
+//
+// Mission format:
+// {
+//   "name": "Mission Name",
+//   "config": { "maxRounds": 10 },  // overrides CONFIG
+//   "designDoc": "some-file.md",     // optional reference doc
+//   "agents": [{ "id", "name", "type", "dependsOn", "role", "fileOwnership", "tasks": { "primary", "stretch" } }]
+// }
+//
+function loadMission(missionPath) {
+  const absPath = resolve(missionPath);
+  if (!existsSync(absPath)) {
+    console.error(`Mission file not found: ${absPath}`);
+    process.exit(1);
+  }
+
+  const mission = JSON.parse(readFileSync(absPath, 'utf-8'));
+  log(`Loading mission: ${mission.name}`);
+  if (mission.description) log(`  ${mission.description}`);
+
+  // Apply config overrides
+  if (mission.config) {
+    Object.assign(CONFIG, mission.config);
+    log(`  Config overrides: ${JSON.stringify(mission.config)}`);
+  }
+
+  // Convert mission agents to orchestrator format
+  const agents = mission.agents.map(a => ({
+    id: a.id,
+    name: a.name,
+    type: a.type || 'feature',
+    dependsOn: a.dependsOn || [],
+    role: a.role || null,
+    handoff: join(HANDOFF_DIR, `${a.id}.md`),
+    fileOwnership: a.fileOwnership || [],
+  }));
+
+  // Generate initial handoff files for agents that don't have one yet
+  for (const agent of mission.agents) {
+    const handoffPath = join(HANDOFF_DIR, `${agent.id}.md`);
+    if (!existsSync(handoffPath)) {
+      const lines = [
+        `# ${agent.name} — Handoff`,
+        '',
+        '## META',
+        '- status: not-started',
+        '- files-modified: (none yet)',
+        '- tests-passing: true',
+        '- notes-for-others: (none)',
+        '',
+        '## Your Mission',
+        '',
+        agent.tasks?.primary || 'See mission config for task details.',
+        '',
+        '## File Ownership',
+        '',
+        ...(agent.fileOwnership || []).map(f => `- \`${f}\``),
+        '',
+      ];
+
+      if (agent.tasks?.stretch?.length) {
+        lines.push('## Stretch Goals', '');
+        agent.tasks.stretch.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+        lines.push('');
+      }
+
+      lines.push(
+        '## IMPORTANT Rules',
+        '- Only edit files in your File Ownership list',
+        '- Do NOT run git commands (orchestrator handles commits)',
+        '- Do NOT edit orchestrator/task-board.md (auto-generated)',
+        '- Run tests (`npx vitest run`) before writing your final handoff',
+        '- For App.tsx changes: note them in handoff under "Deferred App.tsx Changes"',
+        '',
+      );
+
+      writeFileSync(handoffPath, lines.join('\n'));
+      log(`  Generated initial handoff: handoffs/${agent.id}.md`);
+    } else {
+      log(`  Handoff exists: handoffs/${agent.id}.md`);
+    }
+  }
+
+  return { agents, missionName: mission.name, designDoc: mission.designDoc || null };
+}
+
+// ============================================================
+// Role Template Loading
+// ============================================================
+function loadRoleTemplate(roleName) {
+  if (!roleName) return '';
+  const rolePath = join(ROLES_DIR, `${roleName}.md`);
+  if (!existsSync(rolePath)) return '';
+  return readFileSync(rolePath, 'utf-8');
+}
 
 // ============================================================
 // Utilities
@@ -235,49 +351,51 @@ function runAgent(agent, round) {
   return new Promise((resolvePromise) => {
     const logFile = join(LOG_DIR, `${agent.id}-round-${round}.log`);
 
-    // Short prompt — details are in the handoff files (agent reads them)
-    const prompt = [
-      `You are "${agent.name}", part of a multi-agent team on the Jousting MVP project.`,
-      `This is round ${round}.`,
+    // Load role template if available
+    const roleTemplate = loadRoleTemplate(agent.role);
+
+    // Build prompt — CLAUDE.md provides project context (auto-loaded by Claude Code)
+    // so we only need coordination info + role guidelines + task reference
+    const promptParts = [
+      `You are "${agent.name}", part of a multi-agent team. Round ${round}.`,
+      `Project context is in CLAUDE.md (auto-loaded).`,
       ``,
-      `FIRST — Read these files in order:`,
-      `1. orchestrator/task-board.md (coordination status — DO NOT edit this file)`,
-      `2. orchestrator/handoffs/${agent.id}.md (your task details and previous progress)`,
-      `3. gear-overhaul-milestones.md (the design document for this overhaul — READ CAREFULLY on first round)`,
-      `4. jousting-handoff-s19.md (full project architecture reference — skim if first round)`,
+      `READ FIRST:`,
+      `1. orchestrator/task-board.md (coordination status — DO NOT edit)`,
+      `2. orchestrator/handoffs/${agent.id}.md (your tasks and progress)`,
+    ];
+
+    // Add design doc reference if mission specifies one
+    if (missionDesignDoc) {
+      promptParts.push(`3. ${missionDesignDoc} (design reference)`);
+    }
+
+    promptParts.push(
       ``,
-      `Then follow the instructions in your handoff file.`,
+      `Then do your work. When done, write updated handoff to orchestrator/handoffs/${agent.id}.md.`,
       ``,
-      `WHEN DONE — Write your updated handoff to orchestrator/handoffs/${agent.id}.md with this format at the top:`,
-      ``,
+      `HANDOFF FORMAT (top of file):`,
       `## META`,
       `- status: in-progress | complete | all-done`,
-      `- files-modified: comma-separated list of files you changed`,
+      `- files-modified: comma-separated list`,
       `- tests-passing: true | false`,
-      `- notes-for-others: any messages for other agents`,
+      `- notes-for-others: messages for other agents`,
       ``,
-      `Status meanings:`,
-      `- in-progress: still working on primary milestone`,
-      `- complete: primary milestone done (unblocks dependent agents), moving to stretch goals`,
-      `- all-done: ALL tasks exhausted (primary + stretch goals), you will not be launched again`,
+      `Status: in-progress (working) → complete (primary done, unblocks others, do stretch goals) → all-done (everything done, retired)`,
+      `Include: ## What Was Done, ## What's Left, ## Issues`,
       ``,
-      `If you finish your primary milestone, set status to "complete" and start on Stretch Goals from your handoff.`,
-      `If you finish stretch goals too, set status to "all-done".`,
-      ``,
-      `Then include sections: ## What Was Done, ## What's Left, ## Issues`,
-      ``,
-      `RULES:`,
-      `- Do NOT run any git commands (orchestrator handles commits)`,
-      `- Do NOT edit orchestrator/task-board.md (it's auto-generated)`,
-      `- Do NOT edit files owned by other agents (check task board)`,
-      `- Do NOT delete test files or remove existing features`,
-      `- Run tests (npx vitest run) before writing your final handoff`,
-      `- For App.tsx changes: note them in your handoff under "Deferred App.tsx Changes"`,
-      `- Keep changes incremental and focused`,
+      `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
       agent.type === 'continuous'
-        ? `- You are a CONTINUOUS agent — write analysis to orchestrator/analysis/${agent.id}-round-${round}.md`
-        : `- You are a FEATURE agent — mark "complete" when PRIMARY milestone is done, then work on Stretch Goals. Mark "all-done" when everything is finished.`,
-    ].join('\n');
+        ? `You are CONTINUOUS — write analysis to orchestrator/analysis/${agent.id}-round-${round}.md`
+        : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
+    );
+
+    // Append role template if available (provides domain-specific guidelines)
+    if (roleTemplate) {
+      promptParts.push(``, `--- ROLE GUIDELINES ---`, roleTemplate);
+    }
+
+    const prompt = promptParts.join('\n');
 
     log(`  Starting ${agent.id}...`);
     const startTime = Date.now();
@@ -411,15 +529,31 @@ function runTests() {
 // ============================================================
 // Main Orchestration Loop
 // ============================================================
+// Module-level variables set by loadMission, used by runAgent and report generation
+let missionDesignDoc = null;
+let missionConfigPath = null;
+
 async function main() {
   ensureDirs();
   const globalStart = Date.now();
 
+  // --- Load mission config if provided as CLI argument ---
+  missionConfigPath = process.argv[2] || null;
+  if (missionConfigPath) {
+    const mission = loadMission(missionConfigPath);
+    AGENTS = mission.agents.map(a => ({
+      ...a,
+      handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
+    }));
+    missionDesignDoc = mission.designDoc;
+  }
+
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v2');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v3');
   log('='.repeat(60));
-  log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type})`).join(', ')}`);
+  if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
+  log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
   log(`Config: ${CONFIG.maxRounds} max rounds, ${CONFIG.agentTimeoutMs / 60000}min/agent, ${CONFIG.maxRuntimeMs / 3600000}hr max runtime`);
   log(`Circuit breaker: stop after ${CONFIG.circuitBreakerThreshold} consecutive test failures`);
   log('');
@@ -586,7 +720,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) 
     const roundsActive = roundLog.filter(r => r.agents.some(a => a.id === agent.id)).length;
     const timeouts = roundLog.flatMap(r => r.agents).filter(a => a.id === agent.id && a.status === 'TIMEOUT').length;
     const errors = roundLog.flatMap(r => r.agents).filter(a => a.id === agent.id && a.status.startsWith('ERROR')).length;
-    return { ...agent, meta, roundsActive, timeouts, errors };
+    return { ...agent, meta, roundsActive, timeouts, errors, role: agent.role || 'none' };
   });
 
   // Collect all files modified across all agents
@@ -614,6 +748,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
+> Orchestrator: v3
 
 ## Summary
 - **Started**: ${startTime}
@@ -621,14 +756,15 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) 
 - **Total runtime**: ${totalMin} minutes (${totalHrs} hours)
 - **Rounds completed**: ${totalRounds}
 - **Stop reason**: ${stopReason}
+${missionConfigPath ? `- **Mission**: ${missionConfigPath}` : '- **Mission**: default agents'}
 - **Final test status**: ${finalTests.passed ? `ALL PASSING (${finalTests.count} tests)` : `FAILING (${finalTests.count} passed, ${finalTests.failCount} failed)`}
 
 ## Agent Results
 
-| Agent | Type | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
-|-------|------|-------------|---------------|----------|--------|----------------|
+| Agent | Type | Role | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
+|-------|------|------|-------------|---------------|----------|--------|----------------|
 ${agentSummaries.map(a =>
-  `| ${a.id} | ${a.type} | ${a.meta.status} | ${a.roundsActive} | ${a.timeouts} | ${a.errors} | ${a.meta.filesModified.length || 0} |`
+  `| ${a.id} | ${a.type} | ${a.role} | ${a.meta.status} | ${a.roundsActive} | ${a.timeouts} | ${a.errors} | ${a.meta.filesModified.length || 0} |`
 ).join('\n')}
 
 ### Agent Details
