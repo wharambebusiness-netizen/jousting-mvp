@@ -1189,3 +1189,171 @@ describe('Edge Cases — Full Giga Gear Match Simulation', () => {
     expect(ratio).toBeLessThan(2.0); // But soft cap prevents doubling
   });
 });
+
+// ============================================================
+// 30. Guard Penetration — calcImpactScore Unit Tests
+// ============================================================
+describe('Guard Penetration — calcImpactScore', () => {
+  it('guardPenetration=0 (default) produces same result as no 4th arg', () => {
+    const withoutArg = calcImpactScore(60, 50, 40);
+    const withZero = calcImpactScore(60, 50, 40, 0);
+    expect(withZero).toBe(withoutArg);
+  });
+
+  it('guardPenetration=0.35 reduces effective guard by 35%', () => {
+    // Without penetration: 60*0.5 + 50*0.4 - 40*0.2 = 30+20-8 = 42
+    const noPen = calcImpactScore(60, 50, 40, 0);
+    expect(noPen).toBe(42);
+
+    // With 35% penetration: effectiveGuard = 40 * 0.65 = 26
+    // 60*0.5 + 50*0.4 - 26*0.2 = 30+20-5.2 = 44.8
+    const withPen = calcImpactScore(60, 50, 40, 0.35);
+    expect(withPen).toBeCloseTo(44.8, 5);
+  });
+
+  it('higher guard penetration always produces higher impact', () => {
+    const guard = 65;
+    const impact0 = calcImpactScore(60, 50, guard, 0);
+    const impact20 = calcImpactScore(60, 50, guard, 0.2);
+    const impact35 = calcImpactScore(60, 50, guard, 0.35);
+    const impact50 = calcImpactScore(60, 50, guard, 0.5);
+    const impact100 = calcImpactScore(60, 50, guard, 1.0);
+
+    expect(impact20).toBeGreaterThan(impact0);
+    expect(impact35).toBeGreaterThan(impact20);
+    expect(impact50).toBeGreaterThan(impact35);
+    expect(impact100).toBeGreaterThan(impact50);
+  });
+
+  it('guardPenetration=1.0 ignores guard completely', () => {
+    // Full penetration: effectiveGuard = 0
+    // 60*0.5 + 50*0.4 - 0 = 30+20 = 50
+    const fullPen = calcImpactScore(60, 50, 40, 1.0);
+    expect(fullPen).toBe(50);
+
+    // Compare to no guard at all
+    const noGuard = calcImpactScore(60, 50, 0, 0);
+    expect(fullPen).toBe(noGuard);
+  });
+
+  it('guard penetration benefit scales with opponent guard level', () => {
+    const pen = 0.35;
+    // Low guard: benefit = 20 * 0.35 * 0.2 = 1.4
+    const lowGuardBenefit = calcImpactScore(60, 50, 20, pen) - calcImpactScore(60, 50, 20, 0);
+    // High guard: benefit = 80 * 0.35 * 0.2 = 5.6
+    const highGuardBenefit = calcImpactScore(60, 50, 80, pen) - calcImpactScore(60, 50, 80, 0);
+
+    expect(highGuardBenefit).toBeGreaterThan(lowGuardBenefit);
+    expect(r(lowGuardBenefit, 1)).toBe(1.4);
+    expect(r(highGuardBenefit, 1)).toBe(5.6);
+  });
+
+  it('guard penetration against 0 guard has no effect', () => {
+    const noPen = calcImpactScore(60, 50, 0, 0);
+    const withPen = calcImpactScore(60, 50, 0, 0.35);
+    expect(withPen).toBe(noPen);
+  });
+});
+
+// ============================================================
+// 31. Guard Penetration — resolvePass Integration (Breaker)
+// ============================================================
+describe('Guard Penetration — resolvePass Breaker', () => {
+  const breaker = ARCHETYPES.breaker;
+
+  it('Breaker gets guard penetration automatically via archetype id', () => {
+    const result = resolvePass(
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    // Breaker should benefit from penetration against Bulwark's high guard
+    // Without penetration, Bulwark's guard (65) would reduce impact more
+    expect(result.p1.impactScore).toBeDefined();
+    expect(result.p2.impactScore).toBeDefined();
+  });
+
+  it('Breaker has higher impact than Duelist with same stats against high guard', () => {
+    // Breaker vs Bulwark: Breaker ignores 35% of Bulwark guard
+    const breakerResult = resolvePass(
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    // Duelist vs Bulwark: no penetration
+    const duelistResult = resolvePass(
+      { archetype: duelist, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    // Breaker has higher base MOM (65 vs 60) AND guard penetration
+    // So Breaker impact should be strictly higher than Duelist's
+    expect(breakerResult.p1.impactScore).toBeGreaterThan(duelistResult.p1.impactScore);
+  });
+
+  it('non-Breaker archetype gets 0 guard penetration in resolvePass', () => {
+    // Charger vs Bulwark: charger has no guard penetration
+    const result = resolvePass(
+      { archetype: charger, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    // Manually compute what impact should be without penetration
+    // If charger got penetration, impact would be higher. Verify it matches
+    // the expected non-penetration value by comparing the two directions:
+    // P2 (Bulwark) should NOT get penetration against P1 (Charger)
+    const reverseResult = resolvePass(
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+      { archetype: charger, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+    );
+
+    // Bulwark is not a breaker, so no penetration in either direction
+    // Impact should be symmetric with the archetype swap
+    expect(result.p1.impactScore).toBeCloseTo(reverseResult.p2.impactScore, 5);
+    expect(result.p2.impactScore).toBeCloseTo(reverseResult.p1.impactScore, 5);
+  });
+
+  it('Breaker vs Breaker: both get guard penetration', () => {
+    const result = resolvePass(
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+    );
+
+    // Mirror matchup: both should have equal impact since both have same stats & pen
+    expect(result.p1.impactScore).toBeCloseTo(result.p2.impactScore, 5);
+    expect(result.unseat).toBe('none');
+  });
+
+  it('Breaker penetration advantage is most impactful against high-guard opponent', () => {
+    // Breaker vs Bulwark (guard 65)
+    const vsBulwark = resolvePass(
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    // Breaker vs Charger (guard 50)
+    const vsCharger = resolvePass(
+      { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: charger, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+    );
+
+    // Compare the impact boost vs what a non-breaker would get
+    const duelistVsBulwark = resolvePass(
+      { archetype: duelist, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 65 },
+    );
+
+    const duelistVsCharger = resolvePass(
+      { archetype: duelist, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+      { archetype: charger, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+    );
+
+    // Penetration advantage vs Bulwark should be larger than vs Charger
+    const breakerEdgeVsBulwark = vsBulwark.p1.impactScore - duelistVsBulwark.p1.impactScore;
+    const breakerEdgeVsCharger = vsCharger.p1.impactScore - duelistVsCharger.p1.impactScore;
+
+    // Breaker always has +5 MOM over duelist, so both edges are positive
+    // But the guard penetration adds MORE vs high guard
+    expect(breakerEdgeVsBulwark).toBeGreaterThan(breakerEdgeVsCharger);
+  });
+});

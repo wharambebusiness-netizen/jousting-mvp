@@ -55,7 +55,7 @@ export const BALANCE = {
   // Fraction of opponent's effective guard that Breaker ignores during
   // impact calculation (both joust and melee). 0.35 = 35% guard ignored.
   // Only applies when the ATTACKER is a Breaker archetype.
-  breakerGuardPenetration: 0.35,
+  breakerGuardPenetration: 0.25,
 
   // --- Shift Costs ---
   // Stamina cost and initiative penalty for shifting mid-pass.

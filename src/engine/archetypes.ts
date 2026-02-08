@@ -47,7 +47,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
   breaker: {
     id: 'breaker',
     name: 'Breaker',
-    momentum: 65,
+    momentum: 62,
     control: 60,
     guard: 55,
     initiative: 55,

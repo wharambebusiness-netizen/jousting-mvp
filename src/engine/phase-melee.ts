@@ -70,6 +70,12 @@ export function resolveMeleeRoundFn(
   // ImpactScore (Breaker ignores a fraction of opponent guard)
   const pen1 = p1State.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
   const pen2 = p2State.archetype.id === 'breaker' ? BALANCE.breakerGuardPenetration : 0;
+  if (pen1 > 0) {
+    log.push(`Breaker P1: guard penetration ${(pen1 * 100).toFixed(0)}% — opponent effective guard ${stats2.guard.toFixed(2)} → ${(stats2.guard * (1 - pen1)).toFixed(2)}`);
+  }
+  if (pen2 > 0) {
+    log.push(`Breaker P2: guard penetration ${(pen2 * 100).toFixed(0)}% — opponent effective guard ${stats1.guard.toFixed(2)} → ${(stats1.guard * (1 - pen2)).toFixed(2)}`);
+  }
   const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, pen1);
   const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, pen2);
   log.push(`ImpactScore: P1 ${impact1.toFixed(2)}, P2 ${impact2.toFixed(2)}`);

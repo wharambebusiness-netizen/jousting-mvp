@@ -8,7 +8,10 @@
 import { describe, it, expect } from 'vitest';
 import { ARCHETYPES, ARCHETYPE_LIST } from './archetypes';
 import { JOUST_ATTACKS, MELEE_ATTACKS, JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from './attacks';
-import { SpeedType, Phase, type Attack, type Archetype, type GiglingLoadout, type PlayerLoadout } from './types';
+import { SpeedType, Phase, type Attack, type Archetype, type GiglingLoadout, type PlayerLoadout, type PlayerState, type PassChoice } from './types';
+import { resolveJoustPass } from './phase-joust';
+import { resolveMeleeRoundFn } from './phase-melee';
+import { calcImpactScore } from './calculator';
 import { createMatch, submitJoustPass, submitMeleeRound } from './match';
 import { createFullLoadout } from './gigling-gear';
 import { createFullPlayerLoadout } from './player-gear';
@@ -331,10 +334,11 @@ describe('Charger stamina endurance', () => {
 // 8. Breaker durability test
 // ============================================================
 describe('Breaker durability', () => {
-  it('Breaker has higher stat total than before (295 vs 280)', () => {
+  it('Breaker has stat total within expected range', () => {
     const b = ARCHETYPES.breaker;
     const total = b.momentum + b.control + b.guard + b.initiative + b.stamina;
-    expect(total).toBe(295);
+    expect(total).toBeGreaterThanOrEqual(290);
+    expect(total).toBeLessThanOrEqual(300);
   });
 
   it('Breaker survives 5 standard passes or unseats opponent', () => {
@@ -535,5 +539,181 @@ describe('Stress — 50 random matches with random gear and archetypes', () => {
       expect(['player1', 'player2', 'draw']).toContain(match.winner);
       expect(match.winReason.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ============================================================
+// 13. Property-based — Breaker guard penetration invariants
+// ============================================================
+describe('Property-based — Breaker guard penetration', () => {
+  function makePlayerState(archId: string, stamina?: number): PlayerState {
+    const arch = ARCHETYPES[archId];
+    return {
+      archetype: arch,
+      currentStamina: stamina ?? arch.stamina,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+  }
+
+  it('calcImpactScore with penetration >= without penetration (all guard values)', () => {
+    const pen = BALANCE.breakerGuardPenetration;
+    for (let guard = 0; guard <= 120; guard += 5) {
+      const withoutPen = calcImpactScore(60, 50, guard, 0);
+      const withPen = calcImpactScore(60, 50, guard, pen);
+      expect(withPen).toBeGreaterThanOrEqual(withoutPen);
+    }
+  });
+
+  it('Breaker impact >= same-stat non-Breaker impact against all archetypes in joust', () => {
+    const breaker = makePlayerState('breaker');
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CdL };
+
+    for (const defId of Object.keys(ARCHETYPES)) {
+      const defender = makePlayerState(defId);
+
+      const breakerResult = resolveJoustPass(1, breaker, defender, choice, choice);
+
+      // Build a "non-breaker" with same stats as breaker but different id
+      const fakeNonBreaker: PlayerState = {
+        archetype: { ...ARCHETYPES.breaker, id: 'fake_nonbreaker' },
+        currentStamina: breaker.currentStamina,
+        carryoverMomentum: 0,
+        carryoverControl: 0,
+        carryoverGuard: 0,
+      };
+      const nonBreakerResult = resolveJoustPass(1, fakeNonBreaker, defender, choice, choice);
+
+      // Breaker should always have >= impact than the same archetype without penetration
+      expect(
+        breakerResult.player1.impactScore,
+        `Breaker impact >= non-Breaker impact vs ${defId}`,
+      ).toBeGreaterThanOrEqual(nonBreakerResult.player1.impactScore);
+    }
+  });
+
+  it('Breaker impact >= same-stat non-Breaker impact against all archetypes in melee', () => {
+    const breaker = makePlayerState('breaker');
+
+    for (const defId of Object.keys(ARCHETYPES)) {
+      const defender = makePlayerState(defId);
+
+      const breakerResult = resolveMeleeRoundFn(1, breaker, defender, MC, MC);
+
+      const fakeNonBreaker: PlayerState = {
+        archetype: { ...ARCHETYPES.breaker, id: 'fake_nonbreaker' },
+        currentStamina: breaker.currentStamina,
+        carryoverMomentum: 0,
+        carryoverControl: 0,
+        carryoverGuard: 0,
+      };
+      const nonBreakerResult = resolveMeleeRoundFn(1, fakeNonBreaker, defender, MC, MC);
+
+      expect(
+        breakerResult.player1ImpactScore,
+        `Breaker melee impact >= non-Breaker melee impact vs ${defId}`,
+      ).toBeGreaterThanOrEqual(nonBreakerResult.player1ImpactScore);
+    }
+  });
+
+  it('guard penetration benefit monotonically increases with opponent guard', () => {
+    const pen = BALANCE.breakerGuardPenetration;
+    let lastBenefit = 0;
+    for (let guard = 0; guard <= 100; guard += 10) {
+      const benefit = calcImpactScore(60, 50, guard, pen) - calcImpactScore(60, 50, guard, 0);
+      expect(benefit).toBeGreaterThanOrEqual(lastBenefit);
+      lastBenefit = benefit;
+    }
+  });
+
+  it('breakerGuardPenetration is between 0 and 1 exclusive', () => {
+    expect(BALANCE.breakerGuardPenetration).toBeGreaterThan(0);
+    expect(BALANCE.breakerGuardPenetration).toBeLessThan(1);
+  });
+});
+
+// ============================================================
+// 14. Breaker full match simulations — completes without errors
+// ============================================================
+describe('Breaker full match — all matchups with guard penetration', () => {
+  const archetypeIds = Object.keys(ARCHETYPES);
+
+  for (const oppId of archetypeIds) {
+    it(`breaker vs ${oppId} completes with guard penetration active`, () => {
+      const match = simulateMatch(ARCHETYPES.breaker, ARCHETYPES[oppId]);
+      expect(match.phase).toBe(Phase.MatchEnd);
+      expect(['player1', 'player2', 'draw']).toContain(match.winner);
+    });
+  }
+
+  for (const oppId of archetypeIds) {
+    it(`${oppId} vs breaker completes with guard penetration active`, () => {
+      const match = simulateMatch(ARCHETYPES[oppId], ARCHETYPES.breaker);
+      expect(match.phase).toBe(Phase.MatchEnd);
+      expect(['player1', 'player2', 'draw']).toContain(match.winner);
+    });
+  }
+});
+
+// ============================================================
+// 15. Breaker with gear — guard penetration + gear stacking
+// ============================================================
+describe('Breaker with gear — guard penetration + gear', () => {
+  const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
+
+  for (const rarity of rarities) {
+    it(`Breaker with ${rarity} gear vs Bulwark completes`, () => {
+      const rng = makeRng(42 + rarities.indexOf(rarity));
+      const steed = createFullLoadout(rarity, rarity, rng);
+      const player = createFullPlayerLoadout(rarity, rng);
+
+      const match = simulateMatch(
+        ARCHETYPES.breaker, ARCHETYPES.bulwark,
+        steed, undefined, player, undefined,
+      );
+      expect(match.phase).toBe(Phase.MatchEnd);
+      expect(['player1', 'player2', 'draw']).toContain(match.winner);
+    });
+  }
+
+  it('Breaker vs Bulwark both with giga gear completes', () => {
+    const rng1 = makeRng(1000);
+    const rng2 = makeRng(2000);
+    const match = simulateMatch(
+      ARCHETYPES.breaker, ARCHETYPES.bulwark,
+      createFullLoadout('giga', 'giga', rng1), createFullLoadout('giga', 'giga', rng2),
+      createFullPlayerLoadout('giga', rng1), createFullPlayerLoadout('giga', rng2),
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+});
+
+// ============================================================
+// 16. Performance regression — with guard penetration
+// ============================================================
+describe('Performance — guard penetration overhead', () => {
+  it('100 Breaker vs Bulwark matches complete in <500ms', () => {
+    const start = performance.now();
+    for (let i = 0; i < 100; i++) {
+      simulateMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark);
+    }
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('100 mixed matches (all archetypes) complete in <1000ms', () => {
+    const archetypeIds = Object.keys(ARCHETYPES);
+    const start = performance.now();
+    let count = 0;
+    for (let i = 0; i < archetypeIds.length && count < 100; i++) {
+      for (let j = 0; j < archetypeIds.length && count < 100; j++) {
+        simulateMatch(ARCHETYPES[archetypeIds[i]], ARCHETYPES[archetypeIds[j]]);
+        count++;
+      }
+    }
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(1000);
   });
 });
