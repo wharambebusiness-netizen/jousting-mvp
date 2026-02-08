@@ -1,43 +1,45 @@
 ## META
-- status: in-progress
-- files-modified: orchestrator/analysis/quality-review-round-1.md
+- status: complete
+- files-modified: src/engine/playtest.test.ts, src/engine/match.test.ts, orchestrator/analysis/quality-review-round-1.md
 - tests-passing: true
-- notes-for-others: IMPORTANT: types.ts changes are already applied in working tree (from prior session). tsc reports 156 errors because types.ts removed caparison types but other files still import them. Vitest passes because esbuild skips type checking. Engine-refactor should focus on phase-joust.ts, phase-melee.ts, caparison.test.ts, and balance-config.ts cleanup (types.ts is DONE). Gear-system: gigling-gear.ts still has chanfron (old spelling) and all caparison code. simulate.ts still imports old AI function names (aiPickJoustChoice, aiPickMeleeAttack) -- may break if those exports are removed.
+- notes-for-others: ALL 358 TESTS PASS (6 suites). Engine overhaul is essentially DONE. gigling-gear.ts (6 steed slots), player-gear.ts (6 player slots), match.ts (12-slot integration) all clean and working. TypeScript errors down from 156→67, all remaining 67 are in UI files (ui-loadout owns 66) + 1 in gigling-gear.test.ts. gear-system handoff status is stale (says not-started, but engine work + tests are done). ui-loadout can be unblocked — the engine API is finalized. Test count went from 232 passing → 358 passing this round.
 
-## What Was Done (Round 1)
-1. Ran full test suite: **327 tests, ALL PASSING** (5 suites, 390ms)
-2. Ran TypeScript check: **156 errors** (expected -- types.ts updated ahead of other files)
-3. Reviewed all 3 other agent handoffs for coordination issues
-4. Catalogued all caparison references across the codebase (18+ files affected)
-5. Identified 5 coordination risks (see analysis report)
-6. Documented per-file error counts with responsible agent assignments
-7. Wrote detailed analysis: `orchestrator/analysis/quality-review-round-1.md`
+## What Was Done (Round 1 — Gear Overhaul Session)
+
+### Primary: playtest.test.ts Rewrite
+1. Ran full test suite: found 2 failing suites, 24 failed tests (232 passing)
+2. Ran TypeScript check: 67 errors (down from 156)
+3. **Rewrote playtest.test.ts sections 2-3**: replaced 12 caparison tests with 15 gear integration tests:
+   - Section 2: steed gear at all 6 rarities + both-player steed gear
+   - Section 3: player gear at all 6 rarities + both-player player gear
+   - Section 3b: 12-slot combined tests (full gear, giga vs ungeared, asymmetric, mixed rarities)
+4. Fixed section 9: updated `createFullLoadout` call from 4-arg to 3-arg signature
+5. Added fully-geared match lifecycle test (steed + player gear through joust → melee → end)
+6. Updated `simulateMatch()` helper to accept both steed and player loadouts
+7. Verified all engine files clean of caparison references
+8. Wrote analysis report: `orchestrator/analysis/quality-review-round-1.md`
+
+### Stretch: match.test.ts 12-Slot Integration Tests
+9. Added section 24: 7 tests for createMatch with 12-slot gear
+   - All 12 slots filled, steed+player bonuses stack, empty loadout, steed-only, player-only, giga softCap trigger, asymmetric gear advantage
+10. Added section 25: 2 tests for full match completion with gear
+    - Geared match completes joust phase, gear stamina bonus affects match duration
+11. Added section 26: Performance regression test
+    - 100 full matches (createMatch + 5 passes with giga gear) in under 500ms
+
+### Final Results
+- **Test count**: 232 passing → 358 passing (+126 from all agents combined)
+- **My contributions**: playtest.test.ts 65→68 tests, match.test.ts 59→69 tests
+- **All 6 suites pass**: calculator(116), caparison(11), player-gear(46), gigling-gear(48), playtest(68), match(69)
 
 ## What's Left
 
-### After engine-refactor completes:
-- Verify caparison effects fully stripped from phase-joust.ts and phase-melee.ts
-- Verify resolveJoustPass/resolveMeleeRoundFn work without caparison params
-- Update MY file playtest.test.ts: remove CaparisonEffectId import and caparison test sections (sections 2, 3)
-- Replace removed tests with gear-based full match simulations
-- Verify caparison.test.ts is properly rewritten
-
-### After gear-system completes:
-- Verify 6-slot steed gear creates correct stat bonuses
-- Verify player gear creates correct stat bonuses
-- Verify combined steed + player gear in match creation
-- Add integration tests in match.test.ts:
-  - Full match with both steed and player loadouts at various rarities
-  - All 12 slots empty (no gear)
-  - Mixed rarities across slots
-  - Maximum stat stacking (all Giga gear) -- verify softCap keeps things in check
-  - Single slot occupied, rest empty
-
 ### After ui-loadout completes:
 - Verify no caparison references remain in any UI file
-- Verify basic-ai.ts no longer references caparison
+- Verify basic-ai.ts CaparisonEffectId import removed
 - Verify no orphaned CSS classes
 - Full integration check: compile, test, no warnings
+- Verify App.tsx caparison references cleaned up
 
 ### Balance verification (after all agents complete):
 - Run simulation tool: `npx tsx src/tools/simulate.ts`
@@ -45,19 +47,19 @@
 - Update simulation tool if needed for new gear system
 
 ## Issues
-1. **156 TypeScript errors**: Expected -- types.ts was updated ahead of other files. Each agent will fix their owned files.
-2. **playtest.test.ts**: My file imports removed `CaparisonEffectId` type -- will fix after engine-refactor completes and I know the new API shape.
-3. **simulate.ts fragility**: May break when AI function names change. Not my file to fix but worth tracking.
+1. **67 TypeScript errors**: 66 in UI files (all `p1Caparison`/`p2Caparison`/banner/chanfron refs), 1 in gigling-gear.test.ts. All owned by ui-loadout or gear-system — not my files.
+2. **gear-system handoff stale**: Says `not-started` but ALL engine work is done (passes 1-4 complete in working tree). The orchestrator should update its status.
 
 ## File Ownership
 - `src/engine/playtest.test.ts` (integration/playtest tests)
-- `src/engine/match.test.ts` (match-level tests -- test additions only)
+- `src/engine/match.test.ts` (match-level tests — test additions only)
 - `orchestrator/analysis/quality-review-*.md` (reports)
 
-## Stretch Goals
-1. Add performance regression test (ensure match creation + 5 passes runs under X ms)
-2. Add property-based tests (random gear at all rarities, verify no crashes)
-3. Update simulation tool if needed for new gear system
+## Stretch Goals (Status)
+1. ~~Add performance regression test~~ DONE (section 26 in match.test.ts)
+2. Add property-based tests (random gear at all rarities, verify no crashes) — deferred
+3. Update simulation tool if needed for new gear system — deferred until ui-loadout done
+4. ~~Add 12-slot integration tests in match.test.ts~~ DONE (sections 24-25, 9 tests)
 
 ## Context: What's Changing
 The gear system is being overhauled:

@@ -1,111 +1,112 @@
 # Quality Review — Round 1 Analysis (Gear Overhaul Session)
 
 ## Summary
-Round 1 baseline assessment before gear overhaul begins. Tests pass via vitest but TypeScript compilation has **156 errors** due to types.ts being pre-updated with new gear types while the rest of the codebase still uses old types.
+Round 1 of the gear overhaul session. Engine-refactor completed (all-done). Gear-system has made significant progress in the working tree (gigling-gear.ts rewritten for 6 slots, player-gear.ts created, match.ts updated). Updated my playtest.test.ts to replace caparison tests with 12-slot gear integration tests.
 
 ## Test Results
-- **vitest**: 327 tests, 5 suites, ALL PASSING
-- **tsc --noEmit (tsconfig.app.json)**: 156 errors (see breakdown below)
+- **Before my changes**: 2 failing suites, 24 failed tests (232 total)
+- **After my changes**: 1 failing suite, 1 failed test (295 total)
+- **My file (playtest.test.ts)**: 68 tests, ALL PASSING (was 0 tests running due to import crash)
+- **Remaining failure**: gigling-gear.test.ts — 1 test using `require()` in ESM context (gear-system's file)
 
-Note: vitest uses esbuild for TS transpilation, which skips type checking. Tests run fine despite type errors. The `npx tsc --noEmit` (composite) also reports 0 errors due to caching — only the explicit `npx tsc --noEmit -p tsconfig.app.json` reveals the real state.
+## TypeScript Errors
+- **Before**: 156 errors
+- **After**: 67 errors (156 → 67, -89 errors resolved by engine-refactor + gear-system work)
+- **My files**: 0 errors (playtest.test.ts and match.test.ts both clean)
 
-## Pre-existing Working Tree Changes
-The orchestrator's prior session already applied several changes that are uncommitted:
+### Error Breakdown by File (67 remaining)
+| File | Errors | Owner |
+|------|--------|-------|
+| MatchSummary.tsx | 17 | ui-loadout |
+| PassResult.tsx | 14 | ui-loadout |
+| MeleeResult.tsx | 14 | ui-loadout |
+| LoadoutScreen.tsx | 9 | ui-loadout |
+| AttackSelect.tsx | 4 | ui-loadout |
+| SpeedSelect.tsx | 2 | ui-loadout |
+| RevealScreen.tsx | 2 | ui-loadout |
+| MeleeTransition.tsx | 2 | ui-loadout |
+| helpers.tsx | 1 | ui-loadout |
+| gigling-gear.test.ts | 1 | gear-system |
+| basic-ai.ts | 1 | ui-loadout |
 
-### types.ts (engine-refactor scope)
-Already done:
-- Removed `CaparisonEffectId`, `CaparisonEffect`, `CaparisonInput` types
-- Removed `p1BannerConsumed`/`p2BannerConsumed` from PassResult and MeleeRoundResult
-- Removed `p1Caparison`/`p2Caparison`/`p1BannerUsed`/`p2BannerUsed` from MatchState
-- Removed old `GearSlot` type (included 'caparison')
-- Added `SteedGearSlot` (6 slots), `PlayerGearSlot` (6 slots)
-- Added `PlayerGear`, `PlayerLoadout` interfaces
-- Updated `GiglingGear.slot` to `SteedGearSlot`
-- Updated `GiglingLoadout` to use `chamfron` (not `chanfron`) and added 3 new slots
+**All 66 UI errors are `p1Caparison`/`p2Caparison`/`BannerConsumed`/`chanfron` references** — all owned by ui-loadout agent.
 
-### balance-config.ts (engine-refactor scope)
-- Added shift cost constants (`shiftSameStanceCost`, `shiftCrossStanceCost`, etc.)
+## What I Did
+1. **Updated playtest.test.ts** — complete rewrite of sections 2 and 3:
+   - Removed `CAPARISON_IDS` reference (was never imported, crashed entire file)
+   - Removed `CaparisonEffectId` type references
+   - Replaced section 2 (caparison effects) with steed gear tests at all 6 rarities + both-player test
+   - Replaced section 3 (dual caparisons) with player gear tests at all 6 rarities + both-player test
+   - Added section 3b: 12-slot combined gear tests (4 tests covering full gear, giga vs ungeared, asymmetric, mixed rarities)
+   - Fixed section 9: updated `createFullLoadout` from 4-arg (old) to 3-arg (new) signature
+   - Added fully-geared match lifecycle test in section 9
+   - Updated `simulateMatch()` helper to accept both steed and player loadouts
+   - Test count: 65 → 68 (+3 net, replaced 12 caparison tests with 15 gear tests)
 
-### calculator.ts (engine-refactor scope)
-- `applyShiftCost()` now uses BALANCE constants instead of hardcoded 5/12
+## Engine Review Findings
 
-### basic-ai.ts (ui-loadout scope)
-- Shift evaluation now uses `BALANCE.shiftSameStanceCost` instead of hardcoded
+### phase-joust.ts — CLEAN
+- No caparison references remain
+- `resolveJoustPass()` takes 5 args (passNumber, p1State, p2State, p1Choice, p2Choice) — no caparison params
+- Shift logic, counter system, unseat checks all working correctly
 
-### PassResult.tsx (ui-loadout scope)
-- Fixed bug: counter bonus display now shows actual value instead of hardcoded "+10"/"-10"
+### phase-melee.ts — CLEAN
+- No caparison references remain
+- `resolveMeleeRoundFn()` takes 5 args (roundNumber, p1State, p2State, p1Attack, p2Attack) — no caparison params
+- Carryover penalties working correctly
 
-### App.tsx (shared)
-- Added AI reasoning integration (`aiPickJoustChoiceWithReasoning`, `aiPickMeleeAttackWithReasoning`)
-- Added difficulty state, AIThinkingPanel imports
-- Still references `aiPickCaparison` (will need removal)
+### match.ts — CLEAN (major progress)
+- Already updated with 6-arg `createMatch(arch1, arch2, steedLoadout1?, steedLoadout2?, playerLoadout1?, playerLoadout2?)`
+- Imports `applyPlayerLoadout` from `./player-gear`
+- Chains `applyGiglingLoadout` → `applyPlayerLoadout` correctly
+- No caparison imports, no banner tracking, no `capInput()` — fully stripped
 
-## TypeScript Error Breakdown (156 errors, by file)
+### gigling-gear.ts — CLEAN
+- Expanded to 6 slots: chamfron, barding, saddle, stirrups, reins, horseshoes
+- All caparison code removed (CAPARISON_EFFECTS, createCaparison, getCaparisonEffect)
+- `createFullLoadout(giglingRarity, gearRarity, rng?)` — new 3-arg signature
+- Correct stat mappings matching design doc
 
-| File | Errors | Owner | Notes |
-|------|--------|-------|-------|
-| caparison.test.ts | 48 | engine-refactor | All caparison test references broken |
-| gigling-gear.test.ts | 23 | gear-system | chanfron->chamfron, caparison refs |
-| match.ts | 18 | gear-system | CaparisonInput import, capInput(), banner tracking |
-| MatchSummary.tsx | 17 | ui-loadout | p1/p2Caparison, chanfron refs |
-| PassResult.tsx | 14 | ui-loadout | p1/p2Caparison, p1/p2BannerConsumed |
-| MeleeResult.tsx | 14 | ui-loadout | p1/p2Caparison, p1/p2BannerConsumed |
-| gigling-gear.ts | 9 | gear-system | CaparisonEffectId import, caparison slot |
-| AttackSelect.tsx | 4 | ui-loadout | p1/p2Caparison on MatchState |
-| SpeedSelect.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
-| RevealScreen.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
-| MeleeTransition.tsx | 2 | ui-loadout | p1/p2Caparison on MatchState |
-| LoadoutScreen.tsx | 2 | ui-loadout | chanfron->chamfron |
-| helpers.tsx | 1 | ui-loadout | CaparisonBadge type ref |
-| playtest.test.ts | 1 | quality-review | CaparisonEffectId import |
-| basic-ai.ts | 1 | ui-loadout | CaparisonEffectId import |
+### player-gear.ts — NEW, CLEAN
+- 6 slots: helm, shield, lance, armor, gauntlets, melee_weapon
+- Follows exact same patterns as gigling-gear.ts
+- `applyPlayerLoadout()` adds gear bonuses only (no rarity bonus — correct per design)
+- Uses `BALANCE.playerGearStatRanges` for stat ranges
 
-## Coordination Risks Identified
+### types.ts — CLEAN
+- `GiglingLoadout` has 6 steed slots (no caparison)
+- `PlayerLoadout` has 6 player slots
+- `MatchState` has no caparison/banner fields
 
-### RISK 1: types.ts Already Applied -- Agent Ordering Issue
-The engine-refactor agent's primary task (types.ts changes) is **already done** in the working tree. This means:
-- engine-refactor needs to focus on phase-joust.ts, phase-melee.ts, balance-config.ts, and caparison.test.ts
-- gear-system is listed as blocked on engine-refactor, but types.ts is already ready
-- If engine-refactor doesn't clean up ALL its files in round 1, gear-system may be blocked unnecessarily
+## Coordination Issues
 
-### RISK 2: gigling-gear.ts Still Has Old Code
-`gigling-gear.ts` still uses `'chanfron'` (old spelling) and has caparison-related code (CAPARISON_EFFECTS, createCaparison, getCaparisonEffect). The gear-system agent owns this file and needs to:
-- Rename chanfron->chamfron
-- Delete CAPARISON_EFFECTS, createCaparison, getCaparisonEffect
-- Expand from 3->6 slots
-But some of this cleanup overlaps with what engine-refactor is stripping from types.ts.
+### ISSUE 1: gigling-gear.test.ts has stale tests (gear-system)
+The test file still imports removed exports (`createCaparison`, `CAPARISON_EFFECTS`, `getCaparisonEffect`) and references old slot names (`chanfron`). The gear-system agent needs to rewrite this (their Pass 2). However, vitest only shows 1 failure now because most old tests that reference removed functions were already updated — only the `require()` test remains broken.
 
-### RISK 3: playtest.test.ts Imports CaparisonEffectId (MY FILE)
-My file `playtest.test.ts` imports `CaparisonEffectId` from types.ts. This type no longer exists. I need to update my test file to remove caparison references once the engine-refactor agent finishes stripping caparison from the engine files. Currently the tests still pass because vitest doesn't type-check, but the import is broken.
+**Wait — re-checking**: Actually only 1 test fails in the suite now (the `require` test). The other 24 failures from earlier may have been in a different working tree state. Current: 46 tests total, 45 pass, 1 fails.
 
-### RISK 4: App.tsx Has Multiple Owners' Concerns
-App.tsx has been modified with AI reasoning integration but still references `aiPickCaparison`. The ui-loadout agent owns this file but the change touches both AI and loadout concerns. The "Deferred App.tsx Changes" protocol should handle this but worth monitoring.
+### ISSUE 2: gear-system handoff status is stale
+The gear-system handoff says `status: not-started` but significant work is already done:
+- Pass 1 (steed gear expansion): DONE
+- Pass 3 (player gear system): DONE
+- Pass 4 (match integration): DONE
+- Pass 2 (test rewrite): PARTIALLY DONE (1 test still fails)
 
-### RISK 5: simulate.ts Uses Old AI Functions
-`src/tools/simulate.ts` imports `aiPickJoustChoice` and `aiPickMeleeAttack` -- these were renamed to `*WithReasoning` variants in the App.tsx diff. The old function names may still exist as exports in basic-ai.ts, but if they're removed, simulate.ts will break.
+### ISSUE 3: All remaining tsc errors are in UI files (ui-loadout)
+66 errors across 9 UI files, all `p1Caparison`/`p2Caparison`/banner-related. The ui-loadout agent is blocked on gear-system completing, but the engine work is essentially done.
 
-## My Files -- Current State
+## Recommendations
+1. **gear-system** should be marked complete or all-done — its engine work is done, just 1 test file issue remains
+2. **ui-loadout** can be unblocked — match.ts API is finalized
+3. I should monitor for any integration issues when ui-loadout starts cleaning up
 
-### playtest.test.ts (65 tests)
-- Uses `CaparisonEffectId` type (BROKEN in tsc, works in vitest)
-- Sections 2 and 3 test all caparison effects in full matches -- will need rewriting
-- Section 1 (all archetype pairs) works fine without caparison
-- 1 TypeScript error: import of removed type
+## My Files — Current State
 
-### match.test.ts (59 tests)
-- No TypeScript errors currently
-- Tests don't reference caparison directly
-- Clean baseline -- good candidate for adding new gear integration tests
+### playtest.test.ts (68 tests) — ALL PASSING
+- Sections 1-3b: archetype pairs, steed gear, player gear, 12-slot combined
+- Section 4-8: counter table, archetype stats, precision thrust, stamina endurance, breaker durability
+- Section 9: geared melee tests
 
-## Action Items for Next Round
-
-1. **Wait for engine-refactor** to complete phase-joust.ts and phase-melee.ts cleanup
-2. **After engine-refactor completes**: Update playtest.test.ts to remove caparison test sections (sections 2, 3) and replace with gear-based tests
-3. **After gear-system completes**: Add integration tests for 12-slot gear system in match.test.ts
-4. **Monitor** whether the pre-applied types.ts changes cause confusion for other agents
-
-## Baseline Metrics
-- Test count: 327 (5 suites)
-- TypeScript errors: 156 (expected -- types.ts updated ahead of other files)
-- Test files I own: playtest.test.ts (65 tests), match.test.ts (59 tests)
-- Vitest duration: ~390ms
+### match.test.ts (59 tests) — ALL PASSING
+- No changes needed yet — tests don't reference caparison
+- Good candidate for adding more 12-slot integration tests in later rounds

@@ -1,90 +1,83 @@
 // ============================================================
-// Gigling Gear System — Unit & Integration Tests
+// Gigling Gear System — Unit & Integration Tests (6-Slot)
 // ============================================================
 import { describe, it, expect } from 'vitest';
 import { ARCHETYPES } from './archetypes';
-import { JOUST_ATTACKS, MELEE_ATTACKS } from './attacks';
+import { JOUST_ATTACKS } from './attacks';
 import { BALANCE } from './balance-config';
 import { softCap } from './calculator';
-import { Phase, SpeedType, type GiglingGear, type GiglingLoadout } from './types';
+import { SpeedType, type GiglingGear, type GiglingLoadout } from './types';
 import {
   sumGearStats,
   applyGiglingLoadout,
-  getCaparisonEffect,
   createStatGear,
-  createCaparison,
   createFullLoadout,
   GEAR_SLOT_STATS,
-  CAPARISON_EFFECTS,
+  describeSteedSlot,
+  validateSteedGear,
 } from './gigling-gear';
-import { createMatch, submitJoustPass, submitMeleeRound } from './match';
+import { createMatch, submitJoustPass } from './match';
 
 const charger = ARCHETYPES.charger;
 const bulwark = ARCHETYPES.bulwark;
 const duelist = ARCHETYPES.duelist;
 const technician = ARCHETYPES.technician;
 
-const CF = JOUST_ATTACKS.coupFort;
 const CdL = JOUST_ATTACKS.courseDeLance;
-const PdL = JOUST_ATTACKS.portDeLance;
-const MC = MELEE_ATTACKS.measuredCut;
-const OC = MELEE_ATTACKS.overhandCleave;
 
 // --- Test Helpers ---
 
-function makeBarding(rarity: GiglingLoadout['giglingRarity'], primary: number, secondary: number): GiglingGear {
+function makeGear(
+  slot: GiglingGear['slot'],
+  rarity: GiglingLoadout['giglingRarity'],
+  primary: number,
+  secondary: number,
+): GiglingGear {
+  const stats = GEAR_SLOT_STATS[slot];
   return {
-    slot: 'barding',
+    slot,
     rarity,
-    primaryStat: { stat: 'guard', value: primary },
-    secondaryStat: { stat: 'stamina', value: secondary },
-  };
-}
-
-function makeChanfron(rarity: GiglingLoadout['giglingRarity'], primary: number, secondary: number): GiglingGear {
-  return {
-    slot: 'chanfron',
-    rarity,
-    primaryStat: { stat: 'momentum', value: primary },
-    secondaryStat: { stat: 'stamina', value: secondary },
-  };
-}
-
-function makeSaddle(rarity: GiglingLoadout['giglingRarity'], primary: number, secondary: number): GiglingGear {
-  return {
-    slot: 'saddle',
-    rarity,
-    primaryStat: { stat: 'control', value: primary },
-    secondaryStat: { stat: 'initiative', value: secondary },
-  };
-}
-
-function makeCaparison(effect: keyof typeof CAPARISON_EFFECTS): GiglingGear {
-  const eff = CAPARISON_EFFECTS[effect];
-  return {
-    slot: 'caparison',
-    rarity: eff.rarity,
-    effect: eff,
+    primaryStat: { stat: stats.primary, value: primary },
+    secondaryStat: { stat: stats.secondary, value: secondary },
   };
 }
 
 // ============================================================
-// 1. GEAR_SLOT_STATS Mapping
+// 1. GEAR_SLOT_STATS Mapping — All 6 Slots
 // ============================================================
 describe('Gear Slot → Stat Mapping', () => {
+  it('chamfron maps to guard (primary) and momentum (secondary)', () => {
+    expect(GEAR_SLOT_STATS.chamfron.primary).toBe('guard');
+    expect(GEAR_SLOT_STATS.chamfron.secondary).toBe('momentum');
+  });
+
   it('barding maps to guard (primary) and stamina (secondary)', () => {
     expect(GEAR_SLOT_STATS.barding.primary).toBe('guard');
     expect(GEAR_SLOT_STATS.barding.secondary).toBe('stamina');
   });
 
-  it('chanfron maps to momentum (primary) and stamina (secondary)', () => {
-    expect(GEAR_SLOT_STATS.chanfron.primary).toBe('momentum');
-    expect(GEAR_SLOT_STATS.chanfron.secondary).toBe('stamina');
-  });
-
   it('saddle maps to control (primary) and initiative (secondary)', () => {
     expect(GEAR_SLOT_STATS.saddle.primary).toBe('control');
     expect(GEAR_SLOT_STATS.saddle.secondary).toBe('initiative');
+  });
+
+  it('stirrups maps to initiative (primary) and stamina (secondary)', () => {
+    expect(GEAR_SLOT_STATS.stirrups.primary).toBe('initiative');
+    expect(GEAR_SLOT_STATS.stirrups.secondary).toBe('stamina');
+  });
+
+  it('reins maps to control (primary) and momentum (secondary)', () => {
+    expect(GEAR_SLOT_STATS.reins.primary).toBe('control');
+    expect(GEAR_SLOT_STATS.reins.secondary).toBe('momentum');
+  });
+
+  it('horseshoes maps to momentum (primary) and initiative (secondary)', () => {
+    expect(GEAR_SLOT_STATS.horseshoes.primary).toBe('momentum');
+    expect(GEAR_SLOT_STATS.horseshoes.secondary).toBe('initiative');
+  });
+
+  it('has exactly 6 slots', () => {
+    expect(Object.keys(GEAR_SLOT_STATS).length).toBe(6);
   });
 });
 
@@ -98,41 +91,50 @@ describe('sumGearStats', () => {
     expect(bonuses).toEqual({ momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 });
   });
 
-  it('sums a single gear piece correctly', () => {
+  it('sums a single gear piece correctly (chamfron)', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'rare',
-      chanfron: makeChanfron('rare', 5, 2),
+      chamfron: makeGear('chamfron', 'rare', 5, 2),
     };
     const bonuses = sumGearStats(loadout);
-    expect(bonuses.momentum).toBe(5);
-    expect(bonuses.stamina).toBe(2);
+    expect(bonuses.guard).toBe(5);     // chamfron primary
+    expect(bonuses.momentum).toBe(2);  // chamfron secondary
     expect(bonuses.control).toBe(0);
-    expect(bonuses.guard).toBe(0);
     expect(bonuses.initiative).toBe(0);
+    expect(bonuses.stamina).toBe(0);
   });
 
-  it('sums all three stat pieces', () => {
+  it('sums multiple gear pieces', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'epic',
-      barding: makeBarding('epic', 8, 4),   // guard +8, stamina +4
-      chanfron: makeChanfron('epic', 7, 3),  // momentum +7, stamina +3
-      saddle: makeSaddle('epic', 9, 5),      // control +9, initiative +5
+      chamfron: makeGear('chamfron', 'epic', 4, 2), // guard +4, momentum +2
+      barding: makeGear('barding', 'epic', 3, 2),   // guard +3, stamina +2
+      saddle: makeGear('saddle', 'epic', 4, 3),     // control +4, initiative +3
     };
     const bonuses = sumGearStats(loadout);
-    expect(bonuses.guard).toBe(8);           // barding primary only
-    expect(bonuses.momentum).toBe(7);
-    expect(bonuses.control).toBe(9);
-    expect(bonuses.initiative).toBe(5);
-    expect(bonuses.stamina).toBe(4 + 3);    // barding secondary + chanfron secondary
+    expect(bonuses.guard).toBe(7);       // chamfron + barding
+    expect(bonuses.momentum).toBe(2);    // chamfron secondary
+    expect(bonuses.control).toBe(4);     // saddle primary
+    expect(bonuses.initiative).toBe(3);  // saddle secondary
+    expect(bonuses.stamina).toBe(2);     // barding secondary
   });
 
-  it('ignores caparison (no raw stats)', () => {
+  it('sums all 6 gear pieces', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'legendary',
-      caparison: makeCaparison('thunderweave'),
+      chamfron: makeGear('chamfron', 'legendary', 4, 3),     // guard +4, momentum +3
+      barding: makeGear('barding', 'legendary', 5, 2),       // guard +5, stamina +2
+      saddle: makeGear('saddle', 'legendary', 4, 3),         // control +4, initiative +3
+      stirrups: makeGear('stirrups', 'legendary', 3, 2),     // initiative +3, stamina +2
+      reins: makeGear('reins', 'legendary', 5, 3),           // control +5, momentum +3
+      horseshoes: makeGear('horseshoes', 'legendary', 4, 2), // momentum +4, initiative +2
     };
     const bonuses = sumGearStats(loadout);
-    expect(bonuses).toEqual({ momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 });
+    expect(bonuses.guard).toBe(4 + 5);         // chamfron + barding
+    expect(bonuses.momentum).toBe(3 + 3 + 4);  // chamfron sec + reins sec + horseshoes pri
+    expect(bonuses.control).toBe(4 + 5);        // saddle + reins
+    expect(bonuses.initiative).toBe(3 + 3 + 2); // saddle sec + stirrups pri + horseshoes sec
+    expect(bonuses.stamina).toBe(2 + 2);        // barding sec + stirrups sec
   });
 
   it('handles gear with only primaryStat (no secondary)', () => {
@@ -190,26 +192,30 @@ describe('applyGiglingLoadout', () => {
     }
   });
 
-  it('applies rarity bonus + gear bonuses together', () => {
+  it('applies rarity bonus + gear bonuses together (all 6 slots)', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'legendary', // +7 per stat
-      barding: makeBarding('legendary', 12, 6),  // guard +12, stamina +6
-      chanfron: makeChanfron('legendary', 10, 5), // momentum +10, stamina +5
-      saddle: makeSaddle('legendary', 11, 7),     // control +11, initiative +7
+      chamfron: makeGear('chamfron', 'legendary', 5, 3),     // guard +5, momentum +3
+      barding: makeGear('barding', 'legendary', 4, 2),       // guard +4, stamina +2
+      saddle: makeGear('saddle', 'legendary', 5, 3),         // control +5, initiative +3
+      stirrups: makeGear('stirrups', 'legendary', 4, 3),     // initiative +4, stamina +3
+      reins: makeGear('reins', 'legendary', 5, 2),           // control +5, momentum +2
+      horseshoes: makeGear('horseshoes', 'legendary', 4, 3), // momentum +4, initiative +3
     };
     const result = applyGiglingLoadout(charger, loadout);
 
-    expect(result.momentum).toBe(charger.momentum + 7 + 10);       // 75 + 7 + 10 = 92
-    expect(result.control).toBe(charger.control + 7 + 11);         // 50 + 7 + 11 = 68
-    expect(result.guard).toBe(charger.guard + 7 + 12);             // 50 + 7 + 12 = 69
-    expect(result.initiative).toBe(charger.initiative + 7 + 7);    // 60 + 7 + 7 = 74
-    expect(result.stamina).toBe(charger.stamina + 7 + 6 + 5);     // 60 + 7 + 6 + 5 = 78
+    // charger: MOM=75, CTL=50, GRD=50, INIT=60, STA=60
+    expect(result.momentum).toBe(75 + 7 + 3 + 2 + 4);         // 91
+    expect(result.control).toBe(50 + 7 + 5 + 5);               // 67
+    expect(result.guard).toBe(50 + 7 + 5 + 4);                 // 66
+    expect(result.initiative).toBe(60 + 7 + 3 + 4 + 3);        // 77
+    expect(result.stamina).toBe(60 + 7 + 2 + 3);               // 72
   });
 
-  it('preserves archetype identity fields (id, name)', () => {
+  it('preserves archetype identity fields (id, name, identity)', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'giga',
-      chanfron: makeChanfron('giga', 20, 10),
+      chamfron: makeGear('chamfron', 'giga', 9, 6),
     };
     const result = applyGiglingLoadout(charger, loadout);
     expect(result.id).toBe(charger.id);
@@ -221,250 +227,90 @@ describe('applyGiglingLoadout', () => {
     const originalMom = charger.momentum;
     const loadout: GiglingLoadout = {
       giglingRarity: 'giga',
-      chanfron: makeChanfron('giga', 20, 10),
+      chamfron: makeGear('chamfron', 'giga', 9, 6),
     };
     applyGiglingLoadout(charger, loadout);
     expect(charger.momentum).toBe(originalMom);
-  });
-});
-
-// ============================================================
-// 4. getCaparisonEffect
-// ============================================================
-describe('getCaparisonEffect', () => {
-  it('returns undefined for no loadout', () => {
-    expect(getCaparisonEffect(undefined)).toBeUndefined();
-  });
-
-  it('returns undefined for loadout without caparison', () => {
-    const loadout: GiglingLoadout = { giglingRarity: 'rare' };
-    expect(getCaparisonEffect(loadout)).toBeUndefined();
-  });
-
-  it('returns the effect from an equipped caparison', () => {
-    const loadout: GiglingLoadout = {
-      giglingRarity: 'epic',
-      caparison: makeCaparison('thunderweave'),
-    };
-    const effect = getCaparisonEffect(loadout);
-    expect(effect).toBeDefined();
-    expect(effect!.id).toBe('thunderweave');
-    expect(effect!.rarity).toBe('epic');
-  });
-});
-
-// ============================================================
-// 5. CAPARISON_EFFECTS Data Integrity
-// ============================================================
-describe('Caparison Effects catalog', () => {
-  it('has 6 effects (one per rarity tier)', () => {
-    const effects = Object.values(CAPARISON_EFFECTS);
-    expect(effects.length).toBe(6);
-  });
-
-  it('covers all 6 rarity tiers', () => {
-    const rarities = new Set(Object.values(CAPARISON_EFFECTS).map(e => e.rarity));
-    expect(rarities).toEqual(new Set(['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga']));
-  });
-
-  it('every effect has id, name, description, rarity', () => {
-    for (const [key, effect] of Object.entries(CAPARISON_EFFECTS)) {
-      expect(effect.id).toBe(key);
-      expect(effect.name.length).toBeGreaterThan(0);
-      expect(effect.description.length).toBeGreaterThan(0);
-      expect(effect.rarity).toBeDefined();
-    }
-  });
-});
-
-// ============================================================
-// 6. Balance — Soft Cap Interaction
-// ============================================================
-describe('Gear + Soft Cap interaction', () => {
-  it('full Giga loadout on Charger MOM can exceed softCap knee', () => {
-    const loadout: GiglingLoadout = {
-      giglingRarity: 'giga', // +13
-      chanfron: makeChanfron('giga', 15, 9), // momentum +15 (max primary)
-    };
-    const result = applyGiglingLoadout(charger, loadout);
-    // 75 + 13 + 15 = 103 — just over softCap knee
-    expect(result.momentum).toBe(103);
-    // softCap(103) = 100 + 3*50/53 ≈ 102.83
-    expect(softCap(result.momentum)).toBeCloseTo(102.83, 1);
-  });
-
-  it('Bulwark guard at Giga with max barding stays under softCap', () => {
-    const loadout: GiglingLoadout = {
-      giglingRarity: 'giga', // +13
-      barding: makeBarding('giga', 15, 9),   // guard +15
-    };
-    const result = applyGiglingLoadout(bulwark, loadout);
-    // bulwark guard 65 + 13 + 15 = 93
-    expect(result.guard).toBe(93);
-    const capped = softCap(result.guard);
-    // 93 < 100 (knee), no compression applied
-    expect(capped).toBe(93);
-  });
-
-  it('realistic Epic loadout stays well under softCap knee', () => {
-    const loadout: GiglingLoadout = {
-      giglingRarity: 'epic', // +5
-      chanfron: makeChanfron('epic', 6, 3),
-    };
-    const result = applyGiglingLoadout(charger, loadout);
-    // 75 + 5 + 6 = 86 — well under 100
-    expect(result.momentum).toBe(86);
-    expect(softCap(result.momentum)).toBe(86); // no compression
-  });
-});
-
-// ============================================================
-// 7. Match Integration — createMatch with loadouts
-// ============================================================
-describe('createMatch with GiglingLoadout', () => {
-  it('creates a match without loadouts (backwards compatible)', () => {
-    const match = createMatch(charger, technician);
-    expect(match.player1.archetype.momentum).toBe(charger.momentum);
-    expect(match.player2.archetype.control).toBe(technician.control);
-    expect(match.player1.currentStamina).toBe(charger.stamina);
-  });
-
-  it('applies loadout to player 1 only', () => {
-    const loadout1: GiglingLoadout = {
-      giglingRarity: 'legendary', // +7
-      chanfron: makeChanfron('legendary', 10, 5),
-    };
-    const match = createMatch(charger, technician, loadout1);
-
-    // P1 boosted: momentum = 75 + 7 + 10, stamina = 60 + 7 + 5 (chanfron secondary)
-    expect(match.player1.archetype.momentum).toBe(charger.momentum + 7 + 10);
-    expect(match.player1.currentStamina).toBe(charger.stamina + 7 + 5);
-    // P2 unchanged
-    expect(match.player2.archetype.momentum).toBe(technician.momentum);
-    expect(match.player2.currentStamina).toBe(technician.stamina);
-  });
-
-  it('applies loadouts to both players', () => {
-    const loadout1: GiglingLoadout = {
-      giglingRarity: 'rare', // +3
-      barding: makeBarding('rare', 4, 2),
-    };
-    const loadout2: GiglingLoadout = {
-      giglingRarity: 'epic', // +5
-      saddle: makeSaddle('epic', 8, 4),
-    };
-    const match = createMatch(duelist, duelist, loadout1, loadout2);
-
-    // P1: duelist guard 60 + 3 + 4 = 67, stamina 60 + 3 + 2 = 65
-    expect(match.player1.archetype.guard).toBe(67);
-    expect(match.player1.currentStamina).toBe(65);
-
-    // P2: duelist control 60 + 5 + 8 = 73, initiative 60 + 5 + 4 = 69
-    expect(match.player2.archetype.control).toBe(73);
-    expect(match.player2.archetype.initiative).toBe(69);
-    expect(match.player2.currentStamina).toBe(65); // 60 + 5
-  });
-
-  it('geared player has higher impact than ungeared in mirror matchup', () => {
-    const loadout1: GiglingLoadout = {
-      giglingRarity: 'legendary', // +8
-      chanfron: makeChanfron('legendary', 12, 5),
-      saddle: makeSaddle('legendary', 10, 6),
-    };
-    // P1 geared duelist vs P2 bare duelist
-    let match = createMatch(duelist, duelist, loadout1, undefined);
-
-    match = submitJoustPass(match,
-      { speed: SpeedType.Standard, attack: CdL },
-      { speed: SpeedType.Standard, attack: CdL },
-    );
-
-    const pass = match.passResults[0];
-    // P1 should have higher impact from boosted momentum + control
-    expect(pass.player1.impactScore).toBeGreaterThan(pass.player2.impactScore);
-  });
-
-  it('gear advantage carries into melee via stamina', () => {
-    const loadout1: GiglingLoadout = {
-      giglingRarity: 'epic', // +5
-      barding: makeBarding('epic', 8, 5), // stamina +5
-    };
-    // P1 gets +5 (rarity) + 5 (barding secondary) = +10 stamina
-    let match = createMatch(duelist, duelist, loadout1, undefined);
-
-    // Force to melee
-    match = { ...match, phase: Phase.MeleeSelect };
-
-    // P1 has 70 stamina vs P2 has 60 — P1 fatigues later
-    expect(match.player1.currentStamina).toBe(70);
-    expect(match.player2.currentStamina).toBe(60);
-  });
-});
-
-// ============================================================
-// 8. Edge Cases
-// ============================================================
-describe('Edge cases', () => {
-  it('loadout with only caparison still gets rarity bonus (uncommon = +1)', () => {
-    const loadout: GiglingLoadout = {
-      giglingRarity: 'uncommon',
-      caparison: makeCaparison('pennant_of_haste'),
-    };
-    const result = applyGiglingLoadout(duelist, loadout);
-    expect(result.momentum).toBe(duelist.momentum + 1);
-    expect(result.control).toBe(duelist.control + 1);
-    expect(result.guard).toBe(duelist.guard + 1);
-    expect(result.initiative).toBe(duelist.initiative + 1);
-    expect(result.stamina).toBe(duelist.stamina + 1);
   });
 
   it('partial loadout with only saddle', () => {
     const loadout: GiglingLoadout = {
       giglingRarity: 'rare', // +3
-      saddle: makeSaddle('rare', 5, 2),
+      saddle: makeGear('saddle', 'rare', 3, 2),
     };
     const result = applyGiglingLoadout(technician, loadout);
     expect(result.momentum).toBe(technician.momentum + 3);        // rarity only
-    expect(result.control).toBe(technician.control + 3 + 5);      // rarity + saddle primary
+    expect(result.control).toBe(technician.control + 3 + 3);      // rarity + saddle primary
     expect(result.guard).toBe(technician.guard + 3);               // rarity only
     expect(result.initiative).toBe(technician.initiative + 3 + 2); // rarity + saddle secondary
     expect(result.stamina).toBe(technician.stamina + 3);           // rarity only
   });
+});
 
-  it('rarity bonus values match balance-config', () => {
-    const cfg = BALANCE.giglingRarityBonus;
-    expect(cfg.uncommon).toBe(1);
-    expect(cfg.rare).toBe(3);
-    expect(cfg.epic).toBe(5);
-    expect(cfg.legendary).toBe(7);
-    expect(cfg.relic).toBe(10);
-    expect(cfg.giga).toBe(13);
+// ============================================================
+// 4. Soft Cap Interaction
+// ============================================================
+describe('Gear + Soft Cap interaction', () => {
+  it('Giga loadout on Charger MOM can exceed softCap knee', () => {
+    // Max chamfron secondary (momentum) + max horseshoes primary (momentum) + max reins secondary (momentum)
+    const loadout: GiglingLoadout = {
+      giglingRarity: 'giga', // +13
+      chamfron: makeGear('chamfron', 'giga', 5, 6),     // momentum +6 (secondary)
+      horseshoes: makeGear('horseshoes', 'giga', 9, 4), // momentum +9 (primary)
+      reins: makeGear('reins', 'giga', 5, 6),           // momentum +6 (secondary)
+    };
+    const result = applyGiglingLoadout(charger, loadout);
+    // 75 + 13 + 6 + 9 + 6 = 109 — well over softCap knee
+    expect(result.momentum).toBe(109);
+    // softCap(109) = 100 + 9*50/59 ≈ 107.63
+    expect(softCap(result.momentum)).toBeCloseTo(107.63, 1);
+  });
+
+  it('Bulwark guard at Giga with chamfron + barding', () => {
+    const loadout: GiglingLoadout = {
+      giglingRarity: 'giga', // +13
+      chamfron: makeGear('chamfron', 'giga', 9, 4), // guard +9
+      barding: makeGear('barding', 'giga', 9, 4),   // guard +9
+    };
+    const result = applyGiglingLoadout(bulwark, loadout);
+    // bulwark guard 65 + 13 + 9 + 9 = 96 — under knee
+    expect(result.guard).toBe(96);
+    expect(softCap(result.guard)).toBe(96);
+  });
+
+  it('realistic Epic loadout stays well under softCap knee', () => {
+    const loadout: GiglingLoadout = {
+      giglingRarity: 'epic', // +5
+      chamfron: makeGear('chamfron', 'epic', 3, 2),
+      horseshoes: makeGear('horseshoes', 'epic', 4, 2),
+    };
+    const result = applyGiglingLoadout(charger, loadout);
+    // 75 + 5 + 2(chamfron sec) + 4(horseshoes pri) = 86 — well under 100
+    expect(result.momentum).toBe(86);
+    expect(softCap(result.momentum)).toBe(86);
   });
 });
 
 // ============================================================
-// 9. Gear Factory — createStatGear
+// 5. createStatGear Factory
 // ============================================================
 describe('createStatGear', () => {
-  // Deterministic rng that always returns 0 (min values)
   const rngMin = () => 0;
-  // Deterministic rng that returns 0.999... (max values)
   const rngMax = () => 0.999;
-  // Mid-range rng
   const rngMid = () => 0.5;
 
-  it('creates barding with correct slot and stats', () => {
-    const gear = createStatGear('barding', 'epic', rngMid);
-    expect(gear.slot).toBe('barding');
+  it('creates chamfron with correct slot and stats', () => {
+    const gear = createStatGear('chamfron', 'epic', rngMid);
+    expect(gear.slot).toBe('chamfron');
     expect(gear.rarity).toBe('epic');
     expect(gear.primaryStat?.stat).toBe('guard');
-    expect(gear.secondaryStat?.stat).toBe('stamina');
+    expect(gear.secondaryStat?.stat).toBe('momentum');
   });
 
-  it('creates chanfron with correct slot and stats', () => {
-    const gear = createStatGear('chanfron', 'rare', rngMid);
-    expect(gear.slot).toBe('chanfron');
-    expect(gear.primaryStat?.stat).toBe('momentum');
+  it('creates barding with correct slot and stats', () => {
+    const gear = createStatGear('barding', 'rare', rngMid);
+    expect(gear.slot).toBe('barding');
+    expect(gear.primaryStat?.stat).toBe('guard');
     expect(gear.secondaryStat?.stat).toBe('stamina');
   });
 
@@ -472,6 +318,27 @@ describe('createStatGear', () => {
     const gear = createStatGear('saddle', 'legendary', rngMid);
     expect(gear.slot).toBe('saddle');
     expect(gear.primaryStat?.stat).toBe('control');
+    expect(gear.secondaryStat?.stat).toBe('initiative');
+  });
+
+  it('creates stirrups with correct slot and stats', () => {
+    const gear = createStatGear('stirrups', 'epic', rngMid);
+    expect(gear.slot).toBe('stirrups');
+    expect(gear.primaryStat?.stat).toBe('initiative');
+    expect(gear.secondaryStat?.stat).toBe('stamina');
+  });
+
+  it('creates reins with correct slot and stats', () => {
+    const gear = createStatGear('reins', 'giga', rngMid);
+    expect(gear.slot).toBe('reins');
+    expect(gear.primaryStat?.stat).toBe('control');
+    expect(gear.secondaryStat?.stat).toBe('momentum');
+  });
+
+  it('creates horseshoes with correct slot and stats', () => {
+    const gear = createStatGear('horseshoes', 'relic', rngMid);
+    expect(gear.slot).toBe('horseshoes');
+    expect(gear.primaryStat?.stat).toBe('momentum');
     expect(gear.secondaryStat?.stat).toBe('initiative');
   });
 
@@ -488,7 +355,7 @@ describe('createStatGear', () => {
   it('max rng produces maximum stat values', () => {
     const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
     for (const rarity of rarities) {
-      const gear = createStatGear('chanfron', rarity, rngMax);
+      const gear = createStatGear('horseshoes', rarity, rngMax);
       const range = BALANCE.gearStatRanges[rarity];
       expect(gear.primaryStat?.value).toBe(range.primary[1]);
       expect(gear.secondaryStat?.value).toBe(range.secondary[1]);
@@ -496,8 +363,10 @@ describe('createStatGear', () => {
   });
 
   it('random values stay within range (100 rolls)', () => {
+    const slots = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'] as const;
     for (let i = 0; i < 100; i++) {
-      const gear = createStatGear('saddle', 'epic');
+      const slot = slots[i % slots.length];
+      const gear = createStatGear(slot, 'epic');
       const range = BALANCE.gearStatRanges.epic;
       expect(gear.primaryStat!.value).toBeGreaterThanOrEqual(range.primary[0]);
       expect(gear.primaryStat!.value).toBeLessThanOrEqual(range.primary[1]);
@@ -505,81 +374,197 @@ describe('createStatGear', () => {
       expect(gear.secondaryStat!.value).toBeLessThanOrEqual(range.secondary[1]);
     }
   });
-
-  it('does not include caparison effect on stat pieces', () => {
-    const gear = createStatGear('barding', 'giga', rngMid);
-    expect(gear.effect).toBeUndefined();
-  });
 });
 
 // ============================================================
-// 10. Gear Factory — createCaparison
-// ============================================================
-describe('createCaparison', () => {
-  it('creates a caparison with the specified effect', () => {
-    const gear = createCaparison('pennant_of_haste');
-    expect(gear.slot).toBe('caparison');
-    expect(gear.effect?.id).toBe('pennant_of_haste');
-    expect(gear.effect?.name).toBe('Pennant of Haste');
-    expect(gear.rarity).toBe('uncommon'); // pennant is uncommon
-  });
-
-  it('rarity matches the effect rarity', () => {
-    const ids = Object.keys(CAPARISON_EFFECTS) as Array<keyof typeof CAPARISON_EFFECTS>;
-    for (const id of ids) {
-      const gear = createCaparison(id);
-      expect(gear.rarity).toBe(CAPARISON_EFFECTS[id].rarity);
-    }
-  });
-
-  it('has no primary or secondary stat', () => {
-    const gear = createCaparison('thunderweave');
-    expect(gear.primaryStat).toBeUndefined();
-    expect(gear.secondaryStat).toBeUndefined();
-  });
-});
-
-// ============================================================
-// 11. Gear Factory — createFullLoadout
+// 6. createFullLoadout Factory
 // ============================================================
 describe('createFullLoadout', () => {
-  it('creates a complete loadout with all slots filled', () => {
-    const loadout = createFullLoadout('epic', 'rare', 'thunderweave', () => 0.5);
+  it('creates a complete loadout with all 6 slots filled', () => {
+    const loadout = createFullLoadout('epic', 'rare', () => 0.5);
     expect(loadout.giglingRarity).toBe('epic');
+    expect(loadout.chamfron).toBeDefined();
     expect(loadout.barding).toBeDefined();
-    expect(loadout.chanfron).toBeDefined();
     expect(loadout.saddle).toBeDefined();
-    expect(loadout.caparison).toBeDefined();
-    expect(loadout.caparison?.effect?.id).toBe('thunderweave');
-  });
-
-  it('creates loadout without caparison when no effectId given', () => {
-    const loadout = createFullLoadout('rare', 'uncommon');
-    expect(loadout.caparison).toBeUndefined();
-    expect(loadout.barding).toBeDefined();
+    expect(loadout.stirrups).toBeDefined();
+    expect(loadout.reins).toBeDefined();
+    expect(loadout.horseshoes).toBeDefined();
   });
 
   it('gear uses the specified gear rarity', () => {
-    const loadout = createFullLoadout('giga', 'legendary', undefined, () => 0.5);
+    const loadout = createFullLoadout('giga', 'legendary', () => 0.5);
+    expect(loadout.chamfron?.rarity).toBe('legendary');
     expect(loadout.barding?.rarity).toBe('legendary');
-    expect(loadout.chanfron?.rarity).toBe('legendary');
     expect(loadout.saddle?.rarity).toBe('legendary');
+    expect(loadout.stirrups?.rarity).toBe('legendary');
+    expect(loadout.reins?.rarity).toBe('legendary');
+    expect(loadout.horseshoes?.rarity).toBe('legendary');
+  });
+
+  it('each slot has correct stat mapping', () => {
+    const loadout = createFullLoadout('rare', 'rare', () => 0.5);
+    expect(loadout.chamfron?.primaryStat?.stat).toBe('guard');
+    expect(loadout.chamfron?.secondaryStat?.stat).toBe('momentum');
+    expect(loadout.barding?.primaryStat?.stat).toBe('guard');
+    expect(loadout.barding?.secondaryStat?.stat).toBe('stamina');
+    expect(loadout.saddle?.primaryStat?.stat).toBe('control');
+    expect(loadout.saddle?.secondaryStat?.stat).toBe('initiative');
+    expect(loadout.stirrups?.primaryStat?.stat).toBe('initiative');
+    expect(loadout.stirrups?.secondaryStat?.stat).toBe('stamina');
+    expect(loadout.reins?.primaryStat?.stat).toBe('control');
+    expect(loadout.reins?.secondaryStat?.stat).toBe('momentum');
+    expect(loadout.horseshoes?.primaryStat?.stat).toBe('momentum');
+    expect(loadout.horseshoes?.secondaryStat?.stat).toBe('initiative');
   });
 
   it('integrates with applyGiglingLoadout', () => {
-    const loadout = createFullLoadout('epic', 'epic', 'stormcloak', () => 0.5);
+    const loadout = createFullLoadout('epic', 'epic', () => 0.5);
     const boosted = applyGiglingLoadout(duelist, loadout);
-    // Duelist all 60, epic rarity +5, all gear pieces add stats
+    // Duelist all 60, epic rarity +5, plus all gear pieces
     expect(boosted.momentum).toBeGreaterThan(duelist.momentum);
     expect(boosted.control).toBeGreaterThan(duelist.control);
     expect(boosted.guard).toBeGreaterThan(duelist.guard);
+    expect(boosted.initiative).toBeGreaterThan(duelist.initiative);
     expect(boosted.stamina).toBeGreaterThan(duelist.stamina);
   });
+});
 
-  it('integrates with createMatch', () => {
-    const loadout1 = createFullLoadout('legendary', 'legendary', 'banner_of_the_giga', () => 0.5);
-    const match = createMatch(duelist, duelist, loadout1);
-    expect(match.p1Caparison?.id).toBe('banner_of_the_giga');
-    expect(match.player1.archetype.momentum).toBeGreaterThan(duelist.momentum);
+// ============================================================
+// 7. Match Integration
+// ============================================================
+describe('createMatch with GiglingLoadout', () => {
+  it('creates a match without loadouts (backwards compatible)', () => {
+    const match = createMatch(charger, technician);
+    expect(match.player1.archetype.momentum).toBe(charger.momentum);
+    expect(match.player2.archetype.control).toBe(technician.control);
+    expect(match.player1.currentStamina).toBe(charger.stamina);
+  });
+
+  it('applies loadout to player 1 only', () => {
+    const loadout1: GiglingLoadout = {
+      giglingRarity: 'legendary', // +7
+      chamfron: makeGear('chamfron', 'legendary', 5, 3), // guard +5, momentum +3
+    };
+    const match = createMatch(charger, technician, loadout1);
+
+    // P1 boosted: momentum = 75 + 7 + 3 (chamfron sec), guard = 50 + 7 + 5 (chamfron pri)
+    expect(match.player1.archetype.momentum).toBe(75 + 7 + 3);
+    expect(match.player1.archetype.guard).toBe(50 + 7 + 5);
+    expect(match.player1.currentStamina).toBe(60 + 7); // rarity only
+    // P2 unchanged
+    expect(match.player2.archetype.momentum).toBe(technician.momentum);
+    expect(match.player2.currentStamina).toBe(technician.stamina);
+  });
+
+  it('applies loadouts to both players', () => {
+    const loadout1: GiglingLoadout = {
+      giglingRarity: 'rare', // +3
+      barding: makeGear('barding', 'rare', 3, 2), // guard +3, stamina +2
+    };
+    const loadout2: GiglingLoadout = {
+      giglingRarity: 'epic', // +5
+      saddle: makeGear('saddle', 'epic', 4, 3), // control +4, initiative +3
+    };
+    const match = createMatch(duelist, duelist, loadout1, loadout2);
+
+    // P1: duelist guard 60 + 3 + 3 = 66, stamina 60 + 3 + 2 = 65
+    expect(match.player1.archetype.guard).toBe(66);
+    expect(match.player1.currentStamina).toBe(65);
+
+    // P2: duelist control 60 + 5 + 4 = 69, initiative 60 + 5 + 3 = 68
+    expect(match.player2.archetype.control).toBe(69);
+    expect(match.player2.archetype.initiative).toBe(68);
+    expect(match.player2.currentStamina).toBe(65); // 60 + 5
+  });
+
+  it('geared player has higher impact than ungeared in mirror matchup', () => {
+    const loadout1: GiglingLoadout = {
+      giglingRarity: 'legendary', // +7
+      horseshoes: makeGear('horseshoes', 'legendary', 5, 3), // momentum +5
+      reins: makeGear('reins', 'legendary', 5, 3),           // control +5, momentum +3
+      saddle: makeGear('saddle', 'legendary', 5, 3),         // control +5
+    };
+    let match = createMatch(duelist, duelist, loadout1, undefined);
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    const pass = match.passResults[0];
+    expect(pass.player1.impactScore).toBeGreaterThan(pass.player2.impactScore);
+  });
+});
+
+// ============================================================
+// 8. Edge Cases
+// ============================================================
+describe('Edge cases', () => {
+  it('rarity bonus values match balance-config', () => {
+    const cfg = BALANCE.giglingRarityBonus;
+    expect(cfg.uncommon).toBe(1);
+    expect(cfg.rare).toBe(3);
+    expect(cfg.epic).toBe(5);
+    expect(cfg.legendary).toBe(7);
+    expect(cfg.relic).toBe(10);
+    expect(cfg.giga).toBe(13);
+  });
+
+  it('no caparison exports exist in gigling-gear module', async () => {
+    // Verify the old caparison functions are no longer exported
+    const mod = await import('./gigling-gear') as Record<string, unknown>;
+    expect(mod['CAPARISON_EFFECTS']).toBeUndefined();
+    expect(mod['createCaparison']).toBeUndefined();
+    expect(mod['getCaparisonEffect']).toBeUndefined();
+  });
+});
+
+// ============================================================
+// 9. describeSteedSlot
+// ============================================================
+describe('describeSteedSlot', () => {
+  it('returns description for each slot', () => {
+    const slots = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'] as const;
+    for (const slot of slots) {
+      const desc = describeSteedSlot(slot);
+      expect(desc.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('chamfron description mentions protection', () => {
+    expect(describeSteedSlot('chamfron')).toContain('armor');
+  });
+});
+
+// ============================================================
+// 10. validateSteedGear
+// ============================================================
+describe('validateSteedGear', () => {
+  it('accepts gear within range', () => {
+    const gear = createStatGear('barding', 'epic', () => 0.5);
+    expect(validateSteedGear(gear)).toBe(true);
+  });
+
+  it('rejects gear with primary stat above max', () => {
+    const gear = makeGear('barding', 'uncommon', 99, 0);
+    expect(validateSteedGear(gear)).toBe(false);
+  });
+
+  it('rejects gear with secondary stat above max', () => {
+    const gear = makeGear('barding', 'uncommon', 1, 99);
+    expect(validateSteedGear(gear)).toBe(false);
+  });
+
+  it('rejects gear with primary stat below min', () => {
+    const gear = makeGear('barding', 'epic', 0, 1);
+    expect(validateSteedGear(gear)).toBe(false);
+  });
+
+  it('accepts all factory-created gear', () => {
+    const loadout = createFullLoadout('giga', 'giga', () => 0.5);
+    const slots = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'] as const;
+    for (const slot of slots) {
+      expect(validateSteedGear(loadout[slot]!)).toBe(true);
+    }
   });
 });

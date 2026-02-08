@@ -1,15 +1,17 @@
 // ============================================================
-// Playtest — Full Match Simulations (S15 Combat Rebalance)
+// Playtest — Full Match Simulations (Gear Overhaul)
 // ============================================================
-// Simulates complete matches for all 6 archetypes with all 6
-// caparisons to verify the combat system works end-to-end.
+// Simulates complete matches for all 6 archetypes with the new
+// 12-slot gear system (6 steed + 6 player) to verify the combat
+// system works end-to-end.
 // ============================================================
 import { describe, it, expect } from 'vitest';
 import { ARCHETYPES, ARCHETYPE_LIST } from './archetypes';
 import { JOUST_ATTACKS, MELEE_ATTACKS, JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from './attacks';
-import { SpeedType, Phase, type Attack, type Archetype, type CaparisonEffectId } from './types';
+import { SpeedType, Phase, type Attack, type Archetype, type GiglingLoadout, type PlayerLoadout } from './types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './match';
 import { createFullLoadout } from './gigling-gear';
+import { createFullPlayerLoadout } from './player-gear';
 import { BALANCE } from './balance-config';
 
 const CF = JOUST_ATTACKS.coupFort;
@@ -25,11 +27,6 @@ const MC = MELEE_ATTACKS.measuredCut;
 const PT = MELEE_ATTACKS.precisionThrust;
 const GH = MELEE_ATTACKS.guardHigh;
 const RS = MELEE_ATTACKS.riposteStep;
-
-const CAPARISON_IDS: CaparisonEffectId[] = [
-  'pennant_of_haste', 'woven_shieldcloth', 'thunderweave',
-  'irongrip_drape', 'stormcloak', 'banner_of_the_giga',
-];
 
 // Deterministic RNG for reproducible tests
 function makeRng(seed: number) {
@@ -59,18 +56,17 @@ function cycleSpeed(pass: number): SpeedType {
 /**
  * Runs a full match between two archetypes, returns the final state.
  * Uses deterministic attack cycling to ensure coverage of all attacks.
+ * Optionally accepts steed and player gear loadouts (12-slot system).
  */
 function simulateMatch(
   arch1: Archetype,
   arch2: Archetype,
-  cap1?: CaparisonEffectId,
-  cap2?: CaparisonEffectId,
+  steedLoadout1?: GiglingLoadout,
+  steedLoadout2?: GiglingLoadout,
+  playerLoadout1?: PlayerLoadout,
+  playerLoadout2?: PlayerLoadout,
 ) {
-  const rng = makeRng(42);
-  const loadout1 = cap1 ? createFullLoadout('rare', 'rare', cap1, rng) : undefined;
-  const loadout2 = cap2 ? createFullLoadout('rare', 'rare', cap2, rng) : undefined;
-
-  let match = createMatch(arch1, arch2, loadout1, loadout2);
+  let match = createMatch(arch1, arch2, steedLoadout1, steedLoadout2, playerLoadout1, playerLoadout2);
   let safety = 0;
 
   // Joust phase (up to 5 passes)
@@ -115,47 +111,116 @@ describe('Full match simulation — all archetype pairs', () => {
 });
 
 // ============================================================
-// 2. All caparison effects work in full matches
+// 2. Full matches with steed gear (6-slot system)
 // ============================================================
-describe('Full match simulation — all caparisons', () => {
-  for (const capId of CAPARISON_IDS) {
-    it(`charger with ${capId} vs duelist completes`, () => {
-      const match = simulateMatch(
-        ARCHETYPES.charger, ARCHETYPES.duelist, capId, undefined,
-      );
-      expect(match.phase).toBe(Phase.MatchEnd);
-      expect(['player1', 'player2', 'draw']).toContain(match.winner);
-    });
+describe('Full match simulation — steed gear loadouts', () => {
+  const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
 
-    it(`duelist vs bulwark with ${capId} completes`, () => {
+  for (const rarity of rarities) {
+    it(`charger with ${rarity} steed gear vs duelist completes`, () => {
+      const rng = makeRng(42);
+      const loadout = createFullLoadout(rarity, rarity, rng);
       const match = simulateMatch(
-        ARCHETYPES.duelist, ARCHETYPES.bulwark, undefined, capId,
+        ARCHETYPES.charger, ARCHETYPES.duelist, loadout, undefined,
       );
       expect(match.phase).toBe(Phase.MatchEnd);
       expect(['player1', 'player2', 'draw']).toContain(match.winner);
     });
   }
+
+  it('both players with steed gear completes', () => {
+    const rng1 = makeRng(100);
+    const rng2 = makeRng(200);
+    const loadout1 = createFullLoadout('epic', 'epic', rng1);
+    const loadout2 = createFullLoadout('legendary', 'legendary', rng2);
+    const match = simulateMatch(
+      ARCHETYPES.charger, ARCHETYPES.bulwark, loadout1, loadout2,
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
 });
 
 // ============================================================
-// 3. Both caparisons active simultaneously
+// 3. Full matches with player gear (6-slot system)
 // ============================================================
-describe('Full match — both players with caparisons', () => {
-  const pairs: [CaparisonEffectId, CaparisonEffectId][] = [
-    ['thunderweave', 'woven_shieldcloth'],
-    ['stormcloak', 'banner_of_the_giga'],
-    ['pennant_of_haste', 'irongrip_drape'],
-    ['banner_of_the_giga', 'thunderweave'],
-  ];
+describe('Full match simulation — player gear loadouts', () => {
+  const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
 
-  for (const [cap1, cap2] of pairs) {
-    it(`${cap1} vs ${cap2} completes`, () => {
+  for (const rarity of rarities) {
+    it(`technician with ${rarity} player gear vs bulwark completes`, () => {
+      const rng = makeRng(77);
+      const playerLoadout = createFullPlayerLoadout(rarity, rng);
       const match = simulateMatch(
-        ARCHETYPES.charger, ARCHETYPES.bulwark, cap1, cap2,
+        ARCHETYPES.technician, ARCHETYPES.bulwark, undefined, undefined, playerLoadout, undefined,
       );
       expect(match.phase).toBe(Phase.MatchEnd);
+      expect(['player1', 'player2', 'draw']).toContain(match.winner);
     });
   }
+
+  it('both players with player gear completes', () => {
+    const rng1 = makeRng(300);
+    const rng2 = makeRng(400);
+    const pLoadout1 = createFullPlayerLoadout('epic', rng1);
+    const pLoadout2 = createFullPlayerLoadout('rare', rng2);
+    const match = simulateMatch(
+      ARCHETYPES.breaker, ARCHETYPES.tactician, undefined, undefined, pLoadout1, pLoadout2,
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+});
+
+// ============================================================
+// 3b. Full 12-slot gear matches (steed + player combined)
+// ============================================================
+describe('Full match simulation — 12-slot gear (steed + player)', () => {
+  it('all 12 slots filled at epic completes', () => {
+    const rng = makeRng(500);
+    const steedLoadout = createFullLoadout('epic', 'epic', rng);
+    const playerLoadout = createFullPlayerLoadout('epic', rng);
+    const match = simulateMatch(
+      ARCHETYPES.duelist, ARCHETYPES.duelist, steedLoadout, undefined, playerLoadout, undefined,
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+
+  it('both players fully geared at giga completes', () => {
+    const rng1 = makeRng(600);
+    const rng2 = makeRng(700);
+    const match = simulateMatch(
+      ARCHETYPES.charger, ARCHETYPES.bulwark,
+      createFullLoadout('giga', 'giga', rng1), createFullLoadout('giga', 'giga', rng2),
+      createFullPlayerLoadout('giga', rng1), createFullPlayerLoadout('giga', rng2),
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+
+  it('asymmetric gear: p1 full giga vs p2 no gear', () => {
+    const rng = makeRng(800);
+    const match = simulateMatch(
+      ARCHETYPES.duelist, ARCHETYPES.duelist,
+      createFullLoadout('giga', 'giga', rng), undefined,
+      createFullPlayerLoadout('giga', rng), undefined,
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    // With full giga gear, P1 should be heavily favored
+    expect(match.winner).toBe('player1');
+  });
+
+  it('mixed rarities across steed/player slots completes', () => {
+    const rng = makeRng(900);
+    const match = simulateMatch(
+      ARCHETYPES.tactician, ARCHETYPES.breaker,
+      createFullLoadout('legendary', 'rare', rng), createFullLoadout('epic', 'epic', rng),
+      createFullPlayerLoadout('uncommon', rng), createFullPlayerLoadout('legendary', rng),
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
 });
 
 // ============================================================
@@ -295,7 +360,7 @@ describe('Breaker durability', () => {
 describe('Full geared matches — melee entry via unseat', () => {
   it('geared charger can unseat low-stamina opponent', () => {
     const rng = makeRng(99);
-    const loadout1 = createFullLoadout('giga', 'giga', 'thunderweave', rng);
+    const loadout1 = createFullLoadout('giga', 'giga', rng);
     let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, loadout1);
 
     // Drain opponent stamina to force unseat
@@ -311,6 +376,30 @@ describe('Full geared matches — melee entry via unseat', () => {
       expect(match.phase).toBe(Phase.MeleeSelect);
 
       // Play melee rounds
+      let rounds = 0;
+      while (match.phase === Phase.MeleeSelect && rounds < 20) {
+        match = submitMeleeRound(match, OC, GH);
+        rounds++;
+      }
+      expect(match.phase).toBe(Phase.MatchEnd);
+    }
+  });
+
+  it('fully geared match transitions through all phases', () => {
+    const rng = makeRng(42);
+    const steedLoadout = createFullLoadout('legendary', 'legendary', rng);
+    const playerLoadout = createFullPlayerLoadout('legendary', rng);
+    let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.technician, steedLoadout, undefined, playerLoadout);
+
+    // Force low stamina to trigger unseat
+    match.player2.currentStamina = 5;
+
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: PdL },
+    );
+
+    if (match.phase === Phase.MeleeSelect) {
       let rounds = 0;
       while (match.phase === Phase.MeleeSelect && rounds < 20) {
         match = submitMeleeRound(match, OC, GH);

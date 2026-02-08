@@ -4,10 +4,16 @@
 - status: not-started
 - files-modified:
 - tests-passing: true
-- notes-for-others: Will redesign LoadoutScreen for 12-slot gear system (6 steed + 6 player), update AI gear selection, update result screens. Depends on gear-system completing.
+- notes-for-others: Multi-pass agent. Will run 3+ iterations building the new UI incrementally. Each pass reads this handoff for context from previous passes. Depends on gear-system completing ALL passes first.
 
 ## Overview
-You are responsible for updating all UI components for the new 12-slot gear system and making caparison cosmetic-only in the UI. You also update the AI gear selection logic.
+You are responsible for updating all UI components for the new 12-slot gear system (6 steed + 6 player) and making caparison cosmetic-only. You also update the AI gear selection logic and App.tsx integration.
+
+**CRITICAL**: This is a multi-pass agent. You will be launched multiple times, each with a fresh conversation context. On each launch:
+1. Read this handoff CAREFULLY to see what was done in previous passes
+2. Read the "Current Pass" section to know what to do NOW
+3. Do your work, run tests, then UPDATE this handoff
+4. Set status to "in-progress" until ALL passes are complete, then set "all-done"
 
 ## File Ownership
 You own these files (only you should edit them):
@@ -21,103 +27,153 @@ You own these files (only you should edit them):
 - `src/App.css`
 
 ## Dependencies
-- **WAIT for gear-system** agent to complete (status: complete or all-done)
-- You need the final types and gear functions to build UI around
+- **gear-system** must be all-done (all 4 passes complete)
+- Read their handoff for the final API: createFullLoadout, createFullPlayerLoadout, applyPlayerLoadout
 
-## Primary Tasks
+## MANDATORY READING (before doing ANY work)
+Before writing any code, read these files:
 
-### Task 1: Redesign LoadoutScreen.tsx
+**Architecture & Design**:
+- `gear-overhaul-milestones.md` — overall design
+- `orchestrator/handoffs/engine-refactor.md` — what was removed from types/engine
+- `orchestrator/handoffs/gear-system.md` — new gear API (createFullLoadout, createFullPlayerLoadout, GEAR_SLOT_STATS, PLAYER_GEAR_SLOT_STATS)
+- `orchestrator/task-board.md` — coordination status
 
-The current LoadoutScreen has:
-- Rarity tier selector (6 buttons)
-- 3 steed gear display (barding, chanfron, saddle)
-- Caparison effect selector (6 effects + none)
-- Stats preview
+**Files you're changing**:
+- `src/App.tsx` — current flow (setup→loadout→speed→attack→reveal→result→end), AI reasoning integration, difficulty state
+- `src/ui/LoadoutScreen.tsx` — current 3-slot gear + caparison selector
+- `src/ui/helpers.tsx` — CaparisonBadge, joustCapTriggered, meleeCapTriggered, Scoreboard, StatBar
+- `src/ui/PassResult.tsx` — has caparison trigger display
+- `src/ui/MeleeResult.tsx` — has caparison trigger display
+- `src/ui/MatchSummary.tsx` — may have caparison summary
+- `src/ai/basic-ai.ts` — CAP_WEIGHTS, pickCaparisonForArchetype, aiPickCaparison, caparison field in AIReasoning
+- `src/App.css` — caparison animation classes
 
-Redesign to:
-1. **Rarity tier selector** — keep but apply to ALL gear (steed + player)
-2. **Steed Gear section** (6 slots): chamfron, barding, saddle, stirrups, reins, horseshoes
-   - Show each slot with its primary/secondary stat and rolled values
-   - Use descriptive labels (e.g., "Chamfron — Head Armor", "Horseshoes — Traction")
-3. **Player Gear section** (6 slots): helm, shield, lance, armor, gauntlets, melee weapon
-   - Same display pattern as steed gear
-   - Use descriptive labels (e.g., "Helm — Head Protection", "Lance — Primary Weapon")
-4. **Caparison section** — COSMETIC ONLY. Just a visual/name selector, no gameplay effect description. Could be a simple dropdown or small grid of options. If you want to keep it interesting, show different caparison names/visuals but clearly label them as "Cosmetic" or "Appearance."
-5. **Stats preview** — show base archetype stats, then cumulative bonuses from steed gear + player gear, then final boosted stats
-6. **Re-roll button** — re-rolls all 12 gear pieces at once
-7. **Confirm button** — passes both steed loadout and player loadout to App.tsx
+**Files you must understand but NOT modify**:
+- `src/engine/types.ts` — GiglingLoadout (6 steed slots), PlayerLoadout, SteedGearSlot, PlayerGearSlot
+- `src/engine/gigling-gear.ts` — GEAR_SLOT_STATS (6 slots), createFullLoadout, sumGearStats
+- `src/engine/player-gear.ts` — PLAYER_GEAR_SLOT_STATS, createFullPlayerLoadout, sumPlayerGearStats
+- `src/engine/match.ts` — createMatch(arch1, arch2, steedLoadout1?, steedLoadout2?, playerLoadout1?, playerLoadout2?)
+- `src/engine/balance-config.ts` — gearStatRanges, playerGearStatRanges
 
-Update `onConfirm` callback to pass both `GiglingLoadout` and `PlayerLoadout`.
+**Preserve these (from S19 integration)**:
+- AI difficulty selector in SetupScreen.tsx (already working)
+- AI reasoning panels: AIThinkingPanel, DifficultyFeedback, StrategyTips, MatchReplay
+- AI reasoning state in App.tsx: aiReasoning, reasoningHistory, difficulty
+- CombatLog component
 
-### Task 2: Update App.tsx
+---
 
-1. **Import** `PlayerLoadout` type and `createFullPlayerLoadout` from player-gear.ts
-2. **Add state**: `const [p1PlayerLoadout, setP1PlayerLoadout] = useState<PlayerLoadout | null>(null)`
-3. **Add state**: `const [p2PlayerLoadout, setP2PlayerLoadout] = useState<PlayerLoadout | null>(null)`
-4. **Update handleLoadoutConfirm**: Accept both steed and player loadouts from LoadoutScreen
-   - Create AI player loadout: `const aiPlayerLoadout = createFullPlayerLoadout(aiRarity, rng)`
-   - Pass both to `createMatch(p1Arch, p2Arch, steedLoadout, aiSteedLoadout, playerLoadout, aiPlayerLoadout)`
-5. **Update handleRematch**: Clear player loadout state
-6. **Remove** any remaining caparison-related state or references (aiPickCaparison call, AI caparison reasoning)
+## PASS SCHEDULE
 
-### Task 3: Update AI Gear Selection (basic-ai.ts)
+### Pass 1: Strip Caparison from UI + AI
+**Goal**: Remove all caparison gameplay references from UI and AI code
+**Status when done**: in-progress
 
-Replace the caparison selection logic with steed/player gear awareness:
-1. **Remove** `CAP_WEIGHTS`, `pickCaparisonForArchetype()`, `aiPickCaparison()`
-2. **Remove** caparison references from commentary and reasoning types
-3. **Remove** caparison field from AIReasoning interface
-4. The AI doesn't need to "choose" gear — it gets random gear at the same rarity tier as the player. Just remove the caparison-specific logic.
-5. If `aiPickCaparison` was used in App.tsx, it's no longer needed — the AI just gets `createFullLoadout()` and `createFullPlayerLoadout()` with random rolls.
+Tasks:
+1. Read ALL mandatory files
+2. **helpers.tsx**:
+   - Remove `CaparisonBadge` component
+   - Remove `joustCapTriggered()` function
+   - Remove `meleeCapTriggered()` function
+   - Remove `CAP_ICON` and `CAP_SHORT_NAME` maps (if they exist)
+   - Remove caparison-related props from `Scoreboard` (p1Cap, p2Cap)
+   - Keep: Scoreboard, StatBar, StaminaBar, StanceTag, PassPips
+3. **PassResult.tsx**:
+   - Remove caparison trigger display section (p1Trig/p2Trig, CaparisonBadge usage)
+   - Remove joustCapTriggered/CaparisonBadge imports
+   - Keep: all stats breakdown, counter bonus (uses actual values now)
+4. **MeleeResult.tsx**:
+   - Remove caparison trigger display
+   - Remove meleeCapTriggered/CaparisonBadge imports
+5. **MatchSummary.tsx**:
+   - Remove any caparison summary/display
+6. **basic-ai.ts**:
+   - Remove `CAP_WEIGHTS` record
+   - Remove `pickCaparisonForArchetype()` function
+   - Remove `aiPickCaparison()` export
+   - Remove `caparison` field from `AIReasoning` interface
+   - Remove caparison from commentary text if referenced
+   - Keep ALL other AI logic: difficulty, personality, pattern tracking, reasoning, commentary
+7. **App.css**:
+   - Remove caparison CSS classes (cap-trigger, cap-glow, cap-pulse, cap-trigger-slide, etc.)
+   - Keep: AI panel CSS, gear grid CSS, animation CSS for victory/defeat
+8. Run `npx vitest run` — verify tests still pass
+9. Write updated handoff
 
-### Task 4: Update helpers.tsx
+### Pass 2: Redesign LoadoutScreen + App.tsx Integration
+**Goal**: Build new 12-slot loadout screen and wire it into App.tsx
+**Status when done**: in-progress
 
-1. **Remove** `CaparisonBadge` component
-2. **Remove** `joustCapTriggered()` function
-3. **Remove** `meleeCapTriggered()` function
-4. **Remove** `CAP_ICON` and `CAP_SHORT_NAME` maps
-5. **Remove** caparison-related props from `Scoreboard` (p1Cap, p2Cap)
-6. **Keep** Scoreboard, StatBar, StaminaBar, StanceTag, PassPips — those are still used
+Tasks:
+1. Read handoff for Pass 1 results
+2. **LoadoutScreen.tsx** — Full redesign:
+   - **Rarity selector**: Keep 6-tier buttons (uncommon→giga), applies to ALL gear
+   - **Steed Gear section** (labeled "Steed Gear"):
+     - Display all 6 slots: Chamfron, Barding, Saddle, Stirrups, Reins, Horseshoes
+     - Each slot shows: slot name, description (e.g., "Head Armor"), primary stat + value, secondary stat + value
+     - Import GEAR_SLOT_STATS from gigling-gear.ts for slot→stat mapping display
+   - **Player Gear section** (labeled "Player Gear"):
+     - Display all 6 slots: Helm, Shield, Lance, Armor, Gauntlets, Melee Weapon
+     - Same display pattern as steed gear
+     - Import PLAYER_GEAR_SLOT_STATS from player-gear.ts
+   - **Caparison section** — COSMETIC ONLY:
+     - Simple text or small visual indicator (e.g., "Caparison: Royal Blue" or just a color/pattern selector)
+     - No gameplay effect description — purely visual
+     - This is optional/minimal — don't over-engineer it
+   - **Stats preview**: Show base archetype → steed gear bonus → player gear bonus → final stats
+   - **Re-roll button**: Re-rolls all 12 gear pieces
+   - **Confirm button**: Passes GiglingLoadout + PlayerLoadout to parent
+   - Update `onConfirm` signature: `(steedLoadout: GiglingLoadout, playerLoadout: PlayerLoadout) => void`
+   - Use `createFullLoadout(rarity, rng)` and `createFullPlayerLoadout(rarity, rng)` from gear modules
+3. **App.tsx** — Integration:
+   - Add `playerLoadout1` and `playerLoadout2` state (PlayerLoadout | null)
+   - Update `handleLoadoutConfirm` to accept both steed and player loadouts
+   - Create AI gear: both `createFullLoadout(rarity)` and `createFullPlayerLoadout(rarity)`
+   - Pass both to `createMatch(arch1, arch2, steedLoadout, aiSteedLoadout, playerLoadout, aiPlayerLoadout)`
+   - Remove `aiPickCaparison` call (no longer exists)
+   - Remove caparison reasoning from combat log
+   - Clear player loadout state in `handleRematch`
+   - PRESERVE: difficulty state, AI reasoning state, AIThinkingPanel, DifficultyFeedback, StrategyTips, MatchReplay
+4. Run tests + TypeScript check
+5. Write updated handoff
 
-### Task 5: Update PassResult.tsx
+### Pass 3: Polish + Final Review
+**Goal**: Clean up, add gear display CSS, verify everything
+**Status when done**: all-done
 
-1. **Remove** all caparison trigger display code (the `p1Trig`/`p2Trig` section)
-2. **Remove** `joustCapTriggered` import
-3. **Remove** `CaparisonBadge` import
-4. The rest of the pass result display (stats breakdown, counter bonus, etc.) stays as-is
+Tasks:
+1. Read handoff for Pass 2 results
+2. **App.css** — Add new styles:
+   - Gear grid layout (2 sections side by side or stacked)
+   - Slot cards with stat displays
+   - Visual distinction between steed and player gear
+   - Stats preview styling
+   - Mobile responsive layout for 12 slots
+3. **MatchSummary.tsx** — Update to show gear summary:
+   - Show steed gear + player gear slot summary if loadouts exist
+   - Use GEAR_SLOT_STATS and PLAYER_GEAR_SLOT_STATS for labels
+4. **Scoreboard** — Remove any remaining caparison badge display
+5. **Final review**:
+   - Grep entire codebase for "caparison" — only cosmetic references should remain
+   - Grep for "CaparisonEffect", "CaparisonInput", "CaparisonEffectId" — should be ZERO
+   - Grep for "getCaparisonEffect", "createCaparison", "CAPARISON_EFFECTS" — should be ZERO
+   - Run `npx vitest run` — all tests pass
+   - Run `npx tsc --noEmit` — clean compile
+6. Write FINAL handoff
 
-### Task 6: Update MeleeResult.tsx
-
-1. **Remove** all caparison trigger display code
-2. **Remove** `meleeCapTriggered` import
-3. **Remove** `CaparisonBadge` import
-
-### Task 7: Update MatchSummary.tsx
-
-1. **Remove** any caparison summary/display
-2. If it shows loadout info, update to show steed + player gear summary instead
-
-### Task 8: Clean up App.css
-
-1. **Remove** caparison-specific CSS classes (cap-trigger, cap-glow, cap-pulse, etc.)
-2. **Add** CSS for new gear grid layout in LoadoutScreen (two 6-slot sections)
-3. Keep all AI panel CSS (ai-thinking, ai-feedback, ai-tips, match-replay) — those are still used
-
-### Task 9: Run tests
-Run `npx vitest run` and ensure all tests pass.
+---
 
 ## Coordination Notes
-- The gear-system agent creates `createFullPlayerLoadout()` and `createFullLoadout()` (expanded to 6 slots) — use those
-- The engine-refactor agent removes caparison from types — don't try to use CaparisonEffect/CaparisonInput
-- App.tsx has AI reasoning/thinking panel integration from S19 — preserve that (aiReasoning, reasoningHistory, AIThinkingPanel, DifficultyFeedback, StrategyTips, MatchReplay)
-- The AIReasoning type in basic-ai.ts has a `caparison?` field — remove it since caparison has no gameplay reasoning anymore
+- gear-system agent creates the new gear APIs — read their handoff for exact function signatures
+- engine-refactor removed all caparison types from types.ts — don't try to use them
+- App.tsx currently has AI reasoning integration from S19 — PRESERVE this carefully
+- SetupScreen.tsx already has difficulty selector — don't touch it
+- AIThinkingPanel.tsx and AIEndScreenPanels.tsx should be untouched (they're wired in App.tsx already)
+- The quality-review agent will verify no caparison references remain — be thorough
 
-## Reference
-- Read `gear-overhaul-milestones.md` for design context
-- Current LoadoutScreen.tsx shows the existing pattern
-- Current App.tsx flow: setup → loadout → speed → attack → reveal → pass-result → ... → end
-- AI reasoning types are in basic-ai.ts (SpeedReasoning, AttackReasoning, ShiftReasoning, AIReasoning)
-
-## Stretch Goals
+## Stretch Goals (after Pass 3)
 1. Add gear tooltips showing stat descriptions (e.g., "Momentum: increases charge impact")
-2. Add visual distinction between steed and player gear sections (different border colors, icons)
-3. Show total stat bonus summary at bottom of loadout screen
+2. Add visual distinction between steed and player gear (different border colors, icons)
+3. Add total stat bonus summary at bottom of loadout screen
+4. Animate gear slot cards on hover

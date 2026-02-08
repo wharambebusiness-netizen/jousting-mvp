@@ -1,5 +1,5 @@
 // ============================================================
-// Jousting — Gigling Gear System
+// Jousting — Gigling Gear System (6-Slot Steed Gear)
 // ============================================================
 // Computes stat bonuses from gigling rarity + equipped gear,
 // producing a boosted Archetype that feeds into the existing
@@ -11,63 +11,26 @@ import type {
   GiglingLoadout,
   GiglingRarity,
   JoustStat,
-  CaparisonEffect,
-  CaparisonEffectId,
+  SteedGearSlot,
 } from './types';
 import { BALANCE } from './balance-config';
 
 // --- Gear Slot → Stat Mapping ---
-// Each stat piece has a fixed primary and secondary stat.
+// Each gear piece has a fixed primary and secondary stat.
 
-export const GEAR_SLOT_STATS: Record<'barding' | 'chanfron' | 'saddle', {
+export const GEAR_SLOT_STATS: Record<SteedGearSlot, {
   primary: JoustStat;
   secondary: JoustStat;
 }> = {
-  barding:  { primary: 'guard',    secondary: 'stamina' },
-  chanfron: { primary: 'momentum', secondary: 'stamina' },
-  saddle:   { primary: 'control',  secondary: 'initiative' },
+  chamfron:   { primary: 'guard',      secondary: 'momentum' },
+  barding:    { primary: 'guard',      secondary: 'stamina' },
+  saddle:     { primary: 'control',    secondary: 'initiative' },
+  stirrups:   { primary: 'initiative', secondary: 'stamina' },
+  reins:      { primary: 'control',    secondary: 'momentum' },
+  horseshoes: { primary: 'momentum',   secondary: 'initiative' },
 };
 
-// --- Caparison Effects ---
-
-export const CAPARISON_EFFECTS: Record<CaparisonEffectId, CaparisonEffect> = {
-  pennant_of_haste: {
-    id: 'pennant_of_haste',
-    name: 'Pennant of Haste',
-    description: '+2 Initiative on Pass 1 only',
-    rarity: 'uncommon',
-  },
-  woven_shieldcloth: {
-    id: 'woven_shieldcloth',
-    name: 'Woven Shieldcloth',
-    description: '+3 Guard when choosing Defensive stance',
-    rarity: 'rare',
-  },
-  thunderweave: {
-    id: 'thunderweave',
-    name: 'Thunderweave',
-    description: '+4 Momentum when choosing Fast speed',
-    rarity: 'epic',
-  },
-  irongrip_drape: {
-    id: 'irongrip_drape',
-    name: 'Irongrip Drape',
-    description: 'Shift threshold reduced by 5 (easier shifts)',
-    rarity: 'legendary',
-  },
-  stormcloak: {
-    id: 'stormcloak',
-    name: 'Stormcloak',
-    description: 'Fatigue ratio reduced by 0.05 (fatigue kicks in later)',
-    rarity: 'relic',
-  },
-  banner_of_the_giga: {
-    id: 'banner_of_the_giga',
-    name: 'Banner of the Giga',
-    description: 'First successful counter per match deals +50% bonus',
-    rarity: 'giga',
-  },
-};
+const ALL_STEED_SLOTS: SteedGearSlot[] = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'];
 
 // --- Stat Bonus Accumulator ---
 
@@ -84,14 +47,13 @@ function emptyBonuses(): StatBonuses {
 }
 
 /**
- * Sums stat bonuses from all equipped stat pieces (barding, chanfron, saddle).
- * Caparison is excluded — it provides effects, not raw stats.
+ * Sums stat bonuses from all equipped steed gear pieces (6 slots).
  */
 export function sumGearStats(loadout: GiglingLoadout): StatBonuses {
   const bonuses = emptyBonuses();
-  const statPieces = [loadout.barding, loadout.chanfron, loadout.saddle];
 
-  for (const gear of statPieces) {
+  for (const slot of ALL_STEED_SLOTS) {
+    const gear = loadout[slot];
     if (!gear) continue;
     if (gear.primaryStat) {
       bonuses[gear.primaryStat.stat] += gear.primaryStat.value;
@@ -133,25 +95,15 @@ export function applyGiglingLoadout(
   };
 }
 
-/**
- * Returns the Caparison effect from a loadout, if any.
- * Used by phase resolution to apply conditional modifiers.
- */
-export function getCaparisonEffect(loadout?: GiglingLoadout): CaparisonEffect | undefined {
-  return loadout?.caparison?.effect;
-}
-
 // --- Gear Factory ---
 
-type StatSlot = 'barding' | 'chanfron' | 'saddle';
-
 /**
- * Creates a stat gear piece (barding, chanfron, or saddle) with randomized
+ * Creates a steed gear piece for the given slot with randomized
  * primary/secondary values within the rarity's defined range.
  * Uses Math.random() for rolls — pass a custom `rng` for deterministic tests.
  */
 export function createStatGear(
-  slot: StatSlot,
+  slot: SteedGearSlot,
   rarity: GiglingRarity,
   rng: () => number = Math.random,
 ): GiglingGear {
@@ -170,35 +122,54 @@ export function createStatGear(
 }
 
 /**
- * Creates a caparison gear piece with the specified effect.
- * The caparison's rarity is determined by the effect's rarity.
- */
-export function createCaparison(effectId: CaparisonEffectId): GiglingGear {
-  const effect = CAPARISON_EFFECTS[effectId];
-  return {
-    slot: 'caparison',
-    rarity: effect.rarity,
-    effect,
-  };
-}
-
-/**
- * Creates a full loadout with randomly rolled gear for all stat slots.
- * Optionally include a caparison effect.
+ * Creates a full steed loadout with randomly rolled gear for all 6 slots.
  */
 export function createFullLoadout(
   giglingRarity: GiglingRarity,
   gearRarity: GiglingRarity,
-  caparisonEffectId?: CaparisonEffectId,
   rng: () => number = Math.random,
 ): GiglingLoadout {
   return {
     giglingRarity,
-    barding: createStatGear('barding', gearRarity, rng),
-    chanfron: createStatGear('chanfron', gearRarity, rng),
-    saddle: createStatGear('saddle', gearRarity, rng),
-    caparison: caparisonEffectId ? createCaparison(caparisonEffectId) : undefined,
+    chamfron:   createStatGear('chamfron', gearRarity, rng),
+    barding:    createStatGear('barding', gearRarity, rng),
+    saddle:     createStatGear('saddle', gearRarity, rng),
+    stirrups:   createStatGear('stirrups', gearRarity, rng),
+    reins:      createStatGear('reins', gearRarity, rng),
+    horseshoes: createStatGear('horseshoes', gearRarity, rng),
   };
+}
+
+// --- Slot Descriptions ---
+
+const STEED_SLOT_DESCRIPTIONS: Record<SteedGearSlot, string> = {
+  chamfron:   'Head armor — protection + charge power',
+  barding:    'Body armor — protection + endurance',
+  saddle:     'Seat — technique + reaction time',
+  stirrups:   'Balance — speed + saddle endurance',
+  reins:      'Steering — precision + directing charge',
+  horseshoes: 'Traction — acceleration + first-strike',
+};
+
+export function describeSteedSlot(slot: SteedGearSlot): string {
+  return STEED_SLOT_DESCRIPTIONS[slot];
+}
+
+// --- Validation ---
+
+export function validateSteedGear(gear: GiglingGear): boolean {
+  const range = BALANCE.gearStatRanges[gear.rarity];
+  if (gear.primaryStat) {
+    if (gear.primaryStat.value < range.primary[0] || gear.primaryStat.value > range.primary[1]) {
+      return false;
+    }
+  }
+  if (gear.secondaryStat) {
+    if (gear.secondaryStat.value < range.secondary[0] || gear.secondaryStat.value > range.secondary[1]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // --- Internal ---

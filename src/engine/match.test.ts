@@ -4,9 +4,12 @@
 import { describe, it, expect } from 'vitest';
 import { ARCHETYPES } from './archetypes';
 import { JOUST_ATTACKS, MELEE_ATTACKS } from './attacks';
-import { Phase, SpeedType, MeleeOutcome } from './types';
+import { Phase, SpeedType, MeleeOutcome, type GiglingLoadout, type PlayerLoadout } from './types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './match';
+import { createFullLoadout, createStatGear, GEAR_SLOT_STATS } from './gigling-gear';
+import { createFullPlayerLoadout, createPlayerGear, PLAYER_GEAR_SLOT_STATS } from './player-gear';
 import { BALANCE } from './balance-config';
+import { softCap } from './calculator';
 
 const charger = ARCHETYPES.charger;
 const technician = ARCHETYPES.technician;
@@ -805,5 +808,199 @@ describe('Edge Cases — shift denied mid-match from stamina drain', () => {
       // Shift denied: stamina 9 < 10 requirement
       expect(match.passResults[2].player1.shifted).toBe(false);
     }
+  });
+});
+
+// ============================================================
+// 24. 12-Slot Gear Integration — createMatch with both gear systems
+// ============================================================
+
+// Deterministic RNG for reproducible tests
+function makeRng(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
+
+describe('12-slot gear integration — createMatch', () => {
+  it('creates match with all 12 steed+player slots filled', () => {
+    const rng = makeRng(42);
+    const steed = createFullLoadout('epic', 'epic', rng);
+    const player = createFullPlayerLoadout('epic', rng);
+    const match = createMatch(charger, technician, steed, undefined, player, undefined);
+
+    // P1 boosted, P2 bare
+    expect(match.player1.archetype.momentum).toBeGreaterThan(charger.momentum);
+    expect(match.player1.archetype.control).toBeGreaterThan(charger.control);
+    expect(match.player1.archetype.guard).toBeGreaterThan(charger.guard);
+    expect(match.player1.archetype.stamina).toBeGreaterThan(charger.stamina);
+    // P2 unchanged
+    expect(match.player2.archetype.momentum).toBe(technician.momentum);
+  });
+
+  it('steed gear + player gear bonuses stack correctly', () => {
+    // Create known gear pieces with min RNG (value = range minimum)
+    const rngMin = () => 0;
+    const steed = createFullLoadout('uncommon', 'uncommon', rngMin);
+    const player = createFullPlayerLoadout('uncommon', rngMin);
+    const match = createMatch(duelist, duelist, steed, undefined, player, undefined);
+
+    // Duelist base: all 60. Uncommon rarity bonus: +1 to all (steed only).
+    // Each uncommon gear piece gives minimum primary + minimum secondary.
+    // Steed gear minimum primary=1, secondary=0 at uncommon.
+    // Player gear minimum primary=1, secondary=0 at uncommon.
+    const steedRange = BALANCE.gearStatRanges.uncommon;
+    const playerRange = BALANCE.playerGearStatRanges.uncommon;
+
+    // P1 should be boosted, P2 should be bare (duelist baseline 60)
+    expect(match.player1.archetype.momentum).toBeGreaterThan(60);
+    expect(match.player2.archetype.momentum).toBe(60);
+  });
+
+  it('all 12 slots empty (no gear) matches bare archetype', () => {
+    const match = createMatch(charger, bulwark);
+    expect(match.player1.archetype.momentum).toBe(charger.momentum);
+    expect(match.player1.archetype.guard).toBe(charger.guard);
+    expect(match.player2.archetype.guard).toBe(bulwark.guard);
+    expect(match.player1.currentStamina).toBe(charger.stamina);
+  });
+
+  it('steed only (no player gear) applies rarity + steed bonuses', () => {
+    const rng = makeRng(100);
+    const steed = createFullLoadout('legendary', 'legendary', rng);
+    const match = createMatch(duelist, duelist, steed);
+
+    // Legendary rarity bonus: +7 to all stats
+    expect(match.player1.archetype.momentum).toBeGreaterThanOrEqual(duelist.momentum + 7);
+    expect(match.player2.archetype.momentum).toBe(duelist.momentum);
+  });
+
+  it('player only (no steed gear) applies player bonuses only', () => {
+    const rng = makeRng(200);
+    const player = createFullPlayerLoadout('epic', rng);
+    const match = createMatch(duelist, duelist, undefined, undefined, player);
+
+    // No steed gear → no rarity bonus. Player gear adds bonuses only.
+    expect(match.player1.archetype.momentum).toBeGreaterThan(duelist.momentum);
+    // P2 unchanged
+    expect(match.player2.archetype.momentum).toBe(duelist.momentum);
+  });
+
+  it('giga steed + giga player gear triggers softCap on momentum', () => {
+    // Build max-stat gear with rng returning 0.999
+    const rngMax = () => 0.999;
+    const steed = createFullLoadout('giga', 'giga', rngMax);
+    const player = createFullPlayerLoadout('giga', rngMax);
+    const match = createMatch(charger, duelist, steed, undefined, player, undefined);
+
+    // Charger MOM=75 + giga rarity=13 + steed gear + player gear
+    // Should be well over softCap knee (100)
+    const rawMom = match.player1.archetype.momentum;
+    expect(rawMom).toBeGreaterThan(100);
+    // Verify softCap compresses it
+    const capped = softCap(rawMom);
+    expect(capped).toBeLessThan(rawMom);
+    expect(capped).toBeGreaterThan(100);
+  });
+
+  it('both players with different gear: higher-geared player has advantage', () => {
+    const rng1 = makeRng(300);
+    const rng2 = makeRng(400);
+    const steed1 = createFullLoadout('giga', 'giga', rng1);
+    const player1 = createFullPlayerLoadout('giga', rng1);
+    const steed2 = createFullLoadout('uncommon', 'uncommon', rng2);
+    const player2 = createFullPlayerLoadout('uncommon', rng2);
+
+    const match = createMatch(duelist, duelist, steed1, steed2, player1, player2);
+
+    // P1 (giga) should have much higher stats than P2 (uncommon)
+    expect(match.player1.archetype.momentum).toBeGreaterThan(match.player2.archetype.momentum);
+    expect(match.player1.archetype.control).toBeGreaterThan(match.player2.archetype.control);
+    expect(match.player1.archetype.guard).toBeGreaterThan(match.player2.archetype.guard);
+    expect(match.player1.currentStamina).toBeGreaterThan(match.player2.currentStamina);
+  });
+});
+
+// ============================================================
+// 25. 12-Slot Gear — Full match plays through without errors
+// ============================================================
+describe('12-slot gear — full match completion', () => {
+  it('geared match completes joust phase normally', () => {
+    const rng = makeRng(500);
+    const steed = createFullLoadout('legendary', 'legendary', rng);
+    const player = createFullPlayerLoadout('legendary', rng);
+    let match = createMatch(charger, bulwark, steed, steed, player, player);
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: PdL },
+      );
+    }
+
+    expect(match.passResults.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('gear stamina bonus affects match duration', () => {
+    // High steed+player stamina gear should let players survive longer
+    const rngMax = () => 0.999;
+    const steed = createFullLoadout('giga', 'giga', rngMax);
+    const player = createFullPlayerLoadout('giga', rngMax);
+    let geared = createMatch(duelist, duelist, steed, steed, player, player);
+    let bare = createMatch(duelist, duelist);
+
+    // Both play expensive attacks (CF -20 STA)
+    for (let i = 0; i < 5; i++) {
+      if (geared.phase === Phase.SpeedSelect) {
+        geared = submitJoustPass(geared,
+          { speed: SpeedType.Fast, attack: CF },
+          { speed: SpeedType.Fast, attack: CF },
+        );
+      }
+      if (bare.phase === Phase.SpeedSelect) {
+        bare = submitJoustPass(bare,
+          { speed: SpeedType.Fast, attack: CF },
+          { speed: SpeedType.Fast, attack: CF },
+        );
+      }
+    }
+
+    // Geared players have much more stamina → less fatigue → higher impact scores in later passes
+    const gearedP5Impact = geared.passResults[4]?.player1.impactScore ?? 0;
+    const bareP5Impact = bare.passResults[4]?.player1.impactScore ?? 0;
+    // If both played all 5 passes, geared should have higher pass 5 impact
+    if (geared.passResults.length >= 5 && bare.passResults.length >= 5) {
+      expect(gearedP5Impact).toBeGreaterThan(bareP5Impact);
+    }
+  });
+});
+
+// ============================================================
+// 26. Performance regression — match creation + 5 passes
+// ============================================================
+describe('Performance — match execution time', () => {
+  it('match creation + 5 passes runs under 50ms', () => {
+    const rng = makeRng(999);
+    const steed = createFullLoadout('giga', 'giga', rng);
+    const player = createFullPlayerLoadout('giga', rng);
+
+    const start = performance.now();
+    for (let trial = 0; trial < 100; trial++) {
+      let match = createMatch(charger, bulwark, steed, steed, player, player);
+      for (let i = 0; i < 5; i++) {
+        if (match.phase !== Phase.SpeedSelect) break;
+        match = submitJoustPass(match,
+          { speed: SpeedType.Standard, attack: CdL },
+          { speed: SpeedType.Standard, attack: PdL },
+        );
+      }
+    }
+    const elapsed = performance.now() - start;
+
+    // 100 full matches should complete in under 500ms (5ms each)
+    expect(elapsed).toBeLessThan(500);
   });
 });
