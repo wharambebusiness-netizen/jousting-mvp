@@ -6,7 +6,7 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (~699 passing as of S29, verify)
+npx vitest run                              # Run all tests (699 passing as of S33)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
@@ -34,7 +34,7 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool
 
-orchestrator/         Multi-agent development system (v4)
+orchestrator/         Multi-agent development system (v5)
   orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
@@ -109,13 +109,13 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (~699 as of S29)
+- **Test count**: run `npx vitest run` (699 as of S33)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
 - **Test breakdown**: run `npx vitest run` — 7 suites (calculator, phase-resolution, gigling-gear, player-gear, match, playtest, gear-variants)
 
-## Orchestrator v4
+## Orchestrator v5
 
 ### Backlog System
 - `orchestrator/backlog.json` — dynamic task queue with `{id, role, priority, status, title, description}`
@@ -125,12 +125,22 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ### Continuous Agents
 - Agents with `type: "continuous"` never retire — skip the `all-done` exit check
-- Designed for overnight runs where work is ongoing
+- Work-gated: skip if no pending tasks and not due for periodic run
 
 ### Overnight Runner
-- `orchestrator/run-overnight.ps1` — PowerShell restart loop
+- `orchestrator/run-overnight.ps1` — PowerShell restart loop with crash counter + exponential backoff
 - Re-launches orchestrator if it crashes or exits early
 - Params: `-MaxHours 10 -Mission "orchestrator\missions\overnight.json"`
+
+### Execution Model
+- **Two-phase rounds**: Phase A (code agents) → tests → Phase B (coordination agents see fresh state)
+- **Model tiering**: per-agent `model` field; 3-tier escalation (haiku → sonnet → opus) with `maxModel` cap and de-escalation on success
+- **Cost tracking**: per-agent cost in overnight report
+- **Analysis rotation**: keeps last 5 rounds, archives older reports
+
+### Resilience
+- Pre-round git tags, auto-revert on test regression
+- Crash counter with exponential backoff, pre-restart validation
 
 ### 9 Role Templates (`orchestrator/roles/`)
 game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, test-writer, ui-dev
