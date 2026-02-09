@@ -1,54 +1,84 @@
-# Visual Polish Report — Round 1
+# CSS Artist — Session 2, Round 1 Analysis
 
-## Focus: Rarity Card Styling + Variant Toggles + Accessibility
+## Overview
 
-### Changes Made
+Fresh audit + new CSS classes for inline style migration. This round focuses on creating CSS class replacements for patterns found across multiple components, enabling UI dev to swap inline styles for class names.
 
-#### 1. Rarity Card Hover Glow (BL-007)
-**Before:** All rarity cards shared the generic `.card--selectable:hover` effect (gold border, generic shadow). No visual distinction between tiers on hover.
+## Changes Made
 
-**After:** Each rarity tier gets a tier-colored glow on hover, with intensity scaling up the rarity ladder:
-- **Uncommon** (green): subtle 8px glow, 0.3 opacity
-- **Rare** (blue): subtle 8px glow, 0.3 opacity
-- **Epic** (purple): medium 10px glow, 0.35 opacity
-- **Legendary** (gold): strong 12px glow, 0.4 opacity
-- **Relic** (red): strong 12px glow, 0.4 opacity
-- **Giga** (gold): intense 14px glow, 0.5 opacity
+### App.css
 
-The progressive glow intensity creates a natural visual hierarchy — higher rarity = more impressive hover feedback.
+**1. SetupScreen Component Classes (5 new selectors)**
+- `.difficulty-selector .btn` — difficulty button size overrides (smaller padding, pill border-radius)
+- `.difficulty-selector .btn:not(.btn--active)` — non-selected difficulty buttons (transparent bg, 1px border)
+- `.btn--back` — back/change-archetype button (transparent, light border, small text)
+- `.archetype-card--random` — flexbox centering for the random opponent card
+- `.archetype-card--random-icon` — large question mark icon styling
 
-#### 2. Rarity Card Selected Glow
-**Before:** Selected cards had `0 0 0 2px {color}` ring + generic `0 3px 12px var(--shadow)`.
+**2. Combat Display Classes (4 new classes)**
+- `.reveal-sides__cell` — text-center cell for attack displays in PassResult/MeleeResult
+- `.reveal-sides__attack-name` — bold attack name
+- `.reveal-sides__speed` — speed label (small, faint, margin-top)
+- `.reveal-sides__counter` — counter badge spacing
 
-**After:** Selected cards now use tier-colored glow instead of generic shadow:
-- Ring retained: `0 0 0 2px {rarity-color}`
-- Shadow replaced: `0 0 {10-16}px rgba({color}, {0.25-0.45})`
-- Glow radius scales with rarity (10px uncommon → 16px giga)
+**3. Impact Row & Result Classes (10 new classes)**
+- `.impact-row__p1--bold`, `.impact-row__p2--bold` — bold modifier for key stats (Impact Score row)
+- `.pass-result__unseat-margin` — unseat margin sub-text
+- `.melee-result__winner` — melee outcome winner text
+- `.melee-result__margin` — melee margin display
+- `.summary-table__result--p1/--p2/--unseat/--tie/--crit` — conditional result column colors
+- `.impact-row--positive/--negative` — counter bonus green/red colors
 
-Text readability is preserved since backgrounds remain the same light tints (e.g., `--rarity-uncommon-bg: #e0f0d6`).
+**4. MatchSummary + MeleeTransition Classes (2 new classes)**
+- `.melee-legend` — melee wins legend text below melee table
+- `.melee-transition__note` — penalty instructional note text
 
-#### 3. Variant Toggle Active States
-**Before:** Active variant toggle buttons had `font-weight: 700`, `background: parchment-dark`, `border-width: 2px`. The only color distinction came from inline styles in LoadoutScreen.tsx using non-standard `var(--mom)` / `var(--ctl)` / `var(--grd)` tokens.
+**5. Mobile Responsive Additions**
+- Summary table cell padding reduced at 480px (4px 6px, smaller font)
+- Difficulty selector wraps on very narrow screens
 
-**After:** Added CSS rules using proper stance design tokens:
-- **Aggressive**: red bg (`--stance-agg-bg`), red border/text (`--stance-agg`)
-- **Balanced**: gold bg (`--stance-bal-bg`), gold border/text (`--stance-bal`)
-- **Defensive**: blue bg (`--stance-def-bg`), blue border/text (`--stance-def`)
+### index.css
 
-**Note:** The inline styles on LoadoutScreen.tsx line 199 override `borderColor` and `color`. A deferred App.tsx change (removing that inline style) would let the CSS take full effect. The current result is still improved since `background` is now CSS-controlled and was previously just `parchment-dark` for all variants.
+**1. New Utility Classes (3 new classes)**
+- `.text-bold` — font-weight: 700
+- `.flex-center` — flex centering (both axes)
+- `.flex-col-center` — column flex centering
 
-#### 4. Accessibility: prefers-reduced-motion
-**Before:** No reduced-motion support whatsoever. Users with vestibular disorders would see all animations.
+## Inline Style Migration Status
 
-**After:** Added `@media (prefers-reduced-motion: reduce)` blocks in both `App.css` and `index.css`:
-- **Disabled animations:** screen fade-in, victory/defeat entrance, timeline pips, score pop, pass pip pulse, stamina critical pulse
-- **Disabled transitions:** card hover, stat bar fills, stamina bar fills, gear item hover, variant toggle buttons, AI thinking bars
+### Ready for JSX Migration (UI dev can now swap)
 
-### Files Modified
-- `src/App.css` — rarity hover/selected glow, variant toggle colors, reduced-motion
-- `src/index.css` — reduced-motion for base animations
+| Component | Inline Style | CSS Class Replacement |
+|---|---|---|
+| SetupScreen:42 | difficulty wrapper flex styles | `.difficulty-selector` + btn overrides |
+| SetupScreen:49-57 | difficulty button conditional styles | `.btn .btn--active` + overrides |
+| SetupScreen:102-110 | back button | `.btn--back` |
+| SetupScreen:121 | random card flex centering | `.archetype-card--random` |
+| SetupScreen:125 | question mark icon | `.archetype-card--random-icon` |
+| PassResult:43,57 | `textAlign: 'center'` cells | `.reveal-sides__cell` |
+| PassResult:45,59 | `fontWeight: 700` attack names | `.reveal-sides__attack-name` |
+| PassResult:47,61 | speed labels | `.reveal-sides__speed` |
+| PassResult:51,54,65,68 | counter badge spacing | `.reveal-sides__counter` |
+| PassResult:141,144 | bold impact row values | `.impact-row__p1--bold` |
+| PassResult:86-92 | counter bonus colors | `.impact-row--positive/--negative` |
+| MeleeResult:61-69 | reveal-sides cells/names | `.reveal-sides__cell` / `__attack-name` |
+| MeleeResult:52 | winner text | `.melee-result__winner` |
+| MeleeResult:54 | margin display | `.melee-result__margin` |
+| MatchSummary:87,92 | player colors | `.text-p1` / `.text-p2` (prev session) |
+| MatchSummary:93-99 | result column colors | `.summary-table__result--*` |
+| MatchSummary:150 | melee legend text | `.melee-legend` |
+| MeleeTransition:62 | penalty note | `.melee-transition__note` |
 
-### Remaining Issues
-1. **Variant toggle inline styles** — LoadoutScreen.tsx line 199 uses inline `borderColor`/`color` that override CSS. Needs deferred App.tsx change.
-2. **Giga gradient background** — `--rarity-giga-bg` is a `linear-gradient()` stored in a CSS variable, which won't work as `background-color`. The selected state uses `--rarity-legendary-bg` as a workaround. This is pre-existing.
-3. **Touch target size** — Variant toggle buttons at 0.65rem / 2px padding are below 44px touch target. Could be addressed in a future round via mobile breakpoint.
+### Still Inline (Dynamic/Conditional)
+
+| Component | Inline Style | Reason |
+|---|---|---|
+| PassResult:109-115 | pass winner conditional color | 3-way conditional (p1/p2/tie) |
+| MatchSummary:135-141 | melee result conditional color | 4-way conditional |
+| MatchSummary:192,210 | animation-delay stagger | Dynamic computed value |
+| helpers:78,114 | width percentage fills | Dynamic bar widths |
+| AIThinkingPanel:64,74,84 | bar fill widths | Dynamic bar widths |
+
+## Test Results
+
+5 pre-existing test failures in calculator.test.ts (4) and match.test.ts (1) from other agents' uncommitted changes. CSS changes cannot affect engine tests. Base repo passes clean.

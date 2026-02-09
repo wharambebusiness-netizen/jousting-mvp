@@ -1,6 +1,6 @@
 {
   "name": "Overnight Continuous Improvement",
-  "description": "Self-sustaining overnight run. Continuous agents iterate on balance, quality, and polish. Producer generates new tasks.",
+  "description": "Self-sustaining overnight run. 7 continuous agents iterate on balance, quality, polish, UI, and game design. Producer generates new tasks.",
   "config": {
     "maxRounds": 50,
     "agentTimeoutMs": 1200000,
@@ -14,7 +14,7 @@
       "role": "producer",
       "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
       "tasks": {
-        "primary": "Read all agent handoffs, the project TODO list (MEMORY.md), and current backlog.json. Identify what work needs doing next. Generate 3-5 new tasks in backlog.json for other agents. Prioritize: balance fixes > bug fixes > test coverage > features > polish. Write a status summary to orchestrator/analysis/producer-status.md."
+        "primary": "Read all agent handoffs, the project TODO list (MEMORY.md), and current backlog.json. Identify what work needs doing next. Generate 3-5 new tasks in backlog.json for other agents. Prioritize: balance fixes > bug fixes > test coverage > UI polish > features > CSS polish. Write a status summary to orchestrator/analysis/producer-status.md."
       }
     },
     {
@@ -32,9 +32,9 @@
       "name": "QA Engineer",
       "type": "continuous",
       "role": "qa-engineer",
-      "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/match.test.ts", "src/engine/playtest.test.ts", "src/engine/gear-variants.test.ts"],
+      "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/match.test.ts", "src/engine/playtest.test.ts", "src/engine/gear-variants.test.ts", "src/engine/phase-resolution.test.ts"],
       "tasks": {
-        "primary": "Each round: pick ONE untested area and write 5-10 new tests for it. Focus areas in order: 1) gear variant interactions, 2) archetype matchup edge cases, 3) stamina/fatigue boundary conditions, 4) softCap behavior near knee=100, 5) melee phase resolution edge cases. Run full suite to verify no regressions."
+        "primary": "Each round: pick ONE untested area and write 5-10 new tests for it. Focus areas in order: 1) gear variant interactions, 2) archetype matchup edge cases, 3) stamina/fatigue boundary conditions, 4) softCap behavior near knee=100, 5) melee phase resolution edge cases. Run full suite to verify no regressions. Also fix any test assertions broken by balance changes from other agents."
       }
     },
     {
@@ -44,7 +44,7 @@
       "role": "css-artist",
       "fileOwnership": ["src/App.css", "src/index.css"],
       "tasks": {
-        "primary": "Each round: pick ONE UI element and improve its visual design. Focus areas in order: 1) rarity card styling (color, borders, glow), 2) variant toggle buttons (clearer active states), 3) combat result screens (damage numbers, animations), 4) setup screen polish, 5) responsive breakpoints. Make small, incremental improvements."
+        "primary": "Each round: pick ONE UI element and improve its visual design. Focus areas in order: 1) combat result screens (damage numbers, animations), 2) responsive breakpoints, 3) melee transition polish, 4) winner banner refinement, 5) accessibility improvements. Make small, incremental improvements. Coordinate with ui-dev agent for JSX-side changes."
       }
     },
     {
@@ -52,9 +52,29 @@
       "name": "Tech Lead",
       "type": "continuous",
       "role": "tech-lead",
-      "fileOwnership": ["src/engine/types.ts"],
+      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md"],
       "tasks": {
-        "primary": "Each round: review changes made by other agents this session. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling. Write review report to orchestrator/analysis/review-round-N.md. If you find issues, note them in your handoff notes-for-others so the relevant agent can fix them next round."
+        "primary": "Each round: review changes made by other agents this session. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling, UI/engine coupling violations. Write review report to orchestrator/analysis/review-round-N.md. Keep CLAUDE.md updated with correct test counts and balance state. If you find issues, note them in your handoff notes-for-others so the relevant agent can fix them next round."
+      }
+    },
+    {
+      "id": "ui-dev",
+      "name": "UI Developer",
+      "type": "continuous",
+      "role": "ui-dev",
+      "fileOwnership": ["src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx", "src/ui/PassResult.tsx", "src/ui/MeleeResult.tsx", "src/ui/MatchSummary.tsx", "src/ui/MeleeTransition.tsx", "src/ui/SpeedSelect.tsx", "src/ui/AttackSelect.tsx", "src/ui/RevealScreen.tsx", "src/ui/helpers.tsx", "src/ui/AIThinkingPanel.tsx", "src/ui/AIEndScreenPanels.tsx", "src/ui/CombatLog.tsx", "src/App.tsx"],
+      "tasks": {
+        "primary": "Each round: pick ONE UI improvement task. Priority order: 1) Migrate inline styles to CSS classes created by the polish agent (59 inline styles identified, class replacements ready in App.css), 2) Add rarity class to gear-item divs in LoadoutScreen for rarity-colored borders, 3) Improve combat result readability (who won, by how much, why), 4) Polish state transitions between screens, 5) Improve archetype/stat display clarity for new players. Run tests before handoff. Coordinate with polish agent on CSS class names."
+      }
+    },
+    {
+      "id": "designer",
+      "name": "Game Designer",
+      "type": "continuous",
+      "role": "game-designer",
+      "fileOwnership": ["orchestrator/analysis/design-round-*.md", "design/*.md"],
+      "tasks": {
+        "primary": "Each round: analyze the current game experience and write a design report. Focus areas in order: 1) Is every archetype interesting to play (not just balanced, but FUN)? 2) Are choices meaningful in each phase (speed, attack, gear variant)? 3) Does the AI provide a satisfying opponent at each difficulty? 4) Is combat feedback clear enough for new players? 5) What one change would most improve the player experience? Write proposals to orchestrator/analysis/design-round-N.md with clear specs the other agents can implement. Do NOT edit source files — you propose, others implement."
       }
     }
   ]

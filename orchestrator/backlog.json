@@ -42,7 +42,7 @@
     "priority": 2,
     "status": "done",
     "title": "Assess breakerGuardPenetration effectiveness",
-    "description": "COMPLETED Round 3: breakerGuardPenetration 0.20→0.25. Breaker overall +2-3pp across most tiers (bare 48.2%, epic 52.2%, giga 54.8%). No test failures — constant is NOT test-locked. Bulwark dominance assessed: GRD=65 double-dip is root cause, needs guardImpactCoeff change (test-locked). Full analysis in balance-tuner-round-3.md.",
+    "description": "COMPLETED Round 3: breakerGuardPenetration 0.20→0.25. Breaker overall +2-3pp across most tiers (bare 48.2%, epic 52.2%, giga 54.8%). No test failures — constant is NOT test-locked. Full analysis in balance-tuner-round-3.md.",
     "fileOwnership": [
       "src/engine/balance-config.ts"
     ],
@@ -78,7 +78,7 @@
     "priority": 3,
     "status": "done",
     "title": "Test stamina/fatigue boundary conditions",
-    "description": "COMPLETED Round 3: QA added 10 fatigue boundary tests (threshold, below-threshold, 1 stamina, negative, guard fatigue interpolation, attack cost clamping, speed clamping). 647/647 passing.",
+    "description": "COMPLETED Round 3: QA added 10 fatigue boundary tests. 647/647 passing.",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/playtest.test.ts"
@@ -139,7 +139,7 @@
     "priority": 4,
     "status": "done",
     "title": "Full tier sweep — run sims at all 7 tiers and document",
-    "description": "COMPLETED Round 3: Full 7-tier sweep documented in balance-tuner-round-3.md. Balance improves monotonically with tier (18.5pp bare → 4.1pp giga). Bulwark dominance peaks at uncommon (63.6%). Charger strongest at epic (56.0%). Legendary/relic/giga excellent (<6pp spread).",
+    "description": "COMPLETED Round 3: Full 7-tier sweep documented in balance-tuner-round-3.md. Balance improves monotonically with tier (18.5pp bare → 4.1pp giga).",
     "fileOwnership": [],
     "createdAt": "2026-02-09T00:00:00Z"
   },
@@ -149,7 +149,7 @@
     "priority": 3,
     "status": "done",
     "title": "Test breaker guard penetration mechanic",
-    "description": "COMPLETED Round 3: QA added 4 penetration tests — positive benefit vs all 6 archetypes, exact 20% removal verified, melee penetration verified, non-breaker zero penetration verified. 647/647 passing.",
+    "description": "COMPLETED Round 3: QA added 4 penetration tests. 647/647 passing.",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/playtest.test.ts"
@@ -162,7 +162,7 @@
     "priority": 2,
     "status": "done",
     "title": "Polish combat result display",
-    "description": "COMPLETED Round 2: Added badge-appear animation, crit-glow pulse, unseat-entrance animation. prefers-reduced-motion support included.",
+    "description": "COMPLETED Round 2: Added badge-appear animation, crit-glow pulse, unseat-entrance animation.",
     "fileOwnership": [
       "src/App.css"
     ],
@@ -174,7 +174,7 @@
     "priority": 2,
     "status": "done",
     "title": "Review round 1 code changes for quality",
-    "description": "COMPLETED Round 2: Reviewed balance-tuner's Technician MOM change (clean), QA's 112 new tests (sound design), polish's CSS (no engine impact). Fixed stale CounterResult comment in types.ts. See analysis/reviewer-round-2.md.",
+    "description": "COMPLETED Round 2: Reviewed balance-tuner's Technician MOM change, QA's 112 new tests, polish's CSS. APPROVED.",
     "fileOwnership": [
       "src/engine/types.ts"
     ],
@@ -186,7 +186,7 @@
     "priority": 3,
     "status": "done",
     "title": "Remove inline styles from LoadoutScreen variant toggle",
-    "description": "COMPLETED Round 3: Polish agent removed VARIANT_COLORS constant and inline style={...} from LoadoutScreen.tsx variant toggle buttons. CSS stance tokens now fully control colors.",
+    "description": "COMPLETED Round 3: Polish agent removed VARIANT_COLORS constant and inline style={...}. CSS stance tokens now fully control colors.",
     "fileOwnership": [
       "src/ui/LoadoutScreen.tsx"
     ],
@@ -198,7 +198,7 @@
     "priority": 2,
     "status": "done",
     "title": "Review round 2 code changes for quality",
-    "description": "COMPLETED Round 3: Reviewed Charger INIT/STA swap (clean), QA's 18 test fixes + 16 new tests (correct), match worked example rewrite (correct 2-pass unseat). Fixed stale comment in balance-config.ts:22. APPROVED with no blocks. See review-round-3.md.",
+    "description": "COMPLETED Round 3: Reviewed Charger INIT/STA swap, QA's 18 test fixes + 16 new tests, match worked example rewrite. APPROVED.",
     "fileOwnership": [
       "src/engine/types.ts"
     ],
@@ -210,7 +210,7 @@
     "priority": 3,
     "status": "done",
     "title": "Polish melee transition and winner banner",
-    "description": "COMPLETED Round 3: Added melee transition entrance animation (scale + red shadow bloom), winner banner gold glow, draw entrance animation, btn--outline modifier for quick-set buttons. All with prefers-reduced-motion support.",
+    "description": "COMPLETED Round 3: Melee transition entrance, winner banner gold glow, draw entrance, btn--outline modifier.",
     "fileOwnership": [
       "src/App.css"
     ],
@@ -220,9 +220,9 @@
     "id": "BL-019",
     "role": "qa-engineer",
     "priority": 4,
-    "status": "pending",
+    "status": "done",
     "title": "Investigate Tactician mirror P1 bias (BUG-002)",
-    "description": "BUG-002: Tactician mirror match shows ~36% vs 64% P1 bias in some bare runs. QA downgraded to Low — likely Monte Carlo noise at N=200. Needs N=1000+ to confirm. Add a targeted test to playtest.test.ts: Tactician mirror N=500, verify P1 win rate 40-60%. Do NOT change engine code.\n\nNOTE: QA is all-done. This is deferred to next session or can be picked up if QA is re-activated.",
+    "description": "COMPLETED Round 5: QA added 2 targeted tests — Tactician mirror N=500 (P1 40-60%) and all 6 archetype mirrors N=500 (P1 35-65%). BUG-002 CLOSED — confirmed Monte Carlo noise. 649/649 passing.",
     "fileOwnership": [
       "src/engine/playtest.test.ts"
     ],
@@ -233,36 +233,33 @@
     "role": "balance-analyst",
     "priority": 1,
     "title": "Fix Bulwark bare/uncommon dominance — test guardImpactCoeff 0.16",
-    "description": "PRIMARY REMAINING BALANCE CONCERN. Bulwark bare=60.4%, uncommon=63.0% (target: <58%). Root cause: GRD=65 double-dips in guardImpactCoeff (impact scoring) AND guardUnseatDivisor (unseat resistance).\n\nProposed fix: guardImpactCoeff 0.18 → 0.16 in balance-config.ts.\n\nWARNING: This constant is TEST-LOCKED in ~7 test assertions. Coordinate with QA (BL-021) to update tests BEFORE or AFTER the change. Do NOT change the value until QA has a plan for the test cascade.\n\nSteps: 1) Run sims at 0.16 (bare, uncommon, rare, epic, giga) to verify Bulwark drops below 58% without creating new problems. 2) Check if Charger bare stays above 40%. 3) Check Duelist doesn't become dominant (was flagged as risk at 0.16 in Round 2 analysis). 4) If 0.16 works, coordinate with QA on test updates. 5) Write findings to analysis/balance-tuner-round-4.md.\n\nDo NOT apply the change to balance-config.ts yet — just run sims with the modified value and report results. QA needs to prepare test updates first.",
+    "description": "SUPERSEDED by BL-025. guardImpactCoeff 0.18→0.16 proven INEFFECTIVE (<1pp change, within noise). Balance-tuner pivoted to stat redistribution. See balance-tuner-round-5.md.",
     "fileOwnership": [
       "src/engine/balance-config.ts"
     ],
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-02-09T03:30:00Z"
   },
   {
     "id": "BL-021",
     "role": "qa-engineer",
-    "priority": 1,
+    "priority": 4,
     "title": "Prepare test updates for guardImpactCoeff 0.18→0.16",
-    "description": "Balance-tuner is evaluating guardImpactCoeff 0.18→0.16 to fix Bulwark dominance (BL-020). This constant is hardcoded in ~7 test assertions.\n\nTasks: 1) Identify ALL test assertions that reference guardImpactCoeff=0.18 or use 0.18 in computed values (search for '0.18', '*0.18', '* 0.18' in test files). 2) Document each affected assertion with file, line, current value, and what the new value would be at 0.16. 3) Write a test update plan to analysis/qa-round-4.md — do NOT make changes yet, just document what needs to change.\n\nThis is a PREPARATORY task — do not modify any test files until balance-tuner confirms 0.16 is the right value (BL-020 must complete first).",
-    "fileOwnership": [
-      "src/engine/calculator.test.ts",
-      "src/engine/playtest.test.ts"
-    ],
-    "status": "pending",
+    "description": "CANCELLED — guardImpactCoeff not being changed. QA completed the mapping (see qa-round-5.md) as reference documentation, but no test changes needed.",
+    "fileOwnership": [],
+    "status": "done",
     "createdAt": "2026-02-09T03:30:00Z"
   },
   {
     "id": "BL-022",
     "role": "tech-lead",
     "priority": 2,
-    "title": "Review round 3 code changes for quality",
-    "description": "Review Round 3 changes: 1) balance-tuner's breakerGuardPenetration 0.20→0.25 in balance-config.ts — already reviewed and APPROVED by reviewer in Round 3, verify no further changes. 2) QA's 42 new tests across calculator.test.ts and playtest.test.ts — verify assertions reference correct values (breakerGuardPenetration now 0.25, not 0.20). 3) Polish's LoadoutScreen.tsx inline style removal + App.css melee/winner polish. 4) Reviewer's own balance-config.ts comment fix. Check for stale docs.\n\nAlso: Update CLAUDE.md 'Balance State' section — breakerGuardPenetration is now 0.25 (was 0.20), Charger INIT=55/STA=65 (was INIT=60/STA=60). 647 tests now passing (was 477 at session start). Write findings to analysis/review-round-4.md.",
+    "title": "Update CLAUDE.md balance state + review Round 4 changes",
+    "description": "COMPLETED Round 5: Reviewer updated CLAUDE.md — breakerGuardPenetration 0.25, Charger INIT/STA documented, test count 647, simulate.ts variant syntax. APPROVED WITH NOTES. See reviewer-round-5.md.",
     "fileOwnership": [
       "src/engine/types.ts"
     ],
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-02-09T03:30:00Z"
   },
   {
@@ -270,11 +267,11 @@
     "role": "qa-engineer",
     "priority": 3,
     "title": "Add multi-pass worked example test to match.test.ts",
-    "description": "Reviewer flagged that after the match.test.ts rewrite in Round 2, there's no multi-pass (3-5 pass) worked example anymore — the current one ends at Pass 2 with an unseat. This reduces integration coverage of fatigue progression.\n\nAdd a new worked example test: Pick two archetypes with moderate stats (e.g., Tactician vs Duelist or Technician vs Tactician) that are likely to go 3-5 passes without unseat at bare. Trace through all passes manually. Include fatigue progression, stamina tracking, carryover scores, and melee transition.\n\nAcceptance criteria: 650+ tests passing. The new test exercises at least 3 joust passes + melee entry.",
+    "description": "COMPLETED Round 6: QA added 6-test multi-pass worked example (Tactician vs Duelist, 5 passes, full fatigue trace). match.test.ts now 77 tests. 655/655 passing.",
     "fileOwnership": [
       "src/engine/match.test.ts"
     ],
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-02-09T03:30:00Z"
   },
   {
@@ -282,11 +279,213 @@
     "role": "css-artist",
     "priority": 4,
     "title": "Add gear item rarity-colored borders",
-    "description": "Polish agent flagged that gear item rarity borders need a JSX change (adding gear-item--${rarity} class to .gear-item divs in LoadoutScreen.tsx) before CSS rules can work. This is a LOW priority UI polish item.\n\nFor now: Write the CSS rules in App.css for .gear-item--uncommon through .gear-item--giga with appropriate border colors using existing --rarity-* CSS variables. The JSX change is deferred until a ui-dev agent is available.\n\nOnly edit src/App.css.",
+    "description": "COMPLETED Round 6: CSS rules for .gear-item--uncommon through .gear-item--giga added to App.css. Dormant until JSX adds gear-item--${rarity} class to .gear-item divs in LoadoutScreen.tsx. Needs ui-dev agent for JSX change.",
     "fileOwnership": [
       "src/App.css"
     ],
-    "status": "pending",
+    "status": "done",
     "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-025",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Apply Bulwark stat redistribution: CTL 55→52, MOM 55→58",
+    "description": "COMPLETED Round 6: Bulwark MOM 55→58, CTL 55→52 applied in archetypes.ts. Uncommon Bulwark 63.7%→58.5% (-5.2pp), spread 22.1pp→15.5pp. Rare/epic excellent. Zero test failures. Giga Bulwark test data updated (momentum 68→71, control 68→65). See balance-tuner-round-6.md.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts",
+      "src/engine/calculator.test.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:00:00Z"
+  },
+  {
+    "id": "BL-026",
+    "role": "qa-engineer",
+    "priority": 2,
+    "title": "Fix stale test comments + verify Bulwark change cascade",
+    "description": "COMPLETED Round 6: Fixed phase-resolution.test.ts:424 stale comment (0.2→BALANCE reference). Updated calculator.test.ts:805 Giga Bulwark construct (momentum 68→71, control 68→65). Cascade verification: zero breakages from BL-025. 655/655 passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts",
+      "src/engine/phase-resolution.test.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:00:00Z"
+  },
+  {
+    "id": "BL-027",
+    "role": "tech-lead",
+    "priority": 1,
+    "title": "Review Round 6 changes + update CLAUDE.md with BL-025 results",
+    "description": "COMPLETED Round 7: CLAUDE.md updated with Bulwark stats, test count to 655, per-archetype win rates. See reviewer-round-7.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:30:00Z"
+  },
+  {
+    "id": "BL-028",
+    "role": "ui-dev",
+    "priority": 3,
+    "title": "Add rarity class to gear-item divs in LoadoutScreen.tsx",
+    "description": "Polish agent (BL-024) added CSS rules for .gear-item--uncommon through .gear-item--giga in App.css. These are dormant until the JSX is updated.\n\nIn LoadoutScreen.tsx, add the rarity class to .gear-item elements:\n- Find all `.gear-item` divs that render gear pieces\n- Add `gear-item--${rarity}` as a dynamic class based on the gear piece's rarity\n- The rarity value should come from the gear piece's rarity field (e.g., steedLoadout.giglingRarity or the individual gear piece rarity)\n\nAcceptance criteria: Gear items in the loadout screen display rarity-colored borders matching the CSS rules in App.css. 685 tests still passing.",
+    "fileOwnership": [
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T05:00:00Z"
+  },
+  {
+    "id": "BL-029",
+    "role": "balance-analyst",
+    "priority": 3,
+    "title": "Run N=1000 confirmation for Tactician uncommon and Breaker giga",
+    "description": "COMPLETED Round 7: Balance-tuner ran 93,600-match health check across 13 simulation runs. QA independently ran 3-run validation. BUG-006 CLOSED: Tactician uncommon = 54.3% mean (noise). Breaker giga down to 53.9-55.3% across runs (stable, within tolerance). No action needed.",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T05:00:00Z"
+  },
+  {
+    "id": "BL-030",
+    "role": "tech-lead",
+    "priority": 1,
+    "title": "Update CLAUDE.md test count 680→685 and fix stale counts",
+    "description": "CLAUDE.md currently says 680 tests but actual is 685 (7 suites, 0 failures). The discrepancy:\n\n1. match.test.ts: CLAUDE.md says 83, actual is 88 (+5 from QA Round 8 carryover/unseated tests)\n\nUpdate CLAUDE.md:\n- Quick Reference: 680→685 passing\n- Test Suite header: 680→685\n- match.test.ts: 83→88 tests, add 'carryover/unseated worked example' to description\n\nAcceptance criteria: CLAUDE.md reflects 685 tests with correct per-file breakdown matching actual vitest output.",
+    "fileOwnership": [
+      "CLAUDE.md"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-031",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Apply Technician MOM 58→61 to fix persistent weakness",
+    "description": "Technician is the persistent weakest archetype at 43-47% across all tiers and variants. Balance-tuner documented root cause (MOM=58 + STA=55 + shift paradox) and recommended MOM 58→61 (+3). Projected +2-3pp across tiers.\n\nChange: In src/engine/archetypes.ts, update technician momentum from 58 to 61.\n\nAfter applying, run `npx tsx src/tools/simulate.ts bare` and `npx tsx src/tools/simulate.ts giga` to verify win rate improvement. Target: Technician ≥47% at bare, ≥48% at giga.\n\nTest cascade estimate: calculator.test.ts worked examples referencing Technician MOM (line ~414: MOM 63→66 with rarity bonus), match.test.ts worked example impact values. ~5-8 assertions will need updating by QA.\n\nAcceptance criteria: Technician MOM=61 in archetypes.ts. Sim shows +2-3pp improvement. Failing test count documented for QA.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-032",
+    "role": "ui-dev",
+    "priority": 3,
+    "title": "Swap inline styles for CSS classes across 10 components",
+    "description": "Polish agent created CSS class replacements for ~50 of 59 inline style occurrences across 10 components. Prioritized migration list in analysis/polish-round-7.md. Key targets:\n1. SetupScreen.tsx:42 — .difficulty-selector (remove inline style)\n2. MatchSummary.tsx:87,92,132,134 — .text-p1/.text-p2 (swap color inline)\n3. PassResult.tsx:51,54,65,68 — .mt-4 (swap marginTop inline)\n4. MatchSummary.tsx:229-256 — .loadout-mini* classes (swap 6 inline styles)\n5. LoadoutScreen.tsx:374 — .text-small (swap fontSize/color inline)\n\nAcceptance criteria: Inline style count reduced from 59 to <15. 685 tests still passing.",
+    "fileOwnership": [
+      "src/ui/SetupScreen.tsx",
+      "src/ui/MatchSummary.tsx",
+      "src/ui/PassResult.tsx",
+      "src/ui/LoadoutScreen.tsx",
+      "src/ui/MeleeTransition.tsx"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T05:30:00Z"
+  },
+  {
+    "id": "BL-033",
+    "role": "qa-engineer",
+    "priority": 1,
+    "title": "Fix test assertions broken by Technician MOM 58→61",
+    "description": "After BL-031 applies Technician MOM 58→61, multiple test assertions will break. Based on previous MOM change cascade (BL-014, MOM 55→58 broke 7 tests):\n\nExpected breakage areas:\n1. calculator.test.ts: Technician MOM in worked examples (e.g., line ~414 with uncommon rarity: MOM 63→66). Impact score calculations will change.\n2. match.test.ts: Worked example Charger vs Technician — Technician effective stats change, impact values change, potentially outcome changes.\n3. Possibly gear-variants.test.ts BL-004 deterministic cycling tests (fragile to ANY stat change).\n\nProcess:\n1. Run `npx vitest run` to identify ALL failing assertions\n2. Recalculate correct values for each broken assertion\n3. Update test assertions to match new correct values\n4. Verify 685+ tests passing after fixes\n\nDEPENDS ON: BL-031 (must be applied first).\n\nAcceptance criteria: All tests passing. Test count ≥685. No regressions.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/match.test.ts",
+      "src/engine/playtest.test.ts",
+      "src/engine/gear-variants.test.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-034",
+    "role": "balance-analyst",
+    "priority": 2,
+    "title": "Post-Technician-change full tier sweep and validation",
+    "description": "After BL-031 (Technician MOM +3) and BL-033 (test fixes) are complete, run a full simulation sweep to validate the change.\n\nRun simulations at: bare, uncommon, rare, epic, giga (all 5 key tiers).\nAlso run uncommon aggressive, uncommon defensive for variant check.\n\nVerify:\n1. Technician win rate improved +2-3pp across tiers (target ≥47% bare, ≥48% giga)\n2. No new dominance flags (no archetype >57% at any tier)\n3. No new weakness flags (no archetype <40% at any tier)\n4. Spread at each tier not worse than previous session\n5. Charger and Bulwark win rates not significantly changed\n\nDEPENDS ON: BL-031, BL-033 (tests must be passing first).\n\nAcceptance criteria: Full sweep documented in analysis/balance-tuner-round-1.md. All flags resolved or accepted.",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-035",
+    "role": "tech-lead",
+    "priority": 2,
+    "title": "Review Technician MOM change + update CLAUDE.md",
+    "description": "After BL-031 (Technician MOM 58→61), BL-033 (test fixes), and BL-034 (validation sweep) are complete, review all changes:\n\n1. Review archetypes.ts change (Technician MOM 58→61)\n2. Review test assertion updates in calculator.test.ts and match.test.ts\n3. Verify test count stable at ≥685\n4. Update CLAUDE.md:\n   - Archetype stats: Technician MOM 58→61\n   - Balance State: Updated win rates from BL-034 sweep\n   - Archetype changes: Add 'Technician MOM 58→61'\n\nDEPENDS ON: BL-031, BL-033, BL-034.\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=61, updated win rates, correct test count.",
+    "fileOwnership": [
+      "CLAUDE.md"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-036",
+    "role": "ui-dev",
+    "priority": 1,
+    "status": "pending",
+    "title": "Migrate top-priority inline styles to CSS classes",
+    "description": "The CSS artist has created class replacements for ~50 inline style occurrences across 10 components. Start with the highest-impact migrations:\n\n1. MatchSummary.tsx:87,92,132,134 — replace color inline styles with .text-p1/.text-p2 classes\n2. PassResult.tsx:51,54,65,68 — replace marginTop inline styles with .mt-4 class\n3. SetupScreen.tsx:42 — replace inline style with .difficulty-selector class\n4. MatchSummary.tsx:229-256 — replace 6 inline styles with .loadout-mini* classes\n5. LoadoutScreen.tsx:374 — replace fontSize/color inline with .text-small class\n\nThe CSS classes already exist in App.css. Just swap the JSX from style={{...}} to className='...'. Run tests after each file to catch regressions.\n\nAcceptance criteria: At least 15 inline styles migrated. All tests passing.",
+    "fileOwnership": ["src/ui/MatchSummary.tsx", "src/ui/PassResult.tsx", "src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx"],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-037",
+    "role": "ui-dev",
+    "priority": 2,
+    "status": "pending",
+    "title": "Improve combat result readability in PassResult",
+    "description": "PassResult.tsx shows joust pass outcomes but could communicate 'who won and why' more clearly. Improvements:\n\n1. Add a clear winner indicator at the top of each pass result (e.g., 'Player 1 wins this pass!' or 'Draw!')\n2. Highlight the winning score in bold or with a color accent\n3. Show the impact score difference prominently (not buried in stats)\n4. Make counter results more visible when they occur (counters are a key mechanic players need to learn)\n\nDo NOT change engine logic — only presentation. Use existing CSS classes from App.css where available.\n\nAcceptance criteria: Pass results clearly communicate winner at a glance. Tests passing.",
+    "fileOwnership": ["src/ui/PassResult.tsx"],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-038",
+    "role": "ui-dev",
+    "priority": 2,
+    "status": "pending",
+    "title": "Add rarity-colored borders to gear items in LoadoutScreen",
+    "description": "CSS artist (BL-024) added .gear-item--uncommon through .gear-item--giga CSS rules to App.css. These are dormant until the JSX adds the rarity class.\n\nIn LoadoutScreen.tsx, find all .gear-item elements and add the rarity-specific class:\n- className should include `gear-item--${rarity}` where rarity comes from the gear piece or the loadout's rarity setting\n- The CSS rules handle the border colors per tier\n\nAcceptance criteria: Gear items display rarity-colored borders. Tests passing.",
+    "fileOwnership": ["src/ui/LoadoutScreen.tsx"],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-039",
+    "role": "game-designer",
+    "priority": 1,
+    "status": "pending",
+    "title": "Player experience audit — archetype identity and fun factor",
+    "description": "Play through (mentally simulate) several matches as each of the 6 archetypes. For each, assess:\n\n1. Does this archetype have a clear IDENTITY that a player can feel? (Charger = momentum/aggression, Bulwark = defense/endurance, etc.)\n2. Does their playstyle create interesting DECISIONS? Or do you just pick the same attack every time?\n3. Is there a 'power fantasy' moment? (Charger landing a devastating lance charge, Technician outmaneuvering with precision)\n4. Which archetype is the LEAST fun to play, even if balanced? Why?\n5. What ONE mechanic change would make the weakest archetype more enjoyable?\n\nRead src/engine/archetypes.ts, src/engine/attacks.ts, and recent balance data. Write your analysis to orchestrator/analysis/design-round-1.md.\n\nAcceptance criteria: Detailed fun-factor assessment for all 6 archetypes with at least 2 actionable proposals.",
+    "fileOwnership": ["orchestrator/analysis/design-round-1.md"],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-040",
+    "role": "game-designer",
+    "priority": 2,
+    "status": "pending",
+    "title": "Evaluate gear variant impact on player decisions",
+    "description": "Analyze whether the 3 gear variants (aggressive/balanced/defensive) create meaningful player choices:\n\n1. Does variant choice feel impactful or like noise? Can a player FEEL the difference between all-aggressive and all-defensive loadouts?\n2. Are there interesting variant combinations? (e.g., aggressive lance + defensive armor for a specific matchup strategy)\n3. Is the UI clear enough for players to understand what each variant does?\n4. Should variant choice interact with archetype selection? (e.g., aggressive gear on a Bulwark — is that a fun contrarian build or just suboptimal?)\n5. Propose any improvements to make variant selection more engaging.\n\nRead src/engine/gigling-gear.ts, src/engine/player-gear.ts, and the gear variant test data. Write analysis to orchestrator/analysis/design-round-2.md.\n\nAcceptance criteria: Clear assessment of variant system with at least 1 concrete improvement proposal.",
+    "fileOwnership": ["orchestrator/analysis/design-round-2.md"],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-041",
+    "role": "game-designer",
+    "priority": 3,
+    "status": "pending",
+    "title": "New player experience — first-match clarity audit",
+    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. The depth should be there for experienced players but the surface should be approachable.\n\nWrite analysis to orchestrator/analysis/design-round-3.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
+    "fileOwnership": ["orchestrator/analysis/design-round-3.md"],
+    "createdAt": "2026-02-09T06:30:00Z"
   }
 ]

@@ -11,6 +11,44 @@
 .app-header h1 { font-size: 1.5rem; margin-bottom: 2px; }
 .app-header .subtitle { margin-bottom: 0; font-size: 0.8rem; }
 
+/* Difficulty selector (SetupScreen) */
+.difficulty-selector {
+  display: flex; justify-content: center;
+  gap: 0.5rem; margin-bottom: 1rem;
+}
+/* Difficulty button overrides — smaller, pill-shaped. Active state via .btn--active */
+.difficulty-selector .btn {
+  padding: 0.4rem 1rem; border-radius: 4px;
+  font-size: 0.9rem;
+}
+.difficulty-selector .btn:not(.btn--active) {
+  background: transparent; border-width: 1px;
+  border-color: var(--ink-faint); font-weight: 400;
+}
+
+/* Back / change-archetype button */
+.btn--back {
+  background: transparent;
+  border: 1px solid var(--ink-faint);
+  color: var(--ink);
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+.btn--back:hover {
+  border-color: var(--gold);
+  background: var(--parchment-light);
+}
+
+/* Random opponent card — vertically centered content */
+.archetype-card--random {
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+}
+.archetype-card--random-icon {
+  font-size: 2rem; margin: 0.5rem 0; line-height: 1;
+}
+
 /* Attack cards */
 .attack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .attack-card { padding: 12px; cursor: pointer; }
@@ -42,6 +80,14 @@
 .reveal-attack { text-align: center; }
 .reveal-attack__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; font-weight: 700; margin: 6px 0 4px; }
 .reveal-attack__speed { font-size: 0.85rem; color: var(--ink-light); margin-bottom: 4px; }
+
+/* Reveal-sides: player attack cells used in PassResult + MeleeResult */
+.reveal-sides__cell { text-align: center; }
+.reveal-sides__attack-name { font-weight: 700; }
+.reveal-sides__speed {
+  font-size: 0.75rem; color: var(--ink-faint); margin-top: 2px;
+}
+.reveal-sides__counter { margin-top: 4px; display: inline-block; }
 
 /* Pass result */
 .pass-result__breakdown {
@@ -250,6 +296,31 @@
 .gear-item--steed { border-left: 3px solid var(--p1); }
 .gear-item--player { border-left: 3px solid var(--p2); }
 
+/* Gear item rarity-colored borders (dormant until JSX adds gear-item--${rarity} class) */
+.gear-item--uncommon { border-color: var(--rarity-uncommon); }
+.gear-item--rare { border-color: var(--rarity-rare); }
+.gear-item--epic {
+  border-color: var(--rarity-epic);
+  box-shadow: 0 0 6px rgba(123, 63, 160, 0.15);
+}
+.gear-item--legendary {
+  border-color: var(--rarity-legendary);
+  box-shadow: 0 0 8px rgba(201, 138, 30, 0.2);
+}
+.gear-item--relic {
+  border-color: var(--rarity-relic);
+  box-shadow: 0 0 8px rgba(181, 32, 32, 0.2);
+}
+.gear-item--giga {
+  border-color: var(--rarity-giga);
+  box-shadow: 0 0 10px rgba(201, 168, 76, 0.25);
+}
+/* Preserve rarity glow on hover for epic+ tiers */
+.gear-item--epic:hover { box-shadow: 0 0 6px rgba(123, 63, 160, 0.15), 0 2px 8px var(--shadow); }
+.gear-item--legendary:hover { box-shadow: 0 0 8px rgba(201, 138, 30, 0.2), 0 2px 8px var(--shadow); }
+.gear-item--relic:hover { box-shadow: 0 0 8px rgba(181, 32, 32, 0.2), 0 2px 8px var(--shadow); }
+.gear-item--giga:hover { box-shadow: 0 0 10px rgba(201, 168, 76, 0.25), 0 2px 8px var(--shadow); }
+
 /* Hover animation for gear cards */
 .gear-item {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -406,9 +477,38 @@
   50% { transform: scale(1.3); opacity: 0.8; }
 }
 
+/* Impact row — bold modifier for key stats (Impact Score) */
+.impact-row__p1--bold,
+.impact-row__p2--bold { font-size: 1.05rem; }
+
+/* Unseat margin sub-text */
+.pass-result__unseat-margin {
+  font-size: 0.8rem; font-weight: 400; margin-top: 4px;
+}
+
+/* Melee outcome result text */
+.melee-result__winner {
+  margin-top: 8px; font-weight: 600; font-size: 1.05rem;
+}
+.melee-result__margin {
+  font-size: 0.85rem; color: var(--ink-light);
+}
+
+/* Summary table: conditional result colors — ready for className migration */
+.summary-table__result--p1 { font-weight: 600; color: var(--p1); }
+.summary-table__result--p2 { font-weight: 600; color: var(--p2); }
+.summary-table__result--unseat { font-weight: 600; color: var(--red); }
+.summary-table__result--tie { font-weight: 600; color: var(--ink-faint); }
+.summary-table__result--crit { font-weight: 600; color: var(--red); }
+
+/* Counter bonus colors */
+.impact-row--positive { color: var(--green); }
+.impact-row--negative { color: var(--red); }
+
 /* Victory / defeat banner animations */
 .winner-banner--victory {
   animation: victory-entrance 0.6s ease-out;
+  box-shadow: 0 4px 20px rgba(201, 168, 76, 0.4);
 }
 @keyframes victory-entrance {
   0% { transform: scale(0.8); opacity: 0; }
@@ -426,10 +526,6 @@
 @keyframes defeat-entrance {
   0% { opacity: 0; transform: translateY(-20px); }
   100% { opacity: 1; transform: translateY(0); }
-}
-
-.winner-banner--victory {
-  box-shadow: 0 4px 20px rgba(201, 168, 76, 0.4);
 }
 
 .winner-banner--draw {
@@ -478,6 +574,25 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* Melee legend — win count text below melee table */
+.melee-legend {
+  font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 16px;
+}
+
+/* Penalty note — instructional text inside melee transition */
+.melee-transition__note {
+  font-size: 0.8rem; color: var(--ink-faint); margin-top: 8px; text-align: center;
+}
+
+/* Loadout mini (MatchSummary) — ready for JSX migration from inline styles */
+.loadout-mini { text-align: center; }
+.loadout-mini__no-gear { text-align: center; color: var(--ink-faint); }
+.loadout-mini__section-label {
+  font-size: 0.7rem; font-weight: 600;
+  color: var(--ink-light); margin-bottom: 2px;
+}
+.loadout-mini__gear-line { font-size: 0.72rem; color: var(--ink-light); }
+
 @media (max-width: 480px) {
   .attack-grid, .speed-grid, .archetype-grid { grid-template-columns: 1fr; }
   .reveal-sides { grid-template-columns: 1fr; }
@@ -518,6 +633,13 @@
 
   /* Gear item slot label narrower on mobile */
   .gear-item__slot { min-width: 70px; font-size: 0.8rem; }
+
+  /* Summary table: tighter on mobile */
+  .summary-table th, .summary-table td { padding: 4px 6px; font-size: 0.75rem; }
+  .summary-table th { font-size: 0.7rem; }
+
+  /* Difficulty selector stacks on very narrow screens */
+  .difficulty-selector { flex-wrap: wrap; }
 }
 
 /* AI Thinking Panel */

@@ -904,3 +904,249 @@ describe('Uncommon rarity bonus is 2', () => {
     expect(geared.player1.currentStamina).toBeGreaterThanOrEqual(62);
   });
 });
+
+// ============================================================
+// 23. BL-019: Tactician mirror P1 bias investigation
+// ============================================================
+describe('BL-019: Tactician mirror P1 bias', () => {
+  /**
+   * Runs N mirror matches with seeded-random attack cycling.
+   * Uses different seed per match for variety, but deterministic overall.
+   */
+  function runMirrorBatch(archetype: Archetype, n: number, baseSeed: number) {
+    let p1Wins = 0;
+    let p2Wins = 0;
+    let draws = 0;
+
+    for (let i = 0; i < n; i++) {
+      const rng = makeRng(baseSeed + i);
+      let match = createMatch(archetype, archetype);
+      let safety = 0;
+
+      // Joust phase — pick attacks using seeded RNG for variety
+      while (match.phase === Phase.SpeedSelect && safety < 10) {
+        const joustAtks = JOUST_ATTACK_LIST;
+        const speeds = [SpeedType.Slow, SpeedType.Standard, SpeedType.Fast];
+        const p1Atk = joustAtks[Math.floor(rng() * joustAtks.length)];
+        const p2Atk = joustAtks[Math.floor(rng() * joustAtks.length)];
+        const p1Spd = speeds[Math.floor(rng() * speeds.length)];
+        const p2Spd = speeds[Math.floor(rng() * speeds.length)];
+        match = submitJoustPass(match,
+          { speed: p1Spd, attack: p1Atk },
+          { speed: p2Spd, attack: p2Atk },
+        );
+        safety++;
+      }
+
+      // Melee phase
+      let meleeRounds = 0;
+      while (match.phase === Phase.MeleeSelect && meleeRounds < 30) {
+        const meleeAtks = MELEE_ATTACK_LIST;
+        const rng2 = makeRng(baseSeed + i + 10000 + meleeRounds);
+        const p1Atk = meleeAtks[Math.floor(rng2() * meleeAtks.length)];
+        const p2Atk = meleeAtks[Math.floor(rng2() * meleeAtks.length)];
+        match = submitMeleeRound(match, p1Atk, p2Atk);
+        meleeRounds++;
+      }
+
+      if (match.winner === 'player1') p1Wins++;
+      else if (match.winner === 'player2') p2Wins++;
+      else draws++;
+    }
+
+    return { p1Wins, p2Wins, draws, total: n };
+  }
+
+  it('Tactician mirror N=500: P1 win rate within 40-60%', () => {
+    const tactician = ARCHETYPES.tactician;
+    const result = runMirrorBatch(tactician, 500, 42);
+    const p1Rate = result.p1Wins / (result.p1Wins + result.p2Wins) * 100;
+
+    // Mirror matchups should have no inherent P1 advantage
+    // BUG-002 reported ~36% P1 at N=200 — likely Monte Carlo noise
+    // At N=500 with deterministic seeding, we expect 40-60% P1
+    expect(p1Rate).toBeGreaterThanOrEqual(40);
+    expect(p1Rate).toBeLessThanOrEqual(60);
+  });
+
+  it('all 6 archetype mirrors N=500: P1 win rate within 35-65%', () => {
+    for (const name of Object.keys(ARCHETYPES)) {
+      const arch = ARCHETYPES[name];
+      const result = runMirrorBatch(arch, 500, 1000 + name.length * 100);
+      const decisive = result.p1Wins + result.p2Wins;
+      if (decisive === 0) continue; // all draws — acceptable for mirrors
+      const p1Rate = result.p1Wins / decisive * 100;
+
+      // Wider band for all archetypes (35-65%) since some may have
+      // attack-order sensitivity in their stat profile
+      expect(p1Rate, `${name} mirror P1 rate ${p1Rate.toFixed(1)}%`)
+        .toBeGreaterThanOrEqual(35);
+      expect(p1Rate, `${name} mirror P1 rate ${p1Rate.toFixed(1)}%`)
+        .toBeLessThanOrEqual(65);
+    }
+  });
+});
+
+// ============================================================
+// 20. Gear Extreme Boundary Tests — Min vs Max Stat Rolls
+// ============================================================
+describe('Gear Extreme Boundaries — min/max stat rolls', () => {
+  const rngMin = () => 0;
+  const rngMax = () => 0.999;
+
+  it('lowest uncommon vs highest giga: match completes without errors', () => {
+    const weakSteed = createFullLoadout('uncommon', 'uncommon', rngMin);
+    const weakPlayer = createFullPlayerLoadout('uncommon', rngMin);
+    const strongSteed = createFullLoadout('giga', 'giga', rngMax);
+    const strongPlayer = createFullPlayerLoadout('giga', rngMax);
+
+    let match = createMatch(
+      ARCHETYPES.duelist, ARCHETYPES.duelist,
+      weakSteed, strongSteed, weakPlayer, strongPlayer,
+    );
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    // Giga player (P2) should dominate
+    expect(match.passResults.length).toBeGreaterThanOrEqual(1);
+    if (match.phase === Phase.MatchEnd) {
+      expect(match.winner).toBe('player2');
+    }
+  });
+
+  it('all-min gear: stamina never goes negative across 5 passes', () => {
+    const steed = createFullLoadout('uncommon', 'uncommon', rngMin);
+    const player = createFullPlayerLoadout('uncommon', rngMin);
+
+    let match = createMatch(
+      ARCHETYPES.charger, ARCHETYPES.technician,
+      steed, steed, player, player,
+    );
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Fast, attack: CF },
+        { speed: SpeedType.Fast, attack: CF },
+      );
+    }
+
+    // Stamina should never be negative
+    for (const pr of match.passResults) {
+      expect(pr.player1.staminaAfter).toBeGreaterThanOrEqual(0);
+      expect(pr.player2.staminaAfter).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('all-max giga gear: stats above softCap knee still produce valid combat', () => {
+    const steed = createFullLoadout('giga', 'giga', rngMax);
+    const player = createFullPlayerLoadout('giga', rngMax);
+
+    let match = createMatch(
+      ARCHETYPES.charger, ARCHETYPES.bulwark,
+      steed, steed, player, player,
+    );
+
+    // Both players have max gear → stats well above softCap knee
+    expect(match.player1.archetype.momentum).toBeGreaterThan(BALANCE.softCapKnee);
+
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: PdL },
+      );
+    }
+
+    // Match must complete
+    expect(match.passResults.length).toBeGreaterThanOrEqual(1);
+    // Impact scores should be positive (softCap shouldn't break scoring)
+    for (const pr of match.passResults) {
+      expect(pr.player1.impactScore).toBeGreaterThan(0);
+      expect(pr.player2.impactScore).toBeGreaterThan(0);
+    }
+  });
+
+  it('min vs max gear: giga differential exceeds uncommon differential', () => {
+    const rarities = ['uncommon', 'giga'] as const;
+    const differentials: number[] = [];
+
+    for (const rarity of rarities) {
+      const minSteed = createFullLoadout(rarity, rarity, rngMin);
+      const maxSteed = createFullLoadout(rarity, rarity, rngMax);
+
+      let minMatch = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, minSteed);
+      let maxMatch = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, maxSteed);
+
+      minMatch = submitJoustPass(minMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      maxMatch = submitJoustPass(maxMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+
+      const minImpact = minMatch.passResults[0].player1.impactScore;
+      const maxImpact = maxMatch.passResults[0].player1.impactScore;
+      differentials.push(maxImpact - minImpact);
+    }
+
+    // Giga min-max differential must exceed uncommon (wider stat ranges)
+    expect(differentials[1]).toBeGreaterThan(differentials[0]);
+    // Both differentials should be positive (max gear always stronger than min)
+    expect(differentials[0]).toBeGreaterThan(0);
+    expect(differentials[1]).toBeGreaterThan(0);
+  });
+
+  it('all 6 rarities: max-roll gear always produces higher impact than min-roll', () => {
+    const rarities = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'] as const;
+
+    for (const rarity of rarities) {
+      const minSteed = createFullLoadout(rarity, rarity, rngMin);
+      const maxSteed = createFullLoadout(rarity, rarity, rngMax);
+
+      let minMatch = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, minSteed);
+      let maxMatch = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, maxSteed);
+
+      minMatch = submitJoustPass(minMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      maxMatch = submitJoustPass(maxMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+
+      expect(maxMatch.passResults[0].player1.impactScore,
+        `${rarity}: max gear impact should exceed min gear impact`)
+        .toBeGreaterThan(minMatch.passResults[0].player1.impactScore);
+    }
+  });
+
+  it('max giga gear melee: match completes within 20 rounds', () => {
+    const steed = createFullLoadout('giga', 'giga', rngMax);
+    const player = createFullPlayerLoadout('giga', rngMax);
+
+    let match = createMatch(
+      ARCHETYPES.breaker, ARCHETYPES.bulwark,
+      steed, steed, player, player,
+    );
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    let rounds = 0;
+    while (match.phase === Phase.MeleeSelect && rounds < 20) {
+      match = submitMeleeRound(match, MC, OC);
+      rounds++;
+    }
+
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.winner).not.toBe('none');
+  });
+});

@@ -6,8 +6,8 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (477 passing)
-npx tsx src/tools/simulate.ts [bare|giga]   # Balance simulation (modes: bare|uncommon|rare|epic|legendary|relic|giga|mixed)
+npx vitest run                              # Run all tests (685 passing)
+npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
@@ -109,10 +109,11 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Balance State
 
-S25 balance pass: guardImpactCoeff 0.18, guardUnseatDivisor 15, breakerGuardPenetration 0.20.
+Key constants in balance-config.ts: guardImpactCoeff 0.18, guardUnseatDivisor 15, breakerGuardPenetration 0.25, softCap knee 100 / K 50.
 Carryover divisors: momentum 6, control 7, guard 9. Unseated boost 1.25, stamina recovery 8.
-Key constants in balance-config.ts: guardImpactCoeff 0.18, guardUnseatDivisor 15, softCap knee 100 / K 50.
-Remaining: Charger weak at bare (~36%), Technician slightly below 45% at epic/giga.
+Archetype changes this session: Technician MOM 55→58, Charger INIT 60→55 / STA 60→65, Bulwark MOM 55→58 / CTL 55→52.
+Current win rates (bare/uncommon/giga): Bulwark 62%/58%/51%, Duelist 53%/55%/49%, Tactician 50%/54%/50%, Technician 47%/44%/46%, Breaker 45%/45%/56%, Charger 41%/43%/48%.
+Remaining: Bulwark dominant at bare (~62%, structural from GRD=65). Uncommon Bulwark improved from 63%→58% via BL-025.
 
 ## Orchestrator v4
 
@@ -143,14 +144,14 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - For App.tsx changes: note them in handoff under "Deferred App.tsx Changes"
 - Write META section at top of handoff with status/files-modified/tests-passing/notes-for-others
 
-## Test Suite (477 tests, 7 suites)
+## Test Suite (685 tests, 7 suites)
 
 ```
-calculator.test.ts        127 tests   Core math validation
-phase-resolution.test.ts   35 tests   Phase resolution validation
+calculator.test.ts        184 tests   Core math + guard penetration + fatigue + counter table exhaustive
+phase-resolution.test.ts   35 tests   Phase resolution + breaker edge cases
 gigling-gear.test.ts       48 tests   6-slot steed gear
 player-gear.test.ts        46 tests   6-slot player gear
-match.test.ts              71 tests   State machine + integration
-playtest.test.ts          106 tests   Property-based + stress tests
-gear-variants.test.ts      44 tests   Gear variant system
+match.test.ts              88 tests   State machine + integration + joust/melee worked examples + carryover/unseated
+playtest.test.ts          128 tests   Property-based + stress + balance config + gear boundaries
+gear-variants.test.ts     156 tests   Gear variant system + archetype x variant matchups
 ```

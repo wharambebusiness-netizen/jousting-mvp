@@ -4,9 +4,9 @@
 // ============================================================
 import { describe, it, expect } from 'vitest';
 import { ARCHETYPES } from './archetypes';
-import { JOUST_ATTACKS, MELEE_ATTACKS, SPEEDS } from './attacks';
+import { JOUST_ATTACKS, MELEE_ATTACKS, SPEEDS, getJoustAttacksByStance, getMeleeAttacksByStance } from './attacks';
 import { BALANCE } from './balance-config';
-import { SpeedType, MeleeOutcome, type Attack, type Archetype } from './types';
+import { Stance, SpeedType, MeleeOutcome, type Attack, type Archetype } from './types';
 import {
   softCap,
   fatigueFactor,
@@ -411,10 +411,10 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
 
   it('Technician pre-shift stats are below knee (unchanged)', () => {
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CdL, 55);
-    expect(stats.momentum).toBe(63); // 58+0+5 = 63
+    expect(stats.momentum).toBe(66); // 61+0+5 = 66
     expect(stats.control).toBe(80);  // 70+0+10 = 80
     expect(stats.guard).toBe(60);    // 55+5 = 60
-    expect(stats.initiative).toBe(70);
+    expect(stats.initiative).toBe(69); // 59+10 = 69
   });
 
   it('Technician qualifies for shift', () => {
@@ -434,10 +434,10 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     const ff = 43 / 44;
     const guardFF = 0.5 + 0.5 * ff;
 
-    expect(r(stats.momentum, 2)).toBe(r(63 * ff, 2));     // 61.57
+    expect(r(stats.momentum, 2)).toBe(r(66 * ff, 2));     // 64.50
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));      // 83.07
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));    // 64.26
-    expect(stats.initiative).toBe(60);
+    expect(stats.initiative).toBe(59); // 59+10-10 = 59
   });
 
   it('end-of-pass stamina correct', () => {
@@ -481,11 +481,11 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     const ff = 29 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], PdL, 29);
-    // MOM: 53 * ff, CTL: 80 * ff, GRD: 75 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(53 * ff, 2));
+    // MOM: 56 * ff, CTL: 80 * ff, GRD: 75 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(56 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(75 * guardFF, 2));
-    expect(stats.initiative).toBe(70);
+    expect(stats.initiative).toBe(69); // 59+10 = 69
   });
 
   it('end-of-pass stamina correct', () => {
@@ -528,8 +528,8 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
     const ff = 21 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 21);
-    // MOM: 63 * ff, CTL: 85 * ff, GRD: 65 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(63 * ff, 2));
+    // MOM: 66 * ff, CTL: 85 * ff, GRD: 65 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(66 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));
   });
@@ -802,7 +802,7 @@ describe('Edge Cases — Extreme Stat Values', () => {
   // Simulate Bulwark with Giga gear: GRD 65 + 13 (rarity) + 15 (primary) = 93
   const gigaBulwark: Archetype = {
     id: 'giga_bulwark', name: 'Giga Bulwark',
-    momentum: 68, control: 68, guard: 93, initiative: 63, stamina: 78,
+    momentum: 71, control: 65, guard: 93, initiative: 63, stamina: 78,
     identity: 'Test',
   };
 
@@ -1613,7 +1613,7 @@ describe('BL-012 — Breaker Penetration vs All Archetypes', () => {
       );
 
       // Same matchup but without penetration (duelist has same CTL=60, GRD=60)
-      // Calculate expected pen benefit: opponent_guard * 0.20 * 0.18
+      // Calculate expected pen benefit: opponent_guard * breakerGuardPenetration * guardImpactCoeff
       const defGuard = defender.guard + CdL.deltaGuard; // raw guard + attack delta
       const expectedBenefit = defGuard * BALANCE.breakerGuardPenetration * BALANCE.guardImpactCoeff;
 
@@ -1640,18 +1640,16 @@ describe('BL-012 — Breaker Penetration vs All Archetypes', () => {
     // The penetration BENEFIT is largest vs Bulwark.
   });
 
-  it('Breaker penetration 0.20 removes exactly 20% of opponent effective guard from impact calc', () => {
+  it('Breaker penetration removes guardPenetration% of opponent effective guard from impact calc', () => {
     // Manual verification: Duelist (GRD=60) + CdL (+5) = raw 65 → softCap(65) = 65
     // At full stamina, guardFF = 1.0, so effGuard = 65
-    // Without penetration: -65 * 0.18 = -11.7
-    // With 20% penetration: -(65 * 0.8) * 0.18 = -52 * 0.18 = -9.36
-    // Difference = 2.34
+    // diff = 65 * penetration * guardImpactCoeff (dynamic from BALANCE)
 
     const noPen = calcImpactScore(60, 50, 65, 0);
     const withPen = calcImpactScore(60, 50, 65, 0.2);
     const diff = withPen - noPen;
 
-    // diff = 65 * 0.2 * 0.18 = 2.34
+    // diff = 65 * 0.2 * guardImpactCoeff
     expect(diff).toBeCloseTo(65 * 0.2 * BALANCE.guardImpactCoeff, 10);
   });
 
@@ -1757,6 +1755,157 @@ describe('Zero-Stamina Melee Resolution', () => {
 });
 
 // ============================================================
+// Counter Resolution Edge Cases — Exhaustive Table Verification
+// ============================================================
+describe('Counter Table Exhaustive Verification — Joust', () => {
+  const joustAttacks = Object.values(JOUST_ATTACKS);
+
+  it('all 36 joust attack pairs resolve without error', () => {
+    for (const atk1 of joustAttacks) {
+      for (const atk2 of joustAttacks) {
+        const result = resolveCounters(atk1, atk2, 60, 60);
+        expect(result.player1Bonus).toBeDefined();
+        expect(result.player2Bonus).toBeDefined();
+        // Bonuses are always symmetric (equal magnitude, opposite sign)
+        expect(result.player1Bonus).toBeCloseTo(-result.player2Bonus, 10);
+      }
+    }
+  });
+
+  it('no mutual counters exist in joust table (beats is one-directional)', () => {
+    for (const atk1 of joustAttacks) {
+      for (const atk2 of joustAttacks) {
+        const a1BeatsA2 = atk1.beats.includes(atk2.id);
+        const a2BeatsA1 = atk2.beats.includes(atk1.id);
+        // If both beat each other, the first check wins — but this should never happen
+        expect(a1BeatsA2 && a2BeatsA1).toBe(false);
+      }
+    }
+  });
+
+  it('beats/beatenBy are consistent: if A beats B, B is beatenBy A', () => {
+    for (const atk1 of joustAttacks) {
+      for (const beatId of atk1.beats) {
+        const beaten = joustAttacks.find(a => a.id === beatId);
+        expect(beaten, `${atk1.id} claims to beat ${beatId} but it does not exist`).toBeDefined();
+        expect(beaten!.beatenBy).toContain(atk1.id);
+      }
+      for (const byId of atk1.beatenBy) {
+        const beater = joustAttacks.find(a => a.id === byId);
+        expect(beater, `${atk1.id} claims beatenBy ${byId} but it does not exist`).toBeDefined();
+        expect(beater!.beats).toContain(atk1.id);
+      }
+    }
+  });
+
+  it('mirror matchups (same attack) always return zero bonus', () => {
+    for (const atk of joustAttacks) {
+      const result = resolveCounters(atk, atk, 80, 80);
+      expect(result.player1Bonus).toBe(0);
+      expect(result.player2Bonus).toBe(0);
+    }
+  });
+
+  it('counter bonus uses winner CTL only (verified across all winning pairs)', () => {
+    for (const atk1 of joustAttacks) {
+      for (const atk2 of joustAttacks) {
+        if (atk1.beats.includes(atk2.id)) {
+          // P1 wins the counter — bonus should depend on P1 CTL, not P2 CTL
+          const r1 = resolveCounters(atk1, atk2, 70, 10);
+          const r2 = resolveCounters(atk1, atk2, 70, 90);
+          expect(r1.player1Bonus).toBe(r2.player1Bonus);
+          expect(r1.player1Bonus).toBe(BALANCE.counterBaseBonus + 70 * BALANCE.counterCtlScaling);
+        }
+      }
+    }
+  });
+});
+
+describe('Counter Table Exhaustive Verification — Melee', () => {
+  const meleeAttacks = Object.values(MELEE_ATTACKS);
+
+  it('all 36 melee attack pairs resolve without error', () => {
+    for (const atk1 of meleeAttacks) {
+      for (const atk2 of meleeAttacks) {
+        const result = resolveCounters(atk1, atk2, 60, 60);
+        expect(result.player1Bonus).toBeCloseTo(-result.player2Bonus, 10);
+      }
+    }
+  });
+
+  it('no mutual counters exist in melee table', () => {
+    for (const atk1 of meleeAttacks) {
+      for (const atk2 of meleeAttacks) {
+        const a1BeatsA2 = atk1.beats.includes(atk2.id);
+        const a2BeatsA1 = atk2.beats.includes(atk1.id);
+        expect(a1BeatsA2 && a2BeatsA1).toBe(false);
+      }
+    }
+  });
+
+  it('beats/beatenBy are consistent: if A beats B, B is beatenBy A', () => {
+    for (const atk1 of meleeAttacks) {
+      for (const beatId of atk1.beats) {
+        const beaten = meleeAttacks.find(a => a.id === beatId);
+        expect(beaten, `${atk1.id} claims to beat ${beatId} but it does not exist`).toBeDefined();
+        expect(beaten!.beatenBy).toContain(atk1.id);
+      }
+      for (const byId of atk1.beatenBy) {
+        const beater = meleeAttacks.find(a => a.id === byId);
+        expect(beater, `${atk1.id} claims beatenBy ${byId} but it does not exist`).toBeDefined();
+        expect(beater!.beats).toContain(atk1.id);
+      }
+    }
+  });
+
+  it('mirror matchups (same attack) always return zero bonus', () => {
+    for (const atk of meleeAttacks) {
+      const result = resolveCounters(atk, atk, 80, 80);
+      expect(result.player1Bonus).toBe(0);
+      expect(result.player2Bonus).toBe(0);
+    }
+  });
+
+  it('counter bonus uses winner CTL only (verified across all winning pairs)', () => {
+    for (const atk1 of meleeAttacks) {
+      for (const atk2 of meleeAttacks) {
+        if (atk1.beats.includes(atk2.id)) {
+          const r1 = resolveCounters(atk1, atk2, 50, 10);
+          const r2 = resolveCounters(atk1, atk2, 50, 90);
+          expect(r1.player1Bonus).toBe(r2.player1Bonus);
+          expect(r1.player1Bonus).toBe(BALANCE.counterBaseBonus + 50 * BALANCE.counterCtlScaling);
+        }
+      }
+    }
+  });
+});
+
+describe('Counter Edge Cases — Extreme CTL Values', () => {
+  it('negative effective CTL produces bonus less than base', () => {
+    // Possible with heavy carryover penalties
+    const result = resolveCounters(CEP, CF, -10, 0);
+    // bonus = 4 + (-10)*0.1 = 3
+    expect(result.player1Bonus).toBe(BALANCE.counterBaseBonus + (-10) * BALANCE.counterCtlScaling);
+    expect(result.player1Bonus).toBe(3);
+  });
+
+  it('very large CTL produces proportionally large bonus', () => {
+    // Giga rarity could push CTL very high
+    const result = resolveCounters(CEP, CF, 150, 0);
+    // bonus = 4 + 150*0.1 = 19
+    expect(result.player1Bonus).toBe(19);
+    expect(result.player2Bonus).toBe(-19);
+  });
+
+  it('fractional CTL produces fractional bonus', () => {
+    // After fatigue, CTL may be fractional (e.g., 55 * 0.833 = 45.833)
+    const result = resolveCounters(CEP, CF, 45.833, 0);
+    const expected = BALANCE.counterBaseBonus + 45.833 * BALANCE.counterCtlScaling;
+    expect(result.player1Bonus).toBeCloseTo(expected, 10);
+  });
+});
+
+// ============================================================
 // All Joust Speed Combinations
 // ============================================================
 describe('All Joust Speed Combinations Resolve', () => {
@@ -1775,4 +1924,93 @@ describe('All Joust Speed Combinations Resolve', () => {
       });
     }
   }
+});
+
+// ============================================================
+// Attack Stance Filter Functions
+// ============================================================
+describe('getJoustAttacksByStance', () => {
+  it('Aggressive stance returns exactly Coup Fort and Bris de Garde', () => {
+    const attacks = getJoustAttacksByStance(Stance.Aggressive);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['brisDeGarde', 'coupFort']);
+  });
+
+  it('Balanced stance returns exactly Course de Lance and Coup de Pointe', () => {
+    const attacks = getJoustAttacksByStance(Stance.Balanced);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['coupDePointe', 'courseDeLance']);
+  });
+
+  it('Defensive stance returns exactly Port de Lance and Coup en Passant', () => {
+    const attacks = getJoustAttacksByStance(Stance.Defensive);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['coupEnPassant', 'portDeLance']);
+  });
+
+  it('all returned attacks have phase = joust', () => {
+    for (const stance of [Stance.Aggressive, Stance.Balanced, Stance.Defensive]) {
+      const attacks = getJoustAttacksByStance(stance);
+      for (const atk of attacks) {
+        expect(atk.phase).toBe('joust');
+      }
+    }
+  });
+
+  it('all 6 joust attacks are covered across 3 stances', () => {
+    const all = [
+      ...getJoustAttacksByStance(Stance.Aggressive),
+      ...getJoustAttacksByStance(Stance.Balanced),
+      ...getJoustAttacksByStance(Stance.Defensive),
+    ];
+    expect(all).toHaveLength(6);
+    const ids = new Set(all.map(a => a.id));
+    expect(ids.size).toBe(6);
+  });
+});
+
+describe('getMeleeAttacksByStance', () => {
+  it('Aggressive stance returns exactly Overhand Cleave and Feint Break', () => {
+    const attacks = getMeleeAttacksByStance(Stance.Aggressive);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['feintBreak', 'overhandCleave']);
+  });
+
+  it('Balanced stance returns exactly Measured Cut and Precision Thrust', () => {
+    const attacks = getMeleeAttacksByStance(Stance.Balanced);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['measuredCut', 'precisionThrust']);
+  });
+
+  it('Defensive stance returns exactly Guard High and Riposte Step', () => {
+    const attacks = getMeleeAttacksByStance(Stance.Defensive);
+    expect(attacks).toHaveLength(2);
+    const ids = attacks.map(a => a.id).sort();
+    expect(ids).toEqual(['guardHigh', 'riposteStep']);
+  });
+
+  it('all returned attacks have phase = melee', () => {
+    for (const stance of [Stance.Aggressive, Stance.Balanced, Stance.Defensive]) {
+      const attacks = getMeleeAttacksByStance(stance);
+      for (const atk of attacks) {
+        expect(atk.phase).toBe('melee');
+      }
+    }
+  });
+
+  it('all 6 melee attacks are covered across 3 stances', () => {
+    const all = [
+      ...getMeleeAttacksByStance(Stance.Aggressive),
+      ...getMeleeAttacksByStance(Stance.Balanced),
+      ...getMeleeAttacksByStance(Stance.Defensive),
+    ];
+    expect(all).toHaveLength(6);
+    const ids = new Set(all.map(a => a.id));
+    expect(ids.size).toBe(6);
+  });
 });

@@ -63,7 +63,7 @@ describe('Full 5-pass joust — score victory', () => {
   });
 });
 
-describe('v4.1 Worked Example — 2 passes (Charger unseats in Pass 2)', () => {
+describe('v4.1 Worked Example — Charger vs Technician 2-pass scenario', () => {
   it('replays Charger vs Technician via match machine', () => {
     let match = createMatch(charger, technician);
 
@@ -74,29 +74,28 @@ describe('v4.1 Worked Example — 2 passes (Charger unseats in Pass 2)', () => {
     );
     expect(match.passResults.length).toBe(1);
     const p1 = match.passResults[0];
-    // With Technician MOM 58 and Charger INIT 55, Technician narrowly wins Pass 1
+    // With Technician MOM 61 and Charger INIT 55, Technician wins Pass 1
     expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore);
     expect(p1.unseat).toBe('none');
     expect(match.player1.currentStamina).toBe(40);
     expect(match.player2.currentStamina).toBe(29);
 
     // Pass 2: Charger Slow+BdG, Technician Standard+PdL
-    // Charger's STA 65 means less fatigue + BdG beats PdL → Charger unseats
+    // Charger has less fatigue + BdG beats PdL, but Technician MOM 61 prevents unseat
     match = submitJoustPass(match,
       { speed: SpeedType.Slow, attack: BdG },
       { speed: SpeedType.Standard, attack: PdL },
     );
     const p2 = match.passResults[1];
     expect(p2.player1.impactScore).toBeGreaterThan(p2.player2.impactScore);
-    expect(p2.unseat).toBe('player1'); // Charger unseats Technician
+    expect(p2.unseat).toBe('none');
     expect(match.player1.currentStamina).toBe(30);
-    // Technician gets stamina recovery (+8): 21+8=29
-    expect(match.player2.currentStamina).toBe(29);
+    expect(match.player2.currentStamina).toBe(21);
 
-    // Match transitions to melee
+    // No unseat — match continues to pass 3
     expect(match.passNumber).toBe(3);
-    expect(match.phase).toBe(Phase.MeleeSelect);
-    expect(match.player2.wasUnseated).toBe(true);
+    expect(match.phase).toBe(Phase.SpeedSelect);
+    expect(match.player2.wasUnseated).toBeFalsy();
   });
 });
 
@@ -228,6 +227,28 @@ describe('Unseat → Melee transition with carryover', () => {
     expect(match.phase).toBe(Phase.MeleeSelect);
     expect(match.player1.wasUnseated).toBe(false);
     expect(match.player2.wasUnseated).toBe(false);
+  });
+
+  it('tied joust → melee has zero carryover penalties for both players', () => {
+    let match = createMatch(duelist, duelist);
+
+    // Play 5 identical passes → tied cumulative scores → melee
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    expect(match.phase).toBe(Phase.MeleeSelect);
+    expect(match.cumulativeScore1).toBe(match.cumulativeScore2);
+    // No unseat → no carryover penalties
+    expect(match.player1.carryoverMomentum).toBe(0);
+    expect(match.player1.carryoverControl).toBe(0);
+    expect(match.player1.carryoverGuard).toBe(0);
+    expect(match.player2.carryoverMomentum).toBe(0);
+    expect(match.player2.carryoverControl).toBe(0);
+    expect(match.player2.carryoverGuard).toBe(0);
   });
 });
 
@@ -1042,5 +1063,436 @@ describe('Performance — match execution time', () => {
 
     // 100 full matches should complete in under 500ms (5ms each)
     expect(elapsed).toBeLessThan(500);
+  });
+});
+
+// ============================================================
+// 27. Multi-pass Worked Example — 5-pass Tactician vs Duelist (BL-023)
+// ============================================================
+// Full deterministic trace: both use Standard speed + CdL every pass.
+// No counter bonus (CdL vs CdL = same stance). Fatigue kicks in at pass 3.
+// Tactician has INIT advantage (75 vs 60) but Duelist has MOM (60 vs 55)
+// and STA (60 vs 55) advantage. Duelist wins on cumulative impact.
+describe('Multi-pass Worked Example — Tactician vs Duelist (5 passes, no unseat)', () => {
+  const tactician = ARCHETYPES.tactician;
+
+  it('completes all 5 passes without unseat', () => {
+    let match = createMatch(tactician, duelist);
+
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    expect(match.passResults.length).toBe(5);
+    for (const pr of match.passResults) {
+      expect(pr.unseat).toBe('none');
+    }
+    expect(match.phase).toBe(Phase.MatchEnd);
+  });
+
+  it('Pass 1: no fatigue, Tactician INIT advantage gives higher accuracy', () => {
+    let match = createMatch(tactician, duelist);
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    const p = match.passResults[0];
+    // Tactician raw: MOM=60, CTL=75, GRD=55, INIT=85 (all below knee, ff=1.0)
+    // Duelist raw:   MOM=65, CTL=70, GRD=65, INIT=70 (all below knee, ff=1.0)
+    expect(p.player1.effectiveStats.momentum).toBeCloseTo(60, 1);
+    expect(p.player1.effectiveStats.control).toBeCloseTo(75, 1);
+    expect(p.player1.effectiveStats.guard).toBeCloseTo(55, 1);
+    expect(p.player1.effectiveStats.initiative).toBe(85);
+
+    expect(p.player2.effectiveStats.momentum).toBeCloseTo(65, 1);
+    expect(p.player2.effectiveStats.control).toBeCloseTo(70, 1);
+    expect(p.player2.effectiveStats.guard).toBeCloseTo(65, 1);
+    expect(p.player2.effectiveStats.initiative).toBe(70);
+
+    // Accuracy: CTL + INIT/2 - oppMOM/4 + counterBonus(0)
+    // P1: 75 + 42.5 - 16.25 = 101.25
+    // P2: 70 + 35 - 15 = 90
+    expect(p.player1.accuracy).toBeCloseTo(101.25, 1);
+    expect(p.player2.accuracy).toBeCloseTo(90, 1);
+
+    // Impact: MOM*0.5 + ACC*0.4 - oppGRD*guardImpactCoeff
+    // P1: 30 + 40.5 - 11.7 = 58.80
+    // P2: 32.5 + 36.0 - 9.9 = 58.60
+    expect(p.player1.impactScore).toBeCloseTo(58.80, 1);
+    expect(p.player2.impactScore).toBeCloseTo(58.60, 1);
+
+    // Stamina: 55-10=45, 60-10=50
+    expect(match.player1.currentStamina).toBe(45);
+    expect(match.player2.currentStamina).toBe(50);
+  });
+
+  it('Pass 2: still no fatigue, identical to Pass 1', () => {
+    let match = createMatch(tactician, duelist);
+    // Play 2 passes
+    for (let i = 0; i < 2; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    const p2 = match.passResults[1];
+    // fatigue thresholds: Tactician 55*0.8=44, Duelist 60*0.8=48
+    // Pass 2 stamina: P1=45 > 44, P2=50 > 48 → ff=1.0, same as pass 1
+    expect(p2.player1.impactScore).toBeCloseTo(58.80, 1);
+    expect(p2.player2.impactScore).toBeCloseTo(58.60, 1);
+    expect(p2.unseat).toBe('none');
+
+    // Stamina: 45-10=35, 50-10=40
+    expect(match.player1.currentStamina).toBe(35);
+    expect(match.player2.currentStamina).toBe(40);
+
+    // Cumulative: 2 * 58.80 = 117.60, 2 * 58.60 = 117.20
+    expect(match.cumulativeScore1).toBeCloseTo(117.60, 1);
+    expect(match.cumulativeScore2).toBeCloseTo(117.20, 1);
+  });
+
+  it('Pass 3: fatigue begins, Duelist overtakes in impact', () => {
+    let match = createMatch(tactician, duelist);
+    for (let i = 0; i < 3; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    const p3 = match.passResults[2];
+    // Pass 3 stamina entering: P1=35 < 44 → ff=35/44, P2=40 < 48 → ff=40/48
+    // Duelist has better fatigue factor (0.833 vs 0.795) → gains edge
+    expect(p3.player2.impactScore).toBeGreaterThan(p3.player1.impactScore);
+    expect(p3.unseat).toBe('none');
+
+    // Stamina: 35-10=25, 40-10=30
+    expect(match.player1.currentStamina).toBe(25);
+    expect(match.player2.currentStamina).toBe(30);
+  });
+
+  it('Passes 4-5: fatigue deepens, Duelist wins on cumulative score', () => {
+    let match = createMatch(tactician, duelist);
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    // Pass 4: P1 sta 25→15, P2 sta 30→20
+    expect(match.passResults[3].unseat).toBe('none');
+    // Pass 5: P1 sta 15→5, P2 sta 20→10
+    expect(match.passResults[4].unseat).toBe('none');
+
+    // Final stamina
+    expect(match.player1.currentStamina).toBe(5);
+    expect(match.player2.currentStamina).toBe(10);
+
+    // Duelist (P2) wins — STA advantage means less fatigue penalty
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.cumulativeScore2).toBeGreaterThan(match.cumulativeScore1);
+    expect(match.winner).toBe('player2');
+    expect(match.winReason).toContain('cumulative ImpactScore');
+  });
+
+  it('fatigue progression: impact decreases monotonically across passes', () => {
+    let match = createMatch(tactician, duelist);
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    // Both players' impact should decrease (or stay equal) each pass due to fatigue
+    for (let i = 1; i < 5; i++) {
+      expect(match.passResults[i].player1.impactScore)
+        .toBeLessThanOrEqual(match.passResults[i - 1].player1.impactScore);
+      expect(match.passResults[i].player2.impactScore)
+        .toBeLessThanOrEqual(match.passResults[i - 1].player2.impactScore);
+    }
+
+    // Passes 1-2 should be equal (no fatigue), pass 3 should be strictly lower
+    expect(match.passResults[0].player1.impactScore)
+      .toBeCloseTo(match.passResults[1].player1.impactScore, 5);
+    expect(match.passResults[2].player1.impactScore)
+      .toBeLessThan(match.passResults[1].player1.impactScore);
+  });
+});
+
+// ============================================================
+// 28. Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds)
+// ============================================================
+// Full deterministic trace: P1 plays Measured Cut, P2 plays Overhand Cleave.
+// MC beats OC → P1 gets counter advantage every round.
+// P2 drains STA faster (OC costs 18 vs MC costs 10) → fatigue compounds.
+// Round 1: Hit. Round 2: Hit (fatigue widens gap). Round 3: Critical (P1 wins melee).
+describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to critical)', () => {
+  it('completes in 3 rounds with P1 winning by critical', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    let rounds = 0;
+    while (match.phase === Phase.MeleeSelect && rounds < 10) {
+      match = submitMeleeRound(match, MC, OC);
+      rounds++;
+    }
+
+    expect(rounds).toBe(3);
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.winner).toBe('player1');
+    expect(match.meleeWins1).toBe(4); // 1 + 1 + 2(crit) = 4
+    expect(match.meleeWins2).toBe(0);
+    expect(match.winReason).toContain('CRITICAL');
+  });
+
+  it('Round 1: no fatigue, MC beats OC counter, Hit', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    match = submitMeleeRound(match, MC, OC);
+    const r = match.meleeRoundResults[0];
+
+    // Both ff=1.0 (STA 60 ≥ 48 threshold)
+    // P1 melee effective: MOM=65, CTL=70, GRD=65 (MC deltas: +5/+10/+5)
+    // P2 melee effective: MOM=80, CTL=50, GRD=55 (OC deltas: +20/-10/-5)
+    // Counter: MC beats OC → P1 bonus = 4 + 70*0.1 = 11.0
+    // P1 acc = 70 + 30 - 20 + 11 = 91.0
+    // P2 acc = 50 + 30 - 16.25 - 11 = 52.75
+    // P1 impact = 32.5 + 36.4 - 9.9 = 59.0
+    // P2 impact = 40 + 21.1 - 11.7 = 49.4
+    expect(r.player1ImpactScore).toBeCloseTo(59.0, 1);
+    expect(r.player2ImpactScore).toBeCloseTo(49.4, 1);
+    expect(r.margin).toBeCloseTo(9.6, 1);
+    expect(r.outcome).toBe(MeleeOutcome.Hit);
+    expect(r.winner).toBe('player1');
+    expect(match.meleeWins1).toBe(1);
+
+    // Stamina: MC -10, OC -18
+    expect(r.player1StaminaAfter).toBe(50);
+    expect(r.player2StaminaAfter).toBe(42);
+  });
+
+  it('Round 2: P2 fatigued (ff=0.875), gap widens, Hit', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    match = submitMeleeRound(match, MC, OC); // R1
+    match = submitMeleeRound(match, MC, OC); // R2
+    const r2 = match.meleeRoundResults[1];
+
+    // P1 STA=50 ≥ 48 → ff=1.0 (still fresh)
+    // P2 STA=42 < 48 → ff=42/48=0.875
+    // P2 guardFF = 0.5 + 0.5*0.875 = 0.9375
+    // P2 effMOM=80*0.875=70, effCTL=50*0.875=43.75, effGRD=55*0.9375=51.5625
+    // Counter bonus: 4 + 70*0.1 = 11.0 (P1 CTL still 70, unfatigued)
+    // P1 impact ≈ 60.62, P2 impact ≈ 41.9
+    expect(r2.player1ImpactScore).toBeCloseTo(60.62, 1);
+    expect(r2.player2ImpactScore).toBeCloseTo(41.9, 1);
+    expect(r2.margin).toBeCloseTo(18.72, 1);
+    expect(r2.outcome).toBe(MeleeOutcome.Hit);
+    expect(r2.winner).toBe('player1');
+    expect(match.meleeWins1).toBe(2);
+
+    // Stamina: 50-10=40, 42-18=24
+    expect(r2.player1StaminaAfter).toBe(40);
+    expect(r2.player2StaminaAfter).toBe(24);
+  });
+
+  it('Round 3: deep fatigue, Critical hit ends melee', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    match = submitMeleeRound(match, MC, OC); // R1
+    match = submitMeleeRound(match, MC, OC); // R2
+    match = submitMeleeRound(match, MC, OC); // R3
+    const r3 = match.meleeRoundResults[2];
+
+    // P1 STA=40 < 48 → ff=40/48≈0.833
+    // P2 STA=24 < 48 → ff=24/48=0.5
+    // Fatigue gap massive → P1 impact >> P2 impact
+    // Margin=33.0 exceeds critThreshold → CRITICAL
+    expect(r3.player1ImpactScore).toBeCloseTo(54.925, 1);
+    expect(r3.player2ImpactScore).toBeCloseTo(21.925, 1);
+    expect(r3.margin).toBeCloseTo(33.0, 1);
+    expect(r3.outcome).toBe(MeleeOutcome.Critical);
+    expect(r3.winner).toBe('player1');
+    // Critical = 2 wins → 2+2 = 4 → melee ends
+    expect(match.meleeWins1).toBe(4);
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(match.winner).toBe('player1');
+
+    // Final stamina
+    expect(r3.player1StaminaAfter).toBe(30);
+    expect(r3.player2StaminaAfter).toBe(6);
+  });
+
+  it('impact escalation: P1 impact rises R1→R2 then falls R2→R3', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    for (let i = 0; i < 3; i++) {
+      match = submitMeleeRound(match, MC, OC);
+    }
+
+    const impacts = match.meleeRoundResults.map(r => r.player1ImpactScore);
+    // R1: 59.0 → R2: 60.62 (rises because opponent's guard fatigues faster)
+    // R2: 60.62 → R3: 54.93 (falls because P1's own stats now fatigued)
+    expect(impacts[1]).toBeGreaterThan(impacts[0]);
+    expect(impacts[2]).toBeLessThan(impacts[1]);
+
+    // P2 impact monotonically decreases (more fatigued each round)
+    const p2impacts = match.meleeRoundResults.map(r => r.player2ImpactScore);
+    expect(p2impacts[1]).toBeLessThan(p2impacts[0]);
+    expect(p2impacts[2]).toBeLessThan(p2impacts[1]);
+  });
+
+  it('stamina drain tracking: MC costs 10, OC costs 18 per round', () => {
+    let match = createMatch(duelist, duelist);
+    match = { ...match, phase: Phase.MeleeSelect };
+
+    for (let i = 0; i < 3; i++) {
+      match = submitMeleeRound(match, MC, OC);
+    }
+
+    // P1 stamina: 60 → 50 → 40 → 30 (drains 10/round)
+    // P2 stamina: 60 → 42 → 24 → 6 (drains 18/round)
+    expect(match.meleeRoundResults[0].player1StaminaAfter).toBe(50);
+    expect(match.meleeRoundResults[1].player1StaminaAfter).toBe(40);
+    expect(match.meleeRoundResults[2].player1StaminaAfter).toBe(30);
+    expect(match.meleeRoundResults[0].player2StaminaAfter).toBe(42);
+    expect(match.meleeRoundResults[1].player2StaminaAfter).toBe(24);
+    expect(match.meleeRoundResults[2].player2StaminaAfter).toBe(6);
+  });
+});
+
+// ============================================================
+// 29. Melee with Carryover Penalties + Unseated Boost
+// ============================================================
+// Worked example: Technician (unseated, carryover penalties) vs Charger (unseater).
+// Unseat margin = 24 → carryover: MOM -4, CTL -3, GRD -2.
+// Technician gets 1.25x impact boost + 8 STA recovery.
+// P1 (Technician) plays MC, P2 (Charger) plays OC. MC beats OC → P1 counter.
+// Despite carryover, Technician's high CTL + counter + boost compete with Charger.
+describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () => {
+  // Build match state simulating post-unseat transition.
+  // Unseat margin 24: MOM -floor(24/6)=-4, CTL -floor(24/7)=-3, GRD -floor(24/9)=-2
+  function buildCarryoverMatch() {
+    let match = createMatch(ARCHETYPES.technician, charger);
+    // Simulate: Technician was unseated by Charger with margin=24.
+    // Post-joust stamina: Tech had STA=36 after joust attack drain, recovered +8 → 44.
+    // Charger had STA=40 after joust.
+    match = {
+      ...match,
+      phase: Phase.MeleeSelect,
+      player1: {
+        ...match.player1,
+        currentStamina: 44,
+        carryoverMomentum: -4,
+        carryoverControl: -3,
+        carryoverGuard: -2,
+        wasUnseated: true,
+      },
+      player2: {
+        ...match.player2,
+        currentStamina: 40,
+        carryoverMomentum: 0,
+        carryoverControl: 0,
+        carryoverGuard: 0,
+        wasUnseated: false,
+      },
+    };
+    return match;
+  }
+
+  it('carryover penalties applied: -4 MOM, -3 CTL, -2 GRD from margin 24', () => {
+    const match = buildCarryoverMatch();
+    expect(match.player1.carryoverMomentum).toBe(-4);
+    expect(match.player1.carryoverControl).toBe(-3);
+    expect(match.player1.carryoverGuard).toBe(-2);
+    expect(match.player1.wasUnseated).toBe(true);
+    expect(match.player2.carryoverMomentum).toBe(0);
+    expect(match.player2.wasUnseated).toBe(false);
+  });
+
+  it('Round 1: unseated boost compensates carryover, MC vs OC counter helps P1', () => {
+    let match = buildCarryoverMatch();
+    match = submitMeleeRound(match, MC, OC);
+    const r = match.meleeRoundResults[0];
+
+    // Technician (P1, unseated) with MC:
+    //   Raw: MOM=58+5-4=59, CTL=70+10-3=77, GRD=55+5-2=58
+    //   STA=44, threshold=55*0.8=44 → ff=1.0 (exactly at threshold)
+    //   guardFF = 0.5 + 0.5*1.0 = 1.0
+    //   EffMOM=59, EffCTL=77, EffGRD=58, INIT=60
+    //
+    // Charger (P2, no carryover) with OC:
+    //   Raw: MOM=75+20=95, CTL=55-10=45, GRD=50-5=45
+    //   STA=40, threshold=65*0.8=52 → ff=40/52 ≈ 0.7692
+    //   guardFF = 0.5 + 0.5*(40/52) ≈ 0.8846
+    //   EffMOM=95*40/52, EffCTL=45*40/52, EffGRD=45*(0.5+0.5*40/52)
+
+    // P1 wins round (counter + boost overcomes carryover)
+    expect(r.winner).toBe('player1');
+    expect(r.player1ImpactScore).toBeGreaterThan(r.player2ImpactScore);
+    expect(r.margin).toBeGreaterThan(30); // Large margin from counter + boost
+
+    // Stamina: MC costs 10, OC costs 18
+    expect(r.player1StaminaAfter).toBe(34);  // 44-10
+    expect(r.player2StaminaAfter).toBe(22);  // 40-18
+  });
+
+  it('unseated boost flag persists across multiple melee rounds', () => {
+    let match = buildCarryoverMatch();
+    match = submitMeleeRound(match, MC, OC);
+    match = submitMeleeRound(match, MC, OC);
+
+    const r1 = match.meleeRoundResults[0];
+    const r2 = match.meleeRoundResults[1];
+
+    // wasUnseated persists — P1 wins both rounds
+    expect(r1.winner).toBe('player1');
+    expect(r2.winner).toBe('player1');
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+    expect(r2.player1ImpactScore).toBeGreaterThan(r2.player2ImpactScore);
+  });
+
+  it('carryover penalties reduce effective stats compared to no-carryover baseline', () => {
+    let withCarryover = buildCarryoverMatch();
+    let noCarryover = createMatch(ARCHETYPES.technician, charger);
+    noCarryover = {
+      ...noCarryover,
+      phase: Phase.MeleeSelect,
+      player1: { ...noCarryover.player1, currentStamina: 44 },
+      player2: { ...noCarryover.player2, currentStamina: 40 },
+    };
+
+    withCarryover = submitMeleeRound(withCarryover, MC, OC);
+    noCarryover = submitMeleeRound(noCarryover, MC, OC);
+
+    const rCarryover = withCarryover.meleeRoundResults[0];
+    const rBaseline = noCarryover.meleeRoundResults[0];
+
+    // Without carryover, P1 has no 1.25x boost, so baseline P1 impact is lower
+    // despite having better raw stats (no -4/-3/-2 penalties).
+    // This demonstrates the boost overcompensates for the penalties.
+    expect(rCarryover.player1ImpactScore).toBeGreaterThan(rBaseline.player1ImpactScore);
+  });
+
+  it('without unseated boost, carryover player has lower pre-boost impact', () => {
+    let match = buildCarryoverMatch();
+    match = submitMeleeRound(match, MC, OC);
+    const r = match.meleeRoundResults[0];
+
+    // The unboosted P1 impact = r.player1ImpactScore / 1.25
+    const unboosted = r.player1ImpactScore / BALANCE.unseatedImpactBoost;
+    expect(unboosted).toBeLessThan(r.player1ImpactScore);
+    expect(r.player1ImpactScore / unboosted).toBeCloseTo(1.25, 5);
   });
 });

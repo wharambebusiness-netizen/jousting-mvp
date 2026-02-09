@@ -220,7 +220,87 @@ describe('Double shift priority (no caparison)', () => {
 });
 
 // ============================================================
-// 4. Guard Penetration — Joust Phase (Breaker Mechanic)
+// 4. Double Unseat via resolveJoustPass
+// ============================================================
+describe('Double unseat via resolveJoustPass', () => {
+  it('mutual unseat: higher margin wins', () => {
+    // Charger (high MOM, low GRD) vs Breaker with aggressive attacks
+    // Both at very low stamina → low unseat threshold
+    const p1: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 5,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const p2: PlayerState = {
+      archetype: ARCHETYPES.breaker,
+      currentStamina: 5,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const choice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const result = resolveJoustPass(1, p1, p2, choice, choice);
+
+    // At STA=5, threshold is low; either both unseat (higher margin wins) or no unseat
+    if (result.unseat !== 'none') {
+      expect(['player1', 'player2']).toContain(result.unseat);
+      expect(result.unseatMargin).toBeGreaterThan(0);
+    }
+  });
+
+  it('mirror matchup at low stamina: tied margins = no unseat', () => {
+    // Identical archetypes, attacks, stamina → tied impact → tied margins
+    const p1: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 3,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const p2: PlayerState = { ...p1 };
+
+    const choice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const result = resolveJoustPass(1, p1, p2, choice, choice);
+
+    // Perfect mirror: if both exceed threshold, tied margins → no unseat
+    expect(result.unseat).toBe('none');
+    expect(result.unseatMargin).toBe(0);
+  });
+
+  it('asymmetric unseat: only stronger player exceeds threshold', () => {
+    // Charger (MOM 75) at full STA vs Technician (MOM 58) at very low STA
+    const p1: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 40,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const p2: PlayerState = {
+      archetype: ARCHETYPES.technician,
+      currentStamina: 5,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const choice1: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const choice2: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+    const result = resolveJoustPass(1, p1, p2, choice1, choice2);
+
+    // Charger should have much higher impact
+    if (result.unseat !== 'none') {
+      expect(result.unseat).toBe('player1');
+      expect(result.unseatMargin).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ============================================================
+// 5. Guard Penetration — Joust Phase (Breaker Mechanic)
 // ============================================================
 describe('Guard Penetration — Joust Phase', () => {
   it('Breaker impact is higher than non-Breaker with same attack against high guard', () => {
@@ -420,9 +500,9 @@ describe('Guard Penetration — Edge Cases', () => {
 
     // Charger has lower guard, so penetration benefit is smaller
     // With PT (deltaGuard=0): charger guard = 50
-    // Penetration: ignores 50*0.35 = 17.5, effective guard = 32.5
-    // Guard reduction on impact: (50 - 32.5) * 0.2 = 3.5 impact boost
-    // This is still non-zero, but much smaller than vs Bulwark
+    // Penetration: ignores 50 * breakerGuardPenetration of guard
+    // Guard reduction on impact uses guardImpactCoeff (from BALANCE)
+    // Benefit is still non-zero, but much smaller than vs Bulwark
     const breakerVsCharger = resolveMeleeRoundFn(1, breaker, charger,
       MELEE_ATTACKS.precisionThrust, MELEE_ATTACKS.precisionThrust);
     const duelistVsCharger = resolveMeleeRoundFn(1, makePlayerState('duelist'), charger,

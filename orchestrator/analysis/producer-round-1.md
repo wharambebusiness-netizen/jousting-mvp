@@ -1,94 +1,93 @@
-# Producer Analysis — Round 1
+# Producer Round 1 Analysis — New Session Bootstrap
 
-## Session Context
+## Session State at Start
 
-This is the first round of a new overnight continuous improvement session. 5 agents are active: producer, balance-tuner, qa, polish, reviewer. All agents start at `not-started` status.
+### Previous Session Summary
+The previous session ran 8 rounds with 5 agents (producer, balance-tuner, qa, polish, reviewer). All agents reached `all-done` status. Key accomplishments:
+- **4 balance changes applied**: Technician MOM 55→58, Charger INIT 60→55 / STA 60→65, breakerGuardPenetration 0.20→0.25, Bulwark MOM 55→58 / CTL 55→52
+- **Test suite grew** from 477 to 685 tests (+208, +44%)
+- **Balance spread improved**: bare 32pp→21pp, uncommon 22pp→15pp
+- **All bugs resolved**: BUG-002 (noise), BUG-004 (info), BUG-005 (closed), BUG-006 (closed)
 
-## Project State Assessment
+### Test Count Reconciliation
+CLAUDE.md says **680 tests** but actual vitest output shows **685 tests** (7 suites).
 
-### Test Suite
-- **477 tests, 7 suites, all passing** — confirmed by running `npx vitest run`
-- Test suites: calculator (127), playtest (106), match (71), gigling-gear (48), player-gear (46), gear-variants (44), phase-resolution (35)
+| Suite | CLAUDE.md | Actual | Delta |
+|-------|-----------|--------|-------|
+| calculator.test.ts | 184 | 184 | 0 |
+| phase-resolution.test.ts | 35 | 35 | 0 |
+| gigling-gear.test.ts | 48 | 48 | 0 |
+| player-gear.test.ts | 46 | 46 | 0 |
+| match.test.ts | **83** | **88** | **+5** |
+| gear-variants.test.ts | 156 | 156 | 0 |
+| playtest.test.ts | 128 | 128 | 0 |
+| **Total** | **680** | **685** | **+5** |
 
-### Current Archetype Stats (from archetypes.ts)
-```
-             MOM  CTL  GRD  INIT  STA  Total
-charger:      75   55   50    60   60  = 300
-technician:   55   70   55    60   55  = 295
-bulwark:      55   55   65    53   62  = 290
-tactician:    55   65   50    75   55  = 300
-breaker:      62   60   55    55   60  = 292
-duelist:      60   60   60    60   60  = 300
-```
+Root cause: QA Round 8 added 5 carryover/unseated worked example tests to match.test.ts (83→88). The reviewer updated CLAUDE.md to 680 but missed these 5 tests. BL-030 updated to reflect 680→685.
 
-### Known Balance Issues (from CLAUDE.md + MEMORY.md)
-1. **Charger weak at bare (~34-36%)** — below 44% target floor
-2. **Technician slightly below 45% at epic/giga** — borderline
-3. **Bulwark dominant (~66% at bare)** — above 58% target ceiling
-4. **Breaker vs Bulwark (~24%)** — "anti-Bulwark" identity not delivering
+### Carryover Tasks from Previous Session
+| Task | Role | Priority | Status | Notes |
+|------|------|----------|--------|-------|
+| BL-028 | ui-dev | P3 | pending | Gear rarity borders in JSX — needs ui-dev |
+| BL-030 | tech-lead | P1 | pending | CLAUDE.md test count 680→685 (updated from stale 655→667) |
+| BL-031 | balance-analyst | P1 | pending | Technician MOM 58→61 — primary balance work (promoted from P3→P1) |
+| BL-032 | ui-dev | P3 | pending | Inline style migration — needs ui-dev |
 
-### Key Constants (balance-config.ts)
-- guardImpactCoeff: 0.18
-- guardUnseatDivisor: 15
-- breakerGuardPenetration: 0.20
-- softCapKnee: 100, softCapK: 50
+## New Tasks Created
 
-## Backlog Actions Taken
+| Task | Role | Priority | Depends On | Description |
+|------|------|----------|------------|-------------|
+| BL-033 | qa-engineer | P1 | BL-031 | Fix test assertions broken by Technician MOM 58→61 |
+| BL-034 | balance-analyst | P2 | BL-031, BL-033 | Post-change full tier sweep and validation |
+| BL-035 | tech-lead | P2 | BL-031, BL-033, BL-034 | Review changes + update CLAUDE.md |
 
-### Existing Tasks (10) — Updated
-- Converted string priorities to numeric (1=highest)
-- Refined task descriptions with test-lock warnings and specific stat references
-- BL-001 (Technician fix): Added warning about CTL being test-locked, suggested STA/GRD as safer levers
-- BL-002 (Charger fix): Added warning that ALL Charger stats are test-locked, suggested STA+2 or INIT+2
-- BL-003: Repurposed from "Bulwark at Uncommon" to "breakerGuardPenetration effectiveness" — this is a higher-impact lever since it's NOT test-locked
-- BL-009: Clarified reviewer should write findings to analysis, NOT move constants
+## Execution Plan
 
-### New Tasks (3) — Added
-- **BL-011** (balance-analyst, P4): Full tier sweep — run sims at all 7 tiers to establish session baseline
-- **BL-012** (qa-engineer, P4): Test breaker guard penetration mechanic — verify the mechanic works as designed
-- **BL-013** (css-artist, P3): Polish combat result display — visual improvements to result screen
+### Wave 1 (Round 1 — can run in parallel)
+- **BL-030** (reviewer): Fix CLAUDE.md test count 680→685 — no dependencies, quick fix
+- **BL-031** (balance-tuner): Apply Technician MOM 58→61 — primary balance change, will break tests
+- **BL-028** (polish/ui-dev): Gear rarity borders in JSX — independent of balance work
 
-## Task Assignment Summary
+### Wave 2 (Round 2 — after BL-031 completes)
+- **BL-033** (qa): Fix broken test assertions from Technician MOM change
 
-| Agent | Assigned Task | Priority | Status |
-|-------|--------------|----------|--------|
-| balance-tuner | BL-001: Fix Technician at Epic/Giga | P1 | assigned |
-| qa | BL-004: Test gear variant interactions | P1 | assigned |
-| polish | BL-007: Rarity card styling | P1 | assigned |
-| reviewer | BL-009: Magic number audit | P1 | assigned |
+### Wave 3 (Round 3 — after BL-033 completes)
+- **BL-034** (balance-tuner): Full tier sweep to validate change
+- **BL-032** (polish/ui-dev): Inline style migration — independent of balance work
+
+### Wave 4 (Round 4 — after BL-034 completes)
+- **BL-035** (reviewer): Review all changes + final CLAUDE.md update
 
 ## Risk Assessment
 
-### File Ownership Conflicts
-- **No conflicts this round**: Each agent touches different files
-  - balance-tuner: `archetypes.ts` only (BL-001 doesn't need balance-config.ts)
-  - qa: `gear-variants.test.ts` only (BL-004)
-  - polish: `App.css` only
-  - reviewer: `types.ts` + writes to analysis/ only
+1. **Technician MOM cascade risk**: Previous MOM change (55→58) broke 7 tests. This change (58→61) will likely break similar assertions. QA has experience with this cascade from BL-014. Risk: MEDIUM.
 
-### Sequencing Constraints
-- BL-002 (Charger) depends on BL-001 (Technician) completing first — same files, same agent
-- BL-003 (breakerGuardPenetration) can run in parallel with BL-002 since it only touches balance-config.ts
-- BL-005/006/012 (QA tasks) must be sequential — same test files
+2. **Match worked example may need full rewrite**: The Charger vs Technician worked example in match.test.ts is sensitive to Technician stats. If the outcome changes (e.g., different pass count or unseat timing), the entire example needs recalculation. Risk: MEDIUM.
 
-### Test Stability Risk
-- **Balance-tuner stat changes** will break hardcoded test assertions if Charger stats are modified (BL-002). Technician stats are partially locked (CTL=70 in tests). The balance-tuner needs to check test files before making changes.
-- **QA adding tests** is low risk — only additive changes
+3. **gear-variants BL-004 fragility**: The N=30 deterministic cycling tests are fragile to ANY stat change. These may need threshold widening. Risk: LOW (known issue, documented in reviewer tech debt).
 
-## Metrics to Track
+4. **File ownership conflicts**: BL-030 and BL-035 both target CLAUDE.md — but they're sequenced (Wave 1 vs Wave 4), so no conflict. BL-031 targets archetypes.ts which no other active task needs. Clean.
 
-| Metric | Current | Session Target |
-|--------|---------|---------------|
-| Tests passing | 477 | 495+ |
-| Win rate spread (bare) | ~32pp | <25pp |
-| Weakest archetype (bare) | Charger ~34% | >40% |
-| Strongest archetype (bare) | Bulwark ~66% | <58% |
-| Breaker vs Bulwark | ~24% | >35% |
+## Milestone Tracking
 
-## Next Round Priorities
+### Balance Targets
+| Metric | Previous Session | Target | Status |
+|--------|-----------------|--------|--------|
+| Technician bare | 45-49% | ≥47% | In progress (BL-031) |
+| Technician giga | 46% | ≥48% | In progress (BL-031) |
+| Charger bare | 41-42% | ≥40% | MET |
+| Bulwark uncommon | 58.5% | ≤60% | MET |
+| Bulwark bare | 62% | Structural, accepted | ACCEPTED |
+| No archetype >57% | Clean except bare Bulwark | — | MET |
 
-1. Review balance-tuner results from BL-001 — did Technician improve at epic/giga?
-2. Review QA test additions from BL-004 — new test count?
-3. If balance-tuner succeeded on BL-001, assign BL-002 (Charger) or BL-003 (breakerGuardPenetration)
-4. If QA completed BL-004, assign BL-005 (softCap tests)
-5. Check for any test failures introduced by other agents
+### Code Quality
+| Metric | Value |
+|--------|-------|
+| Tests passing | 685/685 |
+| Test suites | 7/7 |
+| CLAUDE.md accuracy | Stale (680 vs 685) — BL-030 |
+| Open bugs | 0 |
+
+## Summary
+
+New session starts clean with 685 passing tests and 0 bugs. Primary objective is **Technician MOM 58→61** (BL-031) — the last remaining balance change from previous session's analysis. The pipeline is well-sequenced: balance change → test fixes → validation sweep → review. UI polish work (BL-028, BL-032) can run in parallel with balance work since they target different files. Backlog updated with 3 new tasks (BL-033, BL-034, BL-035) to support the Technician change pipeline.
