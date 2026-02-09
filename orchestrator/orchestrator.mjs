@@ -1005,6 +1005,9 @@ async function main() {
   // Round-level tracking for the overnight report
   const roundLog = []; // { round, agents: [{id, status, elapsed}], testsPassed, testCount, failCount }
 
+  // v5F: Round-level decision log — tracks WHY each agent was included/skipped/blocked each round
+  const roundDecisions = [];
+
   for (let round = 1; round <= CONFIG.maxRounds; round++) {
     // --- Check max runtime ---
     const elapsed = Date.now() - globalStart;
@@ -1014,6 +1017,30 @@ async function main() {
       break;
     }
     const remainingHrs = ((CONFIG.maxRuntimeMs - elapsed) / 3600000).toFixed(1);
+
+    // --- Feature 5E: Hot-reload mission config each round ---
+    if (missionConfigPath) {
+      try {
+        const absPath = resolve(missionConfigPath);
+        const freshMission = JSON.parse(readFileSync(absPath, 'utf-8'));
+        for (const freshAgent of (freshMission.agents || [])) {
+          const existing = AGENTS.find(a => a.id === freshAgent.id);
+          if (!existing) continue;
+          // Only update live-tunable fields; preserve runtime state (_originalModel, etc.)
+          const TUNABLE_FIELDS = ['model', 'timeoutMs', 'maxBudgetUsd', 'maxModel', 'minFrequencyRounds', 'maxTasksPerRound'];
+          for (const field of TUNABLE_FIELDS) {
+            const newVal = freshAgent[field] ?? (field === 'maxTasksPerRound' ? 1 : field === 'minFrequencyRounds' ? 0 : null);
+            const oldVal = existing[field];
+            if (newVal !== oldVal) {
+              log(`Hot-reload: ${existing.id} ${field} changed ${oldVal}->${newVal}`);
+              existing[field] = newVal;
+            }
+          }
+        }
+      } catch (err) {
+        log(`Hot-reload WARNING: Could not re-read mission config (${err.message}). Keeping existing config.`);
+      }
+    }
 
     log(`\n${'━'.repeat(50)}`);
     log(`  ROUND ${round} of ${CONFIG.maxRounds}  (${remainingHrs}hr remaining)`);
@@ -1026,6 +1053,9 @@ async function main() {
     generateTaskBoard(round, lastTestStatus, consecutiveTestFailures);
 
     // --- Determine which agents run this round (v5: work-gated + min frequency) ---
+    // v5F: Track per-agent decisions this round
+    const thisRoundDecisions = []; // populated during selection, updated after execution
+
     const activeAgents = AGENTS.filter(agent => {
       const meta = parseHandoffMeta(agent.id);
 
@@ -1033,6 +1063,11 @@ async function main() {
       if (meta.status === 'all-done') {
         if (agent.type !== 'continuous') {
           log(`  ${agent.id}: ALL DONE (skipping)`);
+          thisRoundDecisions.push({
+            round, agentId: agent.id, decision: 'skipped',
+            reason: 'all-done (non-continuous)', model: agent.model || 'default',
+            escalated: false, succeeded: null, elapsed: null,
+          });
           return false;
         }
 
@@ -1047,6 +1082,12 @@ async function main() {
 
         if (!hasBacklogTask && !hasLeftoverWork && !dueForPeriodicRun) {
           log(`  ${agent.id}: IDLE (no pending tasks, skipping)`);
+          const freqInfo = minFreq < Infinity ? ` (min ${minFreq}, last ran ${roundsSinceLastRun} ago)` : '';
+          thisRoundDecisions.push({
+            round, agentId: agent.id, decision: 'skipped',
+            reason: `work-gated: no tasks${freqInfo}`, model: agent.model || 'default',
+            escalated: false, succeeded: null, elapsed: null,
+          });
           return false;
         }
         log(`  ${agent.id}: CONTINUOUS — has work or due for periodic run`);
@@ -1058,12 +1099,28 @@ async function main() {
         return isDepSatisfied(depMeta.status);
       });
       if (!depsMet) {
+        const blockingDeps = agent.dependsOn.filter(depId => {
+          const depMeta = parseHandoffMeta(depId);
+          return !isDepSatisfied(depMeta.status);
+        });
         log(`  ${agent.id}: BLOCKED (needs ${agent.dependsOn.join(', ')})`);
+        thisRoundDecisions.push({
+          round, agentId: agent.id, decision: 'blocked',
+          reason: `dependency blocked by ${blockingDeps.join(', ')}`, model: agent.model || 'default',
+          escalated: false, succeeded: null, elapsed: null,
+        });
         return false;
       }
 
       const phase = meta.status === 'complete' ? 'stretch goals' : agent.type;
       log(`  ${agent.id}: ACTIVE (${phase})`);
+      // Record as included — succeeded/elapsed will be updated after execution
+      thisRoundDecisions.push({
+        round, agentId: agent.id, decision: 'included',
+        reason: meta.status === 'all-done' ? 'has pending tasks' : `active (${phase})`,
+        model: agent.model || 'default',
+        escalated: false, succeeded: null, elapsed: null,
+      });
       return true;
     });
 
@@ -1072,9 +1129,11 @@ async function main() {
       if (allRetired) {
         stopReason = 'all agents exhausted their task lists';
         log('\nAll agents have exhausted their task lists. Done!');
+        roundDecisions.push(...thisRoundDecisions);
         break;
       }
       log('\nNo agents can run this round (all blocked or all-done). Waiting...');
+      roundDecisions.push(...thisRoundDecisions);
       roundLog.push({ round, agents: [], testsPassed: null, testCount: '-', failCount: '-', note: 'skipped (all blocked)' });
       continue;
     }
@@ -1161,6 +1220,20 @@ async function main() {
         log(`\n⚠ Tests failing! Consecutive failures: ${consecutiveTestFailures}/${CONFIG.circuitBreakerThreshold}`);
       }
     }
+
+    // v5F: Update decision entries with execution results
+    for (const ra of roundAgents) {
+      const decision = thisRoundDecisions.find(d => d.agentId === ra.id);
+      if (decision) {
+        decision.succeeded = ra.status === 'OK';
+        decision.elapsed = ra.elapsed * 1000; // convert seconds to ms
+        // Check if model was escalated this round
+        const agent = AGENTS.find(a => a.id === ra.id);
+        if (agent) decision.model = agent.model || 'default';
+        decision.escalated = !!(agent?._originalModel && agent.model !== agent._originalModel);
+      }
+    }
+    roundDecisions.push(...thisRoundDecisions);
 
     roundLog.push({
       round,
@@ -1299,15 +1372,29 @@ async function main() {
   log(`Task board: ${TASK_BOARD}`);
 
   // ============================================================
+  // v5F: Write round-decisions.json
+  // ============================================================
+  try {
+    mkdirSync(join(ORCH_DIR, 'logs'), { recursive: true });
+    writeFileSync(
+      join(LOG_DIR, 'round-decisions.json'),
+      JSON.stringify(roundDecisions, null, 2)
+    );
+    log(`Round decisions log written to: ${join(LOG_DIR, 'round-decisions.json')} (${roundDecisions.length} entries)`);
+  } catch (err) {
+    log(`WARNING: Could not write round-decisions.json: ${err.message}`);
+  }
+
+  // ============================================================
   // Generate Overnight Report
   // ============================================================
-  generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts, costLog);
+  generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts, costLog, roundDecisions);
 }
 
 // ============================================================
 // Overnight Report Generation
 // ============================================================
-function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts = {}, costLog = {}) {
+function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts = {}, costLog = {}, roundDecisions = []) {
   const totalMin = ((Date.now() - globalStart) / 60000).toFixed(1);
   const totalHrs = (totalMin / 60).toFixed(1);
   const totalRounds = roundLog.length;
@@ -1478,6 +1565,41 @@ ${agentSummaries.map(a => {
   return `| ${a.id} | ${baseModel} | ${maxModel} | ${finalModel} | ${escCount} |`;
 }).join('\n')}
 
+## Decision Log Summary
+
+${(() => {
+  if (!roundDecisions.length) return '(no decisions recorded)\n';
+
+  // Aggregate per-agent stats from decision log
+  const agentDecisionStats = {};
+  for (const d of roundDecisions) {
+    if (!agentDecisionStats[d.agentId]) {
+      agentDecisionStats[d.agentId] = { included: 0, skipped: 0, blocked: 0, succeeded: 0, failed: 0 };
+    }
+    const s = agentDecisionStats[d.agentId];
+    if (d.decision === 'included') {
+      s.included++;
+      if (d.succeeded === true) s.succeeded++;
+      else if (d.succeeded === false) s.failed++;
+    } else if (d.decision === 'skipped') {
+      s.skipped++;
+    } else if (d.decision === 'blocked') {
+      s.blocked++;
+    }
+  }
+
+  const rows = Object.entries(agentDecisionStats).map(([id, s]) => {
+    const successRate = s.included > 0 ? Math.round((s.succeeded / s.included) * 100) + '%' : '—';
+    return `| ${id} | ${s.included} | ${s.skipped} | ${s.blocked} | ${successRate} |`;
+  });
+
+  return `| Agent | Included | Skipped | Blocked | Success Rate |
+|-------|----------|---------|---------|-------------|
+${rows.join('\n')}
+
+> Full decision log: \`orchestrator/logs/round-decisions.json\`
+`;
+})()}
 ## Analysis Reports Generated
 ${analysisFiles.length
   ? analysisFiles.map(a => `- ${a.agent} round ${a.round}: \`${a.path}\``).join('\n')
