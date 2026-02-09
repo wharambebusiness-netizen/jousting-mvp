@@ -368,7 +368,7 @@ function ensureDirs() {
 //   ## META
 //   - status: all-done | complete | in-progress | blocked
 //   - files-modified: file1.ts, file2.ts
-//   - tests-passing: true | false
+//   - tests-passing: true | false | true (794 all) | 794
 //   - notes-for-others: free text
 //
 // Status meanings:
@@ -377,24 +377,90 @@ function ensureDirs() {
 //   all-done    — all tasks exhausted (primary + stretch), agent is retired
 //   blocked     — waiting on dependency
 //
+// Parser is tolerant of:
+//   - Case variations (e.g., "Files-Modified", "STATUS", "Tests-Passing")
+//   - Extra whitespace and formatting variations
+//   - Missing fields (sensible defaults returned)
+//   - Non-standard values (logged as warnings, never crashes)
+//
+// Returns: { status, filesModified, testsPassing, notes,
+//            testCount, notesForOthers, testsHealthy, fileCount }
+//
 function parseHandoffMeta(agentId) {
+  const defaults = {
+    status: 'not-started', filesModified: [], testsPassing: null, notes: '',
+    testCount: null, notesForOthers: '', testsHealthy: null, fileCount: 0,
+  };
   const path = join(HANDOFF_DIR, `${agentId}.md`);
-  if (!existsSync(path)) return { status: 'not-started', filesModified: [], testsPassing: null, notes: '' };
+  if (!existsSync(path)) return { ...defaults };
 
-  const content = readFileSync(path, 'utf-8');
-  const meta = { status: 'not-started', filesModified: [], testsPassing: null, notes: '' };
+  let content;
+  try {
+    content = readFileSync(path, 'utf-8');
+  } catch (err) {
+    log(`  WARNING: Could not read handoff for ${agentId}: ${err.message}`);
+    return { ...defaults };
+  }
 
-  const statusMatch = content.match(/^-\s*status:\s*(.+)$/m);
-  if (statusMatch) meta.status = statusMatch[1].trim();
+  const meta = { ...defaults };
 
-  const filesMatch = content.match(/^-\s*files-modified:\s*(.+)$/m);
-  if (filesMatch) meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
+  try {
+    // Case-insensitive matching with flexible whitespace (handles "Files-Modified", "files-modified", etc.)
+    const statusMatch = content.match(/^-\s*status\s*:\s*(.+)$/im);
+    if (statusMatch) meta.status = statusMatch[1].trim();
 
-  const testsMatch = content.match(/^-\s*tests-passing:\s*(.+)$/m);
-  if (testsMatch) meta.testsPassing = testsMatch[1].trim() === 'true';
+    const filesMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*(.+)$/im);
+    if (filesMatch) {
+      meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
+    }
 
-  const notesMatch = content.match(/^-\s*notes-for-others:\s*(.+)$/m);
-  if (notesMatch) meta.notes = notesMatch[1].trim();
+    // tests-passing: handle "true", "false", "true (685 tests, 7 suites)", "true (667/667)", "794"
+    const testsMatch = content.match(/^-\s*tests[\s-]*passing\s*:\s*(.+)$/im);
+    if (testsMatch) {
+      const raw = testsMatch[1].trim();
+      // Determine boolean: starts with "true" → true, starts with "false" → false
+      if (/^true\b/i.test(raw)) {
+        meta.testsPassing = true;
+      } else if (/^false\b/i.test(raw)) {
+        meta.testsPassing = false;
+      } else if (/^\d+$/.test(raw)) {
+        // Bare number like "794" — assume passing
+        meta.testsPassing = true;
+      }
+      // Extract numeric test count from patterns like "true (685 tests...)" or "true (667/667)" or bare "794"
+      const countMatch = raw.match(/(\d+)/);
+      if (countMatch) {
+        meta.testCount = parseInt(countMatch[1], 10);
+      }
+    }
+
+    const notesMatch = content.match(/^-\s*notes[\s-]*for[\s-]*others\s*:\s*(.+)$/im);
+    if (notesMatch) {
+      meta.notes = notesMatch[1].trim();
+      meta.notesForOthers = meta.notes;
+    }
+
+    // --- Quality signals ---
+    // testsHealthy: scan full handoff text for health indicators
+    const lowerContent = content.toLowerCase();
+    if (meta.testsPassing === true) {
+      meta.testsHealthy = true;
+    } else if (meta.testsPassing === false) {
+      meta.testsHealthy = false;
+    } else if (lowerContent.includes('all tests passing') || lowerContent.includes('all passing')) {
+      meta.testsHealthy = true;
+    } else if (lowerContent.includes('tests failing') || lowerContent.includes('test failure')) {
+      meta.testsHealthy = false;
+    }
+    // else testsHealthy stays null (unknown)
+
+    // fileCount: derived from filesModified
+    meta.fileCount = meta.filesModified.length;
+
+  } catch (err) {
+    log(`  WARNING: Malformed META in handoff for ${agentId}: ${err.message}`);
+    // Return what we have so far — meta has defaults for any unparsed fields
+  }
 
   return meta;
 }
