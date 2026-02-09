@@ -54,12 +54,6 @@ const VARIANT_LABELS: Record<GearVariant, { short: string; full: string }> = {
   defensive:  { short: 'Def', full: 'Defensive' },
 };
 
-const VARIANT_COLORS: Record<GearVariant, string> = {
-  aggressive: 'var(--mom, #c44)',
-  balanced:   'var(--ctl, #48a)',
-  defensive:  'var(--grd, #4a8)',
-};
-
 interface Props {
   archetype: Archetype;
   opponentName: string;
@@ -196,7 +190,6 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
           className={`variant-toggle__btn variant-toggle__btn--${v} ${current === v ? 'variant-toggle__btn--active' : ''}`}
           onClick={() => onSelect(v)}
           title={VARIANT_LABELS[v].full}
-          style={current === v ? { borderColor: VARIANT_COLORS[v], color: VARIANT_COLORS[v] } : undefined}
         >
           {VARIANT_LABELS[v].short}
         </button>

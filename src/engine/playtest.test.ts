@@ -717,3 +717,190 @@ describe('Performance — guard penetration overhead', () => {
     expect(elapsed).toBeLessThan(1000);
   });
 });
+
+// ============================================================
+// 17. Mixed Variant Loadout Stress Tests
+// ============================================================
+describe('Mixed variant loadout matches', () => {
+  const variants: Array<'aggressive' | 'balanced' | 'defensive'> = ['aggressive', 'balanced', 'defensive'];
+
+  it('aggressive steed + defensive player gear completes without error', () => {
+    const rng = makeRng(42);
+    const steed = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player = createFullPlayerLoadout('giga', rng, 'defensive');
+    const match = simulateMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed, steed, player, player);
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+
+  it('defensive steed + aggressive player gear completes without error', () => {
+    const rng = makeRng(43);
+    const steed = createFullLoadout('epic', 'epic', rng, 'defensive');
+    const player = createFullPlayerLoadout('epic', rng, 'aggressive');
+    const match = simulateMatch(ARCHETYPES.technician, ARCHETYPES.tactician, steed, steed, player, player);
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+
+  it('P1 aggressive vs P2 defensive gear — both complete', () => {
+    const rng1 = makeRng(100);
+    const rng2 = makeRng(200);
+    const match = simulateMatch(
+      ARCHETYPES.breaker, ARCHETYPES.bulwark,
+      createFullLoadout('giga', 'giga', rng1, 'aggressive'),
+      createFullLoadout('giga', 'giga', rng2, 'defensive'),
+      createFullPlayerLoadout('giga', rng1, 'aggressive'),
+      createFullPlayerLoadout('giga', rng2, 'defensive'),
+    );
+    expect(match.phase).toBe(Phase.MatchEnd);
+    expect(['player1', 'player2', 'draw']).toContain(match.winner);
+  });
+
+  it('all 9 variant combinations (steed x player) complete for Duelist mirror', () => {
+    for (const sv of variants) {
+      for (const pv of variants) {
+        const rng = makeRng(sv.length * 100 + pv.length);
+        const steed = createFullLoadout('rare', 'rare', rng, sv);
+        const player = createFullPlayerLoadout('rare', rng, pv);
+        const match = simulateMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, steed, steed, player, player);
+        expect(match.phase).toBe(Phase.MatchEnd);
+      }
+    }
+  });
+});
+
+// ============================================================
+// 18. Player Gear — No Rarity Bonus Verification
+// ============================================================
+describe('Player gear applies NO rarity bonus', () => {
+  it('player-only loadout does not add rarity bonus to stats', () => {
+    const rng = makeRng(555);
+    const duel = ARCHETYPES.duelist;
+    const playerLoadout = createFullPlayerLoadout('giga', rng);
+
+    // With both steed + player gear: steed adds rarity bonus
+    const rng2 = makeRng(555);
+    const steedLoadout = createFullLoadout('giga', 'giga', rng2);
+
+    // Player-only match
+    const playerOnly = createMatch(duel, duel, undefined, undefined, playerLoadout, playerLoadout);
+    // Both gear match
+    const bothGear = createMatch(duel, duel, steedLoadout, steedLoadout, playerLoadout, playerLoadout);
+
+    // Player-only should NOT have rarity bonus (60 base + gear stats)
+    // Both-gear should have rarity bonus (+13 for giga)
+    const playerOnlySta = playerOnly.player1.currentStamina;
+    const bothGearSta = bothGear.player1.currentStamina;
+
+    // bothGear has steed rarity bonus (13) + steed gear stats that playerOnly doesn't have
+    expect(bothGearSta).toBeGreaterThan(playerOnlySta);
+    // The minimum difference is the rarity bonus (13)
+    expect(bothGearSta - playerOnlySta).toBeGreaterThanOrEqual(BALANCE.giglingRarityBonus.giga);
+  });
+});
+
+// ============================================================
+// 19. Unseated Impact Boost and Stamina Recovery
+// ============================================================
+describe('Unseated mechanics — boost and recovery', () => {
+  it('unseated player starts melee with stamina recovery applied', () => {
+    // Force an unseat scenario: Charger Fast+CF vs Duelist Standard+PdL
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.duelist);
+
+    // Play aggressive to try to trigger unseat
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.SpeedSelect) break;
+      match = submitJoustPass(match,
+        { speed: SpeedType.Fast, attack: CF },
+        { speed: SpeedType.Standard, attack: PdL },
+      );
+    }
+
+    // If unseat occurred, check the recovery
+    if (match.phase === Phase.MeleeSelect) {
+      const unseatedPlayer = match.player1.wasUnseated ? match.player1 : match.player2;
+
+      if (match.player1.wasUnseated || match.player2.wasUnseated) {
+        // Unseated player should have received stamina recovery
+        expect(unseatedPlayer.currentStamina).toBeGreaterThanOrEqual(BALANCE.unseatedStaminaRecovery);
+      }
+    }
+  });
+});
+
+// ============================================================
+// 20. Carryover Divisors Match Balance Config
+// ============================================================
+describe('Carryover divisors are from balance-config', () => {
+  it('momentum divisor matches config', () => {
+    expect(BALANCE.carryoverDivisors.momentum).toBe(6);
+  });
+  it('control divisor matches config', () => {
+    expect(BALANCE.carryoverDivisors.control).toBe(7);
+  });
+  it('guard divisor matches config', () => {
+    expect(BALANCE.carryoverDivisors.guard).toBe(9);
+  });
+  it('unseated impact boost matches config', () => {
+    expect(BALANCE.unseatedImpactBoost).toBe(1.25);
+  });
+  it('unseated stamina recovery matches config', () => {
+    expect(BALANCE.unseatedStaminaRecovery).toBe(8);
+  });
+});
+
+// ============================================================
+// 21. All Melee Attack Speed Combinations
+// ============================================================
+describe('All melee attack combinations resolve without error', () => {
+  const meleeAttacks = Object.values(MELEE_ATTACKS);
+
+  it('all 36 melee attack matchups produce valid outcomes', () => {
+    for (const atk1 of meleeAttacks) {
+      for (const atk2 of meleeAttacks) {
+        const p1: PlayerState = {
+          archetype: ARCHETYPES.charger,
+          currentStamina: 40,
+          wasUnseated: false,
+          carryoverMomentum: 0,
+          carryoverControl: 0,
+          carryoverGuard: 0,
+        };
+        const p2: PlayerState = {
+          archetype: ARCHETYPES.technician,
+          currentStamina: 35,
+          wasUnseated: false,
+          carryoverMomentum: 0,
+          carryoverControl: 0,
+          carryoverGuard: 0,
+        };
+        const result = resolveMeleeRoundFn(1, p1, p2, atk1, atk2);
+
+        expect(['Draw', 'Hit', 'Critical']).toContain(result.outcome);
+        expect(['none', 'player1', 'player2']).toContain(result.winner);
+        expect(result.player1StaminaAfter).toBeGreaterThanOrEqual(0);
+        expect(result.player2StaminaAfter).toBeGreaterThanOrEqual(0);
+        expect(result.margin).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+// ============================================================
+// 22. Uncommon Rarity Bonus = 2 (not 1)
+// ============================================================
+describe('Uncommon rarity bonus is 2', () => {
+  it('uncommon rarity bonus matches config value of 2', () => {
+    expect(BALANCE.giglingRarityBonus.uncommon).toBe(2);
+  });
+
+  it('uncommon gear adds +2 to all stats via rarity bonus', () => {
+    const rng = makeRng(777);
+    const duel = ARCHETYPES.duelist; // all 60s
+    const steed = createFullLoadout('uncommon', 'uncommon', rng);
+    const geared = createMatch(duel, duel, steed);
+
+    // Base stamina 60 + rarity bonus 2 + gear stamina bonuses
+    expect(geared.player1.currentStamina).toBeGreaterThanOrEqual(62);
+  });
+});

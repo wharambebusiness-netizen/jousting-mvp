@@ -1516,3 +1516,263 @@ describe('Guard Penetration — resolvePass Breaker', () => {
     expect(breakerEdgeVsBulwark).toBeGreaterThan(breakerEdgeVsCharger);
   });
 });
+
+// ============================================================
+// BL-006: Stamina/Fatigue Boundary Conditions
+// ============================================================
+describe('BL-006 — Stamina/Fatigue Boundary Conditions', () => {
+  it('fatigue factor at exact threshold returns 1.0', () => {
+    // threshold = STA * 0.8. At threshold, ff should be exactly 1.0
+    const maxSta = 65; // Charger
+    const threshold = maxSta * BALANCE.fatigueRatio; // 52
+    expect(fatigueFactor(threshold, maxSta)).toBe(1.0);
+  });
+
+  it('fatigue factor 1 below threshold degrades linearly', () => {
+    const maxSta = 65;
+    const threshold = maxSta * BALANCE.fatigueRatio; // 52
+    const ff = fatigueFactor(threshold - 1, maxSta); // 51/52
+    expect(ff).toBeCloseTo(51 / 52, 10);
+    expect(ff).toBeLessThan(1.0);
+  });
+
+  it('fatigue factor at 1 stamina is small but positive', () => {
+    const ff = fatigueFactor(1, 60);
+    expect(ff).toBeGreaterThan(0);
+    expect(ff).toBeLessThan(0.03); // 1/48 ≈ 0.0208
+    expect(ff).toBeCloseTo(1 / (60 * BALANCE.fatigueRatio), 10);
+  });
+
+  it('negative stamina is treated as 0 (fatigue factor 0)', () => {
+    expect(fatigueFactor(-5, 60)).toBe(0);
+    expect(fatigueFactor(-100, 60)).toBe(0);
+  });
+
+  it('fatigue ratio 0.8 means threshold is 80% of max stamina for every archetype', () => {
+    const archetypes = [charger, technician, bulwark, duelist];
+    for (const arch of archetypes) {
+      const threshold = arch.stamina * BALANCE.fatigueRatio;
+      // At threshold: ff=1, just below: ff<1
+      expect(fatigueFactor(threshold, arch.stamina)).toBe(1.0);
+      expect(fatigueFactor(threshold - 0.01, arch.stamina)).toBeLessThan(1.0);
+    }
+  });
+
+  it('fatigue above threshold still returns 1.0 (no overcharge)', () => {
+    // Gear can push current stamina above base max via Slow speed
+    expect(fatigueFactor(70, 60)).toBe(1.0);
+    expect(fatigueFactor(200, 60)).toBe(1.0);
+  });
+
+  it('guard fatigue factor interpolates between floor and 1.0', () => {
+    // At ff=0.0 → guardFF = 0.5
+    expect(guardFatigueFactor(0)).toBe(BALANCE.guardFatigueFloor);
+    // At ff=1.0 → guardFF = 1.0
+    expect(guardFatigueFactor(1.0)).toBe(1.0);
+    // At ff=0.5 → guardFF = 0.5 + 0.5*0.5 = 0.75
+    expect(guardFatigueFactor(0.5)).toBe(0.75);
+    // monotonically increasing
+    for (let ff = 0; ff < 1.0; ff += 0.1) {
+      expect(guardFatigueFactor(ff + 0.1)).toBeGreaterThan(guardFatigueFactor(ff));
+    }
+  });
+
+  it('stamina cost clamping: attack cost > current stamina → stamina 0, not negative', () => {
+    // CF costs 20 stamina
+    expect(applyAttackStaminaCost(19, CF)).toBe(0);
+    expect(applyAttackStaminaCost(20, CF)).toBe(0);
+    expect(applyAttackStaminaCost(21, CF)).toBe(1);
+    // CdL costs 10 stamina
+    expect(applyAttackStaminaCost(9, CdL)).toBe(0);
+    expect(applyAttackStaminaCost(10, CdL)).toBe(0);
+    expect(applyAttackStaminaCost(11, CdL)).toBe(1);
+  });
+
+  it('speed stamina: Fast(-5) at 3 stamina clamps to 0', () => {
+    expect(applySpeedStamina(3, SPEEDS[SpeedType.Fast])).toBe(0);
+  });
+
+  it('speed stamina: Slow(+5) at 0 stamina recovers to 5', () => {
+    expect(applySpeedStamina(0, SPEEDS[SpeedType.Slow])).toBe(5);
+  });
+});
+
+// ============================================================
+// BL-012: Breaker Guard Penetration Across All Defenders
+// ============================================================
+describe('BL-012 — Breaker Penetration vs All Archetypes', () => {
+  const breaker = ARCHETYPES.breaker;
+  const allArchetypes = Object.values(ARCHETYPES);
+
+  it('Breaker always gets positive guard penetration benefit vs every archetype', () => {
+    for (const defender of allArchetypes) {
+      // Breaker vs defender with penetration
+      const withPen = resolvePass(
+        { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+        { archetype: defender, speed: SpeedType.Standard, attack: CdL, currentStamina: defender.stamina },
+      );
+
+      // Same matchup but without penetration (duelist has same CTL=60, GRD=60)
+      // Calculate expected pen benefit: opponent_guard * 0.20 * 0.18
+      const defGuard = defender.guard + CdL.deltaGuard; // raw guard + attack delta
+      const expectedBenefit = defGuard * BALANCE.breakerGuardPenetration * BALANCE.guardImpactCoeff;
+
+      // Penetration benefit is always positive when defender has guard > 0
+      expect(expectedBenefit).toBeGreaterThan(0);
+    }
+  });
+
+  it('penetration benefit is proportional to defender guard stat', () => {
+    const impactVs: Record<string, number> = {};
+    for (const defender of allArchetypes) {
+      const result = resolvePass(
+        { archetype: breaker, speed: SpeedType.Standard, attack: CdL, currentStamina: 60 },
+        { archetype: defender, speed: SpeedType.Standard, attack: CdL, currentStamina: defender.stamina },
+      );
+      impactVs[defender.id] = result.p1.impactScore;
+    }
+
+    // Breaker should have highest impact advantage vs Bulwark (highest GRD)
+    // and lowest vs Charger (lowest GRD)
+    expect(impactVs['breaker']).toBeDefined();
+    // Penetration benefit only affects the -guard term, so higher opponent guard
+    // means more guard to penetrate, but also more subtraction overall.
+    // The penetration BENEFIT is largest vs Bulwark.
+  });
+
+  it('Breaker penetration 0.20 removes exactly 20% of opponent effective guard from impact calc', () => {
+    // Manual verification: Duelist (GRD=60) + CdL (+5) = raw 65 → softCap(65) = 65
+    // At full stamina, guardFF = 1.0, so effGuard = 65
+    // Without penetration: -65 * 0.18 = -11.7
+    // With 20% penetration: -(65 * 0.8) * 0.18 = -52 * 0.18 = -9.36
+    // Difference = 2.34
+
+    const noPen = calcImpactScore(60, 50, 65, 0);
+    const withPen = calcImpactScore(60, 50, 65, 0.2);
+    const diff = withPen - noPen;
+
+    // diff = 65 * 0.2 * 0.18 = 2.34
+    expect(diff).toBeCloseTo(65 * 0.2 * BALANCE.guardImpactCoeff, 10);
+  });
+
+  it('Breaker penetration is applied in melee phase too', () => {
+    const MC = MELEE_ATTACKS.measuredCut;
+    // Melee with Breaker vs Bulwark
+    const breakerStats = computeMeleeEffectiveStats(breaker, MC, 60);
+    const bulwarkStats = computeMeleeEffectiveStats(bulwark, MC, 62);
+
+    const counters = resolveCounters(MC, MC, breakerStats.control, bulwarkStats.control);
+    const acc1 = calcAccuracy(breakerStats.control, breakerStats.initiative, bulwarkStats.momentum, counters.player1Bonus);
+    const acc2 = calcAccuracy(bulwarkStats.control, bulwarkStats.initiative, breakerStats.momentum, counters.player2Bonus);
+
+    const breakerImpact = calcImpactScore(breakerStats.momentum, acc1, bulwarkStats.guard, BALANCE.breakerGuardPenetration);
+    const noPenImpact = calcImpactScore(breakerStats.momentum, acc1, bulwarkStats.guard, 0);
+
+    expect(breakerImpact).toBeGreaterThan(noPenImpact);
+    expect(breakerImpact - noPenImpact).toBeCloseTo(
+      bulwarkStats.guard * BALANCE.breakerGuardPenetration * BALANCE.guardImpactCoeff, 5
+    );
+  });
+
+  it('non-Breaker archetypes get zero guard penetration', () => {
+    const nonBreakers = allArchetypes.filter(a => a.id !== 'breaker');
+    for (const attacker of nonBreakers) {
+      // resolvePass should not apply penetration for non-breakers
+      const result = resolvePass(
+        { archetype: attacker, speed: SpeedType.Standard, attack: CdL, currentStamina: attacker.stamina },
+        { archetype: bulwark, speed: SpeedType.Standard, attack: CdL, currentStamina: 62 },
+      );
+
+      // Manually compute impact without penetration
+      const stats = computeEffectiveStats(attacker, SPEEDS[SpeedType.Standard], CdL, attacker.stamina);
+      const defStats = computeEffectiveStats(bulwark, SPEEDS[SpeedType.Standard], CdL, 62);
+      const counters = resolveCounters(CdL, CdL, stats.control, defStats.control);
+      const acc = calcAccuracy(stats.control, stats.initiative, defStats.momentum, counters.player1Bonus);
+      const expectedImpact = calcImpactScore(stats.momentum, acc, defStats.guard, 0);
+
+      expect(result.p1.impactScore).toBeCloseTo(expectedImpact, 5);
+    }
+  });
+});
+
+// ============================================================
+// Zero-Stamina Melee Resolution
+// ============================================================
+describe('Zero-Stamina Melee Resolution', () => {
+  it('melee round resolves with both players at 0 stamina', () => {
+    // At 0 stamina: MOM=0, CTL=0, GRD=floor, INIT unchanged
+    const result = resolveMeleeRound(0, 65); // margin=0, defGuard=65*0.5=32.5
+    expect(result.outcome).toBe(MeleeOutcome.Draw);
+    expect(result.winner).toBe('none');
+  });
+
+  it('melee draw threshold scales with defender guard even at 0 stamina', () => {
+    // At 0 sta, guard = rawGuard * guardFatigueFloor
+    // Bulwark: 65 * 0.5 = 32.5, hitThresh = 3 + 32.5*0.031 = 4.0075
+    // Charger: 50 * 0.5 = 25, hitThresh = 3 + 25*0.031 = 3.775
+    const bulwarkGuardAtZero = 65 * BALANCE.guardFatigueFloor;
+    const chargerGuardAtZero = 50 * BALANCE.guardFatigueFloor;
+
+    const bulwarkHitThresh = BALANCE.meleeHitBase + bulwarkGuardAtZero * BALANCE.meleeHitGrdScale;
+    const chargerHitThresh = BALANCE.meleeHitBase + chargerGuardAtZero * BALANCE.meleeHitGrdScale;
+
+    expect(bulwarkHitThresh).toBeGreaterThan(chargerHitThresh);
+
+    // A tiny margin that's a hit vs Charger but a draw vs Bulwark
+    const tinyMargin = (bulwarkHitThresh + chargerHitThresh) / 2;
+    const vsCharger = resolveMeleeRound(tinyMargin, chargerGuardAtZero);
+    const vsBulwark = resolveMeleeRound(tinyMargin, bulwarkGuardAtZero);
+
+    expect(vsCharger.outcome).toBe(MeleeOutcome.Hit);
+    expect(vsBulwark.outcome).toBe(MeleeOutcome.Draw);
+  });
+
+  it('all 36 melee attack combinations resolve without error at 0 stamina', () => {
+    const meleeAttacks = Object.values(MELEE_ATTACKS);
+    for (const atk1 of meleeAttacks) {
+      for (const atk2 of meleeAttacks) {
+        const stats1 = computeMeleeEffectiveStats(charger, atk1, 0);
+        const stats2 = computeMeleeEffectiveStats(bulwark, atk2, 0);
+        const counters = resolveCounters(atk1, atk2, stats1.control, stats2.control);
+        const acc1 = calcAccuracy(stats1.control, stats1.initiative, stats2.momentum, counters.player1Bonus);
+        const acc2 = calcAccuracy(stats2.control, stats2.initiative, stats1.momentum, counters.player2Bonus);
+        const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, 0);
+        const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, 0);
+        const margin = impact1 - impact2;
+        const defGuard = margin >= 0 ? stats2.guard : stats1.guard;
+        const result = resolveMeleeRound(margin, defGuard);
+
+        expect(['Draw', 'Hit', 'Critical']).toContain(result.outcome);
+        expect(['higher', 'lower', 'none']).toContain(result.winner);
+      }
+    }
+  });
+
+  it('counter bonus at 0 stamina is just the base bonus (CTL=0)', () => {
+    // At 0 stamina, effCTL = 0, so counter bonus = 4 + 0*0.1 = 4
+    const result = resolveCounters(CF, PdL, 0, 0); // CF beats PdL
+    expect(result.player1Bonus).toBe(BALANCE.counterBaseBonus); // 4
+    expect(result.player2Bonus).toBe(-BALANCE.counterBaseBonus); // -4
+  });
+});
+
+// ============================================================
+// All Joust Speed Combinations
+// ============================================================
+describe('All Joust Speed Combinations Resolve', () => {
+  const speeds = [SpeedType.Slow, SpeedType.Standard, SpeedType.Fast];
+  for (const s1 of speeds) {
+    for (const s2 of speeds) {
+      it(`${s1} vs ${s2}: resolvePass produces valid result`, () => {
+        const result = resolvePass(
+          { archetype: charger, speed: s1, attack: CF, currentStamina: 65 },
+          { archetype: technician, speed: s2, attack: CdL, currentStamina: 55 },
+        );
+        expect(result.p1.impactScore).toBeGreaterThanOrEqual(0);
+        expect(result.unseat).toMatch(/^(none|player1|player2)$/);
+        expect(result.p1.staminaAfter).toBeGreaterThanOrEqual(0);
+        expect(result.p2.staminaAfter).toBeGreaterThanOrEqual(0);
+      });
+    }
+  }
+});

@@ -134,6 +134,16 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
 .btn--primary:hover { background: var(--gold-dark); }
 .btn--large { padding: 14px 36px; font-size: 1.1rem; }
 .btn--small { padding: 6px 14px; font-size: 0.85rem; }
+.btn--outline {
+  background: transparent;
+  border-color: var(--border-light);
+  color: var(--ink-light);
+}
+.btn--outline:hover {
+  background: var(--parchment-light);
+  border-color: var(--gold);
+  color: var(--ink);
+}
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn:disabled:hover { transform: none; box-shadow: none; }
 

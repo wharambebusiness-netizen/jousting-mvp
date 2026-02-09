@@ -131,14 +131,28 @@
   background: linear-gradient(135deg, var(--red), #5c1a00);
   color: #fff; border-radius: var(--radius-lg);
   margin-bottom: 16px;
+  animation: melee-entrance 0.6s ease-out;
 }
-.melee-transition__icon { font-size: 3rem; margin-bottom: 8px; line-height: 1; }
+.melee-transition__icon {
+  font-size: 3rem; margin-bottom: 8px; line-height: 1;
+  animation: melee-icon-slam 0.5s ease-out 0.15s backwards;
+}
 .melee-transition h2 {
   font-size: 2rem; letter-spacing: 0.1em;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
   margin-bottom: 8px;
 }
 .melee-transition__subtitle { font-size: 0.95rem; opacity: 0.9; }
+@keyframes melee-entrance {
+  0% { opacity: 0; transform: scaleY(0.3); box-shadow: 0 0 0 rgba(139, 37, 0, 0); }
+  50% { opacity: 1; transform: scaleY(1.03); }
+  100% { transform: scaleY(1); box-shadow: 0 4px 20px rgba(139, 37, 0, 0.4); }
+}
+@keyframes melee-icon-slam {
+  0% { transform: scale(2.5) rotate(-15deg); opacity: 0; }
+  60% { transform: scale(0.9) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
 
 .melee-transition__penalties {
   background: var(--parchment-light); border: 2px solid var(--border-light);
@@ -408,9 +422,18 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+.winner-banner--victory {
+  box-shadow: 0 4px 20px rgba(201, 168, 76, 0.4);
+}
+
 .winner-banner--draw {
   background: linear-gradient(135deg, var(--parchment-dark), var(--border-light));
   border-color: var(--border);
+  animation: draw-entrance 0.6s ease-out;
+}
+@keyframes draw-entrance {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 /* Match timeline (mini horizontal pass results) */
@@ -687,6 +710,9 @@
   .screen,
   .winner-banner--victory,
   .winner-banner--defeat,
+  .winner-banner--draw,
+  .melee-transition,
+  .melee-transition__icon,
   .timeline-pip,
   .final-score--reveal .scoreboard__score,
   .scoreboard__score--anim,

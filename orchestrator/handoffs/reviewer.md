@@ -2,10 +2,10 @@
 
 ## META
 - status: complete
-- files-modified: src/engine/types.ts, orchestrator/analysis/reviewer-round-2.md
-- tests-passing: false (588/589 — 1 failure in match.test.ts:78, not my file)
-- notes-for-others: match.test.ts:78 has an incorrectly flipped assertion — Charger still wins pass 1 impact (61.68 vs 61.12) after Technician MOM+3. Fix: change line 79 to `expect(p1.player1.impactScore).toBeGreaterThan(p1.player2.impactScore)` and update comment. balance-tuner or qa: please fix this — it's a one-line change. Gear type safety audit complete (BL-010) — system is clean.
-- completed-tasks: BL-009, BL-010
+- files-modified: src/engine/balance-config.ts, orchestrator/analysis/review-round-3.md
+- tests-passing: true (605/605)
+- notes-for-others: Round 2 BLOCK (match.test.ts:78) is RESOLVED — QA's worked example rewrite is correct after both Technician MOM and Charger INIT/STA changes. breakerGuardPenetration 0.20→0.25 change is APPROVED — clean, safe, no test impact. CLAUDE.md "Balance State" section should be updated: breakerGuardPenetration is now 0.25, Charger INIT=55/STA=65.
+- completed-tasks: BL-009, BL-010, BL-015
 
 ## What Was Done
 
@@ -20,22 +20,24 @@
 - Wrote detailed review report: `orchestrator/analysis/review-round-1.md`
 
 ### Round 2: Code Review + BL-010 Gear Type Safety Audit
-- **Reviewed balance-tuner's Technician MOM 55→58** — valid change, 14/15 test failures fixed by other agents, 1 remaining in match.test.ts:78 (incorrectly flipped assertion)
-- **Reviewed QA's 112 new gear-variants tests** — thorough coverage, sound design, all 156 gear-variants tests passing
-- **Reviewed polish agent's CSS changes** — CSS-only, no engine impact
-- **BL-010 Type Safety Audit** — comprehensive audit of gigling-gear.ts, player-gear.ts, gear-variants.ts, gear-utils.ts:
-  - All slot mappings exhaustive via `Record<>` typing (compile-time safety)
-  - RNG parameters correctly typed as `() => number` throughout
-  - Variant parameter compile-time safe; runtime validation not needed yet (no external data paths)
-  - Factory functions handle all edge cases correctly
-  - No `any`, no `as` casts, no type safety issues
-- **Fixed types.ts:178** — Updated stale CounterResult comment from flat ±10 to scaled formula
+- **Reviewed balance-tuner's Technician MOM 55→58** — valid change, test failures fixed by QA
+- **Reviewed QA's 112 new gear-variants tests** — thorough coverage, sound design
+- **BL-010 Type Safety Audit** — comprehensive audit of gear system, all clean
+- **Fixed types.ts:178** — Updated stale CounterResult comment
 - Wrote detailed review report: `orchestrator/analysis/reviewer-round-2.md`
+
+### Round 3: Code Review + BL-015
+- **Reviewed balance-tuner's breakerGuardPenetration 0.20→0.25** (BL-003) — clean change in balance-config.ts. Comment updated correctly. No hardcoded test references — all tests use `BALANCE.breakerGuardPenetration`. 605/605 tests pass. APPROVED.
+- **Reviewed QA's Round 2 test maintenance** — 18 test failures fixed, 16 new tests added. Match worked example rewritten as 2-pass unseat scenario (correct for Charger STA=65). The Round 2 BLOCK (match.test.ts:78 flipped assertion) is now correctly resolved — with Charger INIT=55, Technician narrowly wins Pass 1 impact.
+- **Reviewed LoadoutScreen.tsx inline style removal** (BL-016, uncommitted) — clean change removing `VARIANT_COLORS` constant and `style={...}` prop. CSS-only delegation, no functional impact.
+- **Fixed balance-config.ts:22** — Stale comment said `Charger (STA 60) threshold = 48`, updated to `Charger (STA 65) threshold = 52`.
+- **Verified hard constraints**: engine/UI separation ✅, constants centralized ✅, stat pipeline order ✅, API stability ✅, type safety ✅
+- Wrote detailed review report: `orchestrator/analysis/review-round-3.md`
 
 ## What's Left
 
-### Immediate (for other agents)
-- **match.test.ts:78** — Fix the incorrectly flipped assertion. Charger still wins pass 1 (61.68 > 61.12). Change `expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore)` to `expect(p1.player1.impactScore).toBeGreaterThan(p1.player2.impactScore)`.
+### For Other Agents
+- **CLAUDE.md balance state** — Should be updated: `breakerGuardPenetration 0.20` → `0.25`, Charger stats now INIT=55/STA=65. Producer or whoever maintains docs should update.
 
 ### For Future Rounds
 - Review any new code changes from other agents
@@ -50,10 +52,13 @@
 - Test-locked archetype stats create maintenance burden — consider test helpers that read from source data
 - Runtime variant validation for deserialization — add runtime guard when external data paths exist
 - Make GiglingGear/PlayerGear stat fields required — enforce stat presence at type level
+- Missing multi-pass (5-pass) worked example after match.test.ts rewrite — less integration coverage of fatigue progression
 
 ## Issues
 
-- **1 test failing**: match.test.ts:78 — incorrectly flipped assertion (not my file to fix)
+- **None blocking.** All 605 tests pass. Round 2 BLOCK resolved.
+- **BUG-002** (Tactician mirror P1 bias, ~36% vs 64%) — still open, needs higher sample size confirmation. Not a code quality issue.
+- **Stale CLAUDE.md** — balance state references are outdated after this session's changes.
 
 ## File Ownership
 

@@ -1,11 +1,11 @@
 # CSS Artist — Handoff
 
 ## META
-- status: complete
-- files-modified: src/App.css
-- tests-passing: true (589/589)
-- notes-for-others: Variant toggle CSS colors work but are partially overridden by inline styles in LoadoutScreen.tsx:199. UI dev should remove the `style={...}` prop on variant-toggle buttons to let CSS handle colors via stance tokens.
-- completed-tasks: BL-007, BL-008
+- status: all-done
+- files-modified: src/App.css, src/index.css, src/ui/LoadoutScreen.tsx
+- tests-passing: true (605/605)
+- notes-for-others: BL-016 complete — inline styles removed from LoadoutScreen.tsx variant toggles, CSS stance tokens now fully control colors. Two remaining inline styles in LoadoutScreen.tsx:374 and MeleeTransition.tsx:41 are minor cleanup items for UI dev.
+- completed-tasks: BL-007, BL-008, BL-016
 
 ## What Was Done
 
@@ -45,19 +45,32 @@ Added comprehensive `@media (prefers-reduced-motion: reduce)` blocks in both App
 **4. Reduced Motion Updates**
 All new animations and transitions added to the prefers-reduced-motion block.
 
+### Round 3: BL-016 + Melee/Winner Polish + btn--outline
+
+**1. Inline Style Removal (BL-016)**
+Removed `VARIANT_COLORS` constant and inline `style={...}` from variant toggle buttons in LoadoutScreen.tsx. CSS stance tokens now fully control all variant toggle colors without inline style interference.
+
+**2. Melee Transition Entrance Animation**
+Added dramatic two-part entrance: container scales vertically with red shadow bloom, sword icon slams down with rotation (delayed 0.15s for sequential feel).
+
+**3. Winner Banner Polish**
+- Victory: added gold glow box-shadow for warmer celebration feel
+- Draw: added `draw-entrance` animation (scale-up from 0.95) — previously had no animation while victory/defeat both did
+
+**4. `btn--outline` Definition**
+Added missing `.btn--outline` modifier (transparent bg, lighter border, subdued text, gold-accented hover). Used by quick-set variant buttons that previously had no visual distinction from regular buttons.
+
+**5. Reduced Motion Updates**
+All round 3 animations added to the prefers-reduced-motion block.
+
 ## What's Left
 
-### Next Priority (Round 3)
-1. **Melee transition screen polish** — the interstitial could use better entrance animation
-2. **Winner banner refinement** — victory/defeat/draw visual distinction improvements
-3. **Gear item rarity-aware styling** — gear items could show rarity color in their border
-
-### Deferred App.tsx Changes
-- **Remove inline styles on variant toggle**: LoadoutScreen.tsx line 199 — remove `style={current === v ? { borderColor: VARIANT_COLORS[v], color: VARIANT_COLORS[v] } : undefined}` to let CSS stance tokens control colors fully.
-- **VARIANT_COLORS constant** can then be removed from LoadoutScreen.tsx (lines 57-61).
+### Deferred JSX Changes (for UI dev)
+- **Gear item rarity borders**: Need `gear-item--${rarity}` class added to `.gear-item` divs in LoadoutScreen.tsx (rarity is available in parent scope but not passed to individual items). CSS rules ready to be written once class is added.
+- **MeleeTransition.tsx:41**: Inline `style={{ marginTop: 8 }}` should use `mt-8` utility class.
+- **LoadoutScreen.tsx:374**: Inline `style={{ fontSize: '0.8rem', color: 'var(--ink-faint)' }}` should be a CSS class.
 
 ## Issues
-- Variant toggle inline styles in LoadoutScreen.tsx partially override CSS stance token colors. CSS works correctly underneath; removing inline styles is a UI dev task.
 - Giga rarity uses `--rarity-legendary-bg` for selected state because `--rarity-giga-bg` is a gradient value. Pre-existing.
 
 ## File Ownership
