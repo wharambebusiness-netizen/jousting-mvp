@@ -260,7 +260,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             const label = STEED_SLOT_LABELS[slot];
             const variantDef = getSteedVariantDef(slot, steedVariants[slot]);
             return (
-              <div key={slot} className="gear-item gear-item--steed">
+              <div key={slot} className={`gear-item gear-item--steed gear-item--${gear.rarity}`}>
                 <div className="gear-item__slot">
                   <div className="gear-item__slot-name">{label.name}</div>
                   <div className="gear-item__gear-name" title={label.desc}>{variantDef.name}</div>
@@ -302,7 +302,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             const label = PLAYER_SLOT_LABELS[slot];
             const variantDef = getPlayerVariantDef(slot, playerVariants[slot]);
             return (
-              <div key={slot} className="gear-item gear-item--player">
+              <div key={slot} className={`gear-item gear-item--player gear-item--${gear.rarity}`}>
                 <div className="gear-item__slot">
                   <div className="gear-item__slot-name">{label.name}</div>
                   <div className="gear-item__gear-name" title={label.desc}>{variantDef.name}</div>
