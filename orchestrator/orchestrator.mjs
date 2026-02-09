@@ -98,6 +98,11 @@ const CONFIG = {
 };
 
 // ============================================================
+// Model Tier Ordering (for escalation/de-escalation)
+// ============================================================
+const MODEL_TIER = { haiku: 0, sonnet: 1, opus: 2 };
+
+// ============================================================
 // Backlog System (v4)
 // ============================================================
 const BACKLOG_FILE = join(ORCH_DIR, 'backlog.json');
@@ -261,6 +266,7 @@ function loadMission(missionPath) {
     handoff: join(HANDOFF_DIR, `${a.id}.md`),
     fileOwnership: a.fileOwnership || [],
     model: a.model || null,                        // v5: per-agent model (sonnet, haiku, etc.)
+    maxModel: a.maxModel || null,                  // v6: max model tier for escalation (haiku/sonnet/opus)
     timeoutMs: a.timeoutMs || null,                // v5: per-agent timeout override
     maxTasksPerRound: a.maxTasksPerRound || 1,     // v6: batch task injection
     minFrequencyRounds: a.minFrequencyRounds || 0, // v5: periodic run frequency (0 = work-gated only)
@@ -769,6 +775,109 @@ function rotateAnalysisFiles(keepRounds = 5) {
 }
 
 // ============================================================
+// Cost Tracking (v6 — Action 1.3)
+// ============================================================
+// Approximate pricing per 1M tokens (USD)
+const MODEL_PRICING = {
+  haiku:   { input: 0.25,  output: 1.25 },
+  sonnet:  { input: 3.00,  output: 15.00 },
+  opus:    { input: 15.00, output: 75.00 },
+  default: { input: 3.00,  output: 15.00 },  // assume sonnet if unknown
+};
+
+/**
+ * Parse Claude CLI stderr output for cost/token information.
+ * Claude Code CLI may output lines like:
+ *   "Total cost: $X.XX"
+ *   "Total tokens: input=N, output=N"
+ *   or token/cost info in other formats
+ * Returns { cost, inputTokens, outputTokens } with nulls for unparsed fields.
+ */
+function parseCostFromStderr(stderr) {
+  const result = { cost: null, inputTokens: null, outputTokens: null };
+  if (!stderr) return result;
+
+  // Try to match "Total cost: $X.XX" or "cost: $X.XX"
+  const costMatch = stderr.match(/(?:total\s+)?cost:\s*\$?([\d.]+)/i);
+  if (costMatch) result.cost = parseFloat(costMatch[1]);
+
+  // Try to match "Total tokens: input=N, output=N"
+  const tokensMatch = stderr.match(/tokens?:?\s*input\s*=?\s*([\d,]+)\s*,?\s*output\s*=?\s*([\d,]+)/i);
+  if (tokensMatch) {
+    result.inputTokens = parseInt(tokensMatch[1].replace(/,/g, ''));
+    result.outputTokens = parseInt(tokensMatch[2].replace(/,/g, ''));
+  }
+
+  // Alternative: match individual token lines
+  if (result.inputTokens === null) {
+    const inputMatch = stderr.match(/input[\s_]tokens?:?\s*([\d,]+)/i);
+    if (inputMatch) result.inputTokens = parseInt(inputMatch[1].replace(/,/g, ''));
+  }
+  if (result.outputTokens === null) {
+    const outputMatch = stderr.match(/output[\s_]tokens?:?\s*([\d,]+)/i);
+    if (outputMatch) result.outputTokens = parseInt(outputMatch[1].replace(/,/g, ''));
+  }
+
+  return result;
+}
+
+/**
+ * Estimate cost from token counts using model pricing.
+ * Returns estimated USD cost.
+ */
+function estimateCostFromTokens(inputTokens, outputTokens, model) {
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING.default;
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}
+
+/**
+ * Initialize or return existing cost log entry for an agent.
+ */
+function ensureCostLogEntry(costLog, agentId) {
+  if (!costLog[agentId]) {
+    costLog[agentId] = {
+      totalCost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      rounds: 0,
+      escalations: 0,
+    };
+  }
+  return costLog[agentId];
+}
+
+/**
+ * Accumulate cost data from an agent run result into the costLog.
+ */
+function accumulateAgentCost(costLog, result, agents) {
+  const agent = agents.find(a => a.id === result.agentId);
+  const entry = ensureCostLogEntry(costLog, result.agentId);
+  entry.rounds++;
+
+  const parsed = parseCostFromStderr(result.stderr);
+
+  if (parsed.cost !== null) {
+    // Direct cost from CLI output
+    entry.totalCost += parsed.cost;
+  }
+
+  if (parsed.inputTokens !== null) {
+    entry.inputTokens += parsed.inputTokens;
+  }
+  if (parsed.outputTokens !== null) {
+    entry.outputTokens += parsed.outputTokens;
+  }
+
+  // If we got tokens but no direct cost, estimate from pricing
+  if (parsed.cost === null && parsed.inputTokens !== null && parsed.outputTokens !== null) {
+    const model = agent?.model || 'default';
+    entry.totalCost += estimateCostFromTokens(parsed.inputTokens, parsed.outputTokens, model);
+  }
+}
+
+// ============================================================
 // Concurrency Limiter (v5 Phase 6D)
 // ============================================================
 async function runAgentsWithConcurrency(agents, round, maxConcurrency) {
@@ -882,6 +991,10 @@ async function main() {
   // v5: Track per-agent state for work-gating, frequency, and model escalation
   const lastRunRound = {};              // agentId → last round number agent ran
   const consecutiveAgentFailures = {};  // agentId → consecutive failure count
+  const escalationCounts = {};          // agentId → total escalation count (for reporting)
+
+  // v6: Cost tracking accumulator — per-agent cost data across rounds
+  const costLog = {};  // agentId → { totalCost, inputTokens, outputTokens, rounds, escalations }
 
   // v5/v6: Classify agent roles for two-phase rounds
   const CODE_AGENT_ROLES = new Set([
@@ -984,10 +1097,11 @@ async function main() {
         lastRunRound[r.agentId] = round;
       }
 
-      // Post-Phase A: changelog, failed task reassignment, validation
+      // Post-Phase A: changelog, failed task reassignment, validation, cost tracking
       appendSessionChangelog(round, codeResults);
       handleFailedTasks(codeResults);
       for (const r of codeResults) {
+        accumulateAgentCost(costLog, r, AGENTS);
         const warnings = validateAgentOutput(r.agentId, round);
         for (const w of warnings) log(`  ⚠ ${w}`);
       }
@@ -1026,6 +1140,9 @@ async function main() {
 
       appendSessionChangelog(round, coordResults);
       handleFailedTasks(coordResults);
+      for (const r of coordResults) {
+        accumulateAgentCost(costLog, r, AGENTS);
+      }
       handleModelEscalation(coordResults);
     }
 
@@ -1100,19 +1217,57 @@ async function main() {
     }
   }
 
-  // --- v6: Model escalation (haiku→sonnet after 2 consecutive failures) ---
+  // --- v6: Model escalation (haiku→sonnet→opus after 2 consecutive failures, with maxModel cap + de-escalation) ---
   function handleModelEscalation(results) {
     for (const result of results) {
       const meta = parseHandoffMeta(result.agentId);
       const agent = AGENTS.find(a => a.id === result.agentId);
-      if (result.timedOut || result.code !== 0 || meta.status === 'not-started') {
+      if (!agent) continue;
+
+      const failed = result.timedOut || result.code !== 0 || meta.status === 'not-started';
+
+      if (failed) {
         consecutiveAgentFailures[result.agentId] = (consecutiveAgentFailures[result.agentId] || 0) + 1;
-        if (agent.model === 'haiku' && consecutiveAgentFailures[result.agentId] >= 2) {
-          log(`  ${result.agentId}: Escalating haiku→sonnet (2 consecutive failures)`);
-          agent.model = 'sonnet';
+
+        if (consecutiveAgentFailures[result.agentId] >= 2) {
+          // Determine next model in the escalation chain
+          const currentModel = agent.model || 'sonnet';
+          const currentTier = MODEL_TIER[currentModel] ?? 1;
+          const nextTier = currentTier + 1;
+          const nextModel = Object.keys(MODEL_TIER).find(m => MODEL_TIER[m] === nextTier);
+
+          if (!nextModel) {
+            // Already at max tier (opus) — nothing to escalate to
+            log(`  ${result.agentId}: Already at highest model (${currentModel}), cannot escalate further`);
+            continue;
+          }
+
+          // Check maxModel cap
+          const maxModel = agent.maxModel || null;
+          if (maxModel && (MODEL_TIER[nextModel] > MODEL_TIER[maxModel])) {
+            log(`  ${result.agentId}: Would escalate ${currentModel}->${nextModel} but maxModel=${maxModel} prevents it`);
+            continue;
+          }
+
+          // Save original model on first escalation (for de-escalation later)
+          if (!agent._originalModel) {
+            agent._originalModel = currentModel;
+          }
+
+          log(`  ${result.agentId}: Escalating ${currentModel}->${nextModel} (${consecutiveAgentFailures[result.agentId]} consecutive failures)`);
+          agent.model = nextModel;
           consecutiveAgentFailures[result.agentId] = 0;
+          escalationCounts[result.agentId] = (escalationCounts[result.agentId] || 0) + 1;
+          // Track escalations in costLog for reporting
+          ensureCostLogEntry(costLog, result.agentId).escalations++;
         }
       } else {
+        // Success — de-escalate if agent was previously escalated
+        if (agent._originalModel && agent.model !== agent._originalModel) {
+          log(`  ${result.agentId}: De-escalating ${agent.model}->${agent._originalModel} (success after escalation)`);
+          agent.model = agent._originalModel;
+          delete agent._originalModel;
+        }
         consecutiveAgentFailures[result.agentId] = 0;
       }
     }
@@ -1146,13 +1301,13 @@ async function main() {
   // ============================================================
   // Generate Overnight Report
   // ============================================================
-  generateOvernightReport(globalStart, roundLog, stopReason, finalTests);
+  generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts, costLog);
 }
 
 // ============================================================
 // Overnight Report Generation
 // ============================================================
-function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) {
+function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts = {}, costLog = {}) {
   const totalMin = ((Date.now() - globalStart) / 60000).toFixed(1);
   const totalHrs = (totalMin / 60).toFixed(1);
   const totalRounds = roundLog.length;
@@ -1234,6 +1389,8 @@ ${agentSummaries.map(a => {
   if (a.meta.notes) s += `\n- **Notes**: ${a.meta.notes}`;
   if (a.timeouts) s += `\n- **Timeouts**: ${a.timeouts}`;
   if (a.errors) s += `\n- **Errors**: ${a.errors}`;
+  if (escalationCounts[a.id]) s += `\n- **Escalations**: ${escalationCounts[a.id]}`;
+  if (a.maxModel) s += `\n- **Max model**: ${a.maxModel}`;
   return s;
 }).join('\n')}
 
@@ -1261,6 +1418,65 @@ ${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no te
 ${efficiencyMetrics.map(m =>
   `| ${m.id} | ${m.model} | ${m.avgTime} | ${m.successRate}% | ${m.filesPerRound} | ${m.roundsActive}/${m.totalRounds} rounds |`
 ).join('\n')}
+
+## Cost Summary
+
+${(() => {
+  const agentIds = Object.keys(costLog);
+  if (!agentIds.length) return '> No cost data captured. Claude CLI may not have emitted token/cost info to stderr.\n> Once cost data is available, this section will populate automatically.\n';
+
+  // Build per-agent cost rows
+  const rows = agentSummaries.map(a => {
+    const c = costLog[a.id] || { totalCost: 0, inputTokens: 0, outputTokens: 0, rounds: 0, escalations: 0 };
+    const model = a.model || 'default';
+    const estCost = c.totalCost > 0 ? `$${c.totalCost.toFixed(4)}` : '—';
+    const avgCost = c.rounds > 0 && c.totalCost > 0 ? `$${(c.totalCost / c.rounds).toFixed(4)}` : '—';
+    const inputK = c.inputTokens > 0 ? `${(c.inputTokens / 1000).toFixed(1)}k` : '—';
+    const outputK = c.outputTokens > 0 ? `${(c.outputTokens / 1000).toFixed(1)}k` : '—';
+    return `| ${a.id} | ${model} | ${c.rounds} | ${inputK} | ${outputK} | ${estCost} | ${avgCost} | ${c.escalations} |`;
+  });
+
+  // Totals
+  const totals = agentSummaries.reduce((acc, a) => {
+    const c = costLog[a.id] || { totalCost: 0, inputTokens: 0, outputTokens: 0, rounds: 0, escalations: 0 };
+    acc.cost += c.totalCost;
+    acc.input += c.inputTokens;
+    acc.output += c.outputTokens;
+    acc.rounds += c.rounds;
+    acc.escalations += c.escalations;
+    return acc;
+  }, { cost: 0, input: 0, output: 0, rounds: 0, escalations: 0 });
+
+  const totalInputK = totals.input > 0 ? `${(totals.input / 1000).toFixed(1)}k` : '—';
+  const totalOutputK = totals.output > 0 ? `${(totals.output / 1000).toFixed(1)}k` : '—';
+  const totalCostStr = totals.cost > 0 ? `$${totals.cost.toFixed(4)}` : '—';
+  const avgCostStr = totals.rounds > 0 && totals.cost > 0 ? `$${(totals.cost / totals.rounds).toFixed(4)}` : '—';
+
+  // Successful task count for cost-per-task metric
+  const successfulRounds = agentSummaries.reduce((sum, a) => sum + a.roundsActive - a.timeouts - a.errors, 0);
+  const costPerSuccess = successfulRounds > 0 && totals.cost > 0 ? `$${(totals.cost / successfulRounds).toFixed(4)}` : '—';
+
+  return `| Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
+|-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
+${rows.join('\n')}
+| **TOTAL** | | **${totals.rounds}** | **${totalInputK}** | **${totalOutputK}** | **${totalCostStr}** | **${avgCostStr}** | **${totals.escalations}** |
+
+- **Cost per successful agent-round**: ${costPerSuccess}
+- **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
+- **Note**: Costs are estimates from token counts if CLI did not report direct cost`;
+})()}
+
+## Model Escalation Summary
+
+| Agent | Base Model | Max Model | Final Model | Escalations |
+|-------|-----------|-----------|-------------|-------------|
+${agentSummaries.map(a => {
+  const baseModel = a._originalModel || a.model || 'default';
+  const maxModel = a.maxModel || 'none';
+  const finalModel = a.model || 'default';
+  const escCount = escalationCounts[a.id] || 0;
+  return `| ${a.id} | ${baseModel} | ${maxModel} | ${finalModel} | ${escCount} |`;
+}).join('\n')}
 
 ## Analysis Reports Generated
 ${analysisFiles.length

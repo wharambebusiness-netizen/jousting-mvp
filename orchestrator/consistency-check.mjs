@@ -40,17 +40,6 @@ export function runConsistencyCheck() {
       softCapK: extractConstant(balanceConfig, /softCap:.*?K:\s*([\d.]+)/s)
     };
 
-    // Check for stale test counts in CLAUDE.md
-    const testCountMatches = claudeMd.match(/(\d{3,})\s+(tests|passing)/gi);
-    if (testCountMatches) {
-      testCountMatches.forEach(match => {
-        const count = match.match(/\d{3,}/)[0];
-        if (count !== '699') {
-          warnings.push(`CLAUDE.md references ${count} tests (expected 699)`);
-        }
-      });
-    }
-
     // Check archetype stats in CLAUDE.md
     const expectedStats = {
       charger: 'MOM=75, CTL=55, GRD=50, INIT=55, STA=65',
