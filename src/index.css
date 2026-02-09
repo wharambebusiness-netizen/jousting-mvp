@@ -9,28 +9,33 @@
 }
 
 :root {
+  /* --- Core palette --- */
   --parchment: #f4e4c1;
   --parchment-dark: #e8d5a3;
   --parchment-light: #faf0dc;
   --ink: #2c1810;
   --ink-light: #5c4033;
   --ink-faint: #8b7355;
+  --white: #fff;
 
   --gold: #c9a84c;
   --gold-dark: #a07c2e;
   --gold-light: #e0c97a;
   --red: #8b2500;
   --red-light: #b53300;
+  --red-dark: #5c1a00;
   --blue: #1e3a5f;
   --blue-light: #2a5a8f;
   --green: #2d5016;
   --green-light: #4a8a2a;
 
+  /* --- Player colors --- */
   --p1: #1e3a5f;
   --p1-bg: #d6e4f0;
   --p2: #8b2500;
   --p2-bg: #f0d6d0;
 
+  /* --- Stance colors --- */
   --stance-agg: #8b2500;
   --stance-agg-bg: #f5ddd6;
   --stance-bal: #a07c2e;
@@ -38,7 +43,7 @@
   --stance-def: #1e3a5f;
   --stance-def-bg: #d6e0f5;
 
-  /* Rarity colors */
+  /* --- Rarity colors --- */
   --rarity-uncommon: #4a8a2a;
   --rarity-uncommon-bg: #e0f0d6;
   --rarity-rare: #2a5a8f;
@@ -52,6 +57,56 @@
   --rarity-giga: #c9a84c;
   --rarity-giga-bg: linear-gradient(135deg, #f5ecd0, #edd6f5, #d6e4f5);
 
+  /* --- Rarity glow (alpha-tinted versions for box-shadow / hover) --- */
+  --glow-uncommon: rgba(74, 138, 42, 0.3);
+  --glow-uncommon-soft: rgba(74, 138, 42, 0.25);
+  --glow-rare: rgba(42, 90, 143, 0.3);
+  --glow-rare-soft: rgba(42, 90, 143, 0.25);
+  --glow-epic: rgba(123, 63, 160, 0.15);
+  --glow-epic-strong: rgba(123, 63, 160, 0.35);
+  --glow-epic-selected: rgba(123, 63, 160, 0.3);
+  --glow-legendary: rgba(201, 138, 30, 0.2);
+  --glow-legendary-strong: rgba(201, 138, 30, 0.4);
+  --glow-legendary-selected: rgba(201, 138, 30, 0.35);
+  --glow-relic: rgba(181, 32, 32, 0.2);
+  --glow-relic-strong: rgba(181, 32, 32, 0.4);
+  --glow-relic-selected: rgba(181, 32, 32, 0.35);
+  --glow-giga: rgba(201, 168, 76, 0.25);
+  --glow-giga-strong: rgba(201, 168, 76, 0.5);
+  --glow-giga-selected: rgba(201, 168, 76, 0.45);
+  --glow-red: rgba(139, 37, 0, 0.3);
+  --glow-red-strong: rgba(139, 37, 0, 0.4);
+  --glow-gold: rgba(201, 168, 76, 0.4);
+  --glow-gold-soft: rgba(201, 168, 76, 0.5);
+  --glow-gold-subtle: rgba(201, 168, 76, 0.6);
+
+  /* --- Stat bar gradient colors --- */
+  --stat-mom: #c94040;
+  --stat-mom-end: #e06040;
+  --stat-ctl: #4080c9;
+  --stat-ctl-end: #5090e0;
+  --stat-grd: #808080;
+  --stat-grd-end: #a0a0a0;
+  --stat-init: #c9a040;
+  --stat-init-end: #e0c060;
+  --stat-sta: #40a050;
+  --stat-sta-end: #60c070;
+
+  /* --- Counter badge colors --- */
+  --counter-win-bg: #d4edda;
+  --counter-win-text: #155724;
+  --counter-win-border: #28a745;
+  --counter-lose-bg: #f8d7da;
+  --counter-lose-text: #721c24;
+  --counter-lose-border: #dc3545;
+
+  /* --- Counter callout colors --- */
+  --callout-bg: #fff8e1;
+  --callout-border: #f9a825;
+  --callout-text: #6d4c00;
+  --callout-flash: #ffe082;
+
+  /* --- Borders & surfaces --- */
   --border: #8b7355;
   --border-light: #b8a88a;
   --shadow: rgba(44, 24, 16, 0.12);
@@ -128,7 +183,7 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
 .btn--primary {
   background: var(--gold);
   border-color: var(--gold-dark);
-  color: #fff;
+  color: var(--white);
   font-weight: 600;
 }
 .btn--primary:hover { background: var(--gold-dark); }
@@ -199,11 +254,11 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
 }
 .stat-bar__fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
 .stat-bar__value { width: 28px; font-size: 0.75rem; font-weight: 600; text-align: right; }
-.stat-bar--mom .stat-bar__fill { background: linear-gradient(90deg, #c94040, #e06040); }
-.stat-bar--ctl .stat-bar__fill { background: linear-gradient(90deg, #4080c9, #5090e0); }
-.stat-bar--grd .stat-bar__fill { background: linear-gradient(90deg, #808080, #a0a0a0); }
-.stat-bar--init .stat-bar__fill { background: linear-gradient(90deg, #c9a040, #e0c060); }
-.stat-bar--sta .stat-bar__fill { background: linear-gradient(90deg, #40a050, #60c070); }
+.stat-bar--mom .stat-bar__fill { background: linear-gradient(90deg, var(--stat-mom), var(--stat-mom-end)); }
+.stat-bar--ctl .stat-bar__fill { background: linear-gradient(90deg, var(--stat-ctl), var(--stat-ctl-end)); }
+.stat-bar--grd .stat-bar__fill { background: linear-gradient(90deg, var(--stat-grd), var(--stat-grd-end)); }
+.stat-bar--init .stat-bar__fill { background: linear-gradient(90deg, var(--stat-init), var(--stat-init-end)); }
+.stat-bar--sta .stat-bar__fill { background: linear-gradient(90deg, var(--stat-sta), var(--stat-sta-end)); }
 
 /* Stance tags */
 .stance-tag {
@@ -244,9 +299,9 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   width: 80px; height: 8px; background: var(--parchment-dark);
   border-radius: 4px; overflow: hidden; border: 1px solid var(--border-light);
 }
-.stamina-bar__fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; background: linear-gradient(90deg, #40a050, #60c070); }
-.stamina-bar__fill--low { background: linear-gradient(90deg, #c94040, #e06040); }
-.stamina-bar__fill--mid { background: linear-gradient(90deg, #c9a040, #e0c060); }
+.stamina-bar__fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; background: linear-gradient(90deg, var(--stat-sta), var(--stat-sta-end)); }
+.stamina-bar__fill--low { background: linear-gradient(90deg, var(--stat-mom), var(--stat-mom-end)); }
+.stamina-bar__fill--mid { background: linear-gradient(90deg, var(--stat-init), var(--stat-init-end)); }
 
 /* Divider */
 .divider { border: none; border-top: 1px solid var(--border-light); margin: 16px 0; }
@@ -330,8 +385,8 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   display: inline-block; padding: 2px 8px; border-radius: 3px;
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
 }
-.counter-badge--win { background: #d4edda; color: #155724; border: 1px solid #28a745; }
-.counter-badge--lose { background: #f8d7da; color: #721c24; border: 1px solid #dc3545; }
+.counter-badge--win { background: var(--counter-win-bg); color: var(--counter-win-text); border: 1px solid var(--counter-win-border); }
+.counter-badge--lose { background: var(--counter-lose-bg); color: var(--counter-lose-text); border: 1px solid var(--counter-lose-border); }
 
 /* Stamina pulse animation (for fatigue threshold warning) */
 @keyframes staminaPulse {
@@ -339,7 +394,7 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   50% { opacity: 0.6; }
 }
 .stamina-bar__fill--critical {
-  background: linear-gradient(90deg, #c94040, #e06040);
+  background: linear-gradient(90deg, var(--stat-mom), var(--stat-mom-end));
   animation: staminaPulse 1.5s ease infinite;
 }
 
