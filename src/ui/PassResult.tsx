@@ -31,7 +31,7 @@ export function PassResultScreen({ match, result, onContinue }: {
       {result.unseat !== 'none' && (
         <div className="pass-result__unseat">
           {result.unseat === 'player1' ? match.player1.archetype.name : match.player2.archetype.name} UNSEATS their opponent!
-          <div style={{ fontSize: '0.8rem', fontWeight: 400, marginTop: 4 }}>
+          <div className="pass-result__unseat-margin">
             Margin: {result.unseatMargin.toFixed(1)} — Transitioning to Melee
           </div>
         </div>
@@ -39,33 +39,33 @@ export function PassResultScreen({ match, result, onContinue }: {
 
       <div className="pass-result__breakdown">
         {/* Attacks used */}
-        <div className="reveal-sides" style={{ marginBottom: 12 }}>
-          <div style={{ textAlign: 'center' }}>
+        <div className="reveal-sides mb-12">
+          <div className="reveal-sides__cell">
             <div className="player-label player-label--p1">You</div>
-            <div style={{ fontWeight: 700 }}>{p1.finalAttack.name}</div>
+            <div className="reveal-sides__attack-name">{p1.finalAttack.name}</div>
             <StanceTag stance={p1.finalAttack.stance} />
-            <div style={{ fontSize: '0.75rem', color: 'var(--ink-faint)', marginTop: 2 }}>
+            <div className="reveal-sides__speed">
               {p1.speed}{p1.shifted ? ' (shifted!)' : ''}
             </div>
             {counters.player1Bonus > 0 && (
-              <span className="counter-badge counter-badge--win" style={{ marginTop: 4 }}>Counters!</span>
+              <span className="counter-badge counter-badge--win reveal-sides__counter">Counters!</span>
             )}
             {counters.player1Bonus < 0 && (
-              <span className="counter-badge counter-badge--lose" style={{ marginTop: 4 }}>Countered!</span>
+              <span className="counter-badge counter-badge--lose reveal-sides__counter">Countered!</span>
             )}
           </div>
-          <div style={{ textAlign: 'center' }}>
+          <div className="reveal-sides__cell">
             <div className="player-label player-label--p2">Opponent</div>
-            <div style={{ fontWeight: 700 }}>{p2.finalAttack.name}</div>
+            <div className="reveal-sides__attack-name">{p2.finalAttack.name}</div>
             <StanceTag stance={p2.finalAttack.stance} />
-            <div style={{ fontSize: '0.75rem', color: 'var(--ink-faint)', marginTop: 2 }}>
+            <div className="reveal-sides__speed">
               {p2.speed}{p2.shifted ? ' (shifted!)' : ''}
             </div>
             {counters.player2Bonus > 0 && (
-              <span className="counter-badge counter-badge--win" style={{ marginTop: 4 }}>Counters!</span>
+              <span className="counter-badge counter-badge--win reveal-sides__counter">Counters!</span>
             )}
             {counters.player2Bonus < 0 && (
-              <span className="counter-badge counter-badge--lose" style={{ marginTop: 4 }}>Countered!</span>
+              <span className="counter-badge counter-badge--lose reveal-sides__counter">Countered!</span>
             )}
           </div>
         </div>
@@ -138,10 +138,10 @@ function Row({ label, v1, v2, fmt = 1, bold }: {
     <div className="impact-row">
       <span className="impact-row__label">{label}</span>
       <div className="impact-row__values">
-        <span className="impact-row__p1" style={bold ? { fontSize: '1.05rem' } : undefined}>
+        <span className={`impact-row__p1${bold ? ' impact-row__p1--bold' : ''}`}>
           {v1.toFixed(fmt)}
         </span>
-        <span className="impact-row__p2" style={bold ? { fontSize: '1.05rem' } : undefined}>
+        <span className={`impact-row__p2${bold ? ' impact-row__p2--bold' : ''}`}>
           {v2.toFixed(fmt)}
         </span>
       </div>

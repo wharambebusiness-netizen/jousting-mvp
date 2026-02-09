@@ -372,7 +372,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
         </button>
       </div>
 
-      <p className="text-center mt-8" style={{ fontSize: '0.8rem', color: 'var(--ink-faint)' }}>
+      <p className="text-center mt-8 hint-text">
         Your opponent will be equipped at a similar tier.
       </p>
     </div>

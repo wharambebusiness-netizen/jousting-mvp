@@ -846,6 +846,17 @@
 .match-replay__attacks { margin-bottom: 6px; }
 .match-replay__shift { margin-bottom: 4px; }
 
+/* Player color text utilities */
+.text-p1 { color: var(--p1); }
+.text-p2 { color: var(--p2); }
+
+/* Hint / footnote text */
+.hint-text { font-size: 0.8rem; color: var(--ink-faint); }
+.hint-text-sm { font-size: 0.75rem; color: var(--ink-faint); }
+
+/* Opponent-selection header wrapper */
+.setup-opponent-header { text-align: center; margin-bottom: 1rem; }
+
 /* Accessibility: respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .screen,

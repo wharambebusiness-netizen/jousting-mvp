@@ -39,7 +39,7 @@ export function SetupScreen({ onStart }: {
       <h1>Joust & Melee</h1>
 
       {/* Difficulty selector */}
-      <div className="difficulty-selector" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div className="difficulty-selector">
         {DIFFICULTIES.map(d => (
           <button
             key={d.value}
@@ -84,7 +84,7 @@ export function SetupScreen({ onStart }: {
               </div>
             ))}
           </div>
-          <p className="text-center mt-16" style={{ fontSize: '0.8rem', color: 'var(--ink-faint)' }}>
+          <p className="text-center mt-16 hint-text">
             Pick your archetype, then choose your opponent.
           </p>
         </>
@@ -93,21 +93,13 @@ export function SetupScreen({ onStart }: {
       {/* Step 2: Pick opponent archetype */}
       {selectedP1 && (
         <>
-          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <p className="subtitle" style={{ marginBottom: '0.25rem' }}>
+          <div className="setup-opponent-header">
+            <p className="subtitle mb-4">
               You chose <strong>{selectedP1.name}</strong> — now pick your opponent
             </p>
             <button
               onClick={handleBack}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--ink-faint)',
-                color: 'var(--ink)',
-                padding: '0.3rem 0.8rem',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-              }}
+              className="btn--back"
             >
               &larr; Change archetype
             </button>
@@ -116,14 +108,13 @@ export function SetupScreen({ onStart }: {
           <div className="archetype-grid">
             {/* Random option card */}
             <div
-              className="card card--selectable archetype-card"
+              className="card card--selectable archetype-card archetype-card--random"
               onClick={handleRandomP2}
-              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             >
               <div className="archetype-card__name">Random</div>
               <div className="archetype-card__identity">A mystery opponent</div>
-              <div style={{ fontSize: '2rem', margin: '0.5rem 0' }}>?</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-faint)' }}>
+              <div className="archetype-card--random-icon">?</div>
+              <div className="hint-text-sm">
                 Randomly selected from the remaining archetypes
               </div>
             </div>
@@ -148,7 +139,7 @@ export function SetupScreen({ onStart }: {
             ))}
           </div>
 
-          <p className="text-center mt-16" style={{ fontSize: '0.8rem', color: 'var(--ink-faint)' }}>
+          <p className="text-center mt-16 hint-text">
             Pick an opponent or choose Random for a surprise.
           </p>
         </>

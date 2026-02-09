@@ -84,12 +84,12 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                       {pr.player1.finalAttack.name}
                       {pr.player1.shifted && ' *'}
                     </td>
-                    <td style={{ color: 'var(--p1)' }}>{pr.player1.impactScore.toFixed(1)}</td>
+                    <td className="text-p1">{pr.player1.impactScore.toFixed(1)}</td>
                     <td>
                       {pr.player2.finalAttack.name}
                       {pr.player2.shifted && ' *'}
                     </td>
-                    <td style={{ color: 'var(--p2)' }}>{pr.player2.impactScore.toFixed(1)}</td>
+                    <td className="text-p2">{pr.player2.impactScore.toFixed(1)}</td>
                     <td style={{
                       fontWeight: 600,
                       color: pr.unseat !== 'none' ? 'var(--red)'
@@ -129,9 +129,9 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                 <tr key={mr.roundNumber}>
                   <td>{mr.roundNumber}</td>
                   <td>{mr.player1Attack.name}</td>
-                  <td style={{ color: 'var(--p1)' }}>{mr.player1ImpactScore.toFixed(1)}</td>
+                  <td className="text-p1">{mr.player1ImpactScore.toFixed(1)}</td>
                   <td>{mr.player2Attack.name}</td>
-                  <td style={{ color: 'var(--p2)' }}>{mr.player2ImpactScore.toFixed(1)}</td>
+                  <td className="text-p2">{mr.player2ImpactScore.toFixed(1)}</td>
                   <td style={{
                     fontWeight: 600,
                     color: mr.outcome === 'Critical' ? 'var(--red)'
@@ -147,7 +147,7 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
               ))}
             </tbody>
           </table>
-          <p style={{ fontSize: '0.8rem', color: 'var(--ink-faint)', marginBottom: 16 }}>
+          <p className="melee-legend mb-16">
             Melee wins — P1: {match.meleeWins1}, P2: {match.meleeWins2} (first to 4, criticals count as 2)
           </p>
         </>
@@ -223,22 +223,22 @@ function LoadoutMini({ label, steedLoadout, playerLoadout }: {
   playerLoadout?: PlayerLoadout | null;
 }) {
   if (!steedLoadout && !playerLoadout) {
-    return <div style={{ textAlign: 'center', color: 'var(--ink-faint)' }}>No gear</div>;
+    return <div className="loadout-mini__no-gear">No gear</div>;
   }
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div className="player-label" style={{ marginBottom: 4 }}>{label}</div>
+    <div className="loadout-mini">
+      <div className="player-label mb-4">{label}</div>
       {steedLoadout && (
         <>
-          <div className={`rarity-badge rarity-badge--${steedLoadout.giglingRarity}`} style={{ marginBottom: 6 }}>
+          <div className={`rarity-badge rarity-badge--${steedLoadout.giglingRarity} mb-6`}>
             {steedLoadout.giglingRarity}
           </div>
-          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--ink-light)', marginBottom: 2 }}>Steed</div>
+          <div className="loadout-mini__section-label">Steed</div>
           {STEED_SLOTS.map(slot => {
             const gear = steedLoadout[slot];
             if (!gear) return null;
             return (
-              <div key={slot} style={{ fontSize: '0.72rem', color: 'var(--ink-light)' }}>
+              <div key={slot} className="loadout-mini__gear-line">
                 {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${gear.primaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
                 {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${gear.secondaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
               </div>
@@ -248,12 +248,12 @@ function LoadoutMini({ label, steedLoadout, playerLoadout }: {
       )}
       {playerLoadout && (
         <>
-          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--ink-light)', marginTop: 6, marginBottom: 2 }}>Knight</div>
+          <div className="loadout-mini__section-label mt-6">Knight</div>
           {PLAYER_SLOTS.map(slot => {
             const gear = playerLoadout[slot];
             if (!gear) return null;
             return (
-              <div key={slot} style={{ fontSize: '0.72rem', color: 'var(--ink-light)' }}>
+              <div key={slot} className="loadout-mini__gear-line">
                 {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${gear.primaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
                 {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${gear.secondaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
               </div>
