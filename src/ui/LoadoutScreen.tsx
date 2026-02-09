@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import type { Archetype, GiglingRarity, GiglingLoadout, PlayerLoadout, SteedGearSlot, PlayerGearSlot } from '../engine/types';
-import { createFullLoadout, applyGiglingLoadout } from '../engine/gigling-gear';
-import { createFullPlayerLoadout, applyPlayerLoadout } from '../engine/player-gear';
+import type { Archetype, GiglingRarity, GiglingLoadout, PlayerLoadout, SteedGearSlot, PlayerGearSlot, GearVariant } from '../engine/types';
+import { createStatGear, applyGiglingLoadout } from '../engine/gigling-gear';
+import { createPlayerGear, applyPlayerLoadout } from '../engine/player-gear';
+import { getSteedVariantDef, getPlayerVariantDef, ALL_STEED_SLOTS, ALL_PLAYER_SLOTS, ALL_GEAR_VARIANTS } from '../engine/gear-variants';
 import { BALANCE } from '../engine/balance-config';
 import { StatBar } from './helpers';
 
@@ -47,6 +48,18 @@ const STAT_TIPS: Record<string, string> = {
   stamina: 'Stamina — endurance. Below 40, Momentum and Control are reduced.',
 };
 
+const VARIANT_LABELS: Record<GearVariant, { short: string; full: string }> = {
+  aggressive: { short: 'Agg', full: 'Aggressive' },
+  balanced:   { short: 'Bal', full: 'Balanced' },
+  defensive:  { short: 'Def', full: 'Defensive' },
+};
+
+const VARIANT_COLORS: Record<GearVariant, string> = {
+  aggressive: 'var(--mom, #c44)',
+  balanced:   'var(--ctl, #48a)',
+  defensive:  'var(--grd, #4a8)',
+};
+
 interface Props {
   archetype: Archetype;
   opponentName: string;
@@ -54,8 +67,21 @@ interface Props {
 }
 
 export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
-  const [rarity, setRarity] = useState<GiglingRarity>('uncommon');
+  // --- Independent rarity state ---
+  const [gigRarity, setGigRarity] = useState<GiglingRarity>('uncommon');
+  const [steedGearRarity, setSteedGearRarity] = useState<GiglingRarity>('uncommon');
+  const [playerGearRarity, setPlayerGearRarity] = useState<GiglingRarity>('uncommon');
   const [seed, setSeed] = useState(0);
+
+  // --- Per-slot variant state ---
+  const [steedVariants, setSteedVariants] = useState<Record<SteedGearSlot, GearVariant>>({
+    chamfron: 'balanced', barding: 'balanced', saddle: 'balanced',
+    stirrups: 'balanced', reins: 'balanced', horseshoes: 'balanced',
+  });
+  const [playerVariants, setPlayerVariants] = useState<Record<PlayerGearSlot, GearVariant>>({
+    helm: 'balanced', shield: 'balanced', lance: 'balanced',
+    armor: 'balanced', gauntlets: 'balanced', melee_weapon: 'balanced',
+  });
 
   // Create deterministic RNG from seed
   function makeRng(s: number) {
@@ -66,14 +92,24 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
     };
   }
 
-  // Generate both loadouts from current selections
+  // --- Generate loadouts per-slot with individual variants ---
   const steedLoadout = useMemo(() => {
-    return createFullLoadout(rarity, rarity, makeRng(seed));
-  }, [rarity, seed]);
+    const rng = makeRng(seed);
+    const loadout: GiglingLoadout = { giglingRarity: gigRarity };
+    for (const slot of ALL_STEED_SLOTS) {
+      loadout[slot] = createStatGear(slot, steedGearRarity, rng, steedVariants[slot]);
+    }
+    return loadout;
+  }, [gigRarity, steedGearRarity, seed, steedVariants]);
 
   const playerLoadout = useMemo(() => {
-    return createFullPlayerLoadout(rarity, makeRng(seed + 7919));
-  }, [rarity, seed]);
+    const rng = makeRng(seed + 7919);
+    const loadout: PlayerLoadout = {};
+    for (const slot of ALL_PLAYER_SLOTS) {
+      loadout[slot] = createPlayerGear(slot, playerGearRarity, rng, playerVariants[slot]);
+    }
+    return loadout;
+  }, [playerGearRarity, seed, playerVariants]);
 
   // Boosted archetype for stat preview (both gear systems applied)
   const boosted = useMemo(() => {
@@ -81,7 +117,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
     return applyPlayerLoadout(withSteed, playerLoadout);
   }, [archetype, steedLoadout, playerLoadout]);
 
-  const rarityBonus = BALANCE.giglingRarityBonus[rarity];
+  const rarityBonus = BALANCE.giglingRarityBonus[gigRarity];
 
   // Calculate total stat bonuses from all gear
   const totalBonuses = useMemo(() => {
@@ -99,14 +135,90 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
     return totals;
   }, [steedLoadout, playerLoadout]);
 
-  const handleRarityChange = (r: GiglingRarity) => {
-    setRarity(r);
-    setSeed(prev => prev + 1);
-  };
-
+  // --- Handlers ---
   const handleReroll = () => {
     setSeed(prev => prev + 1);
   };
+
+  const setSteedVariant = (slot: SteedGearSlot, variant: GearVariant) => {
+    setSteedVariants(prev => ({ ...prev, [slot]: variant }));
+  };
+
+  const setPlayerVariant = (slot: PlayerGearSlot, variant: GearVariant) => {
+    setPlayerVariants(prev => ({ ...prev, [slot]: variant }));
+  };
+
+  const setAllSteedVariants = (variant: GearVariant) => {
+    setSteedVariants({
+      chamfron: variant, barding: variant, saddle: variant,
+      stirrups: variant, reins: variant, horseshoes: variant,
+    });
+  };
+
+  const setAllPlayerVariants = (variant: GearVariant) => {
+    setPlayerVariants({
+      helm: variant, shield: variant, lance: variant,
+      armor: variant, gauntlets: variant, melee_weapon: variant,
+    });
+  };
+
+  // --- Shared rarity selector component ---
+  const RaritySelector = ({ label, value, onChange }: {
+    label: string;
+    value: GiglingRarity;
+    onChange: (r: GiglingRarity) => void;
+  }) => (
+    <div className="rarity-selector">
+      <h4 className="rarity-selector__label">{label}</h4>
+      <div className="rarity-grid rarity-grid--compact">
+        {RARITIES.map(r => (
+          <div
+            key={r.id}
+            className={`card card--selectable rarity-card rarity-card--${r.id} rarity-card--compact ${value === r.id ? 'card--selected' : ''}`}
+            onClick={() => onChange(r.id)}
+          >
+            <div className="rarity-card__name">{r.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // --- Variant toggle component ---
+  const VariantToggle = ({ current, onSelect }: {
+    current: GearVariant;
+    onSelect: (v: GearVariant) => void;
+  }) => (
+    <span className="variant-toggle">
+      {ALL_GEAR_VARIANTS.map(v => (
+        <button
+          key={v}
+          className={`variant-toggle__btn variant-toggle__btn--${v} ${current === v ? 'variant-toggle__btn--active' : ''}`}
+          onClick={() => onSelect(v)}
+          title={VARIANT_LABELS[v].full}
+          style={current === v ? { borderColor: VARIANT_COLORS[v], color: VARIANT_COLORS[v] } : undefined}
+        >
+          {VARIANT_LABELS[v].short}
+        </button>
+      ))}
+    </span>
+  );
+
+  // --- Quick-set variant buttons ---
+  const QuickSetButtons = ({ onSet }: { onSet: (v: GearVariant) => void }) => (
+    <span className="quick-set-buttons">
+      {ALL_GEAR_VARIANTS.map(v => (
+        <button
+          key={v}
+          className="btn btn--small btn--outline"
+          onClick={() => onSet(v)}
+          title={`Set all slots to ${VARIANT_LABELS[v].full}`}
+        >
+          All {VARIANT_LABELS[v].full}
+        </button>
+      ))}
+    </span>
+  );
 
   return (
     <div className="screen">
@@ -115,40 +227,55 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
         {archetype.name} vs {opponentName} — gear up your mount and knight
       </p>
 
-      {/* Rarity Tier */}
-      <h3 className="mb-8">Gear Tier</h3>
-      <div className="rarity-grid">
-        {RARITIES.map(r => (
-          <div
-            key={r.id}
-            className={`card card--selectable rarity-card rarity-card--${r.id} ${rarity === r.id ? 'card--selected' : ''}`}
-            onClick={() => handleRarityChange(r.id)}
-          >
-            <div className="rarity-card__name">{r.label}</div>
-            <div className="rarity-card__bonus">
-              +{BALANCE.giglingRarityBonus[r.id]} all stats
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* --- Independent Rarity Selectors --- */}
+      <h3 className="mb-8">Gear Tiers</h3>
 
-      {/* Steed Gear Section */}
+      <RaritySelector
+        label="Mount Rarity"
+        value={gigRarity}
+        onChange={r => { setGigRarity(r); setSeed(prev => prev + 1); }}
+      />
+      <p className="rarity-selector__note">
+        +{BALANCE.giglingRarityBonus[gigRarity]} flat bonus to all stats
+      </p>
+
+      <RaritySelector
+        label="Steed Gear Quality"
+        value={steedGearRarity}
+        onChange={r => { setSteedGearRarity(r); setSeed(prev => prev + 1); }}
+      />
+
+      <RaritySelector
+        label="Player Gear Quality"
+        value={playerGearRarity}
+        onChange={r => { setPlayerGearRarity(r); setSeed(prev => prev + 1); }}
+      />
+
+      {/* --- Steed Gear Section --- */}
       <div className="loadout-section mt-16">
         <div className="loadout-section__header">
           <h3>Steed Gear</h3>
-          <button className="btn btn--small" onClick={handleReroll}>Re-roll All</button>
+          <span className="loadout-section__actions">
+            <QuickSetButtons onSet={setAllSteedVariants} />
+            <button className="btn btn--small" onClick={handleReroll}>Re-roll All</button>
+          </span>
         </div>
         <div className="gear-list">
           {STEED_SLOTS.map(slot => {
             const gear = steedLoadout[slot];
             if (!gear) return null;
             const label = STEED_SLOT_LABELS[slot];
+            const variantDef = getSteedVariantDef(slot, steedVariants[slot]);
             return (
               <div key={slot} className="gear-item gear-item--steed">
                 <div className="gear-item__slot">
-                  <div>{label.name}</div>
-                  <div className="gear-item__desc">{label.desc}</div>
+                  <div className="gear-item__slot-name">{label.name}</div>
+                  <div className="gear-item__gear-name" title={label.desc}>{variantDef.name}</div>
                 </div>
+                <VariantToggle
+                  current={steedVariants[slot]}
+                  onSelect={v => setSteedVariant(slot, v)}
+                />
                 <span className="gear-item__stats">
                   {gear.primaryStat && (
                     <span className="gear-stat gear-stat--primary" title={STAT_TIPS[gear.primaryStat.stat]}>
@@ -167,20 +294,30 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
         </div>
       </div>
 
-      {/* Player Gear Section */}
+      {/* --- Player Gear Section --- */}
       <div className="loadout-section mt-16">
-        <h3>Player Gear</h3>
+        <div className="loadout-section__header">
+          <h3>Player Gear</h3>
+          <span className="loadout-section__actions">
+            <QuickSetButtons onSet={setAllPlayerVariants} />
+          </span>
+        </div>
         <div className="gear-list">
           {PLAYER_SLOTS.map(slot => {
             const gear = playerLoadout[slot];
             if (!gear) return null;
             const label = PLAYER_SLOT_LABELS[slot];
+            const variantDef = getPlayerVariantDef(slot, playerVariants[slot]);
             return (
               <div key={slot} className="gear-item gear-item--player">
                 <div className="gear-item__slot">
-                  <div>{label.name}</div>
-                  <div className="gear-item__desc">{label.desc}</div>
+                  <div className="gear-item__slot-name">{label.name}</div>
+                  <div className="gear-item__gear-name" title={label.desc}>{variantDef.name}</div>
                 </div>
+                <VariantToggle
+                  current={playerVariants[slot]}
+                  onSelect={v => setPlayerVariant(slot, v)}
+                />
                 <span className="gear-item__stats">
                   {gear.primaryStat && (
                     <span className="gear-stat gear-stat--primary" title={STAT_TIPS[gear.primaryStat.stat]}>
@@ -199,7 +336,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
         </div>
       </div>
 
-      {/* Stats Preview */}
+      {/* --- Stats Preview --- */}
       <div className="loadout-section mt-16">
         <h3 className="mb-8">Stats Preview</h3>
         <div className="stats-preview">

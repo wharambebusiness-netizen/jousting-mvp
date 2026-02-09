@@ -155,7 +155,7 @@ describe('Melee phase', () => {
 });
 
 describe('Unseat → Melee transition with carryover', () => {
-  it('applies carryover penalties to unseated player', () => {
+  it('applies carryover penalties and wasUnseated flag to unseated player', () => {
     // We need to manufacture a state where unseat can happen.
     // Use the match machine but with extreme conditions.
     // Actually, let's test the transition logic directly by setting up
@@ -178,16 +178,64 @@ describe('Unseat → Melee transition with carryover', () => {
     if (lastPass.unseat !== 'none') {
       expect(match.phase).toBe(Phase.MeleeSelect);
 
-      // Unseated player should have carryover penalties
+      // Unseated player should have carryover penalties and wasUnseated=true
       if (lastPass.unseat === 'player1') {
         // P1 unseats P2 → P2 gets penalties
         expect(match.player2.carryoverMomentum).toBeLessThan(0);
         expect(match.player2.carryoverControl).toBeLessThan(0);
         expect(match.player2.carryoverGuard).toBeLessThan(0);
+        expect(match.player2.wasUnseated).toBe(true);
+        expect(match.player1.wasUnseated).toBe(false);
       }
     }
     // If no unseat, that's OK — the threshold is quite high
     // The test validates the flow either way
+  });
+
+  it('unseated player receives stamina recovery', () => {
+    let match = createMatch(charger, technician);
+
+    // Set technician to low stamina to trigger unseat
+    match.player2.currentStamina = 5;
+
+    // Charger goes Fast+CF with full stamina vs nearly-dead Technician
+    match = submitJoustPass(match,
+      { speed: SpeedType.Fast, attack: CF },
+      { speed: SpeedType.Standard, attack: PdL },
+    );
+
+    const lastPass = match.passResults[0];
+    if (lastPass.unseat !== 'none') {
+      expect(match.phase).toBe(Phase.MeleeSelect);
+
+      if (lastPass.unseat === 'player1') {
+        // P2 was unseated. P2 started at 5 STA, lost 8 from PdL attack → 0.
+        // Then gains unseatedStaminaRecovery (8) → 8, capped at archetype max.
+        const p2StaAfterAttack = lastPass.player2.staminaAfter;
+        const expectedRecovery = Math.min(
+          p2StaAfterAttack + BALANCE.unseatedStaminaRecovery,
+          technician.stamina,
+        );
+        expect(match.player2.currentStamina).toBe(expectedRecovery);
+        expect(match.player2.currentStamina).toBeGreaterThan(p2StaAfterAttack);
+      }
+    }
+  });
+
+  it('tied joust → melee sets wasUnseated false for both players', () => {
+    let match = createMatch(duelist, duelist);
+
+    // Play 5 identical passes → tied → melee
+    for (let i = 0; i < 5; i++) {
+      match = submitJoustPass(match,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    expect(match.phase).toBe(Phase.MeleeSelect);
+    expect(match.player1.wasUnseated).toBe(false);
+    expect(match.player2.wasUnseated).toBe(false);
   });
 });
 
@@ -847,7 +895,7 @@ describe('12-slot gear integration — createMatch', () => {
     const player = createFullPlayerLoadout('uncommon', rngMin);
     const match = createMatch(duelist, duelist, steed, undefined, player, undefined);
 
-    // Duelist base: all 60. Uncommon rarity bonus: +1 to all (steed only).
+    // Duelist base: all 60. Uncommon rarity bonus: +2 to all (steed only).
     // Each uncommon gear piece gives minimum primary + minimum secondary.
     // Steed gear minimum primary=1, secondary=0 at uncommon.
     // Player gear minimum primary=1, secondary=0 at uncommon.

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v3
+// Jousting MVP — Multi-Agent Orchestrator v4
 // ============================================================
+// v4 additions:
+// - Backlog system (orchestrator/backlog.json) for dynamic task injection
+// - Continuous agents never retire — always find more work
+// - Producer role integration — generates tasks for other agents
+// - Better overnight sustainability
+//
 // v3 additions:
 // - Mission config files (orchestrator/missions/*.json)
 // - Role templates (orchestrator/roles/*.md)
@@ -78,6 +84,41 @@ const CONFIG = {
   allowedTools: 'Edit,Read,Write,Glob,Grep,Bash',
   reportFile: join(ORCH_DIR, 'overnight-report.md'),
 };
+
+// ============================================================
+// Backlog System (v4)
+// ============================================================
+const BACKLOG_FILE = join(ORCH_DIR, 'backlog.json');
+
+function loadBacklog() {
+  if (!existsSync(BACKLOG_FILE)) return [];
+  try { return JSON.parse(readFileSync(BACKLOG_FILE, 'utf-8')); }
+  catch (_) { return []; }
+}
+
+function saveBacklog(tasks) {
+  writeFileSync(BACKLOG_FILE, JSON.stringify(tasks, null, 2));
+}
+
+function getNextTask(role) {
+  const backlog = loadBacklog();
+  const task = backlog.find(t => t.status === 'pending' && t.role === role);
+  if (task) {
+    task.status = 'assigned';
+    saveBacklog(backlog);
+  }
+  return task;
+}
+
+function completeBacklogTask(taskId) {
+  const backlog = loadBacklog();
+  const task = backlog.find(t => t.id === taskId);
+  if (task) {
+    task.status = 'completed';
+    task.completedAt = new Date().toISOString();
+    saveBacklog(backlog);
+  }
+}
 
 // ============================================================
 // Agent Definitions (default — overridden by mission config)
@@ -390,6 +431,21 @@ function runAgent(agent, round) {
         : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
     );
 
+    // v4: Inject next backlog task if available
+    const backlogTask = getNextTask(agent.role);
+    if (backlogTask) {
+      promptParts.push(
+        ``,
+        `--- BACKLOG TASK (from producer) ---`,
+        `Task ID: ${backlogTask.id}`,
+        `Priority: ${backlogTask.priority}`,
+        `Title: ${backlogTask.title}`,
+        `Description: ${backlogTask.description}`,
+        `Files: ${(backlogTask.fileOwnership || []).join(', ')}`,
+        `When done, note this task ID in your handoff META under completed-tasks.`,
+      );
+    }
+
     // Append role template if available (provides domain-specific guidelines)
     if (roleTemplate) {
       promptParts.push(``, `--- ROLE GUIDELINES ---`, roleTemplate);
@@ -550,7 +606,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v3');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v4');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -587,9 +643,15 @@ async function main() {
       const meta = parseHandoffMeta(agent.id);
 
       // Skip agents that have exhausted all tasks (primary + stretch)
+      // v4: continuous agents NEVER retire — they always find more work
       if (meta.status === 'all-done') {
-        log(`  ${agent.id}: ALL DONE (skipping)`);
-        return false;
+        if (agent.type === 'continuous') {
+          log(`  ${agent.id}: CONTINUOUS — resetting to in-progress (always has work)`);
+          // Don't skip — continuous agents always run
+        } else {
+          log(`  ${agent.id}: ALL DONE (skipping)`);
+          return false;
+        }
       }
 
       // Check dependencies — "complete" and "all-done" both satisfy
@@ -748,7 +810,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v3
+> Orchestrator: v4
 
 ## Summary
 - **Started**: ${startTime}

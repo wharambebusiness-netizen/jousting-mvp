@@ -76,6 +76,23 @@ export const BALANCE = {
   meleeCritBase: 15,
   meleeCritGrdScale: 0.154,
 
+  // --- Melee Carryover Divisors ---
+  // Unseated player gets stat penalties: -floor(unseatMargin / divisor).
+  // Higher divisor = smaller penalty (more forgiving).
+  carryoverDivisors: {
+    momentum: 6,
+    control: 7,
+    guard: 9,
+  },
+
+  // Unseated player gets a multiplicative impact boost in melee to partially
+  // compensate for carryover + fatigue disadvantage. Target: 15-20% unseated win rate.
+  unseatedImpactBoost: 1.25,
+
+  // Stamina recovered by the unseated player at melee start.
+  // Addresses fatigue as the dominant penalty root cause.
+  unseatedStaminaRecovery: 8,
+
   // --- Melee Win Conditions ---
   // meleeWinsNeeded: round wins required to take the melee.
   // criticalWinsValue: how many round wins a Critical hit counts for.
@@ -90,7 +107,7 @@ export const BALANCE = {
   // Flattened curve: every tier gives something, Giga peaks ~103 on
   // best stat so softCap (knee=100) stays meaningful.
   giglingRarityBonus: {
-    uncommon: 1,
+    uncommon: 2,
     rare: 3,
     epic: 5,
     legendary: 7,

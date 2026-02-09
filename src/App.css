@@ -241,6 +241,45 @@
 .gear-stat--primary { background: var(--gold-light); color: var(--ink); }
 .gear-stat--secondary { background: var(--parchment-dark); color: var(--ink-light); }
 
+/* Compact rarity grid (for independent selectors) */
+.rarity-selector { margin-bottom: 8px; }
+.rarity-selector__label {
+  font-size: 0.8rem; font-weight: 700; color: var(--ink-light);
+  margin-bottom: 4px; margin-top: 0;
+}
+.rarity-selector__note {
+  font-size: 0.75rem; color: var(--ink-faint); margin: 2px 0 8px;
+}
+.rarity-grid--compact { gap: 4px; }
+.rarity-card--compact { padding: 6px 8px; min-height: unset; }
+.rarity-card--compact .rarity-card__name { font-size: 0.78rem; margin-bottom: 0; }
+
+/* Gear item sub-elements */
+.gear-item__slot-name { font-weight: 700; font-size: 0.85rem; }
+.gear-item__gear-name {
+  font-size: 0.7rem; color: var(--ink-faint);
+  font-style: italic; font-weight: 400;
+}
+
+/* Variant toggle (Agg / Bal / Def per slot) */
+.variant-toggle { display: inline-flex; gap: 2px; }
+.variant-toggle__btn {
+  font-size: 0.65rem; font-weight: 600;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid var(--border-light);
+  background: transparent; color: var(--ink-faint);
+  cursor: pointer; transition: all 0.12s ease;
+}
+.variant-toggle__btn:hover { background: var(--parchment-dark); }
+.variant-toggle__btn--active {
+  font-weight: 700; background: var(--parchment-dark);
+  border-width: 2px;
+}
+
+/* Quick-set variant buttons */
+.quick-set-buttons { display: inline-flex; gap: 4px; margin-left: 8px; }
+.loadout-section__actions { display: flex; align-items: center; gap: 6px; }
+
 /* Rarity badge */
 .rarity-badge {
   display: inline-block; padding: 1px 6px; border-radius: 3px;

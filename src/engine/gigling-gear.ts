@@ -7,6 +7,7 @@
 // ============================================================
 import type {
   Archetype,
+  GearVariant,
   GiglingGear,
   GiglingLoadout,
   GiglingRarity,
@@ -14,6 +15,8 @@ import type {
   SteedGearSlot,
 } from './types';
 import { BALANCE } from './balance-config';
+import { type StatBonuses, emptyBonuses, rollInRange } from './gear-utils';
+import { getSteedSlotStats } from './gear-variants';
 
 // --- Gear Slot → Stat Mapping ---
 // Each gear piece has a fixed primary and secondary stat.
@@ -33,18 +36,6 @@ export const GEAR_SLOT_STATS: Record<SteedGearSlot, {
 const ALL_STEED_SLOTS: SteedGearSlot[] = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'];
 
 // --- Stat Bonus Accumulator ---
-
-interface StatBonuses {
-  momentum: number;
-  control: number;
-  guard: number;
-  initiative: number;
-  stamina: number;
-}
-
-function emptyBonuses(): StatBonuses {
-  return { momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 };
-}
 
 /**
  * Sums stat bonuses from all equipped steed gear pieces (6 slots).
@@ -101,14 +92,16 @@ export function applyGiglingLoadout(
  * Creates a steed gear piece for the given slot with randomized
  * primary/secondary values within the rarity's defined range.
  * Uses Math.random() for rolls — pass a custom `rng` for deterministic tests.
+ * Optional variant changes which stats the primary/secondary map to.
  */
 export function createStatGear(
   slot: SteedGearSlot,
   rarity: GiglingRarity,
   rng: () => number = Math.random,
+  variant?: GearVariant,
 ): GiglingGear {
   const range = BALANCE.gearStatRanges[rarity];
-  const slotStats = GEAR_SLOT_STATS[slot];
+  const slotStats = variant ? getSteedSlotStats(slot, variant) : GEAR_SLOT_STATS[slot];
 
   const primaryValue = rollInRange(range.primary[0], range.primary[1], rng);
   const secondaryValue = rollInRange(range.secondary[0], range.secondary[1], rng);
@@ -116,6 +109,7 @@ export function createStatGear(
   return {
     slot,
     rarity,
+    variant,
     primaryStat: { stat: slotStats.primary, value: primaryValue },
     secondaryStat: { stat: slotStats.secondary, value: secondaryValue },
   };
@@ -123,20 +117,22 @@ export function createStatGear(
 
 /**
  * Creates a full steed loadout with randomly rolled gear for all 6 slots.
+ * Optional variant applies the same variant to all slots.
  */
 export function createFullLoadout(
   giglingRarity: GiglingRarity,
   gearRarity: GiglingRarity,
   rng: () => number = Math.random,
+  variant?: GearVariant,
 ): GiglingLoadout {
   return {
     giglingRarity,
-    chamfron:   createStatGear('chamfron', gearRarity, rng),
-    barding:    createStatGear('barding', gearRarity, rng),
-    saddle:     createStatGear('saddle', gearRarity, rng),
-    stirrups:   createStatGear('stirrups', gearRarity, rng),
-    reins:      createStatGear('reins', gearRarity, rng),
-    horseshoes: createStatGear('horseshoes', gearRarity, rng),
+    chamfron:   createStatGear('chamfron', gearRarity, rng, variant),
+    barding:    createStatGear('barding', gearRarity, rng, variant),
+    saddle:     createStatGear('saddle', gearRarity, rng, variant),
+    stirrups:   createStatGear('stirrups', gearRarity, rng, variant),
+    reins:      createStatGear('reins', gearRarity, rng, variant),
+    horseshoes: createStatGear('horseshoes', gearRarity, rng, variant),
   };
 }
 
@@ -172,8 +168,5 @@ export function validateSteedGear(gear: GiglingGear): boolean {
   return true;
 }
 
-// --- Internal ---
-
-function rollInRange(min: number, max: number, rng: () => number): number {
-  return min + Math.floor(rng() * (max - min + 1));
-}
+// Re-export StatBonuses for consumers that import from here
+export type { StatBonuses } from './gear-utils';

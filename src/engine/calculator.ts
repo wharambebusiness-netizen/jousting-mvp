@@ -230,9 +230,8 @@ export function resolveMeleeRound(
 }
 
 // --- 7.1 Melee Carryover Penalties ---
-// Momentum penalty: -floor(Unseat_Margin / 3)
-// Control penalty:  -floor(Unseat_Margin / 4)
-// Guard penalty:    -floor(Unseat_Margin / 5)
+// Penalties = -floor(Unseat_Margin / divisor) per stat.
+// Divisors are in balance-config.ts for easy tuning.
 
 export function calcCarryoverPenalties(unseatMargin: number): {
   momentumPenalty: number;
@@ -240,9 +239,9 @@ export function calcCarryoverPenalties(unseatMargin: number): {
   guardPenalty: number;
 } {
   return {
-    momentumPenalty: -Math.floor(unseatMargin / 3),
-    controlPenalty: -Math.floor(unseatMargin / 4),
-    guardPenalty: -Math.floor(unseatMargin / 5),
+    momentumPenalty: -Math.floor(unseatMargin / BALANCE.carryoverDivisors.momentum),
+    controlPenalty: -Math.floor(unseatMargin / BALANCE.carryoverDivisors.control),
+    guardPenalty: -Math.floor(unseatMargin / BALANCE.carryoverDivisors.guard),
   };
 }
 

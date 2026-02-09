@@ -7,6 +7,7 @@
 // ============================================================
 import type {
   Archetype,
+  GearVariant,
   GiglingLoadout,
   PlayerGear,
   PlayerGearSlot,
@@ -16,6 +17,8 @@ import type {
 } from './types';
 import { BALANCE } from './balance-config';
 import { sumGearStats } from './gigling-gear';
+import { type StatBonuses, emptyBonuses, rollInRange } from './gear-utils';
+import { getPlayerSlotStats } from './gear-variants';
 
 // --- Player Gear Slot → Stat Mapping ---
 
@@ -34,18 +37,6 @@ export const PLAYER_GEAR_SLOT_STATS: Record<PlayerGearSlot, {
 const ALL_PLAYER_SLOTS: PlayerGearSlot[] = ['helm', 'shield', 'lance', 'armor', 'gauntlets', 'melee_weapon'];
 
 // --- Stat Bonus Accumulator ---
-
-interface StatBonuses {
-  momentum: number;
-  control: number;
-  guard: number;
-  initiative: number;
-  stamina: number;
-}
-
-function emptyBonuses(): StatBonuses {
-  return { momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 };
-}
 
 /**
  * Sums stat bonuses from all equipped player gear pieces (6 slots).
@@ -99,14 +90,16 @@ export function applyPlayerLoadout(
  * Creates a player gear piece for the given slot with randomized
  * primary/secondary values within the rarity's defined range.
  * Uses Math.random() for rolls — pass a custom `rng` for deterministic tests.
+ * Optional variant changes which stats the primary/secondary map to.
  */
 export function createPlayerGear(
   slot: PlayerGearSlot,
   rarity: GiglingRarity,
   rng: () => number = Math.random,
+  variant?: GearVariant,
 ): PlayerGear {
   const range = BALANCE.playerGearStatRanges[rarity];
-  const slotStats = PLAYER_GEAR_SLOT_STATS[slot];
+  const slotStats = variant ? getPlayerSlotStats(slot, variant) : PLAYER_GEAR_SLOT_STATS[slot];
 
   const primaryValue = rollInRange(range.primary[0], range.primary[1], rng);
   const secondaryValue = rollInRange(range.secondary[0], range.secondary[1], rng);
@@ -114,6 +107,7 @@ export function createPlayerGear(
   return {
     slot,
     rarity,
+    variant,
     primaryStat: { stat: slotStats.primary, value: primaryValue },
     secondaryStat: { stat: slotStats.secondary, value: secondaryValue },
   };
@@ -121,18 +115,20 @@ export function createPlayerGear(
 
 /**
  * Creates a full player loadout with randomly rolled gear for all 6 slots.
+ * Optional variant applies the same variant to all slots.
  */
 export function createFullPlayerLoadout(
   gearRarity: GiglingRarity,
   rng: () => number = Math.random,
+  variant?: GearVariant,
 ): PlayerLoadout {
   return {
-    helm:         createPlayerGear('helm', gearRarity, rng),
-    shield:       createPlayerGear('shield', gearRarity, rng),
-    lance:        createPlayerGear('lance', gearRarity, rng),
-    armor:        createPlayerGear('armor', gearRarity, rng),
-    gauntlets:    createPlayerGear('gauntlets', gearRarity, rng),
-    melee_weapon: createPlayerGear('melee_weapon', gearRarity, rng),
+    helm:         createPlayerGear('helm', gearRarity, rng, variant),
+    shield:       createPlayerGear('shield', gearRarity, rng, variant),
+    lance:        createPlayerGear('lance', gearRarity, rng, variant),
+    armor:        createPlayerGear('armor', gearRarity, rng, variant),
+    gauntlets:    createPlayerGear('gauntlets', gearRarity, rng, variant),
+    melee_weapon: createPlayerGear('melee_weapon', gearRarity, rng, variant),
   };
 }
 
@@ -170,20 +166,12 @@ export function validatePlayerGear(gear: PlayerGear): boolean {
 
 // --- Combined Gear Summary ---
 
-interface GearSummary {
-  momentum: number;
-  control: number;
-  guard: number;
-  initiative: number;
-  stamina: number;
-}
-
 export function getGearSummary(
   steedLoadout?: GiglingLoadout,
   playerLoadout?: PlayerLoadout,
-): GearSummary {
-  const steed = steedLoadout ? sumGearStats(steedLoadout) : { momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 };
-  const player = playerLoadout ? sumPlayerGearStats(playerLoadout) : { momentum: 0, control: 0, guard: 0, initiative: 0, stamina: 0 };
+): StatBonuses {
+  const steed = steedLoadout ? sumGearStats(steedLoadout) : emptyBonuses();
+  const player = playerLoadout ? sumPlayerGearStats(playerLoadout) : emptyBonuses();
 
   return {
     momentum:   steed.momentum   + player.momentum,
@@ -194,8 +182,5 @@ export function getGearSummary(
   };
 }
 
-// --- Internal ---
-
-function rollInRange(min: number, max: number, rng: () => number): number {
-  return min + Math.floor(rng() * (max - min + 1));
-}
+// Re-export StatBonuses for consumers that import from here
+export type { StatBonuses } from './gear-utils';

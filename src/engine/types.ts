@@ -104,6 +104,8 @@ export interface PlayerState {
   carryoverMomentum: number;
   carryoverControl: number;
   carryoverGuard: number;
+  /** Set true when this player was unseated during jousting (used for melee rebalance) */
+  wasUnseated?: boolean;
 }
 
 // --- Pass Choice ---
@@ -177,6 +179,18 @@ export type CounterResult = {
   player2Bonus: number; // +10, -10, or 0
 };
 
+// --- Gear Variant System ---
+
+export type GearVariant = 'aggressive' | 'balanced' | 'defensive';
+
+export interface GearVariantDefinition {
+  variant: GearVariant;
+  name: string;
+  primaryStat: JoustStat;
+  secondaryStat: JoustStat;
+  affinity: string; // archetype id (informational only, no mechanical bonus)
+}
+
 // --- Gigling Gear System ---
 
 export type GiglingRarity = 'uncommon' | 'rare' | 'epic' | 'legendary' | 'relic' | 'giga';
@@ -192,6 +206,7 @@ export type JoustStat = 'momentum' | 'control' | 'guard' | 'initiative' | 'stami
 export interface GiglingGear {
   slot: SteedGearSlot;
   rarity: GiglingRarity;
+  variant?: GearVariant;
   primaryStat?: { stat: JoustStat; value: number };
   secondaryStat?: { stat: JoustStat; value: number };
 }
@@ -200,6 +215,7 @@ export interface GiglingGear {
 export interface PlayerGear {
   slot: PlayerGearSlot;
   rarity: GiglingRarity;
+  variant?: GearVariant;
   primaryStat?: { stat: JoustStat; value: number };
   secondaryStat?: { stat: JoustStat; value: number };
 }

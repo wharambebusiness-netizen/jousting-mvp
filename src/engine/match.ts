@@ -130,18 +130,38 @@ function transitionToMelee(state: MatchState, lastPass: PassResult): MatchState 
   const newState = { ...state };
 
   if (unseatedPlayer === 'player1') {
+    const recoveredSta = Math.min(
+      state.player1.currentStamina + BALANCE.unseatedStaminaRecovery,
+      state.player1.archetype.stamina,
+    );
     newState.player1 = {
       ...state.player1,
       carryoverMomentum: penalties.momentumPenalty,
       carryoverControl: penalties.controlPenalty,
       carryoverGuard: penalties.guardPenalty,
+      wasUnseated: true,
+      currentStamina: recoveredSta,
+    };
+    newState.player2 = {
+      ...state.player2,
+      wasUnseated: false,
     };
   } else {
+    const recoveredSta = Math.min(
+      state.player2.currentStamina + BALANCE.unseatedStaminaRecovery,
+      state.player2.archetype.stamina,
+    );
     newState.player2 = {
       ...state.player2,
       carryoverMomentum: penalties.momentumPenalty,
       carryoverControl: penalties.controlPenalty,
       carryoverGuard: penalties.guardPenalty,
+      wasUnseated: true,
+      currentStamina: recoveredSta,
+    };
+    newState.player1 = {
+      ...state.player1,
+      wasUnseated: false,
     };
   }
 
@@ -171,6 +191,8 @@ function resolveJoustEnd(state: MatchState): MatchState {
     return {
       ...state,
       phase: Phase.MeleeSelect,
+      player1: { ...state.player1, wasUnseated: false },
+      player2: { ...state.player2, wasUnseated: false },
     };
   }
 }

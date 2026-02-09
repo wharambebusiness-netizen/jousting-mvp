@@ -763,14 +763,17 @@ describe('Edge Cases — Carryover Penalties', () => {
 
   it('carryover penalties at margin 30 are substantial', () => {
     const penalties = calcCarryoverPenalties(30);
-    expect(penalties.momentumPenalty).toBe(-10); // -floor(30/3)
-    expect(penalties.controlPenalty).toBe(-7);   // -floor(30/4) = -7
-    expect(penalties.guardPenalty).toBe(-6);      // -floor(30/5)
+    expect(penalties.momentumPenalty).toBe(-5); // -floor(30/6)
+    expect(penalties.controlPenalty).toBe(-4);  // -floor(30/7) = -4
+    expect(penalties.guardPenalty).toBe(-3);    // -floor(30/9) = -3
   });
 
   it('melee effective stats include carryover penalties', () => {
     const statsNoPenalty = computeMeleeEffectiveStats(duelist, MC, 60, 0, 0, 0);
-    const statsWithPenalty = computeMeleeEffectiveStats(duelist, MC, 60, -10, -7, -6);
+    const penalties = calcCarryoverPenalties(30);
+    const statsWithPenalty = computeMeleeEffectiveStats(
+      duelist, MC, 60, penalties.momentumPenalty, penalties.controlPenalty, penalties.guardPenalty,
+    );
 
     expect(statsWithPenalty.momentum).toBeLessThan(statsNoPenalty.momentum);
     expect(statsWithPenalty.control).toBeLessThan(statsNoPenalty.control);

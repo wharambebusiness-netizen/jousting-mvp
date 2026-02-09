@@ -76,8 +76,19 @@ export function resolveMeleeRoundFn(
   if (pen2 > 0) {
     log.push(`Breaker P2: guard penetration ${(pen2 * 100).toFixed(0)}% — opponent effective guard ${stats1.guard.toFixed(2)} → ${(stats1.guard * (1 - pen2)).toFixed(2)}`);
   }
-  const impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, pen1);
-  const impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, pen2);
+  let impact1 = calcImpactScore(stats1.momentum, acc1, stats2.guard, pen1);
+  let impact2 = calcImpactScore(stats2.momentum, acc2, stats1.guard, pen2);
+
+  // Unseated impact boost: compensate for carryover + fatigue disadvantage
+  if (p1State.wasUnseated) {
+    impact1 *= BALANCE.unseatedImpactBoost;
+    log.push(`Unseated boost P1: impact x${BALANCE.unseatedImpactBoost} → ${impact1.toFixed(2)}`);
+  }
+  if (p2State.wasUnseated) {
+    impact2 *= BALANCE.unseatedImpactBoost;
+    log.push(`Unseated boost P2: impact x${BALANCE.unseatedImpactBoost} → ${impact2.toFixed(2)}`);
+  }
+
   log.push(`ImpactScore: P1 ${impact1.toFixed(2)}, P2 ${impact2.toFixed(2)}`);
 
   // Differential resolution with guard-relative thresholds

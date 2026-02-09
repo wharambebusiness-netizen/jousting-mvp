@@ -161,19 +161,19 @@ describe('applyGiglingLoadout', () => {
     expect(result).toBe(duelist); // same reference
   });
 
-  it('applies rarity bonus only (no gear) for uncommon → +1', () => {
+  it('applies rarity bonus only (no gear) for uncommon → +2', () => {
     const loadout: GiglingLoadout = { giglingRarity: 'uncommon' };
     const result = applyGiglingLoadout(duelist, loadout);
-    expect(result.momentum).toBe(duelist.momentum + 1);
-    expect(result.control).toBe(duelist.control + 1);
-    expect(result.guard).toBe(duelist.guard + 1);
-    expect(result.initiative).toBe(duelist.initiative + 1);
-    expect(result.stamina).toBe(duelist.stamina + 1);
+    expect(result.momentum).toBe(duelist.momentum + 2);
+    expect(result.control).toBe(duelist.control + 2);
+    expect(result.guard).toBe(duelist.guard + 2);
+    expect(result.initiative).toBe(duelist.initiative + 2);
+    expect(result.stamina).toBe(duelist.stamina + 2);
   });
 
   it('applies rarity bonus for each tier', () => {
     const rarities: Array<{ rarity: GiglingLoadout['giglingRarity']; bonus: number }> = [
-      { rarity: 'uncommon', bonus: 1 },
+      { rarity: 'uncommon', bonus: 2 },
       { rarity: 'rare', bonus: 3 },
       { rarity: 'epic', bonus: 5 },
       { rarity: 'legendary', bonus: 7 },
@@ -502,7 +502,7 @@ describe('createMatch with GiglingLoadout', () => {
 describe('Edge cases', () => {
   it('rarity bonus values match balance-config', () => {
     const cfg = BALANCE.giglingRarityBonus;
-    expect(cfg.uncommon).toBe(1);
+    expect(cfg.uncommon).toBe(2);
     expect(cfg.rare).toBe(3);
     expect(cfg.epic).toBe(5);
     expect(cfg.legendary).toBe(7);

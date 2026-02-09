@@ -1,0 +1,61 @@
+{
+  "name": "Overnight Continuous Improvement",
+  "description": "Self-sustaining overnight run. Continuous agents iterate on balance, quality, and polish. Producer generates new tasks.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 36000000
+  },
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs, the project TODO list (MEMORY.md), and current backlog.json. Identify what work needs doing next. Generate 3-5 new tasks in backlog.json for other agents. Prioritize: balance fixes > bug fixes > test coverage > features > polish. Write a status summary to orchestrator/analysis/producer-status.md."
+      }
+    },
+    {
+      "id": "balance-tuner",
+      "name": "Balance Analyst",
+      "type": "continuous",
+      "role": "balance-analyst",
+      "fileOwnership": ["src/engine/balance-config.ts", "src/engine/archetypes.ts"],
+      "tasks": {
+        "primary": "Run simulations at all tiers (bare, uncommon, epic, giga). Identify the weakest archetype at each tier. Make ONE small tuning change per round (max +/-3 stat points or one constant tweak). Verify tests pass. Track win rate trajectory across rounds. Target: no archetype below 44% or above 58% at any tier."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/match.test.ts", "src/engine/playtest.test.ts", "src/engine/gear-variants.test.ts"],
+      "tasks": {
+        "primary": "Each round: pick ONE untested area and write 5-10 new tests for it. Focus areas in order: 1) gear variant interactions, 2) archetype matchup edge cases, 3) stamina/fatigue boundary conditions, 4) softCap behavior near knee=100, 5) melee phase resolution edge cases. Run full suite to verify no regressions."
+      }
+    },
+    {
+      "id": "polish",
+      "name": "CSS Artist",
+      "type": "continuous",
+      "role": "css-artist",
+      "fileOwnership": ["src/App.css", "src/index.css"],
+      "tasks": {
+        "primary": "Each round: pick ONE UI element and improve its visual design. Focus areas in order: 1) rarity card styling (color, borders, glow), 2) variant toggle buttons (clearer active states), 3) combat result screens (damage numbers, animations), 4) setup screen polish, 5) responsive breakpoints. Make small, incremental improvements."
+      }
+    },
+    {
+      "id": "reviewer",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "fileOwnership": ["src/engine/types.ts"],
+      "tasks": {
+        "primary": "Each round: review changes made by other agents this session. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling. Write review report to orchestrator/analysis/review-round-N.md. If you find issues, note them in your handoff notes-for-others so the relevant agent can fix them next round."
+      }
+    }
+  ]
+}

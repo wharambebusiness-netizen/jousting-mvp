@@ -72,7 +72,7 @@ Caparison is cosmetic only — zero gameplay effects.
 - Precision Thrust: deltaGuard = 0
 - `resolveCounters()` takes effective CTL; bonus = 4 + winnerCTL*0.1
 - Guard partially fatigues via guardFatigueFloor (0.5)
-- Uncommon rarity bonus = 1 (not 0)
+- Uncommon rarity bonus = 2 (not 1)
 - AI has `WithReasoning` and `WithCommentary` function variants — originals unchanged for backwards compat
 
 ## Key API Signatures
