@@ -425,7 +425,7 @@ function validateFileOwnership(agentResults, agents) {
   }
 }
 
-function validateAgentOutput(agentId, round) {
+function validateAgentOutput(agentId, round, result = null) {
   const meta = parseHandoffMeta(agentId);
   const warnings = [];
 
@@ -438,7 +438,19 @@ function validateAgentOutput(agentId, round) {
   if (meta.testsPassing === false) {
     warnings.push(`${agentId}: Reports tests FAILING`);
   }
-  return warnings;
+
+  // v5B: Detect empty work — agent exited OK but modified zero files and didn't update handoff
+  let isEmptyWork = false;
+  if (result && result.code === 0 && !result.timedOut) {
+    const noFilesModified = !meta.filesModified.length || (meta.filesModified.length === 1 && meta.filesModified[0] === '(none yet)');
+    const handoffNotUpdated = meta.status === 'not-started';
+    if (noFilesModified && handoffNotUpdated) {
+      isEmptyWork = true;
+      warnings.push(`${agentId}: EMPTY WORK — exited OK but modified zero files and didn't update handoff (round ${round})`);
+    }
+  }
+
+  return { warnings, isEmptyWork };
 }
 
 // ============================================================
@@ -993,6 +1005,13 @@ async function main() {
   const consecutiveAgentFailures = {};  // agentId → consecutive failure count
   const escalationCounts = {};          // agentId → total escalation count (for reporting)
 
+  // v5B: Track per-agent empty rounds (ran OK but modified zero files)
+  const consecutiveEmptyRounds = {};    // agentId → consecutive empty-work count
+
+  // v5C: Track per-agent failure cooldown
+  const lastFailedRound = {};           // agentId → round number of last failure
+  const lastEscalatedRound = {};        // agentId → round number of last escalation
+
   // v6: Cost tracking accumulator — per-agent cost data across rounds
   const costLog = {};  // agentId → { totalCost, inputTokens, outputTokens, rounds, escalations }
 
@@ -1093,6 +1112,21 @@ async function main() {
         log(`  ${agent.id}: CONTINUOUS — has work or due for periodic run`);
       }
 
+      // v5C: Failure cooldown — skip agent for 1 round after failure (unless escalated since)
+      if (lastFailedRound[agent.id] && lastFailedRound[agent.id] === round - 1) {
+        const escalatedSinceFailure = lastEscalatedRound[agent.id] && lastEscalatedRound[agent.id] >= lastFailedRound[agent.id];
+        if (!escalatedSinceFailure) {
+          log(`  ${agent.id}: Cooling down (failed round ${lastFailedRound[agent.id]}, skipping round ${round})`);
+          thisRoundDecisions.push({
+            round, agentId: agent.id, decision: 'skipped',
+            reason: `cooldown: failed round ${lastFailedRound[agent.id]}`, model: agent.model || 'default',
+            escalated: false, succeeded: null, elapsed: null,
+          });
+          return false;
+        }
+        log(`  ${agent.id}: Would cooldown but was escalated since failure — allowing`);
+      }
+
       // Check dependencies — "complete" and "all-done" both satisfy
       const depsMet = agent.dependsOn.every(depId => {
         const depMeta = parseHandoffMeta(depId);
@@ -1161,8 +1195,19 @@ async function main() {
       handleFailedTasks(codeResults);
       for (const r of codeResults) {
         accumulateAgentCost(costLog, r, AGENTS);
-        const warnings = validateAgentOutput(r.agentId, round);
+        const { warnings, isEmptyWork } = validateAgentOutput(r.agentId, round, r);
         for (const w of warnings) log(`  ⚠ ${w}`);
+
+        // v5B: Track consecutive empty rounds per agent
+        if (isEmptyWork) {
+          consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
+          if (consecutiveEmptyRounds[r.agentId] >= 3) {
+            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — recommend escalating model or reassigning tasks`);
+          }
+        } else if (r.code === 0 && !r.timedOut) {
+          // Reset on successful non-empty work
+          consecutiveEmptyRounds[r.agentId] = 0;
+        }
       }
       validateFileOwnership(codeResults, AGENTS);
 
@@ -1201,7 +1246,20 @@ async function main() {
       handleFailedTasks(coordResults);
       for (const r of coordResults) {
         accumulateAgentCost(costLog, r, AGENTS);
+        const { warnings, isEmptyWork } = validateAgentOutput(r.agentId, round, r);
+        for (const w of warnings) log(`  ⚠ ${w}`);
+
+        // v5B: Track consecutive empty rounds per agent
+        if (isEmptyWork) {
+          consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
+          if (consecutiveEmptyRounds[r.agentId] >= 3) {
+            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — recommend escalating model or reassigning tasks`);
+          }
+        } else if (r.code === 0 && !r.timedOut) {
+          consecutiveEmptyRounds[r.agentId] = 0;
+        }
       }
+      validateFileOwnership(coordResults, AGENTS);
       handleModelEscalation(coordResults);
     }
 
@@ -1291,6 +1349,7 @@ async function main() {
   }
 
   // --- v6: Model escalation (haiku→sonnet→opus after 2 consecutive failures, with maxModel cap + de-escalation) ---
+  // Also tracks lastFailedRound for v5C cooldown and lastEscalatedRound for cooldown bypass
   function handleModelEscalation(results) {
     for (const result of results) {
       const meta = parseHandoffMeta(result.agentId);
@@ -1300,6 +1359,9 @@ async function main() {
       const failed = result.timedOut || result.code !== 0 || meta.status === 'not-started';
 
       if (failed) {
+        // v5C: Track last failed round for cooldown
+        lastFailedRound[result.agentId] = round;
+
         consecutiveAgentFailures[result.agentId] = (consecutiveAgentFailures[result.agentId] || 0) + 1;
 
         if (consecutiveAgentFailures[result.agentId] >= 2) {
@@ -1331,6 +1393,8 @@ async function main() {
           agent.model = nextModel;
           consecutiveAgentFailures[result.agentId] = 0;
           escalationCounts[result.agentId] = (escalationCounts[result.agentId] || 0) + 1;
+          // v5C: Track escalation round so cooldown is bypassed
+          lastEscalatedRound[result.agentId] = round;
           // Track escalations in costLog for reporting
           ensureCostLogEntry(costLog, result.agentId).escalations++;
         }
