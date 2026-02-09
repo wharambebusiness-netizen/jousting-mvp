@@ -2,10 +2,10 @@
 
 ## META
 - status: all-done
-- files-modified: src/App.css, src/index.css, src/ui/LoadoutScreen.tsx
-- tests-passing: true (605/605)
-- notes-for-others: BL-016 complete — inline styles removed from LoadoutScreen.tsx variant toggles, CSS stance tokens now fully control colors. Two remaining inline styles in LoadoutScreen.tsx:374 and MeleeTransition.tsx:41 are minor cleanup items for UI dev.
-- completed-tasks: BL-007, BL-008, BL-016
+- files-modified: src/App.css, src/index.css
+- tests-passing: true (647/647)
+- notes-for-others: Round 4 adds 8 missing CSS class definitions, focus-visible keyboard navigation states for all interactive elements, and btn--active modifier. UI dev: 39 inline styles across 10 components need cleanup — see analysis/polish-round-4.md for full list. SetupScreen difficulty selector inline styles can now be removed since btn--active CSS exists.
+- completed-tasks: BL-007, BL-008, BL-016, BL-018 (partial — gear rarity borders deferred)
 
 ## What Was Done
 
@@ -63,15 +63,38 @@ Added missing `.btn--outline` modifier (transparent bg, lighter border, subdued 
 **5. Reduced Motion Updates**
 All round 3 animations added to the prefers-reduced-motion block.
 
+### Round 4: Missing Classes + Focus States + Mobile Polish
+
+**1. Missing CSS Class Definitions (8 classes)**
+Full audit found 8 CSS classes referenced in JSX without corresponding CSS rules. Added definitions for: `.attack-card__delta`, `.archetype-card__stats`, `.combat-log__entry`, `.ai-thinking__speed`, `.ai-thinking__attacks`, `.match-replay__speed`, `.match-replay__attacks`, `.match-replay__shift`.
+
+**2. Focus-Visible Keyboard Navigation (7 selectors)**
+Added `:focus-visible` outline styling for all interactive elements: `.btn`, `.card--selectable`, `.archetype-card`, `.variant-toggle__btn`, `.combat-log__toggle`, `.ai-thinking__toggle`, `.match-replay__header`. Uses gold accent outline consistent with design system.
+
+**3. `btn--active` Modifier**
+Added missing `.btn--active` class (dark ink background, parchment text) used by difficulty selector buttons. Currently overridden by inline styles in SetupScreen.tsx JSX.
+
+**4. Mobile Breakpoint Additions**
+- Melee penalty grid: flex-wrap + reduced gap for narrow screens
+- Gear item slot labels: smaller min-width and font-size on mobile
+
 ## What's Left
 
 ### Deferred JSX Changes (for UI dev)
-- **Gear item rarity borders**: Need `gear-item--${rarity}` class added to `.gear-item` divs in LoadoutScreen.tsx (rarity is available in parent scope but not passed to individual items). CSS rules ready to be written once class is added.
+- **Gear item rarity borders**: Need `gear-item--${rarity}` class added to `.gear-item` divs in LoadoutScreen.tsx. CSS rules ready to be written once class is added.
+- **39 inline styles across 10 components**: See analysis/polish-round-4.md for full inventory. Highest priority: SetupScreen difficulty selector (btn--active CSS now exists), PassResult text alignment, MeleeTransition font sizing.
 - **MeleeTransition.tsx:41**: Inline `style={{ marginTop: 8 }}` should use `mt-8` utility class.
 - **LoadoutScreen.tsx:374**: Inline `style={{ fontSize: '0.8rem', color: 'var(--ink-faint)' }}` should be a CSS class.
 
+### Accessibility (Structural — requires JSX)
+- Interactive `<div onClick>` elements should be `<button>` or have `role="button"` + keyboard handlers
+- Collapsible panels need `aria-expanded` attributes
+- Emoji icons need `aria-label` attributes
+- CSS-only tooltips (`.tip::after`) not keyboard-accessible
+
 ## Issues
 - Giga rarity uses `--rarity-legendary-bg` for selected state because `--rarity-giga-bg` is a gradient value. Pre-existing.
+- SetupScreen difficulty selector inline styles override new `btn--active` CSS. Need JSX cleanup to take effect.
 
 ## File Ownership
 - `src/App.css`

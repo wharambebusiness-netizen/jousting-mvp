@@ -40,9 +40,9 @@
     "id": "BL-003",
     "role": "balance-analyst",
     "priority": 2,
-    "status": "assigned",
+    "status": "done",
     "title": "Assess breakerGuardPenetration effectiveness",
-    "description": "Breaker vs Bulwark matchup is 41% (bare, post-Round 2). breakerGuardPenetration is at 0.20. Run sims to check if Breaker vs Bulwark needs improvement. If below 40%, try 0.25 or 0.30. This constant is NOT test-locked (safe to change in balance-config.ts). Also assess Bulwark bare dominance (60-62%) — consider guardImpactCoeff 0.18→0.16 as a lever. Write findings to analysis/balance-tuner-round-3.md.\n\nIMPORTANT: Bulwark's 60-62% bare win rate is the primary remaining balance concern. Focus analysis on what keeps Bulwark dominant and what levers exist.",
+    "description": "COMPLETED Round 3: breakerGuardPenetration 0.20→0.25. Breaker overall +2-3pp across most tiers (bare 48.2%, epic 52.2%, giga 54.8%). No test failures — constant is NOT test-locked. Bulwark dominance assessed: GRD=65 double-dip is root cause, needs guardImpactCoeff change (test-locked). Full analysis in balance-tuner-round-3.md.",
     "fileOwnership": [
       "src/engine/balance-config.ts"
     ],
@@ -76,9 +76,9 @@
     "id": "BL-006",
     "role": "qa-engineer",
     "priority": 3,
-    "status": "assigned",
+    "status": "done",
     "title": "Test stamina/fatigue boundary conditions",
-    "description": "Write 5-6 tests for fatigue edge cases: 1) fatigueFactor with maxStamina=0 (division safety), 2) stamina recovery in melee for unseated player, 3) melee round resolution at zero stamina. NOTE: QA already covered zero stamina joust and guard floor in Round 2 exploratory tests. Focus on UNCOVERED areas: zero-stamina melee resolution, melee attack speed combinations, player gear NO rarity bonus verification. Add to calculator.test.ts or playtest.test.ts.\n\nAcceptance criteria: 610+ tests passing. No regressions.",
+    "description": "COMPLETED Round 3: QA added 10 fatigue boundary tests (threshold, below-threshold, 1 stamina, negative, guard fatigue interpolation, attack cost clamping, speed clamping). 647/647 passing.",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/playtest.test.ts"
@@ -137,9 +137,9 @@
     "id": "BL-011",
     "role": "balance-analyst",
     "priority": 4,
-    "status": "assigned",
+    "status": "done",
     "title": "Full tier sweep — run sims at all 7 tiers and document",
-    "description": "Run `npx tsx src/tools/simulate.ts` at all tiers: bare, uncommon, rare, epic, legendary, relic, giga. Document all 6 archetype win rates at each tier in a table. This creates the post-Round-2 baseline reference (includes both Technician MOM+3 and Charger INIT→STA changes). No code changes — just data collection. Write results to analysis/balance-tuner-round-3.md.\n\nThis is a STRETCH GOAL — do BL-003 first.",
+    "description": "COMPLETED Round 3: Full 7-tier sweep documented in balance-tuner-round-3.md. Balance improves monotonically with tier (18.5pp bare → 4.1pp giga). Bulwark dominance peaks at uncommon (63.6%). Charger strongest at epic (56.0%). Legendary/relic/giga excellent (<6pp spread).",
     "fileOwnership": [],
     "createdAt": "2026-02-09T00:00:00Z"
   },
@@ -147,9 +147,9 @@
     "id": "BL-012",
     "role": "qa-engineer",
     "priority": 3,
-    "status": "assigned",
+    "status": "done",
     "title": "Test breaker guard penetration mechanic",
-    "description": "Write 3-5 tests verifying breaker guard penetration works correctly: 1) breaker vs non-breaker — breaker should see reduced opponent guard in impact calc, 2) non-breaker vs non-breaker — no guard reduction, 3) breakerGuardPenetration=0.20 means 20% of opponent effective guard is ignored, 4) penetration applies in both joust and melee phases. Add to calculator.test.ts or playtest.test.ts.\n\nAcceptance criteria: No regressions, total tests 610+.",
+    "description": "COMPLETED Round 3: QA added 4 penetration tests — positive benefit vs all 6 archetypes, exact 20% removal verified, melee penetration verified, non-breaker zero penetration verified. 647/647 passing.",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/playtest.test.ts"
@@ -182,11 +182,11 @@
   },
   {
     "id": "BL-016",
-    "role": "ui-dev",
+    "role": "css-artist",
     "priority": 3,
-    "status": "pending",
+    "status": "done",
     "title": "Remove inline styles from LoadoutScreen variant toggle",
-    "description": "LoadoutScreen.tsx:199 has inline style={...} on variant-toggle buttons that overrides CSS stance token colors added in BL-008. Remove the inline style prop and the VARIANT_COLORS constant (lines 57-61). This enables the CSS stance colors polish agent added.\n\nNOTE: Requires ui-dev role — touches LoadoutScreen.tsx which is a UI component. Reassigned from css-artist (who cannot edit .tsx files).",
+    "description": "COMPLETED Round 3: Polish agent removed VARIANT_COLORS constant and inline style={...} from LoadoutScreen.tsx variant toggle buttons. CSS stance tokens now fully control colors.",
     "fileOwnership": [
       "src/ui/LoadoutScreen.tsx"
     ],
@@ -196,9 +196,9 @@
     "id": "BL-017",
     "role": "tech-lead",
     "priority": 2,
-    "status": "assigned",
+    "status": "done",
     "title": "Review round 2 code changes for quality",
-    "description": "Review code changes from Round 2: 1) balance-tuner's Charger INIT 60→55, STA 60→65 in archetypes.ts — verify clean, 2) QA's 18 test fixes + 16 new tests across calculator.test.ts, match.test.ts, gigling-gear.test.ts, playtest.test.ts — verify computed values are correct, assertions make sense, 3) QA's rewritten match worked example (now 2-pass unseat) — verify narrative is consistent with engine mechanics. NOTE: Your Round 2 concern about match.test.ts:78 assertion direction is RESOLVED — with Charger INIT=55 (not 60), Technician DOES win Pass 1 impact. QA's assertion is correct. All 605 tests pass. Write findings to analysis/reviewer-round-3.md.",
+    "description": "COMPLETED Round 3: Reviewed Charger INIT/STA swap (clean), QA's 18 test fixes + 16 new tests (correct), match worked example rewrite (correct 2-pass unseat). Fixed stale comment in balance-config.ts:22. APPROVED with no blocks. See review-round-3.md.",
     "fileOwnership": [
       "src/engine/types.ts"
     ],
@@ -208,9 +208,9 @@
     "id": "BL-018",
     "role": "css-artist",
     "priority": 3,
-    "status": "assigned",
+    "status": "done",
     "title": "Polish melee transition and winner banner",
-    "description": "1) Melee transition interstitial: add entrance animation for the melee phase transition screen. 2) Winner banner: improve victory/defeat/draw visual distinction with different colors and sizing. 3) Gear item rarity-aware borders: show rarity color in gear item card borders. Only edit src/App.css. Include prefers-reduced-motion support for any new animations.",
+    "description": "COMPLETED Round 3: Added melee transition entrance animation (scale + red shadow bloom), winner banner gold glow, draw entrance animation, btn--outline modifier for quick-set buttons. All with prefers-reduced-motion support.",
     "fileOwnership": [
       "src/App.css"
     ],
@@ -222,10 +222,71 @@
     "priority": 4,
     "status": "pending",
     "title": "Investigate Tactician mirror P1 bias (BUG-002)",
-    "description": "BUG-002: Tactician mirror match shows ~36% vs 64% P1 bias in some bare runs. With INIT=75, the first-mover advantage in shifts may be causing this. Run 1000+ Tactician mirror matches to confirm if bias is real or Monte Carlo noise. If real (P1 consistently wins >60%), document the mechanism. If noise (<5pp from 50/50 at N=1000), downgrade to resolved.\n\nAdd a targeted test to playtest.test.ts: Tactician mirror N=500, verify P1 win rate 40-60%. Do NOT change engine code.",
+    "description": "BUG-002: Tactician mirror match shows ~36% vs 64% P1 bias in some bare runs. QA downgraded to Low — likely Monte Carlo noise at N=200. Needs N=1000+ to confirm. Add a targeted test to playtest.test.ts: Tactician mirror N=500, verify P1 win rate 40-60%. Do NOT change engine code.\n\nNOTE: QA is all-done. This is deferred to next session or can be picked up if QA is re-activated.",
     "fileOwnership": [
       "src/engine/playtest.test.ts"
     ],
     "createdAt": "2026-02-09T03:00:00Z"
+  },
+  {
+    "id": "BL-020",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Fix Bulwark bare/uncommon dominance — test guardImpactCoeff 0.16",
+    "description": "PRIMARY REMAINING BALANCE CONCERN. Bulwark bare=60.4%, uncommon=63.0% (target: <58%). Root cause: GRD=65 double-dips in guardImpactCoeff (impact scoring) AND guardUnseatDivisor (unseat resistance).\n\nProposed fix: guardImpactCoeff 0.18 → 0.16 in balance-config.ts.\n\nWARNING: This constant is TEST-LOCKED in ~7 test assertions. Coordinate with QA (BL-021) to update tests BEFORE or AFTER the change. Do NOT change the value until QA has a plan for the test cascade.\n\nSteps: 1) Run sims at 0.16 (bare, uncommon, rare, epic, giga) to verify Bulwark drops below 58% without creating new problems. 2) Check if Charger bare stays above 40%. 3) Check Duelist doesn't become dominant (was flagged as risk at 0.16 in Round 2 analysis). 4) If 0.16 works, coordinate with QA on test updates. 5) Write findings to analysis/balance-tuner-round-4.md.\n\nDo NOT apply the change to balance-config.ts yet — just run sims with the modified value and report results. QA needs to prepare test updates first.",
+    "fileOwnership": [
+      "src/engine/balance-config.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-021",
+    "role": "qa-engineer",
+    "priority": 1,
+    "title": "Prepare test updates for guardImpactCoeff 0.18→0.16",
+    "description": "Balance-tuner is evaluating guardImpactCoeff 0.18→0.16 to fix Bulwark dominance (BL-020). This constant is hardcoded in ~7 test assertions.\n\nTasks: 1) Identify ALL test assertions that reference guardImpactCoeff=0.18 or use 0.18 in computed values (search for '0.18', '*0.18', '* 0.18' in test files). 2) Document each affected assertion with file, line, current value, and what the new value would be at 0.16. 3) Write a test update plan to analysis/qa-round-4.md — do NOT make changes yet, just document what needs to change.\n\nThis is a PREPARATORY task — do not modify any test files until balance-tuner confirms 0.16 is the right value (BL-020 must complete first).",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-022",
+    "role": "tech-lead",
+    "priority": 2,
+    "title": "Review round 3 code changes for quality",
+    "description": "Review Round 3 changes: 1) balance-tuner's breakerGuardPenetration 0.20→0.25 in balance-config.ts — already reviewed and APPROVED by reviewer in Round 3, verify no further changes. 2) QA's 42 new tests across calculator.test.ts and playtest.test.ts — verify assertions reference correct values (breakerGuardPenetration now 0.25, not 0.20). 3) Polish's LoadoutScreen.tsx inline style removal + App.css melee/winner polish. 4) Reviewer's own balance-config.ts comment fix. Check for stale docs.\n\nAlso: Update CLAUDE.md 'Balance State' section — breakerGuardPenetration is now 0.25 (was 0.20), Charger INIT=55/STA=65 (was INIT=60/STA=60). 647 tests now passing (was 477 at session start). Write findings to analysis/review-round-4.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-023",
+    "role": "qa-engineer",
+    "priority": 3,
+    "title": "Add multi-pass worked example test to match.test.ts",
+    "description": "Reviewer flagged that after the match.test.ts rewrite in Round 2, there's no multi-pass (3-5 pass) worked example anymore — the current one ends at Pass 2 with an unseat. This reduces integration coverage of fatigue progression.\n\nAdd a new worked example test: Pick two archetypes with moderate stats (e.g., Tactician vs Duelist or Technician vs Tactician) that are likely to go 3-5 passes without unseat at bare. Trace through all passes manually. Include fatigue progression, stamina tracking, carryover scores, and melee transition.\n\nAcceptance criteria: 650+ tests passing. The new test exercises at least 3 joust passes + melee entry.",
+    "fileOwnership": [
+      "src/engine/match.test.ts"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-024",
+    "role": "css-artist",
+    "priority": 4,
+    "title": "Add gear item rarity-colored borders",
+    "description": "Polish agent flagged that gear item rarity borders need a JSX change (adding gear-item--${rarity} class to .gear-item divs in LoadoutScreen.tsx) before CSS rules can work. This is a LOW priority UI polish item.\n\nFor now: Write the CSS rules in App.css for .gear-item--uncommon through .gear-item--giga with appropriate border colors using existing --rarity-* CSS variables. The JSX change is deferred until a ui-dev agent is available.\n\nOnly edit src/App.css.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "status": "pending",
+    "createdAt": "2026-02-09T03:30:00Z"
   }
 ]

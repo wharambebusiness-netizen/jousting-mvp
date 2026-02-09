@@ -2,40 +2,56 @@
 
 ## META
 - status: complete
-- files-modified: src/engine/balance-config.ts, orchestrator/analysis/balance-tuner-round-3.md
+- files-modified: src/tools/simulate.ts, orchestrator/analysis/balance-tuner-round-4.md
 - tests-passing: true
-- completed-tasks: BL-001, BL-002, BL-003, BL-011
-- notes-for-others: [BALANCE CHANGE] breakerGuardPenetration 0.20→0.25 (Round 3). No test failures — this constant is NOT test-locked. Breaker overall win rate improves +2-3pp across most tiers. Full 7-tier baseline data in analysis/balance-tuner-round-3.md. Reviewer note re: match.test.ts:78 flipped assertion — I am not permitted to edit test files, QA should address this.
+- completed-tasks: BL-001, BL-002, BL-003, BL-011, Round 4 analysis
+- notes-for-others: Round 4 is analysis-only — no balance constant changes. Added variant CLI arg to simulate.ts (`npx tsx src/tools/simulate.ts [tier] [aggressive|balanced|defensive]`). Key finding: aggressive gear amplifies Bulwark dominance at giga from 49% to 59% — variant system creates meaningful but asymmetric metagame shifts. Breaker flagged at giga 55.8% — likely noise, monitor. Bulwark stat redistribution proposed for Round 5.
 
 ## What Was Done
 
-### BL-011: Full Tier Sweep (Round 3)
+### Round 4: Comprehensive Analysis + Variant Balance Study
 
-**Task**: Run simulations at all 7 tiers (bare, uncommon, rare, epic, legendary, relic, giga) and document archetype win rates.
+**1. Fresh 7-Tier Baseline (Confirmatory)**
 
-**Key findings**:
-- Balance quality improves monotonically with rarity tier (18.5pp spread at bare → 4.1pp at giga)
-- Bulwark dominance peaks at uncommon (63.6%) — worst single balance problem
-- Charger is weakest at bare/uncommon but STRONGEST at epic (56.0%) — "scales with gear" profile
-- Legendary/relic/giga are in excellent shape (5.6pp spread or less, no flags)
+Re-ran simulations at all 7 tiers to confirm Round 3 numbers with breakerGuardPenetration=0.25. Results are consistent — all deltas within Monte Carlo variance (~3pp). Key numbers:
+- Bulwark: 61.6% bare, 62.3% uncommon — still dominant at low tiers
+- Breaker: 55.8% giga — new flag (borderline, may be noise)
+- Technician: 44-48% across all tiers — persistent mild weakness
+- Balance quality: bare/uncommon poor, rare+ good-to-excellent
 
-Full data tables in `orchestrator/analysis/balance-tuner-round-3.md`.
+**2. Variant-Aware Balance Analysis (NEW)**
 
-### BL-003: breakerGuardPenetration Assessment (Round 3)
+First-ever analysis of how gear variants affect archetype balance:
 
-**Change**: `breakerGuardPenetration` 0.20 → 0.25 in `balance-config.ts`
+| Giga | Balanced | Aggressive | Defensive |
+|------|----------|------------|-----------|
+| Bulwark | 48.8% | **58.8%** | 49.8% |
+| Spread | 8.7pp | **14.7pp** | 8.0pp |
 
-**Hypothesis**: 0.20 may be insufficient for Breaker's anti-tank identity.
+- **Aggressive gear massively benefits Bulwark** (+9pp at giga) — when everyone's guard drops, Bulwark's intrinsic GRD=65 dominates
+- **Defensive gear creates the best giga balance** (8.0pp spread, no flags)
+- **Bulwark is variant-immune at uncommon** (61-63% regardless) — confirms base stat dominance
+- Unseat rate: 37.4% balanced → 53.4% aggressive at giga
 
-**Tested values**: 0.20 (baseline), 0.25, 0.30.
+**3. Simulate Tool Enhancement**
 
-**Result at 0.25**: Breaker overall +2.6pp bare, +2.4pp epic, +3.1pp giga. No new dominant matchups. 605/605 tests pass.
+Added optional variant parameter to `simulate.ts`:
+```bash
+npx tsx src/tools/simulate.ts giga aggressive   # all aggressive gear
+npx tsx src/tools/simulate.ts uncommon defensive # all defensive gear
+npx tsx src/tools/simulate.ts epic               # balanced (default)
+```
 
-**Why not 0.30**: Risk of Breaker dominance at giga (projected 55-57%). 0.25 keeps Breaker in the 48-55% healthy range.
+**4. Bulwark Lever Analysis**
 
-**Key insight**: Guard penetration helps Breaker against ALL opponents equally, not specifically against Bulwark. The Breaker vs Bulwark matchup at uncommon (~30%) is a Bulwark structural problem, not a Breaker problem.
+Documented all available balance levers for addressing Bulwark dominance, ranked by feasibility:
+- Most feasible: Bulwark stat redistribution (CTL/INIT → MOM, keep GRD=65, total≥290)
+- Most impactful but test-locked: guardImpactCoeff 0.18→0.16
+- Riskiest: Bulwark GRD reduction (identity change)
 
-## Current Archetype Stats (Post Round 3)
+Full analysis in `orchestrator/analysis/balance-tuner-round-4.md`.
+
+## Current Archetype Stats (Unchanged from Round 3)
 
 ```
              MOM  CTL  GRD  INIT  STA  Total
@@ -47,7 +63,7 @@ breaker:      62   60   55    55   60  = 292
 duelist:      60   60   60    60   60  = 300
 ```
 
-Balance constants changed this session:
+Balance constants changed this session (prior rounds):
 - breakerGuardPenetration: 0.20 → **0.25** (Round 3)
 
 Stats changed in previous rounds:
@@ -56,33 +72,34 @@ Stats changed in previous rounds:
 
 ## What's Left
 
-### Priority 1: Bulwark Bare/Uncommon Dominance
-- Bare: 60.4%, Uncommon: 63.0% — both above 60% target
-- Root cause: GRD=65 double-dip (guardImpactCoeff + guardUnseatDivisor)
-- Candidate fix: guardImpactCoeff 0.18 → 0.16 (TEST-LOCKED: ~7 assertions need updating)
-- Alternative: Bulwark GRD reduction (TEST-LOCKED: GRD=65 in gigling-gear.test.ts)
-- Requires QA coordination for test updates before implementation
+### Priority 1: Bulwark Bare/Uncommon Dominance (Critical)
+- Bare: 61.6%, Uncommon: 62.3% — both above 60% target
+- **Proposed Round 5 change**: Bulwark CTL 55→52, INIT 53→50, MOM 55→58 (total stays 290)
+- Hypothesis: reduces counter bonus + accuracy contribution, -2-3pp at bare
+- These stats are NOT directly test-locked for Bulwark (safe to change)
+- Need to verify no Bulwark-specific computed values in tests before changing
 
-### Priority 2: Technician Persistent Weakness
-- Consistently 43-49% across all tiers
+### Priority 2: Breaker at Giga (Monitor)
+- 55.8% — first time flagged as dominant
+- Likely Monte Carlo noise (within 3pp of 55% threshold)
+- Need higher-N confirmation before intervening
+- If confirmed, consider breakerGuardPenetration 0.25→0.22
+
+### Priority 3: Technician Persistent Weakness
+- 44-48% across all tiers
 - May partially self-correct once Bulwark dominance is addressed
 - Monitor, do not intervene yet
 
-### Priority 3: Charger at Uncommon
-- 40.8% — borderline at target (>40%)
-- Charger becomes strongest at epic (53.9%) — acceptable tier-dependent profile
-- Monitor, do not intervene
-
 ### Do NOT Change
 - breakerGuardPenetration — needs stabilization data at 0.25
+- guardImpactCoeff — test-locked, diffuse effects
+- Any archetype GRD values — test-locked
 - Charger stats — current values achieve bare target
-- Any archetype stats until QA confirms test stability
 
 ## Issues
 
-- **Reviewer flagged**: match.test.ts:78 has incorrectly flipped assertion (Charger still wins pass 1 impact after Technician MOM+3). QA should fix line 79 to `expect(p1.player1.impactScore).toBeGreaterThan(p1.player2.impactScore)`.
-- Uncommon tier shows highest variance and worst balance — structural issue from GRD dominance before softCap engagement.
-- Monte Carlo variance at 200 matches/matchup is ~3pp for individual matchups. Consider increasing to 500 for precision work.
+- Variant metagame asymmetry: aggressive loadouts distort giga balance (14.7pp spread). Document for game designer — may need variant-specific balancing guidance in player-facing docs.
+- Monte Carlo variance at N=200 per matchup is ~3pp for individual matchups. Breaker giga flag (55.8%) is within noise range of acceptable (53%). Need higher N for conclusive assessment.
 
 ## File Ownership
 

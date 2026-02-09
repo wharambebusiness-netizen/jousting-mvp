@@ -144,6 +144,20 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   border-color: var(--gold);
   color: var(--ink);
 }
+.btn--active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--parchment);
+  font-weight: 700;
+}
+.btn--active:hover {
+  background: var(--ink-light);
+  border-color: var(--ink);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn:disabled:hover { transform: none; box-shadow: none; }
 
@@ -161,6 +175,10 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   border-color: var(--gold);
   box-shadow: 0 3px 12px var(--shadow);
   transform: translateY(-2px);
+}
+.card--selectable:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 .card--selected {
   background: var(--card-selected);

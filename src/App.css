@@ -19,6 +19,7 @@
 .attack-card__ratings { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.7rem; color: var(--ink-light); }
 .attack-card__deltas { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.75rem; }
 .attack-card__counters { margin-top: 6px; font-size: 0.7rem; color: var(--ink-faint); line-height: 1.4; }
+.attack-card__delta { display: inline-flex; align-items: baseline; gap: 2px; }
 
 /* Speed cards */
 .speed-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
@@ -31,8 +32,10 @@
 .archetype-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .archetype-card { padding: 14px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
 .archetype-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px var(--shadow); }
+.archetype-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .archetype-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
 .archetype-card__identity { font-size: 0.8rem; font-style: italic; color: var(--ink-light); margin-bottom: 8px; }
+.archetype-card__stats { margin-top: 4px; }
 
 /* Reveal layout */
 .reveal-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
@@ -77,12 +80,14 @@
   font-size: 0.85rem; color: var(--ink-light);
 }
 .combat-log__toggle:hover { background: var(--border-light); }
+.combat-log__toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .combat-log__content {
   padding: 8px 12px; background: var(--ink); color: var(--gold-light);
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.72rem; line-height: 1.5; max-height: 300px; overflow-y: auto;
 }
 .combat-log__section { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201, 168, 76, 0.2); }
+.combat-log__entry { padding: 1px 0; }
 
 /* Outcome badges */
 .outcome-badge {
@@ -319,6 +324,7 @@
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   min-width: 28px; text-align: center;
 }
+.variant-toggle__btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 /* Subtle tinted hover per variant type */
 .variant-toggle__btn--aggressive:hover { background: var(--stance-agg-bg); color: var(--stance-agg); }
 .variant-toggle__btn--balanced:hover { background: var(--stance-bal-bg); color: var(--stance-bal); }
@@ -506,6 +512,12 @@
   /* Quick-set buttons stack on mobile */
   .quick-set-buttons { flex-wrap: wrap; margin-left: 0; margin-top: 4px; }
   .loadout-section__actions { flex-wrap: wrap; }
+
+  /* Melee penalty grid stacks on mobile */
+  .melee-transition__penalty-grid { gap: 12px; flex-wrap: wrap; }
+
+  /* Gear item slot label narrower on mobile */
+  .gear-item__slot { min-width: 70px; font-size: 0.8rem; }
 }
 
 /* AI Thinking Panel */
@@ -520,6 +532,7 @@
   font-size: 0.85rem; color: var(--ink-light);
 }
 .ai-thinking__toggle:hover { background: var(--border-light); }
+.ai-thinking__toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .ai-thinking__content {
   padding: 12px; background: var(--parchment-light);
   font-size: 0.8rem; line-height: 1.5;
@@ -544,6 +557,8 @@
 }
 
 /* Speed weight bars */
+.ai-thinking__speed { margin-bottom: 4px; }
+.ai-thinking__attacks { margin-bottom: 4px; }
 .ai-thinking__bar-row {
   display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
 }
@@ -688,6 +703,7 @@
   font-family: inherit;
 }
 .match-replay__header:hover { background: var(--parchment-dark); }
+.match-replay__header:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .match-replay__label {
   font-family: Georgia, 'Times New Roman', serif;
   font-weight: 700; min-width: 60px; color: var(--ink);
@@ -704,6 +720,9 @@
 .match-replay__chosen {
   font-weight: 700; color: var(--gold-dark);
 }
+.match-replay__speed { margin-bottom: 6px; }
+.match-replay__attacks { margin-bottom: 6px; }
+.match-replay__shift { margin-bottom: 4px; }
 
 /* Accessibility: respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {

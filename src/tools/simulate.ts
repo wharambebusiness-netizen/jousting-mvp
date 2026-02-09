@@ -11,7 +11,7 @@ import { createMatch, submitJoustPass, submitMeleeRound } from '../engine/match'
 import { aiPickJoustChoice, aiPickMeleeAttack } from '../ai/basic-ai';
 import { JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from '../engine/attacks';
 import { Phase } from '../engine/types';
-import type { Attack, MatchState, PassChoice, GiglingLoadout, PlayerLoadout, GiglingRarity } from '../engine/types';
+import type { Attack, MatchState, PassChoice, GiglingLoadout, PlayerLoadout, GiglingRarity, GearVariant } from '../engine/types';
 import { createFullLoadout } from '../engine/gigling-gear';
 import { createFullPlayerLoadout } from '../engine/player-gear';
 
@@ -25,6 +25,11 @@ type GearMode = typeof GEAR_MODES[number];
 const gearArg = process.argv[2] as GearMode | undefined;
 const GEAR_MODE: GearMode = gearArg && GEAR_MODES.includes(gearArg) ? gearArg : 'bare';
 
+// Parse optional variant from command line (e.g., "npx tsx simulate.ts giga aggressive")
+const GEAR_VARIANTS = ['aggressive', 'balanced', 'defensive'] as const;
+const variantArg = process.argv[3] as GearVariant | undefined;
+const GEAR_VARIANT: GearVariant | undefined = variantArg && GEAR_VARIANTS.includes(variantArg) ? variantArg : undefined;
+
 const ALL_RARITIES: GiglingRarity[] = ['uncommon', 'rare', 'epic', 'legendary', 'relic', 'giga'];
 
 function makeGear(mode: GearMode): { steed?: GiglingLoadout; player?: PlayerLoadout } {
@@ -32,15 +37,15 @@ function makeGear(mode: GearMode): { steed?: GiglingLoadout; player?: PlayerLoad
   if (mode === 'mixed') {
     const rarity = ALL_RARITIES[Math.floor(Math.random() * ALL_RARITIES.length)];
     return {
-      steed: createFullLoadout(rarity, rarity),
-      player: createFullPlayerLoadout(rarity),
+      steed: createFullLoadout(rarity, rarity, Math.random, GEAR_VARIANT),
+      player: createFullPlayerLoadout(rarity, Math.random, GEAR_VARIANT),
     };
   }
   // Uniform rarity
   const rarity = mode as GiglingRarity;
   return {
-    steed: createFullLoadout(rarity, rarity),
-    player: createFullPlayerLoadout(rarity),
+    steed: createFullLoadout(rarity, rarity, Math.random, GEAR_VARIANT),
+    player: createFullPlayerLoadout(rarity, Math.random, GEAR_VARIANT),
   };
 }
 
@@ -253,7 +258,8 @@ function printResults(matchups: MatchupResult[], stats: ArchetypeStats[]): strin
 
   lines.push('='.repeat(70));
   lines.push('JOUSTING MVP — BALANCE SIMULATION REPORT');
-  lines.push(`Gear mode: ${GEAR_MODE}${GEAR_MODE === 'bare' ? ' (no gear)' : GEAR_MODE === 'mixed' ? ' (random rarity per match)' : ` (both players at ${GEAR_MODE} rarity)`}`);
+  const variantLabel = GEAR_VARIANT ? `, variant: ${GEAR_VARIANT}` : '';
+  lines.push(`Gear mode: ${GEAR_MODE}${GEAR_MODE === 'bare' ? ' (no gear)' : GEAR_MODE === 'mixed' ? ' (random rarity per match)' : ` (both players at ${GEAR_MODE} rarity)`}${variantLabel}`);
   lines.push(`Matches per matchup: ${MATCHES_PER_MATCHUP}`);
   lines.push(`Total matches: ${matchups.length * MATCHES_PER_MATCHUP}`);
   lines.push('='.repeat(70));
