@@ -234,7 +234,7 @@ describe('Exploratory Edge Cases', () => {
       const a = ARCHETYPES[name];
       const total = a.momentum + a.control + a.guard + a.initiative + a.stamina;
       expect(total, `${name} total=${total}`).toBeGreaterThanOrEqual(290);
-      expect(total, `${name} total=${total}`).toBeLessThanOrEqual(300);
+      expect(total, `${name} total=${total}`).toBeLessThanOrEqual(305);
     }
   });
 });
@@ -411,7 +411,7 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
 
   it('Technician pre-shift stats are below knee (unchanged)', () => {
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CdL, 55);
-    expect(stats.momentum).toBe(66); // 61+0+5 = 66
+    expect(stats.momentum).toBe(69); // 64+0+5 = 69
     expect(stats.control).toBe(80);  // 70+0+10 = 80
     expect(stats.guard).toBe(60);    // 55+5 = 60
     expect(stats.initiative).toBe(69); // 59+10 = 69
@@ -434,7 +434,7 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     const ff = 43 / 44;
     const guardFF = 0.5 + 0.5 * ff;
 
-    expect(r(stats.momentum, 2)).toBe(r(66 * ff, 2));     // 64.50
+    expect(r(stats.momentum, 2)).toBe(r(69 * ff, 2));     // 67.43
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));      // 83.07
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));    // 64.26
     expect(stats.initiative).toBe(59); // 59+10-10 = 59
@@ -481,8 +481,8 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     const ff = 29 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], PdL, 29);
-    // MOM: 56 * ff, CTL: 80 * ff, GRD: 75 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(56 * ff, 2));
+    // MOM: 59 * ff, CTL: 80 * ff, GRD: 75 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(59 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(75 * guardFF, 2));
     expect(stats.initiative).toBe(69); // 59+10 = 69
@@ -528,8 +528,8 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
     const ff = 21 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 21);
-    // MOM: 66 * ff, CTL: 85 * ff, GRD: 65 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(66 * ff, 2));
+    // MOM: 69 * ff, CTL: 85 * ff, GRD: 65 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(69 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));
   });

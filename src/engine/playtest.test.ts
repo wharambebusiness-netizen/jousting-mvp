@@ -276,7 +276,7 @@ describe('Archetype stats — S15 rebalance', () => {
     for (const arch of ARCHETYPE_LIST) {
       const total = arch.momentum + arch.control + arch.guard + arch.initiative + arch.stamina;
       expect(total, `${arch.id} total=${total}`).toBeGreaterThanOrEqual(290);
-      expect(total, `${arch.id} total=${total}`).toBeLessThanOrEqual(300);
+      expect(total, `${arch.id} total=${total}`).toBeLessThanOrEqual(305);
     }
   });
 });

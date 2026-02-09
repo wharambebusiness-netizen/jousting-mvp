@@ -15,20 +15,21 @@
     "id": "BL-031",
     "role": "balance-analyst",
     "priority": 1,
-    "title": "Apply Technician MOM 58→61 to fix persistent weakness",
-    "description": "Technician is the persistent weakest archetype at 43-47% across all tiers and variants. Balance-tuner documented root cause (MOM=58 + STA=55 + shift paradox) and recommended MOM 58→61 (+3). Projected +2-3pp across tiers.\n\nChange: In src/engine/archetypes.ts, update technician momentum from 58 to 61.\n\nAfter applying, run `npx tsx src/tools/simulate.ts bare` and `npx tsx src/tools/simulate.ts giga` to verify win rate improvement. Target: Technician ≥47% at bare, ≥48% at giga.\n\nTest cascade estimate: calculator.test.ts worked examples referencing Technician MOM (line ~414: MOM 63→66 with rarity bonus), match.test.ts worked example impact values. ~5-8 assertions will need updating by QA.\n\nAcceptance criteria: Technician MOM=61 in archetypes.ts. Sim shows +2-3pp improvement. Failing test count documented for QA.",
+    "title": "Apply Technician MOM 61→64 to fix persistent weakness",
+    "description": "Technician remains the weakest archetype. Previous change (58→61 in Run #1) helped but not enough. Applying MOM 61→64 (+3). Projected +2-3pp across tiers.\n\nChange: In src/engine/archetypes.ts, update technician momentum from 61 to 64.\n\nAfter applying, run `npx tsx src/tools/simulate.ts bare` and `npx tsx src/tools/simulate.ts giga` to verify win rate improvement.\n\nTest cascade estimate: calculator.test.ts worked examples referencing Technician MOM, match.test.ts worked example impact values. ~5-8 assertions will need updating by QA.\n\nAcceptance criteria: Technician MOM=64 in archetypes.ts. Sim shows improvement. Failing test count documented for QA.",
     "fileOwnership": [
       "src/engine/archetypes.ts"
     ],
-    "status": "deferred",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:00:00Z",
     "createdAt": "2026-02-09T06:00:00Z"
   },
   {
     "id": "BL-033",
     "role": "qa-engineer",
     "priority": 1,
-    "title": "Fix test assertions broken by Technician MOM 58→61",
-    "description": "After BL-031 applies Technician MOM 58→61, multiple test assertions will break. Based on previous MOM change cascade (BL-014, MOM 55→58 broke 7 tests):\n\nExpected breakage areas:\n1. calculator.test.ts: Technician MOM in worked examples (e.g., line ~414 with uncommon rarity: MOM 63→66). Impact score calculations will change.\n2. match.test.ts: Worked example Charger vs Technician — Technician effective stats change, impact values change, potentially outcome changes.\n3. Possibly gear-variants.test.ts BL-004 deterministic cycling tests (fragile to ANY stat change).\n\nProcess:\n1. Run `npx vitest run` to identify ALL failing assertions\n2. Recalculate correct values for each broken assertion\n3. Update test assertions to match new correct values\n4. Verify ~699+ tests passing after fixes\n\nDEPENDS ON: BL-031 (must be applied first).\n\nAcceptance criteria: All tests passing. Test count ≥~699. No regressions.",
+    "title": "Fix test assertions broken by Technician MOM 61→64",
+    "description": "After BL-031 applies Technician MOM 61→64, multiple test assertions will break.\n\nExpected breakage areas:\n1. calculator.test.ts: Technician MOM in worked examples. Impact score calculations will change.\n2. match.test.ts: Worked example Charger vs Technician — Technician effective stats change, impact values change.\n3. Possibly gear-variants.test.ts deterministic cycling tests (fragile to ANY stat change).\n\nProcess:\n1. Run `npx vitest run` to identify ALL failing assertions\n2. Recalculate correct values for each broken assertion\n3. Update test assertions to match new correct values\n4. Verify ~699+ tests passing after fixes\n\nDEPENDS ON: BL-031 (must be applied first).\n\nAcceptance criteria: All tests passing. Test count ≥~699. No regressions.",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/match.test.ts",
@@ -44,7 +45,7 @@
     "role": "balance-analyst",
     "priority": 2,
     "title": "Post-Technician-change full tier sweep and validation",
-    "description": "After BL-031 (Technician MOM +3) and BL-033 (test fixes) are complete, run a full simulation sweep to validate the change.\n\nRun simulations at: bare, uncommon, rare, epic, giga (all 5 key tiers).\nAlso run uncommon aggressive, uncommon defensive for variant check.\n\nVerify:\n1. Technician win rate improved +2-3pp across tiers (target ≥47% bare, ≥48% giga)\n2. No new dominance flags (no archetype >57% at any tier)\n3. No new weakness flags (no archetype <40% at any tier)\n4. Spread at each tier not worse than previous session\n5. Charger and Bulwark win rates not significantly changed\n\nDEPENDS ON: BL-031, BL-033 (tests must be passing first).\n\nAcceptance criteria: Full sweep documented in analysis/balance-tuner-round-1.md. All flags resolved or accepted.",
+    "description": "After BL-031 (Technician MOM 61→64) and BL-033 (test fixes) are complete, run a full simulation sweep to validate the change.\n\nRun simulations at: bare, uncommon, rare, epic, giga (all 5 key tiers).\nAlso run uncommon aggressive, uncommon defensive for variant check.\n\nVerify:\n1. Technician win rate improved +2-3pp across tiers (target ≥47% bare, ≥48% giga)\n2. No new dominance flags (no archetype >57% at any tier)\n3. No new weakness flags (no archetype <40% at any tier)\n4. Spread at each tier not worse than previous session\n5. Charger and Bulwark win rates not significantly changed\n\nDEPENDS ON: BL-031, BL-033 (tests must be passing first).\n\nAcceptance criteria: Full sweep documented in analysis/balance-tuner-round-1.md. All flags resolved or accepted.",
     "fileOwnership": [
       "src/tools/simulate.ts"
     ],
@@ -57,7 +58,7 @@
     "role": "tech-lead",
     "priority": 2,
     "title": "Review Technician MOM change + update CLAUDE.md",
-    "description": "After BL-031 (Technician MOM 58→61), BL-033 (test fixes), and BL-034 (validation sweep) are complete, review all changes:\n\n1. Review archetypes.ts change (Technician MOM 58→61)\n2. Review test assertion updates in calculator.test.ts and match.test.ts\n3. Verify test count stable at ≥~699\n4. Update CLAUDE.md:\n   - Archetype stats: Technician MOM 58→61\n   - Balance State: Updated win rates from BL-034 sweep\n   - Archetype changes: Add 'Technician MOM 58→61'\n\nDEPENDS ON: BL-031, BL-033, BL-034.\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=61, updated win rates, correct test count.",
+    "description": "After BL-031 (Technician MOM 61→64), BL-033 (test fixes), and BL-034 (validation sweep) are complete, review all changes:\n\n1. Review archetypes.ts change (Technician MOM 61→64)\n2. Review test assertion updates in calculator.test.ts and match.test.ts\n3. Verify test count stable at ≥~699\n4. Update CLAUDE.md:\n   - Archetype stats: Technician MOM 61→64\n   - Balance State: Updated win rates from BL-034 sweep\n   - Archetype changes: Add 'Technician MOM 61→64'\n\nDEPENDS ON: BL-031, BL-033, BL-034.\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=61, updated win rates, correct test count.",
     "fileOwnership": [
       "CLAUDE.md"
     ],
@@ -124,5 +125,45 @@
     "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. The depth should be there for experienced players but the surface should be approachable.\n\nWrite analysis to orchestrator/analysis/design-round-3.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
     "fileOwnership": ["orchestrator/analysis/design-round-3.md"],
     "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-042",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "pending",
+    "title": "Consolidate and clean up App.css color variables",
+    "description": "Review App.css for duplicated color values and inconsistent naming. Create CSS custom properties (variables) for the core color palette:\n\n1. Identify all unique colors used across App.css and index.css\n2. Create a :root block with named variables (--color-p1, --color-p2, --color-accent, --color-bg-*, --color-text-*, --color-rarity-*)\n3. Replace hardcoded color values with variable references\n4. Ensure rarity tier colors (common through giga) are consistent\n\nAcceptance criteria: All colors use CSS variables. No duplicate hex values. Visual appearance unchanged.",
+    "fileOwnership": ["src/App.css", "src/index.css"],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-043",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "pending",
+    "title": "Add responsive breakpoints for mobile layout",
+    "description": "The game currently has no responsive design. Add media queries for common breakpoints:\n\n1. Desktop (default): current layout\n2. Tablet (≤768px): reduce padding, smaller fonts, stack horizontal layouts vertically\n3. Mobile (≤480px): single-column layout, larger touch targets for buttons\n\nFocus on the most-used screens first: SetupScreen, LoadoutScreen, and combat result screens. Use existing CSS classes — just add @media rules.\n\nAcceptance criteria: Game is usable on tablet and mobile viewports. No horizontal scrolling.",
+    "fileOwnership": ["src/App.css", "src/index.css"],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-044",
+    "role": "balance-analyst",
+    "priority": 2,
+    "status": "pending",
+    "title": "Analyze gear variant win rate impact per archetype",
+    "description": "Run simulations at uncommon and epic tiers for all 3 gear variants (aggressive, balanced, defensive) for every archetype pairing. Determine:\n\n1. Which archetypes benefit most from aggressive vs defensive gear?\n2. Are any archetype+variant combos dominant (>60% win rate)?\n3. Are any archetype+variant combos unviable (<35% win rate)?\n4. Is the variant system creating meaningful choices or is one variant always optimal?\n\nRun: `npx tsx src/tools/simulate.ts uncommon aggressive`, `npx tsx src/tools/simulate.ts uncommon defensive`, `npx tsx src/tools/simulate.ts epic aggressive`, `npx tsx src/tools/simulate.ts epic defensive`\n\nWrite analysis to orchestrator/analysis/balance-tuner-variant-analysis.md.\n\nAcceptance criteria: Full variant x archetype matrix with win rates at 2+ tiers. Clear recommendation on whether variant system is healthy.",
+    "fileOwnership": ["orchestrator/analysis/balance-tuner-variant-analysis.md"],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-045",
+    "role": "qa-engineer",
+    "priority": 2,
+    "status": "pending",
+    "title": "Add AI opponent test coverage",
+    "description": "The AI system (src/ai/) has no dedicated test suite. Create basic test coverage:\n\n1. Create src/ai/ai.test.ts\n2. Test aiPickJoustChoice returns valid JoustChoice for all archetypes at all difficulties\n3. Test aiPickMeleeAttack returns valid MeleeAttack for all archetypes at all difficulties\n4. Test that WithReasoning variants return both choice and reasoning string\n5. Test pattern tracking: after repeated opponent moves, AI should adjust (at medium+ difficulty)\n6. Test personality consistency: same archetype at same difficulty should have consistent tendencies\n\nAcceptance criteria: ≥15 new tests. All passing. No changes to AI source code.",
+    "fileOwnership": ["src/ai/ai.test.ts"],
+    "createdAt": "2026-02-09T23:00:00Z"
   }
 ]
