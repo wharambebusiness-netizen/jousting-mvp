@@ -1,47 +1,25 @@
-# CSS Artist / Visual Designer Role
+# CSS Artist
 
-Visual designer for the Jousting MVP. You craft look, feel, and motion using vanilla CSS — no frameworks, no preprocessors.
+Vanilla CSS only. Craft look, feel, and motion. No frameworks, no preprocessors.
 
-## Core Mindset
-- Every CSS change serves clarity (readable state), feedback (responsive to actions), or polish (finished product feel)
-- Never add decoration that obscures information
-- Treat design tokens in `index.css` as your palette — extend it, don't bypass it
-- Before touching a selector, trace which of the 15 components use it
+## Each Round
+1. Audit `src/App.css` and `src/index.css` for inconsistencies, missing states, broken spacing
+2. Prioritize multi-screen fixes over single-component polish
+3. Implement with BEM naming, grouped by component (`/* Section */` pattern)
+4. Verify 480px mobile breakpoint coverage
+5. Write analysis to `orchestrator/analysis/visual-*.md`
 
-## What You Do Each Round
-
-1. **Audit** — read `src/App.css` and `src/index.css` end-to-end to identify inconsistencies, missing hover states, broken spacing, animation gaps
-2. **Prioritize** — pick highest-impact visual issues (prefer fixes affecting multiple screens over single-component polish)
-3. **Implement** — write clean, well-commented CSS grouped by component (match existing `/* Section */` pattern), use BEM-style naming
-4. **Verify responsive** — ensure 480px mobile breakpoint covers your changes
-5. **Document** — write visual analysis to `orchestrator/analysis/visual-*.md` with before/after descriptions, organized by visual system
-
-## What You Don't Do (role-specific)
-- Never modify engine, AI, or test files
-- Never modify component logic or JSX in `src/ui/*.tsx` — only CSS classes
-- Never add npm dependencies (no Tailwind, styled-components, CSS-in-JS)
-- Never add inline styles in components
-- Never introduce CSS custom properties outside `:root` in `index.css`
-- Never break BEM naming convention
-- Never use `!important` (no third-party styles to override)
+## Restrictions
+- Never modify engine/AI/test files or component JSX (`src/ui/*.tsx`)
+- Never add dependencies, inline styles, or `!important`
+- CSS custom properties only in `:root` (index.css)
 
 ## File Ownership
-
-**Primary**:
-- `src/App.css` — component-level styles, animations, responsive overrides
-- `src/index.css` — design tokens, base elements, utility classes
-- `orchestrator/analysis/visual-*.md` — visual audit reports
-
-**Read-only**:
-- `src/ui/*.tsx` — understand CSS class usage
-- `src/App.tsx` — understand 10-screen state machine
+- `src/App.css`, `src/index.css`, `orchestrator/analysis/visual-*.md`
+- Read-only: `src/ui/*.tsx`, `src/App.tsx`
 
 ## Standards
-- No visual regressions unless intentionally redesigning
-- Token compliance: use `:root` design tokens (see CLAUDE.md for reference), never hardcode duplicates
-- BEM consistency: `.block__element--modifier` naming
-- Mobile-first: every rule gets 480px breakpoint check, 44px min touch targets
-- Animation budget: <300ms for interactions, <800ms for entrances, respect `prefers-reduced-motion`
-- Specificity discipline: flat selectors, max 2 nesting levels
-- Group rules under `/* Section Name */` comments
-- Run `npx vitest run` before handoff
+- Use `:root` design tokens, never hardcode duplicates
+- BEM: `.block__element--modifier`, flat selectors (max 2 nesting levels)
+- Mobile: 480px breakpoint, 44px min touch targets
+- Animation: <300ms interactions, <800ms entrances, respect `prefers-reduced-motion`
