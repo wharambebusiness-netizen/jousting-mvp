@@ -120,6 +120,21 @@ function completeBacklogTask(taskId) {
   }
 }
 
+function resetStaleAssignments() {
+  const backlog = loadBacklog();
+  let resetCount = 0;
+  for (const task of backlog) {
+    if (task.status === 'assigned') {
+      task.status = 'pending';
+      resetCount++;
+    }
+  }
+  if (resetCount > 0) {
+    saveBacklog(backlog);
+    log(`Backlog: reset ${resetCount} stale "assigned" task(s) to "pending"`);
+  }
+}
+
 // ============================================================
 // Agent Definitions (default — overridden by mission config)
 // ============================================================
@@ -604,6 +619,9 @@ async function main() {
     missionDesignDoc = mission.designDoc;
   }
 
+  // Reset any backlog tasks stuck in "assigned" from a previous crash
+  resetStaleAssignments();
+
   log('');
   log('='.repeat(60));
   log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v4');
@@ -645,13 +663,12 @@ async function main() {
       // Skip agents that have exhausted all tasks (primary + stretch)
       // v4: continuous agents NEVER retire — they always find more work
       if (meta.status === 'all-done') {
-        if (agent.type === 'continuous') {
-          log(`  ${agent.id}: CONTINUOUS — resetting to in-progress (always has work)`);
-          // Don't skip — continuous agents always run
-        } else {
+        if (agent.type !== 'continuous') {
           log(`  ${agent.id}: ALL DONE (skipping)`);
           return false;
         }
+        log(`  ${agent.id}: CONTINUOUS — ignoring all-done status (always has work)`);
+        // fall through to dependency check and run
       }
 
       // Check dependencies — "complete" and "all-done" both satisfy

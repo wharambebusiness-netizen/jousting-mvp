@@ -331,3 +331,13 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   .grid-3, .grid-2 { grid-template-columns: 1fr; }
   h1 { font-size: 1.4rem; }
 }
+
+/* Accessibility: respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .stamina-bar__fill--critical { animation: none; }
+  .screen { animation: none; }
+  .btn,
+  .card--selectable,
+  .stat-bar__fill,
+  .stamina-bar__fill { transition: none; }
+}

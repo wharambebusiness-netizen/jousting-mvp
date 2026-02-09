@@ -144,29 +144,35 @@
 }
 .rarity-card__bonus { font-size: 0.75rem; }
 
-/* Rarity color variants */
+/* Rarity color variants — hover glow + selected glow per tier */
 .rarity-card--uncommon { border-color: var(--rarity-uncommon); }
-.rarity-card--uncommon.card--selected { background: var(--rarity-uncommon-bg); box-shadow: 0 0 0 2px var(--rarity-uncommon), 0 3px 12px var(--shadow); }
+.rarity-card--uncommon.card--selectable:hover { border-color: var(--rarity-uncommon); box-shadow: 0 0 8px rgba(74, 138, 42, 0.3); }
+.rarity-card--uncommon.card--selected { background: var(--rarity-uncommon-bg); box-shadow: 0 0 0 2px var(--rarity-uncommon), 0 0 10px rgba(74, 138, 42, 0.25); }
 .rarity-card--uncommon .rarity-card__name { color: var(--rarity-uncommon); }
 
 .rarity-card--rare { border-color: var(--rarity-rare); }
-.rarity-card--rare.card--selected { background: var(--rarity-rare-bg); box-shadow: 0 0 0 2px var(--rarity-rare), 0 3px 12px var(--shadow); }
+.rarity-card--rare.card--selectable:hover { border-color: var(--rarity-rare); box-shadow: 0 0 8px rgba(42, 90, 143, 0.3); }
+.rarity-card--rare.card--selected { background: var(--rarity-rare-bg); box-shadow: 0 0 0 2px var(--rarity-rare), 0 0 10px rgba(42, 90, 143, 0.25); }
 .rarity-card--rare .rarity-card__name { color: var(--rarity-rare); }
 
 .rarity-card--epic { border-color: var(--rarity-epic); }
-.rarity-card--epic.card--selected { background: var(--rarity-epic-bg); box-shadow: 0 0 0 2px var(--rarity-epic), 0 3px 12px var(--shadow); }
+.rarity-card--epic.card--selectable:hover { border-color: var(--rarity-epic); box-shadow: 0 0 10px rgba(123, 63, 160, 0.35); }
+.rarity-card--epic.card--selected { background: var(--rarity-epic-bg); box-shadow: 0 0 0 2px var(--rarity-epic), 0 0 12px rgba(123, 63, 160, 0.3); }
 .rarity-card--epic .rarity-card__name { color: var(--rarity-epic); }
 
 .rarity-card--legendary { border-color: var(--rarity-legendary); }
-.rarity-card--legendary.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-legendary), 0 3px 12px var(--shadow); }
+.rarity-card--legendary.card--selectable:hover { border-color: var(--rarity-legendary); box-shadow: 0 0 12px rgba(201, 138, 30, 0.4); }
+.rarity-card--legendary.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-legendary), 0 0 14px rgba(201, 138, 30, 0.35); }
 .rarity-card--legendary .rarity-card__name { color: var(--rarity-legendary); }
 
 .rarity-card--relic { border-color: var(--rarity-relic); }
-.rarity-card--relic.card--selected { background: var(--rarity-relic-bg); box-shadow: 0 0 0 2px var(--rarity-relic), 0 3px 12px var(--shadow); }
+.rarity-card--relic.card--selectable:hover { border-color: var(--rarity-relic); box-shadow: 0 0 12px rgba(181, 32, 32, 0.4); }
+.rarity-card--relic.card--selected { background: var(--rarity-relic-bg); box-shadow: 0 0 0 2px var(--rarity-relic), 0 0 14px rgba(181, 32, 32, 0.35); }
 .rarity-card--relic .rarity-card__name { color: var(--rarity-relic); }
 
 .rarity-card--giga { border-color: var(--rarity-giga); }
-.rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 3px 12px var(--shadow); }
+.rarity-card--giga.card--selectable:hover { border-color: var(--rarity-giga); box-shadow: 0 0 14px rgba(201, 168, 76, 0.5); }
+.rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 0 16px rgba(201, 168, 76, 0.45); }
 .rarity-card--giga .rarity-card__name { color: var(--rarity-giga); }
 
 /* Loadout section (gear + stats) */
@@ -272,8 +278,17 @@
 }
 .variant-toggle__btn:hover { background: var(--parchment-dark); }
 .variant-toggle__btn--active {
-  font-weight: 700; background: var(--parchment-dark);
+  font-weight: 700;
   border-width: 2px;
+}
+.variant-toggle__btn--active.variant-toggle__btn--aggressive {
+  background: var(--stance-agg-bg); border-color: var(--stance-agg); color: var(--stance-agg);
+}
+.variant-toggle__btn--active.variant-toggle__btn--balanced {
+  background: var(--stance-bal-bg); border-color: var(--stance-bal); color: var(--stance-bal);
+}
+.variant-toggle__btn--active.variant-toggle__btn--defensive {
+  background: var(--stance-def-bg); border-color: var(--stance-def); color: var(--stance-def);
 }
 
 /* Quick-set variant buttons */
@@ -621,4 +636,24 @@
 }
 .match-replay__chosen {
   font-weight: 700; color: var(--gold-dark);
+}
+
+/* Accessibility: respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .screen,
+  .winner-banner--victory,
+  .winner-banner--defeat,
+  .timeline-pip,
+  .final-score--reveal .scoreboard__score,
+  .scoreboard__score--anim { animation: none; }
+
+  .pass-pip--current { animation: none; }
+
+  .card--selectable,
+  .stat-bar__fill,
+  .stamina-bar__fill,
+  .gear-item,
+  .variant-toggle__btn,
+  .pass-pip,
+  .ai-thinking__bar-fill { transition: none; }
 }

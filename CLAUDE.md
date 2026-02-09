@@ -6,12 +6,13 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (370 passing)
+npx vitest run                              # Run all tests (477 passing)
 npx tsx src/tools/simulate.ts [bare|giga]   # Balance simulation (modes: bare|uncommon|rare|epic|legendary|relic|giga|mixed)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
 node orchestrator/orchestrator.mjs orchestrator/missions/X.json  # Launch with mission config
+powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1  # Overnight runner (restart loop)
 ```
 
 ## Architecture
@@ -33,12 +34,14 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool
 
-orchestrator/         Multi-agent development system
-  orchestrator.mjs    Main orchestration script
+orchestrator/         Multi-agent development system (v4)
+  orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
+  backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
-  roles/*.md          Role templates (agent behavior guidelines)
+  roles/*.md          9 role templates (professional agent briefs)
   handoffs/*.md       Agent state files (structured META sections)
   analysis/*.md       Balance/quality reports
+  run-overnight.ps1   PowerShell restart loop for overnight runs
 ```
 
 ## Stat Pipeline
@@ -60,6 +63,17 @@ Base archetype stats (MOM/CTL/GRD/INIT/STA)
 
 Caparison is cosmetic only — zero gameplay effects.
 
+### Gear Variants
+
+3 variants per slot: **aggressive**, **balanced** (=legacy defaults), **defensive**
+- Same total stat budget (horizontal power), different primary/secondary allocation
+- Balanced variant MUST match legacy GEAR_SLOT_STATS exactly
+- Affinity field is informational only (no mechanical bonus)
+- `createStatGear(slot, rarity, rng?, variant?)` — optional variant param
+- `createFullLoadout(gigRarity, gearRarity, rng?, variant?)` — optional variant
+- `createPlayerGear(slot, rarity, rng?, variant?)` — optional variant
+- `createFullPlayerLoadout(gearRarity, rng?, variant?)` — optional variant
+
 ## Critical Gotchas
 
 - Counter table: Agg>Def>Bal>Agg; Port de Lance beats Coup en Passant; Guard High beats Measured Cut
@@ -74,13 +88,17 @@ Caparison is cosmetic only — zero gameplay effects.
 - Guard partially fatigues via guardFatigueFloor (0.5)
 - Uncommon rarity bonus = 2 (not 1)
 - AI has `WithReasoning` and `WithCommentary` function variants — originals unchanged for backwards compat
+- Breaker detection via `archetype.id` in phase-joust.ts and phase-melee.ts
+- Unseated boost via `wasUnseated` flag on PlayerState
+- Balanced variant must match legacy GEAR_SLOT_STATS
+- AI rarity matching: App.tsx uses `steedLoadout.giglingRarity` for all AI gear
 
 ## Key API Signatures
 
 ```typescript
 createMatch(arch1, arch2, steedLoadout1?, steedLoadout2?, playerLoadout1?, playerLoadout2?): MatchState
-createFullLoadout(giglingRarity, gearRarity, rng?): GiglingLoadout
-createFullPlayerLoadout(gearRarity, rng?): PlayerLoadout
+createFullLoadout(giglingRarity, gearRarity, rng?, variant?): GiglingLoadout
+createFullPlayerLoadout(gearRarity, rng?, variant?): PlayerLoadout
 applyGiglingLoadout(archetype, loadout?): Archetype   // adds rarity bonus
 applyPlayerLoadout(archetype, loadout?): Archetype     // NO rarity bonus
 resolveJoustPass(p1, p2, p1Choice, p2Choice, passNum, p1Stam, p2Stam, cumScore1, cumScore2): PassResult
@@ -91,10 +109,30 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Balance State
 
-S22 balance pass: Charger CTL 50→55, Technician MOM 50→55, guardImpactCoeff 0.2→0.18.
-Epic tier near-perfect (7.3pp spread). Bare spread 33pp→25pp. Giga spread 18pp→13pp.
+S25 balance pass: guardImpactCoeff 0.18, guardUnseatDivisor 15, breakerGuardPenetration 0.20.
+Carryover divisors: momentum 6, control 7, guard 9. Unseated boost 1.25, stamina recovery 8.
 Key constants in balance-config.ts: guardImpactCoeff 0.18, guardUnseatDivisor 15, softCap knee 100 / K 50.
-Remaining: Charger still weak at bare (36%), Technician slightly below 45% across tiers.
+Remaining: Charger weak at bare (~36%), Technician slightly below 45% at epic/giga.
+
+## Orchestrator v4
+
+### Backlog System
+- `orchestrator/backlog.json` — dynamic task queue with `{id, role, priority, status, title, description}`
+- Producer agent generates 3-5 tasks per round, other agents consume them
+- Orchestrator injects matching backlog tasks into agent prompts before each run
+- Status flow: pending → assigned → completed
+
+### Continuous Agents
+- Agents with `type: "continuous"` never retire — skip the `all-done` exit check
+- Designed for overnight runs where work is ongoing
+
+### Overnight Runner
+- `orchestrator/run-overnight.ps1` — PowerShell restart loop
+- Re-launches orchestrator if it crashes or exits early
+- Params: `-MaxHours 10 -Mission "orchestrator\missions\overnight.json"`
+
+### 9 Role Templates (`orchestrator/roles/`)
+game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, test-writer, ui-dev
 
 ## Orchestrator Rules (for orchestrated agents)
 
@@ -105,13 +143,14 @@ Remaining: Charger still weak at bare (36%), Technician slightly below 45% acros
 - For App.tsx changes: note them in handoff under "Deferred App.tsx Changes"
 - Write META section at top of handoff with status/files-modified/tests-passing/notes-for-others
 
-## Test Suite (370 tests, 6 suites)
+## Test Suite (477 tests, 7 suites)
 
 ```
-calculator.test.ts    116 tests   Core math validation
-caparison.test.ts      11 tests   Phase-resolution validation
-gigling-gear.test.ts   48 tests   6-slot steed gear
-player-gear.test.ts    46 tests   6-slot player gear
-match.test.ts          69 tests   State machine + integration
-playtest.test.ts       80 tests   Property-based + stress tests
+calculator.test.ts        127 tests   Core math validation
+phase-resolution.test.ts   35 tests   Phase resolution validation
+gigling-gear.test.ts       48 tests   6-slot steed gear
+player-gear.test.ts        46 tests   6-slot player gear
+match.test.ts              71 tests   State machine + integration
+playtest.test.ts          106 tests   Property-based + stress tests
+gear-variants.test.ts      44 tests   Gear variant system
 ```

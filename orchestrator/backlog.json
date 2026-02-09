@@ -1,0 +1,132 @@
+[
+  {
+    "id": "BL-001",
+    "role": "balance-analyst",
+    "priority": 1,
+    "status": "assigned",
+    "title": "Fix Technician weakness at Epic/Giga tiers",
+    "description": "Technician win rate is ~44% at epic and giga tiers, below the 44-58% target band. Current stats: MOM=55, CTL=70, GRD=55, INIT=60, STA=55 (total=295). Investigate whether a small STA or GRD buff (+2-3) improves survivability at high tiers. CAUTION: Technician CTL is test-locked at 70 in multiple tests; MOM was already buffed from 50→55 in S22. Run `npx tsx src/tools/simulate.ts epic` and `npx tsx src/tools/simulate.ts giga` before and after. One variable at a time. Target: Technician ≥45% at all tiers.",
+    "fileOwnership": ["src/engine/archetypes.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-002",
+    "role": "balance-analyst",
+    "priority": 2,
+    "status": "pending",
+    "title": "Investigate Charger weakness at bare tier",
+    "description": "Charger bare win rate is ~34-36%. Current stats: MOM=75, CTL=55, GRD=50, INIT=60, STA=60 (total=300). Charger CTL was already buffed from 50→55 in S22. ALL Charger stats are test-locked in gigling-gear.test.ts — any change requires updating computed values in tests. Run `npx tsx src/tools/simulate.ts bare` before and after. Consider: STA+2 or INIT+2 (safer than MOM/CTL which cascade to more test assertions). Target: Charger ≥40% at bare.",
+    "fileOwnership": ["src/engine/archetypes.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-003",
+    "role": "balance-analyst",
+    "priority": 3,
+    "status": "pending",
+    "title": "Assess breakerGuardPenetration effectiveness",
+    "description": "Breaker vs Bulwark matchup was 24% in Round 4 analysis. breakerGuardPenetration is at 0.20 but may not be sufficient. Run `npx tsx src/tools/simulate.ts bare` and check the Breaker vs Bulwark matchup specifically. If Breaker vs Bulwark is still below 35%, try bumping breakerGuardPenetration to 0.25. This constant is NOT test-locked (safe to change). Run before/after sims.",
+    "fileOwnership": ["src/engine/balance-config.ts"],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-004",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "assigned",
+    "title": "Test gear variant interactions with archetype matchups",
+    "description": "Write 5-8 tests verifying that aggressive/defensive gear variants produce meaningfully different match outcomes. Test: 1) all-aggressive loadout vs all-defensive loadout for 2-3 archetype pairs, 2) verify variant choice doesn't produce degenerate strategies (>70% win rate in 50-match sample), 3) mixed variant loadouts work correctly. Add to gear-variants.test.ts. Target: 485+ tests after.",
+    "fileOwnership": ["src/engine/gear-variants.test.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-005",
+    "role": "qa-engineer",
+    "priority": 2,
+    "status": "pending",
+    "title": "Test softCap boundary behavior",
+    "description": "Write 5-6 tests for softCap(knee=100, K=50) edge cases: 1) stat exactly at knee returns knee, 2) stat 1 above knee, 3) Bulwark GRD at giga rarity (65+13=78 base, but after gear can cross 100), 4) verify softCap formula: knee + excess*K/(excess+K), 5) stamina is NOT soft-capped (passes through unchanged). Add to calculator.test.ts.",
+    "fileOwnership": ["src/engine/calculator.test.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-006",
+    "role": "qa-engineer",
+    "priority": 3,
+    "status": "pending",
+    "title": "Test stamina/fatigue boundary conditions",
+    "description": "Write 5-6 tests for fatigue edge cases: 1) stamina at 0 (minimum fatigue factor), 2) stamina at max (factor=1.0), 3) guardFatigueFloor=0.5 interaction with 0 stamina, 4) fatigueFactor with maxStamina=0 (division safety), 5) stamina recovery in melee for unseated player. Add to calculator.test.ts or playtest.test.ts.",
+    "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/playtest.test.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-007",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "assigned",
+    "title": "Polish rarity card styling",
+    "description": "Improve RaritySelector card visuals: 1) add distinct border colors per rarity tier (common=gray, uncommon=green, rare=blue, epic=purple, legendary=orange, giga=gold), 2) subtle glow/shadow on hover and selected state, 3) ensure text remains readable on all backgrounds. Only edit src/App.css.",
+    "fileOwnership": ["src/App.css"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-008",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "pending",
+    "title": "Improve variant toggle button UX",
+    "description": "Make the Agg/Bal/Def variant toggle buttons more visually distinct: 1) use color coding (red=aggressive, gray=balanced, blue=defensive), 2) clearer active/selected state, 3) smooth transition on toggle, 4) consistent sizing. Only edit src/App.css.",
+    "fileOwnership": ["src/App.css"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-009",
+    "role": "tech-lead",
+    "priority": 1,
+    "status": "assigned",
+    "title": "Review balance-config.ts for magic numbers",
+    "description": "Audit phase-joust.ts, phase-melee.ts, and calculator.ts for any remaining hardcoded magic numbers that should be in balance-config.ts. Check: impact formula coefficients (0.5, 0.4), accuracy base values, melee stamina costs, pass scoring thresholds. Write findings to orchestrator/analysis/review-round-1.md. Do NOT move constants yourself — flag them for engine-dev or balance-analyst.",
+    "fileOwnership": ["src/engine/types.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-010",
+    "role": "tech-lead",
+    "priority": 2,
+    "status": "pending",
+    "title": "Type safety audit of gear system",
+    "description": "Review gigling-gear.ts and player-gear.ts for type safety: 1) ensure all slot mappings are exhaustive, 2) verify rng parameter types, 3) check variant parameter validation, 4) ensure createFullLoadout and createFullPlayerLoadout handle edge cases. Write findings to orchestrator/analysis/review-round-1.md.",
+    "fileOwnership": ["src/engine/types.ts"],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-011",
+    "role": "balance-analyst",
+    "priority": 4,
+    "status": "pending",
+    "title": "Full tier sweep — run sims at all 7 tiers and document",
+    "description": "Run `npx tsx src/tools/simulate.ts` at all tiers: bare, uncommon, rare, epic, legendary, relic, giga. Document all 6 archetype win rates at each tier in a table. This creates the baseline reference for this session. No code changes — just data collection. Write results to the balance-tuner handoff.",
+    "fileOwnership": [],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-012",
+    "role": "qa-engineer",
+    "priority": 4,
+    "status": "pending",
+    "title": "Test breaker guard penetration mechanic",
+    "description": "Write 3-5 tests verifying breaker guard penetration works correctly: 1) breaker vs non-breaker — breaker should see reduced opponent guard in impact calc, 2) non-breaker vs non-breaker — no guard reduction, 3) breakerGuardPenetration=0.20 means 20% of opponent effective guard is ignored, 4) penetration applies in both joust and melee phases. Add to calculator.test.ts or playtest.test.ts.",
+    "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/playtest.test.ts"],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-013",
+    "role": "css-artist",
+    "priority": 3,
+    "status": "pending",
+    "title": "Polish combat result display",
+    "description": "Improve the combat result screen visuals: 1) make win/loss state more visually dramatic (larger text, color emphasis), 2) style the score breakdown to be more readable, 3) add visual hierarchy to pass-by-pass results. Only edit src/App.css.",
+    "fileOwnership": ["src/App.css"],
+    "createdAt": "2026-02-09T00:00:00Z"
+  }
+]
