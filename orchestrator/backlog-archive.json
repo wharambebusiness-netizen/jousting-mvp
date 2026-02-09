@@ -1,0 +1,340 @@
+[
+  {
+    "id": "BL-014",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "done",
+    "title": "Fix 7 failing tests caused by Technician MOM 55→58",
+    "description": "COMPLETED Round 2: QA fixed 18 test failures across 4 files (7 from Technician MOM + 11 from Charger INIT/STA). Rewrote match.test.ts worked example (now 2-pass unseat). Added 16 new tests. 605/605 passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/match.test.ts"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
+  },
+  {
+    "id": "BL-001",
+    "role": "balance-analyst",
+    "priority": 1,
+    "status": "done",
+    "title": "Fix Technician weakness at Epic/Giga tiers",
+    "description": "COMPLETED Round 1: Technician MOM 55→58. Win rates improved: bare +3.1pp (48.7%), epic +0.9pp (46.4%), giga +2.1pp (48.3%). All above 45% target.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-002",
+    "role": "balance-analyst",
+    "priority": 3,
+    "status": "done",
+    "title": "Investigate Charger weakness at bare tier",
+    "description": "COMPLETED Round 2: Charger INIT 60→55, STA 60→65. Bare win rate 35.9%→41-42% (+5-6pp). Target ≥40% met. Spread tightened from 26.5pp to ~19pp.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-003",
+    "role": "balance-analyst",
+    "priority": 2,
+    "status": "done",
+    "title": "Assess breakerGuardPenetration effectiveness",
+    "description": "COMPLETED Round 3: breakerGuardPenetration 0.20→0.25. Breaker overall +2-3pp across most tiers (bare 48.2%, epic 52.2%, giga 54.8%). No test failures — constant is NOT test-locked. Full analysis in balance-tuner-round-3.md.",
+    "fileOwnership": [
+      "src/engine/balance-config.ts"
+    ],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-004",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "done",
+    "title": "Test gear variant interactions with archetype matchups",
+    "description": "COMPLETED Round 1: QA added 112 new tests (44→156 in gear-variants.test.ts). All variant tests pass.",
+    "fileOwnership": [
+      "src/engine/gear-variants.test.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-005",
+    "role": "qa-engineer",
+    "priority": 3,
+    "status": "done",
+    "title": "Test softCap boundary behavior",
+    "description": "COMPLETED Round 2: QA added 6 softCap boundary tests + 10 exploratory edge cases to calculator.test.ts. All passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-006",
+    "role": "qa-engineer",
+    "priority": 3,
+    "status": "done",
+    "title": "Test stamina/fatigue boundary conditions",
+    "description": "COMPLETED Round 3: QA added 10 fatigue boundary tests. 647/647 passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-007",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "done",
+    "title": "Polish rarity card styling",
+    "description": "COMPLETED Round 1: Added per-tier colored hover glow, selected state glow, prefers-reduced-motion support.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-008",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "done",
+    "title": "Improve variant toggle button UX",
+    "description": "COMPLETED Rounds 1-2: Stance-colored active states, pill group container, hover preview, mobile touch targets.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-009",
+    "role": "tech-lead",
+    "priority": 1,
+    "status": "done",
+    "title": "Review balance-config.ts for magic numbers",
+    "description": "COMPLETED Round 1: All balance-tunable constants centralized. See analysis/review-round-1.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-010",
+    "role": "tech-lead",
+    "priority": 2,
+    "status": "done",
+    "title": "Type safety audit of gear system",
+    "description": "COMPLETED Round 2: Full audit — no 'any', no 'as' casts, exhaustive slot mappings. See analysis/reviewer-round-2.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
+  },
+  {
+    "id": "BL-011",
+    "role": "balance-analyst",
+    "priority": 4,
+    "status": "done",
+    "title": "Full tier sweep — run sims at all 7 tiers and document",
+    "description": "COMPLETED Round 3: Full 7-tier sweep documented in balance-tuner-round-3.md. Balance improves monotonically with tier (18.5pp bare → 4.1pp giga).",
+    "fileOwnership": [],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-012",
+    "role": "qa-engineer",
+    "priority": 3,
+    "status": "done",
+    "title": "Test breaker guard penetration mechanic",
+    "description": "COMPLETED Round 3: QA added 4 penetration tests. 647/647 passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts"
+    ],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-013",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "done",
+    "title": "Polish combat result display",
+    "description": "COMPLETED Round 2: Added badge-appear animation, crit-glow pulse, unseat-entrance animation.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-015",
+    "role": "tech-lead",
+    "priority": 2,
+    "status": "done",
+    "title": "Review round 1 code changes for quality",
+    "description": "COMPLETED Round 2: Reviewed balance-tuner's Technician MOM change, QA's 112 new tests, polish's CSS. APPROVED.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
+  },
+  {
+    "id": "BL-016",
+    "role": "css-artist",
+    "priority": 3,
+    "status": "done",
+    "title": "Remove inline styles from LoadoutScreen variant toggle",
+    "description": "COMPLETED Round 3: Polish agent removed VARIANT_COLORS constant and inline style={...}. CSS stance tokens now fully control colors.",
+    "fileOwnership": [
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
+  },
+  {
+    "id": "BL-017",
+    "role": "tech-lead",
+    "priority": 2,
+    "status": "done",
+    "title": "Review round 2 code changes for quality",
+    "description": "COMPLETED Round 3: Reviewed Charger INIT/STA swap, QA's 18 test fixes + 16 new tests, match worked example rewrite. APPROVED.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "createdAt": "2026-02-09T03:00:00Z"
+  },
+  {
+    "id": "BL-018",
+    "role": "css-artist",
+    "priority": 3,
+    "status": "done",
+    "title": "Polish melee transition and winner banner",
+    "description": "COMPLETED Round 3: Melee transition entrance, winner banner gold glow, draw entrance, btn--outline modifier.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "createdAt": "2026-02-09T03:00:00Z"
+  },
+  {
+    "id": "BL-019",
+    "role": "qa-engineer",
+    "priority": 4,
+    "status": "done",
+    "title": "Investigate Tactician mirror P1 bias (BUG-002)",
+    "description": "COMPLETED Round 5: QA added 2 targeted tests — Tactician mirror N=500 (P1 40-60%) and all 6 archetype mirrors N=500 (P1 35-65%). BUG-002 CLOSED — confirmed Monte Carlo noise. 649/649 passing.",
+    "fileOwnership": [
+      "src/engine/playtest.test.ts"
+    ],
+    "createdAt": "2026-02-09T03:00:00Z"
+  },
+  {
+    "id": "BL-020",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Fix Bulwark bare/uncommon dominance — test guardImpactCoeff 0.16",
+    "description": "SUPERSEDED by BL-025. guardImpactCoeff 0.18→0.16 proven INEFFECTIVE (<1pp change, within noise). Balance-tuner pivoted to stat redistribution. See balance-tuner-round-5.md.",
+    "fileOwnership": [
+      "src/engine/balance-config.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-021",
+    "role": "qa-engineer",
+    "priority": 4,
+    "title": "Prepare test updates for guardImpactCoeff 0.18→0.16",
+    "description": "CANCELLED — guardImpactCoeff not being changed. QA completed the mapping (see qa-round-5.md) as reference documentation, but no test changes needed.",
+    "fileOwnership": [],
+    "status": "done",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-022",
+    "role": "tech-lead",
+    "priority": 2,
+    "title": "Update CLAUDE.md balance state + review Round 4 changes",
+    "description": "COMPLETED Round 5: Reviewer updated CLAUDE.md — breakerGuardPenetration 0.25, Charger INIT/STA documented, test count 647, simulate.ts variant syntax. APPROVED WITH NOTES. See reviewer-round-5.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-023",
+    "role": "qa-engineer",
+    "priority": 3,
+    "title": "Add multi-pass worked example test to match.test.ts",
+    "description": "COMPLETED Round 6: QA added 6-test multi-pass worked example (Tactician vs Duelist, 5 passes, full fatigue trace). match.test.ts now 77 tests. 655/655 passing.",
+    "fileOwnership": [
+      "src/engine/match.test.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-024",
+    "role": "css-artist",
+    "priority": 4,
+    "title": "Add gear item rarity-colored borders",
+    "description": "COMPLETED Round 6: CSS rules for .gear-item--uncommon through .gear-item--giga added to App.css. Dormant until JSX adds gear-item--${rarity} class to .gear-item divs in LoadoutScreen.tsx. Needs ui-dev agent for JSX change.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T03:30:00Z"
+  },
+  {
+    "id": "BL-025",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Apply Bulwark stat redistribution: CTL 55→52, MOM 55→58",
+    "description": "COMPLETED Round 6: Bulwark MOM 55→58, CTL 55→52 applied in archetypes.ts. Uncommon Bulwark 63.7%→58.5% (-5.2pp), spread 22.1pp→15.5pp. Rare/epic excellent. Zero test failures. Giga Bulwark test data updated (momentum 68→71, control 68→65). See balance-tuner-round-6.md.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts",
+      "src/engine/calculator.test.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:00:00Z"
+  },
+  {
+    "id": "BL-026",
+    "role": "qa-engineer",
+    "priority": 2,
+    "title": "Fix stale test comments + verify Bulwark change cascade",
+    "description": "COMPLETED Round 6: Fixed phase-resolution.test.ts:424 stale comment (0.2→BALANCE reference). Updated calculator.test.ts:805 Giga Bulwark construct (momentum 68→71, control 68→65). Cascade verification: zero breakages from BL-025. 655/655 passing.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts",
+      "src/engine/phase-resolution.test.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:00:00Z"
+  },
+  {
+    "id": "BL-027",
+    "role": "tech-lead",
+    "priority": 1,
+    "title": "Review Round 6 changes + update CLAUDE.md with BL-025 results",
+    "description": "COMPLETED Round 7: CLAUDE.md updated with Bulwark stats, test count to 655, per-archetype win rates. See reviewer-round-7.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T04:30:00Z"
+  },
+  {
+    "id": "BL-029",
+    "role": "balance-analyst",
+    "priority": 3,
+    "title": "Run N=1000 confirmation for Tactician uncommon and Breaker giga",
+    "description": "COMPLETED Round 7: Balance-tuner ran 93,600-match health check across 13 simulation runs. QA independently ran 3-run validation. BUG-006 CLOSED: Tactician uncommon = 54.3% mean (noise). Breaker giga down to 53.9-55.3% across runs (stable, within tolerance). No action needed.",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T05:00:00Z"
+  }
+]

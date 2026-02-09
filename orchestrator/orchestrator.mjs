@@ -8,6 +8,16 @@
 // - Producer role integration — generates tasks for other agents
 // - Better overnight sustainability
 //
+// v5 additions:
+// - archiveCompletedTasks() at startup (keeps backlog lean)
+// - dependsOn enforcement in getNextTask()
+// - deferred backlog status (skipped by automation, awaiting human approval)
+// - Session changelog generation
+// - File ownership validation (post-round)
+// - Agent output validation (catches silent failures)
+// - Failed task reassignment (immediate on crash/timeout)
+// - Consistency check at startup
+//
 // v3 additions:
 // - Mission config files (orchestrator/missions/*.json)
 // - Role templates (orchestrator/roles/*.md)
@@ -30,9 +40,10 @@
 // ============================================================
 
 import { spawn } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { runConsistencyCheck } from './consistency-check.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -82,6 +93,7 @@ const CONFIG = {
   circuitBreakerThreshold: 3,           // stop after 3 consecutive test failures
   testTimeoutMs: 3 * 60 * 1000,        // 3 min for test suite
   allowedTools: 'Edit,Read,Write,Glob,Grep,Bash',
+  maxConcurrency: 0,                     // 0 = unlimited; >0 = max parallel agents per phase
   reportFile: join(ORCH_DIR, 'overnight-report.md'),
 };
 
@@ -89,6 +101,7 @@ const CONFIG = {
 // Backlog System (v4)
 // ============================================================
 const BACKLOG_FILE = join(ORCH_DIR, 'backlog.json');
+const BACKLOG_ARCHIVE_FILE = join(ORCH_DIR, 'backlog-archive.json');
 
 function loadBacklog() {
   if (!existsSync(BACKLOG_FILE)) return [];
@@ -101,13 +114,25 @@ function saveBacklog(tasks) {
 }
 
 function getNextTask(role) {
+  return getNextTasks(role, 1)[0] || null;
+}
+
+function getNextTasks(role, maxTasks = 1) {
   const backlog = loadBacklog();
-  const task = backlog.find(t => t.status === 'pending' && t.role === role);
-  if (task) {
-    task.status = 'assigned';
-    saveBacklog(backlog);
-  }
-  return task;
+  const tasks = backlog
+    .filter(t =>
+      t.status === 'pending' && t.role === role &&
+      (!t.dependsOn?.length || t.dependsOn.every(depId => {
+        const dep = backlog.find(d => d.id === depId);
+        // If dep not found in active backlog, treat as satisfied (already archived)
+        return !dep || dep.status === 'completed' || dep.status === 'done';
+      }))
+    )
+    .slice(0, maxTasks);
+
+  for (const task of tasks) { task.status = 'assigned'; }
+  if (tasks.length) saveBacklog(backlog);
+  return tasks;
 }
 
 function completeBacklogTask(taskId) {
@@ -133,6 +158,28 @@ function resetStaleAssignments() {
     saveBacklog(backlog);
     log(`Backlog: reset ${resetCount} stale "assigned" task(s) to "pending"`);
   }
+}
+
+function archiveCompletedTasks() {
+  const backlog = loadBacklog();
+  const completed = backlog.filter(t => t.status === 'completed' || t.status === 'done');
+  if (!completed.length) return;
+
+  // Load existing archive or create new
+  let archive = [];
+  if (existsSync(BACKLOG_ARCHIVE_FILE)) {
+    try { archive = JSON.parse(readFileSync(BACKLOG_ARCHIVE_FILE, 'utf-8')); }
+    catch (_) { archive = []; }
+  }
+
+  // Move completed tasks to archive
+  archive.push(...completed);
+  writeFileSync(BACKLOG_ARCHIVE_FILE, JSON.stringify(archive, null, 2));
+
+  // Remove from active backlog
+  const active = backlog.filter(t => t.status !== 'completed' && t.status !== 'done');
+  saveBacklog(active);
+  log(`Backlog: archived ${completed.length} completed task(s) (${active.length} remaining)`);
 }
 
 // ============================================================
@@ -204,7 +251,7 @@ function loadMission(missionPath) {
     log(`  Config overrides: ${JSON.stringify(mission.config)}`);
   }
 
-  // Convert mission agents to orchestrator format
+  // Convert mission agents to orchestrator format (v5: include model, timeout, task batching, frequency)
   const agents = mission.agents.map(a => ({
     id: a.id,
     name: a.name,
@@ -213,6 +260,11 @@ function loadMission(missionPath) {
     role: a.role || null,
     handoff: join(HANDOFF_DIR, `${a.id}.md`),
     fileOwnership: a.fileOwnership || [],
+    model: a.model || null,                        // v5: per-agent model (sonnet, haiku, etc.)
+    timeoutMs: a.timeoutMs || null,                // v5: per-agent timeout override
+    maxTasksPerRound: a.maxTasksPerRound || 1,     // v6: batch task injection
+    minFrequencyRounds: a.minFrequencyRounds || 0, // v5: periodic run frequency (0 = work-gated only)
+    maxBudgetUsd: a.maxBudgetUsd || null,          // v6: per-agent cost cap
   }));
 
   // Generate initial handoff files for agents that don't have one yet
@@ -267,6 +319,16 @@ function loadMission(missionPath) {
 // ============================================================
 // Role Template Loading
 // ============================================================
+let commonRulesContent = '';
+
+function loadCommonRules() {
+  const rulesPath = join(ROLES_DIR, '_common-rules.md');
+  if (existsSync(rulesPath)) {
+    commonRulesContent = readFileSync(rulesPath, 'utf-8');
+    log(`Loaded shared rules: ${commonRulesContent.split('\n').length} lines`);
+  }
+}
+
 function loadRoleTemplate(roleName) {
   if (!roleName) return '';
   const rolePath = join(ROLES_DIR, `${roleName}.md`);
@@ -332,6 +394,72 @@ function parseHandoffMeta(agentId) {
 }
 
 // ============================================================
+// Validation Functions
+// ============================================================
+function validateFileOwnership(agentResults, agents) {
+  const violationLog = join(LOG_DIR, 'ownership-violations.log');
+  for (const result of agentResults) {
+    const agent = agents.find(a => a.id === result.agentId);
+    if (!agent?.fileOwnership?.length) continue;
+    const meta = parseHandoffMeta(result.agentId);
+    for (const file of meta.filesModified) {
+      const owned = agent.fileOwnership.some(pattern => {
+        if (pattern.includes('*')) {
+          const prefix = pattern.split('*')[0];
+          return file.startsWith(prefix);
+        }
+        return file === pattern;
+      });
+      if (!owned) {
+        const msg = `[${timestamp()}] OWNERSHIP VIOLATION: ${result.agentId} modified ${file} (not in fileOwnership)`;
+        log(`  ⚠ ${msg}`);
+        appendFileSync(violationLog, msg + '\n');
+      }
+    }
+  }
+}
+
+function validateAgentOutput(agentId, round) {
+  const meta = parseHandoffMeta(agentId);
+  const warnings = [];
+
+  if (meta.status === 'not-started') {
+    warnings.push(`${agentId}: Handoff not updated (still "not-started")`);
+  }
+  if (!meta.filesModified.length && meta.status === 'in-progress') {
+    warnings.push(`${agentId}: Claims in-progress but no files modified`);
+  }
+  if (meta.testsPassing === false) {
+    warnings.push(`${agentId}: Reports tests FAILING`);
+  }
+  return warnings;
+}
+
+// ============================================================
+// Session Changelog (auto-generated each round)
+// ============================================================
+const CHANGELOG_FILE = join(ORCH_DIR, 'session-changelog.md');
+
+function resetSessionChangelog() {
+  writeFileSync(CHANGELOG_FILE, '# Session Changelog (auto-generated)\n\n');
+}
+
+function appendSessionChangelog(round, agentResults) {
+  const entries = [];
+  for (const result of agentResults) {
+    const meta = parseHandoffMeta(result.agentId);
+    const status = result.timedOut ? 'TIMEOUT' : result.code === 0 ? 'OK' : `ERROR(${result.code})`;
+    const files = meta.filesModified.length ? meta.filesModified.join(', ') : 'none';
+    const tests = meta.testsPassing === true ? 'PASS' : meta.testsPassing === false ? 'FAIL' : '?';
+    entries.push(`- **${result.agentId}** (${status}): files=[${files}], tests=${tests}${meta.notes ? `. ${meta.notes}` : ''}`);
+  }
+  if (entries.length) {
+    const section = `## Round ${round} [${timestamp()}]\n${entries.join('\n')}\n\n`;
+    appendFileSync(CHANGELOG_FILE, section);
+  }
+}
+
+// ============================================================
 // Task Board Generation (orchestrator-owned, agents only READ)
 // ============================================================
 function isDepSatisfied(status) {
@@ -388,12 +516,8 @@ ${agentStatuses.filter(a => a.meta.notes).map(a => `- **${a.id}**: ${a.meta.note
 5. Run \`npx vitest run\` before writing your final handoff to confirm tests pass
 6. Write your updated handoff with the ## META section at the top
 
-## Reference Files
-- Gear overhaul design: gear-overhaul-milestones.md (in project root)
-- Full project architecture: jousting-handoff-s19.md (in project root)
-- Balance config: src/engine/balance-config.ts
-- All types: src/engine/types.ts
-- AI logic: src/ai/basic-ai.ts
+## Reference
+See CLAUDE.md for file locations and architecture.
 `;
 
   writeFileSync(TASK_BOARD, board);
@@ -417,8 +541,9 @@ function runAgent(agent, round) {
       `Project context is in CLAUDE.md (auto-loaded).`,
       ``,
       `READ FIRST:`,
-      `1. orchestrator/task-board.md (coordination status — DO NOT edit)`,
-      `2. orchestrator/handoffs/${agent.id}.md (your tasks and progress)`,
+      `1. orchestrator/session-changelog.md (what changed this session so far)`,
+      `2. orchestrator/task-board.md (coordination status — DO NOT edit)`,
+      `3. orchestrator/handoffs/${agent.id}.md (your tasks and progress)`,
     ];
 
     // Add design doc reference if mission specifies one
@@ -446,19 +571,24 @@ function runAgent(agent, round) {
         : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
     );
 
-    // v4: Inject next backlog task if available
-    const backlogTask = getNextTask(agent.role);
-    if (backlogTask) {
-      promptParts.push(
-        ``,
-        `--- BACKLOG TASK (from producer) ---`,
-        `Task ID: ${backlogTask.id}`,
-        `Priority: ${backlogTask.priority}`,
-        `Title: ${backlogTask.title}`,
-        `Description: ${backlogTask.description}`,
-        `Files: ${(backlogTask.fileOwnership || []).join(', ')}`,
-        `When done, note this task ID in your handoff META under completed-tasks.`,
-      );
+    // v5/v6: Inject batch backlog tasks if available
+    const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1);
+    if (backlogTasks.length) {
+      promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
+      for (let i = 0; i < backlogTasks.length; i++) {
+        const bt = backlogTasks[i];
+        promptParts.push(
+          `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
+          `Description: ${bt.description}`,
+          `Files: ${(bt.fileOwnership || []).join(', ')}`,
+        );
+      }
+      promptParts.push(`Work through these in order. Note completed task IDs in handoff META under completed-tasks.`);
+    }
+
+    // Append shared rules (common to all agents)
+    if (commonRulesContent) {
+      promptParts.push(``, `--- SHARED RULES ---`, commonRulesContent);
     }
 
     // Append role template if available (provides domain-specific guidelines)
@@ -471,12 +601,13 @@ function runAgent(agent, round) {
     log(`  Starting ${agent.id}...`);
     const startTime = Date.now();
 
+    // v5/v6: Build CLI args with optional per-agent model + budget
+    const cliArgs = ['-p', '--allowedTools', CONFIG.allowedTools, '--output-format', 'text'];
+    if (agent.model) cliArgs.push('--model', agent.model);
+    if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
+
     // Spawn claude with prompt piped via stdin (avoids Windows cmd length limit)
-    const proc = spawn('claude', [
-      '-p',
-      '--allowedTools', CONFIG.allowedTools,
-      '--output-format', 'text',
-    ], {
+    const proc = spawn('claude', cliArgs, {
       cwd: MVP_DIR,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -489,12 +620,13 @@ function runAgent(agent, round) {
 
     activeProcs.add(proc.pid);
 
-    // Timeout handler — uses taskkill /T to kill entire process tree on Windows
+    // v5: Per-agent timeout override or global default
+    const timeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
     const timer = setTimeout(() => {
       timedOut = true;
-      log(`  ${agent.id} TIMED OUT after ${CONFIG.agentTimeoutMs / 60000} minutes — killing process tree (PID ${proc.pid})`);
+      log(`  ${agent.id} TIMED OUT after ${timeout / 60000} minutes — killing process tree (PID ${proc.pid})`);
       killProcessTree(proc.pid);
-    }, CONFIG.agentTimeoutMs);
+    }, timeout);
 
     proc.stdout.on('data', (data) => {
       const text = data.toString();
@@ -561,6 +693,100 @@ function gitBackup(round) {
 }
 
 // ============================================================
+// Git Tagging & Revert (v5 Phase 7)
+// ============================================================
+function tagRoundStart(round) {
+  return new Promise((resolvePromise) => {
+    const tag = `round-${round}-start`;
+    const cmd = `git tag -f ${tag}`;
+    const proc = spawn('cmd', ['/c', cmd], {
+      cwd: MVP_DIR,
+      shell: true,
+      stdio: 'pipe',
+    });
+    proc.on('close', (code) => {
+      if (code === 0) log(`  Git tag created: ${tag}`);
+      else log(`  Git tag failed (code ${code}) — continuing without tag`);
+      resolvePromise();
+    });
+    proc.on('error', () => resolvePromise());
+  });
+}
+
+function gitRevertToTag(round) {
+  return new Promise((resolvePromise) => {
+    const tag = `round-${round}-start`;
+    const cmd = `git checkout ${tag} -- src/`;
+    const proc = spawn('cmd', ['/c', cmd], {
+      cwd: MVP_DIR,
+      shell: true,
+      stdio: 'pipe',
+    });
+    proc.on('close', (code) => {
+      if (code === 0) log(`  Reverted src/ to tag ${tag}`);
+      else log(`  Revert to tag ${tag} failed (code ${code})`);
+      resolvePromise();
+    });
+    proc.on('error', () => resolvePromise());
+  });
+}
+
+// ============================================================
+// Analysis File Rotation (v5 Phase 5F)
+// ============================================================
+function rotateAnalysisFiles(keepRounds = 5) {
+  if (!existsSync(ANALYSIS_DIR)) return;
+
+  const archiveDir = join(ANALYSIS_DIR, 'archive');
+  mkdirSync(archiveDir, { recursive: true });
+
+  const files = [];
+  for (const f of readdirSync(ANALYSIS_DIR)) {
+    const match = f.match(/-round-(\d+)\./);
+    if (match) {
+      files.push({ name: f, round: parseInt(match[1]) });
+    }
+  }
+
+  if (!files.length) return;
+
+  const maxRound = Math.max(...files.map(f => f.round));
+  const threshold = maxRound - keepRounds;
+  let archived = 0;
+
+  for (const f of files) {
+    if (f.round <= threshold) {
+      try {
+        renameSync(join(ANALYSIS_DIR, f.name), join(archiveDir, f.name));
+        archived++;
+      } catch (_) {}
+    }
+  }
+
+  if (archived > 0) {
+    log(`Analysis rotation: archived ${archived} old report(s) (keeping last ${keepRounds} rounds)`);
+  }
+}
+
+// ============================================================
+// Concurrency Limiter (v5 Phase 6D)
+// ============================================================
+async function runAgentsWithConcurrency(agents, round, maxConcurrency) {
+  if (!maxConcurrency || maxConcurrency >= agents.length) {
+    return Promise.all(agents.map(a => runAgent(a, round)));
+  }
+
+  const results = [];
+  for (let i = 0; i < agents.length; i += maxConcurrency) {
+    const batch = agents.slice(i, i + maxConcurrency);
+    log(`  Concurrency batch ${Math.floor(i / maxConcurrency) + 1}: ${batch.map(a => a.id).join(', ')}`);
+    const batchResults = await Promise.all(batch.map(a => runAgent(a, round)));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// ============================================================
 // Run Tests
 // ============================================================
 function runTests() {
@@ -622,9 +848,26 @@ async function main() {
   // Reset any backlog tasks stuck in "assigned" from a previous crash
   resetStaleAssignments();
 
+  // Archive completed tasks to keep backlog lean
+  archiveCompletedTasks();
+
+  // Reset session changelog
+  resetSessionChangelog();
+
+  // Load shared rules for agent prompts
+  loadCommonRules();
+
+  // Run consistency check
+  try { runConsistencyCheck(); }
+  catch (err) { log(`Consistency check error: ${err.message}`); }
+
+  // Rotate old analysis files
+  try { rotateAnalysisFiles(5); }
+  catch (err) { log(`Analysis rotation error: ${err.message}`); }
+
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v4');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v5');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -635,6 +878,16 @@ async function main() {
   let consecutiveTestFailures = 0;
   let lastTestStatus = null;
   let stopReason = 'max rounds reached';
+
+  // v5: Track per-agent state for work-gating, frequency, and model escalation
+  const lastRunRound = {};              // agentId → last round number agent ran
+  const consecutiveAgentFailures = {};  // agentId → consecutive failure count
+
+  // v5/v6: Classify agent roles for two-phase rounds
+  const CODE_AGENT_ROLES = new Set([
+    'balance-analyst', 'qa-engineer', 'test-writer', 'engine-dev', 'ui-dev', 'css-artist'
+  ]);
+  const COORD_AGENT_ROLES = new Set(['producer', 'tech-lead', 'game-designer']);
 
   // Round-level tracking for the overnight report
   const roundLog = []; // { round, agents: [{id, status, elapsed}], testsPassed, testCount, failCount }
@@ -653,22 +906,37 @@ async function main() {
     log(`  ROUND ${round} of ${CONFIG.maxRounds}  (${remainingHrs}hr remaining)`);
     log(`${'━'.repeat(50)}`);
 
+    // --- v7: Pre-round git tag ---
+    await tagRoundStart(round);
+
     // --- Generate task board (orchestrator-owned) ---
     generateTaskBoard(round, lastTestStatus, consecutiveTestFailures);
 
-    // --- Determine which agents run this round ---
+    // --- Determine which agents run this round (v5: work-gated + min frequency) ---
     const activeAgents = AGENTS.filter(agent => {
       const meta = parseHandoffMeta(agent.id);
 
       // Skip agents that have exhausted all tasks (primary + stretch)
-      // v4: continuous agents NEVER retire — they always find more work
       if (meta.status === 'all-done') {
         if (agent.type !== 'continuous') {
           log(`  ${agent.id}: ALL DONE (skipping)`);
           return false;
         }
-        log(`  ${agent.id}: CONTINUOUS — ignoring all-done status (always has work)`);
-        // fall through to dependency check and run
+
+        // v5: Work-gated launching for continuous agents
+        const hasBacklogTask = loadBacklog().some(t =>
+          t.status === 'pending' && t.role === agent.role
+        );
+        const hasLeftoverWork = meta.status === 'in-progress';
+        const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
+        const minFreq = agent.minFrequencyRounds || Infinity;
+        const dueForPeriodicRun = roundsSinceLastRun >= minFreq;
+
+        if (!hasBacklogTask && !hasLeftoverWork && !dueForPeriodicRun) {
+          log(`  ${agent.id}: IDLE (no pending tasks, skipping)`);
+          return false;
+        }
+        log(`  ${agent.id}: CONTINUOUS — has work or due for periodic run`);
       }
 
       // Check dependencies — "complete" and "all-done" both satisfy
@@ -687,7 +955,6 @@ async function main() {
     });
 
     if (activeAgents.length === 0) {
-      // Check if every agent is all-done or blocked
       const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
       if (allRetired) {
         stopReason = 'all agents exhausted their task lists';
@@ -699,36 +966,91 @@ async function main() {
       continue;
     }
 
-    // --- Launch agents in parallel ---
-    log(`\nLaunching ${activeAgents.length} agent(s)...`);
-    const results = await Promise.all(activeAgents.map(a => runAgent(a, round)));
-
-    // --- Round summary ---
-    log('\nRound results:');
+    // --- v6: Two-phase rounds (code agents first, then coordination) ---
+    const codeAgents = activeAgents.filter(a => CODE_AGENT_ROLES.has(a.role));
+    const coordAgents = activeAgents.filter(a => COORD_AGENT_ROLES.has(a.role));
     const roundAgents = [];
-    for (const r of results) {
-      const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
-      log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
-      roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
+    let testResult = null;
+
+    // Phase A: Code agents
+    if (codeAgents.length) {
+      log(`\nPhase A: Launching ${codeAgents.length} code agent(s)...`);
+      const codeResults = await runAgentsWithConcurrency(codeAgents, round, CONFIG.maxConcurrency);
+
+      for (const r of codeResults) {
+        const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
+        log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
+        roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
+        lastRunRound[r.agentId] = round;
+      }
+
+      // Post-Phase A: changelog, failed task reassignment, validation
+      appendSessionChangelog(round, codeResults);
+      handleFailedTasks(codeResults);
+      for (const r of codeResults) {
+        const warnings = validateAgentOutput(r.agentId, round);
+        for (const w of warnings) log(`  ⚠ ${w}`);
+      }
+      validateFileOwnership(codeResults, AGENTS);
+
+      // v6: Model escalation check
+      handleModelEscalation(codeResults);
+
+      // Run tests after code agents
+      testResult = await runTests();
+
+      // v7: Auto-revert on test regression
+      if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
+        log(`  ⚠ Tests regressed this round! Reverting to round-${round}-start...`);
+        await gitRevertToTag(round);
+        log(`  Reverted src/ to pre-round state. Agents that caused regression will retry.`);
+        // Re-run tests to confirm revert worked
+        testResult = await runTests();
+      }
+
+      // Refresh task-board so Phase B agents see updated state
+      generateTaskBoard(round, testResult.passed ? `PASSING (${testResult.count} tests)` : lastTestStatus, consecutiveTestFailures);
     }
 
-    // --- Run tests ---
-    const testResult = await runTests();
-    if (testResult.passed) {
-      consecutiveTestFailures = 0;
-      lastTestStatus = `PASSING (${testResult.count} tests)`;
-    } else {
-      consecutiveTestFailures++;
-      lastTestStatus = `FAILING (${testResult.count} passed, ${testResult.failCount} failed)`;
-      log(`\n⚠ Tests failing! Consecutive failures: ${consecutiveTestFailures}/${CONFIG.circuitBreakerThreshold}`);
+    // Phase B: Coordination agents (see fresh handoffs from Phase A)
+    if (coordAgents.length) {
+      log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s)...`);
+      const coordResults = await runAgentsWithConcurrency(coordAgents, round, CONFIG.maxConcurrency);
+
+      for (const r of coordResults) {
+        const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
+        log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
+        roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
+        lastRunRound[r.agentId] = round;
+      }
+
+      appendSessionChangelog(round, coordResults);
+      handleFailedTasks(coordResults);
+      handleModelEscalation(coordResults);
+    }
+
+    // --- Update test status ---
+    if (!testResult) {
+      // No code agents ran — carry forward last test status
+      log('  Skipping tests (no code-modifying agents ran this round)');
+    }
+    if (testResult) {
+      if (testResult.passed) {
+        consecutiveTestFailures = 0;
+        lastTestStatus = `PASSING (${testResult.count} tests)`;
+      } else {
+        consecutiveTestFailures++;
+        lastTestStatus = `FAILING (${testResult.count} passed, ${testResult.failCount} failed)`;
+        log(`\n⚠ Tests failing! Consecutive failures: ${consecutiveTestFailures}/${CONFIG.circuitBreakerThreshold}`);
+      }
     }
 
     roundLog.push({
       round,
       agents: roundAgents,
-      testsPassed: testResult.passed,
-      testCount: testResult.count,
-      failCount: testResult.failCount || '0',
+      testsPassed: testResult?.passed ?? null,
+      testCount: testResult?.count ?? '-',
+      failCount: testResult?.failCount || '0',
     });
 
     // --- Circuit breaker ---
@@ -740,8 +1062,18 @@ async function main() {
       break;
     }
 
-    // --- Git backup ---
-    await gitBackup(round);
+    // --- v5: Smart git backup (skip when only orchestrator internals changed) ---
+    const sourceChanged = roundAgents.some(a => {
+      const meta = parseHandoffMeta(a.id);
+      return meta.filesModified.some(f =>
+        f.startsWith('src/') || f === 'CLAUDE.md' || f.endsWith('.json')
+      );
+    });
+    if (sourceChanged) {
+      await gitBackup(round);
+    } else {
+      log('  Skipping git backup (only internal orchestrator files changed)');
+    }
 
     // --- Check if all agents are retired ---
     const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
@@ -749,6 +1081,40 @@ async function main() {
       stopReason = 'all agents exhausted their task lists';
       log('\nAll agents have exhausted their task lists. Orchestration finished.');
       break;
+    }
+  }
+
+  // --- v5: Helper for failed task reassignment ---
+  function handleFailedTasks(results) {
+    for (const result of results) {
+      if (result.timedOut || result.code !== 0) {
+        const backlog = loadBacklog();
+        const agentRole = AGENTS.find(a => a.id === result.agentId)?.role;
+        const stuckTasks = backlog.filter(t => t.status === 'assigned' && t.role === agentRole);
+        for (const task of stuckTasks) {
+          task.status = 'pending';
+          log(`  Resetting task ${task.id} to pending (agent ${result.agentId} failed)`);
+        }
+        if (stuckTasks.length) saveBacklog(backlog);
+      }
+    }
+  }
+
+  // --- v6: Model escalation (haiku→sonnet after 2 consecutive failures) ---
+  function handleModelEscalation(results) {
+    for (const result of results) {
+      const meta = parseHandoffMeta(result.agentId);
+      const agent = AGENTS.find(a => a.id === result.agentId);
+      if (result.timedOut || result.code !== 0 || meta.status === 'not-started') {
+        consecutiveAgentFailures[result.agentId] = (consecutiveAgentFailures[result.agentId] || 0) + 1;
+        if (agent.model === 'haiku' && consecutiveAgentFailures[result.agentId] >= 2) {
+          log(`  ${result.agentId}: Escalating haiku→sonnet (2 consecutive failures)`);
+          agent.model = 'sonnet';
+          consecutiveAgentFailures[result.agentId] = 0;
+        }
+      } else {
+        consecutiveAgentFailures[result.agentId] = 0;
+      }
     }
   }
 
@@ -813,21 +1179,36 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests) 
   // Read analysis reports if they exist
   const analysisFiles = [];
   try {
-    const entries = readFileSync; // we'll use existsSync + readFileSync
-    for (const agent of ['balance-sim', 'quality-review']) {
-      for (let r = 1; r <= totalRounds + 1; r++) {
-        const p = join(ANALYSIS_DIR, `${agent}-round-${r}.md`);
-        if (existsSync(p)) {
-          analysisFiles.push({ agent, round: r, path: p });
+    for (const f of readdirSync(ANALYSIS_DIR)) {
+      if (f.endsWith('.md') && f.includes('-round-')) {
+        const match = f.match(/^(.+)-round-(\d+)\.md$/);
+        if (match) {
+          analysisFiles.push({ agent: match[1], round: parseInt(match[2]), path: join(ANALYSIS_DIR, f) });
         }
       }
     }
+    analysisFiles.sort((a, b) => a.round - b.round);
   } catch (_) {}
+
+  // v6E: Agent efficiency metrics
+  const efficiencyMetrics = agentSummaries.map(a => {
+    const totalTime = roundLog.flatMap(r => r.agents)
+      .filter(ra => ra.id === a.id)
+      .reduce((sum, ra) => sum + ra.elapsed, 0);
+    const avgTime = a.roundsActive > 0 ? (totalTime / a.roundsActive / 60).toFixed(1) : '0';
+    const successRate = a.roundsActive > 0
+      ? Math.round(((a.roundsActive - a.timeouts - a.errors) / a.roundsActive) * 100)
+      : 0;
+    const filesPerRound = a.roundsActive > 0
+      ? (a.meta.filesModified.length / a.roundsActive).toFixed(1)
+      : '0';
+    return { id: a.id, model: a.model || 'default', avgTime, successRate, filesPerRound, roundsActive: a.roundsActive, totalRounds };
+  });
 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v4
+> Orchestrator: v5
 
 ## Summary
 - **Started**: ${startTime}
@@ -872,6 +1253,14 @@ ${allFiles.length ? allFiles.map(f => `- ${f}`).join('\n') : '(none)'}
 
 ## Test Trajectory
 ${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no test data)'}
+
+## Agent Efficiency (v5 Metrics)
+
+| Agent | Model | Avg Time (min) | Success Rate | Files/Round | Utilization |
+|-------|-------|----------------|-------------|-------------|-------------|
+${efficiencyMetrics.map(m =>
+  `| ${m.id} | ${m.model} | ${m.avgTime} | ${m.successRate}% | ${m.filesPerRound} | ${m.roundsActive}/${m.totalRounds} rounds |`
+).join('\n')}
 
 ## Analysis Reports Generated
 ${analysisFiles.length
