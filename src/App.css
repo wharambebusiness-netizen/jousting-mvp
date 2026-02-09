@@ -29,7 +29,8 @@
 
 /* Archetype cards */
 .archetype-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.archetype-card { padding: 14px; }
+.archetype-card { padding: 14px; transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.archetype-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px var(--shadow); }
 .archetype-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
 .archetype-card__identity { font-size: 0.8rem; font-style: italic; color: var(--ink-light); margin-bottom: 8px; }
 
@@ -45,11 +46,19 @@
   border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px;
 }
 .pass-result__unseat {
-  text-align: center; padding: 12px;
+  text-align: center; padding: 14px 16px;
   background: linear-gradient(135deg, var(--red), var(--red-light));
   color: white; border-radius: var(--radius-lg);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.2rem; font-weight: 700; margin-bottom: 16px;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 12px rgba(139, 37, 0, 0.3);
+  animation: unseat-entrance 0.5s ease-out;
+}
+@keyframes unseat-entrance {
+  0% { transform: scale(0.9); opacity: 0; box-shadow: 0 0 0 rgba(139, 37, 0, 0); }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 4px 12px rgba(139, 37, 0, 0.3); }
 }
 
 /* Melee wins tracker */
@@ -80,10 +89,24 @@
   display: inline-block; padding: 4px 12px; border-radius: var(--radius);
   font-family: Georgia, 'Times New Roman', serif; font-weight: 700;
   font-size: 0.85rem; text-transform: uppercase;
+  animation: badge-appear 0.3s ease-out;
 }
 .outcome-badge--hit { background: var(--gold-light); color: var(--ink); border: 1px solid var(--gold-dark); }
-.outcome-badge--critical { background: var(--red); color: white; }
+.outcome-badge--critical {
+  background: var(--red); color: white;
+  box-shadow: 0 0 8px rgba(139, 37, 0, 0.4);
+  animation: badge-appear 0.3s ease-out, crit-glow 1.5s ease-in-out 0.3s;
+}
 .outcome-badge--draw { background: var(--parchment-dark); color: var(--ink-light); border: 1px solid var(--border); }
+@keyframes badge-appear {
+  0% { transform: scale(0.7); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes crit-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(139, 37, 0, 0.4); }
+  50% { box-shadow: 0 0 16px rgba(139, 37, 0, 0.6); }
+}
 
 /* Shift section */
 .shift-section {
@@ -268,18 +291,28 @@
 }
 
 /* Variant toggle (Agg / Bal / Def per slot) */
-.variant-toggle { display: inline-flex; gap: 2px; }
+.variant-toggle {
+  display: inline-flex; gap: 2px;
+  background: var(--parchment-dark);
+  border-radius: 4px; padding: 2px;
+}
 .variant-toggle__btn {
   font-size: 0.65rem; font-weight: 600;
-  padding: 2px 6px; border-radius: 3px;
-  border: 1px solid var(--border-light);
+  padding: 3px 8px; border-radius: 3px;
+  border: 1.5px solid transparent;
   background: transparent; color: var(--ink-faint);
-  cursor: pointer; transition: all 0.12s ease;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 28px; text-align: center;
 }
-.variant-toggle__btn:hover { background: var(--parchment-dark); }
+/* Subtle tinted hover per variant type */
+.variant-toggle__btn--aggressive:hover { background: var(--stance-agg-bg); color: var(--stance-agg); }
+.variant-toggle__btn--balanced:hover { background: var(--stance-bal-bg); color: var(--stance-bal); }
+.variant-toggle__btn--defensive:hover { background: var(--stance-def-bg); color: var(--stance-def); }
+/* Active state — filled pill with stance color */
 .variant-toggle__btn--active {
   font-weight: 700;
-  border-width: 2px;
+  box-shadow: 0 1px 3px var(--shadow);
 }
 .variant-toggle__btn--active.variant-toggle__btn--aggressive {
   background: var(--stance-agg-bg); border-color: var(--stance-agg); color: var(--stance-agg);
@@ -293,6 +326,10 @@
 
 /* Quick-set variant buttons */
 .quick-set-buttons { display: inline-flex; gap: 4px; margin-left: 8px; }
+.quick-set-buttons .btn--small {
+  font-size: 0.72rem; padding: 4px 10px;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
 .loadout-section__actions { display: flex; align-items: center; gap: 6px; }
 
 /* Rarity badge */
@@ -439,6 +476,13 @@
 
   /* AI thinking panel */
   .ai-thinking__bar-label { min-width: 50px; }
+
+  /* Variant toggles — larger touch targets on mobile */
+  .variant-toggle__btn { min-width: 36px; min-height: 32px; padding: 4px 10px; font-size: 0.72rem; }
+
+  /* Quick-set buttons stack on mobile */
+  .quick-set-buttons { flex-wrap: wrap; margin-left: 0; margin-top: 4px; }
+  .loadout-section__actions { flex-wrap: wrap; }
 }
 
 /* AI Thinking Panel */
@@ -645,7 +689,10 @@
   .winner-banner--defeat,
   .timeline-pip,
   .final-score--reveal .scoreboard__score,
-  .scoreboard__score--anim { animation: none; }
+  .scoreboard__score--anim,
+  .outcome-badge,
+  .outcome-badge--critical,
+  .pass-result__unseat { animation: none; }
 
   .pass-pip--current { animation: none; }
 
@@ -654,6 +701,7 @@
   .stamina-bar__fill,
   .gear-item,
   .variant-toggle__btn,
+  .archetype-card,
   .pass-pip,
   .ai-thinking__bar-fill { transition: none; }
 }

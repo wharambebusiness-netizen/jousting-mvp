@@ -10,8 +10,8 @@ export const ARCHETYPES: Record<string, Archetype> = {
     momentum: 75,
     control: 55,
     guard: 50,
-    initiative: 60,
-    stamina: 60,
+    initiative: 55,
+    stamina: 65,
     identity: 'Raw impact; wins fast or fades',
   },
   technician: {

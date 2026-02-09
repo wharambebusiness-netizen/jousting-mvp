@@ -204,12 +204,12 @@ describe('applyGiglingLoadout', () => {
     };
     const result = applyGiglingLoadout(charger, loadout);
 
-    // charger: MOM=75, CTL=55, GRD=50, INIT=60, STA=60
+    // charger: MOM=75, CTL=55, GRD=50, INIT=55, STA=65
     expect(result.momentum).toBe(75 + 7 + 3 + 2 + 4);         // 91
     expect(result.control).toBe(55 + 7 + 5 + 5);               // 72
     expect(result.guard).toBe(50 + 7 + 5 + 4);                 // 66
-    expect(result.initiative).toBe(60 + 7 + 3 + 4 + 3);        // 77
-    expect(result.stamina).toBe(60 + 7 + 2 + 3);               // 72
+    expect(result.initiative).toBe(55 + 7 + 3 + 4 + 3);        // 72
+    expect(result.stamina).toBe(65 + 7 + 2 + 3);               // 77
   });
 
   it('preserves archetype identity fields (id, name, identity)', () => {
@@ -450,7 +450,7 @@ describe('createMatch with GiglingLoadout', () => {
     // P1 boosted: momentum = 75 + 7 + 3 (chamfron sec), guard = 50 + 7 + 5 (chamfron pri)
     expect(match.player1.archetype.momentum).toBe(75 + 7 + 3);
     expect(match.player1.archetype.guard).toBe(50 + 7 + 5);
-    expect(match.player1.currentStamina).toBe(60 + 7); // rarity only
+    expect(match.player1.currentStamina).toBe(65 + 7); // rarity only
     // P2 unchanged
     expect(match.player2.archetype.momentum).toBe(technician.momentum);
     expect(match.player2.currentStamina).toBe(technician.stamina);

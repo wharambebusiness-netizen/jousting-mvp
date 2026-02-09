@@ -35,7 +35,7 @@ describe('Match creation', () => {
     const match = createMatch(charger, technician);
     expect(match.phase).toBe(Phase.SpeedSelect);
     expect(match.passNumber).toBe(1);
-    expect(match.player1.currentStamina).toBe(60); // Charger STA
+    expect(match.player1.currentStamina).toBe(65); // Charger STA
     expect(match.player2.currentStamina).toBe(55); // Technician STA
     expect(match.cumulativeScore1).toBe(0);
     expect(match.cumulativeScore2).toBe(0);
@@ -63,8 +63,8 @@ describe('Full 5-pass joust — score victory', () => {
   });
 });
 
-describe('v4.1 Worked Example — 3 passes', () => {
-  it('replays Charger vs Technician Passes 1-3 via match machine', () => {
+describe('v4.1 Worked Example — 2 passes (Charger unseats in Pass 2)', () => {
+  it('replays Charger vs Technician via match machine', () => {
     let match = createMatch(charger, technician);
 
     // Pass 1: Charger Fast+CF, Technician Standard+CdL → shifts to CEP
@@ -74,37 +74,29 @@ describe('v4.1 Worked Example — 3 passes', () => {
     );
     expect(match.passResults.length).toBe(1);
     const p1 = match.passResults[0];
-    // Charger wins pass 1 (raw MOM dominates with reduced guard coeff 0.2)
-    expect(p1.player1.impactScore).toBeGreaterThan(p1.player2.impactScore);
+    // With Technician MOM 58 and Charger INIT 55, Technician narrowly wins Pass 1
+    expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore);
     expect(p1.unseat).toBe('none');
-    expect(match.player1.currentStamina).toBe(35);
+    expect(match.player1.currentStamina).toBe(40);
     expect(match.player2.currentStamina).toBe(29);
 
     // Pass 2: Charger Slow+BdG, Technician Standard+PdL
+    // Charger's STA 65 means less fatigue + BdG beats PdL → Charger unseats
     match = submitJoustPass(match,
       { speed: SpeedType.Slow, attack: BdG },
       { speed: SpeedType.Standard, attack: PdL },
     );
     const p2 = match.passResults[1];
-    // Charger wins pass 2 (BdG beats PdL)
     expect(p2.player1.impactScore).toBeGreaterThan(p2.player2.impactScore);
-    expect(match.player1.currentStamina).toBe(25);
-    expect(match.player2.currentStamina).toBe(21);
+    expect(p2.unseat).toBe('player1'); // Charger unseats Technician
+    expect(match.player1.currentStamina).toBe(30);
+    // Technician gets stamina recovery (+8): 21+8=29
+    expect(match.player2.currentStamina).toBe(29);
 
-    // Pass 3: Charger Slow+CdL, Technician Standard+CEP
-    match = submitJoustPass(match,
-      { speed: SpeedType.Slow, attack: CdL },
-      { speed: SpeedType.Standard, attack: CEP },
-    );
-    const p3 = match.passResults[2];
-    // Charger now wins pass 3 (more stamina = less fatigue after rebalance)
-    expect(p3.player1.impactScore).toBeGreaterThan(p3.player2.impactScore);
-    expect(match.player1.currentStamina).toBe(20);
-    expect(match.player2.currentStamina).toBe(7);
-
-    // Cumulative: extremely close per spec narrative
-    expect(match.passNumber).toBe(4);
-    expect(match.phase).toBe(Phase.SpeedSelect);
+    // Match transitions to melee
+    expect(match.passNumber).toBe(3);
+    expect(match.phase).toBe(Phase.MeleeSelect);
+    expect(match.player2.wasUnseated).toBe(true);
   });
 });
 
@@ -248,7 +240,7 @@ describe('Stamina tracking across passes', () => {
       { speed: SpeedType.Fast, attack: CF },
       { speed: SpeedType.Standard, attack: CdL },
     );
-    expect(match.player1.currentStamina).toBe(35); // 60 -5 -20 = 35
+    expect(match.player1.currentStamina).toBe(40); // 65 -5 -20 = 40
     expect(match.player2.currentStamina).toBe(45); // 55 -0 -10 = 45
 
     // Pass 2: Charger Slow+PdL = +5 (speed) then -8 (attack)
@@ -256,7 +248,7 @@ describe('Stamina tracking across passes', () => {
       { speed: SpeedType.Slow, attack: PdL },
       { speed: SpeedType.Standard, attack: CdL },
     );
-    expect(match.player1.currentStamina).toBe(32); // 35 +5 -8 = 32
+    expect(match.player1.currentStamina).toBe(37); // 40 +5 -8 = 37
     expect(match.player2.currentStamina).toBe(35); // 45 -0 -10 = 35
   });
 });

@@ -1,102 +1,136 @@
 [
   {
+    "id": "BL-014",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "assigned",
+    "title": "Fix 7 failing tests caused by Technician MOM 55→58",
+    "description": "CRITICAL: 7 tests fail due to balance-tuner's Technician MOM change (55→58) in round 1. Tests that need updated assertions:\n\n1. calculator.test.ts — 'Technician pre-shift stats are below knee (unchanged)' — expects MOM=55, actual=58\n2. calculator.test.ts — 'Technician post-shift has slight fatigue (sta 43 < threshold 44)' — cascading from MOM change\n3. calculator.test.ts — 'Technician stats use correct fatigue' — MOM: 50*ff should be 58*ff (note: old test used MOM=50 from pre-S22)\n4. calculator.test.ts — 'Technician stats at deeper fatigue' — MOM: 60*ff should be 63*ff (58+CEP.delta=5)\n5. calculator.test.ts — 'resolves Pass 1 with correct directional outcome' — Charger may no longer win impact against Technician\n6. calculator.test.ts — 'counter bonus in resolvePass scales with CTL' — impact delta sign flipped\n7. match.test.ts — 'replays Charger vs Technician Passes 1-3 via match machine' — pass 1 impact direction wrong\n\nRecalculate all expected values using Technician MOM=58, CTL=70, GRD=55, INIT=60, STA=55. For tests 5-7: the Charger vs Technician impact comparison has tightened — Technician's higher MOM (58 vs 55) means Charger's MOM advantage (75 vs 58) is reduced, potentially flipping directional assertions. You may need to change assertion direction or use closeTo() for tight margins.\n\nAcceptance criteria: All 589 tests pass (582+7 fixed). Run `npx vitest run` to confirm.",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/match.test.ts"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
+  },
+  {
     "id": "BL-001",
     "role": "balance-analyst",
     "priority": 1,
-    "status": "assigned",
+    "status": "done",
     "title": "Fix Technician weakness at Epic/Giga tiers",
-    "description": "Technician win rate is ~44% at epic and giga tiers, below the 44-58% target band. Current stats: MOM=55, CTL=70, GRD=55, INIT=60, STA=55 (total=295). Investigate whether a small STA or GRD buff (+2-3) improves survivability at high tiers. CAUTION: Technician CTL is test-locked at 70 in multiple tests; MOM was already buffed from 50→55 in S22. Run `npx tsx src/tools/simulate.ts epic` and `npx tsx src/tools/simulate.ts giga` before and after. One variable at a time. Target: Technician ≥45% at all tiers.",
-    "fileOwnership": ["src/engine/archetypes.ts"],
-    "createdAt": "2026-02-08T00:00:00Z"
-  },
-  {
-    "id": "BL-002",
-    "role": "balance-analyst",
-    "priority": 2,
-    "status": "pending",
-    "title": "Investigate Charger weakness at bare tier",
-    "description": "Charger bare win rate is ~34-36%. Current stats: MOM=75, CTL=55, GRD=50, INIT=60, STA=60 (total=300). Charger CTL was already buffed from 50→55 in S22. ALL Charger stats are test-locked in gigling-gear.test.ts — any change requires updating computed values in tests. Run `npx tsx src/tools/simulate.ts bare` before and after. Consider: STA+2 or INIT+2 (safer than MOM/CTL which cascade to more test assertions). Target: Charger ≥40% at bare.",
-    "fileOwnership": ["src/engine/archetypes.ts"],
+    "description": "COMPLETED Round 1: Technician MOM 55→58. Win rates improved: bare +3.1pp (48.7%), epic +0.9pp (46.4%), giga +2.1pp (48.3%). All above 45% target. 7 test failures from this change need fixing by QA (BL-014).",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-003",
     "role": "balance-analyst",
-    "priority": 3,
-    "status": "pending",
+    "priority": 2,
+    "status": "assigned",
     "title": "Assess breakerGuardPenetration effectiveness",
-    "description": "Breaker vs Bulwark matchup was 24% in Round 4 analysis. breakerGuardPenetration is at 0.20 but may not be sufficient. Run `npx tsx src/tools/simulate.ts bare` and check the Breaker vs Bulwark matchup specifically. If Breaker vs Bulwark is still below 35%, try bumping breakerGuardPenetration to 0.25. This constant is NOT test-locked (safe to change). Run before/after sims.",
-    "fileOwnership": ["src/engine/balance-config.ts"],
+    "description": "Breaker vs Bulwark matchup was 24% in Round 4 analysis. breakerGuardPenetration is at 0.20 but may not be sufficient. Run `npx tsx src/tools/simulate.ts bare` and check the Breaker vs Bulwark matchup specifically. If Breaker vs Bulwark is still below 35%, try bumping breakerGuardPenetration to 0.25 or 0.30. This constant is NOT test-locked (safe to change in balance-config.ts). Run before/after sims. Also try to understand why Bulwark remains dominant at bare (~63%). Write findings to analysis/balance-tuner-round-2.md.\n\nIMPORTANT: Do NOT change archetypes.ts this round — wait for QA to fix the 7 failing tests from BL-001 first. Only touch balance-config.ts.",
+    "fileOwnership": [
+      "src/engine/balance-config.ts"
+    ],
     "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-002",
+    "role": "balance-analyst",
+    "priority": 3,
+    "status": "blocked",
+    "title": "Investigate Charger weakness at bare tier",
+    "description": "BLOCKED: Wait until BL-014 (test fixes for Technician MOM change) is done before making more archetypes.ts changes. Charger bare win rate is ~36-38%. ALL Charger stats are test-locked — any change will break computed test values. This task should only start AFTER QA confirms 589/589 tests pass.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
+    "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-004",
     "role": "qa-engineer",
     "priority": 1,
-    "status": "assigned",
+    "status": "done",
     "title": "Test gear variant interactions with archetype matchups",
-    "description": "Write 5-8 tests verifying that aggressive/defensive gear variants produce meaningfully different match outcomes. Test: 1) all-aggressive loadout vs all-defensive loadout for 2-3 archetype pairs, 2) verify variant choice doesn't produce degenerate strategies (>70% win rate in 50-match sample), 3) mixed variant loadouts work correctly. Add to gear-variants.test.ts. Target: 485+ tests after.",
-    "fileOwnership": ["src/engine/gear-variants.test.ts"],
+    "description": "COMPLETED Round 1: QA added 112 new tests (44→156 in gear-variants.test.ts). All variant tests pass. Coverage: 72 matchup tests, 26 degenerate strategy tests, 7 mixed variant tests, 3 mechanical tests, 3 stress tests.",
+    "fileOwnership": [
+      "src/engine/gear-variants.test.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-005",
     "role": "qa-engineer",
-    "priority": 2,
+    "priority": 3,
     "status": "pending",
     "title": "Test softCap boundary behavior",
-    "description": "Write 5-6 tests for softCap(knee=100, K=50) edge cases: 1) stat exactly at knee returns knee, 2) stat 1 above knee, 3) Bulwark GRD at giga rarity (65+13=78 base, but after gear can cross 100), 4) verify softCap formula: knee + excess*K/(excess+K), 5) stamina is NOT soft-capped (passes through unchanged). Add to calculator.test.ts.",
-    "fileOwnership": ["src/engine/calculator.test.ts"],
+    "description": "Write 5-6 tests for softCap(knee=100, K=50) edge cases: 1) stat exactly at knee returns knee, 2) stat 1 above knee, 3) Bulwark GRD at giga rarity (65+13=78 base, but after gear can cross 100), 4) verify softCap formula: knee + excess*K/(excess+K), 5) stamina is NOT soft-capped (passes through unchanged). Add to calculator.test.ts. Only start AFTER BL-014 is complete (tests green).",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-006",
     "role": "qa-engineer",
-    "priority": 3,
+    "priority": 4,
     "status": "pending",
     "title": "Test stamina/fatigue boundary conditions",
     "description": "Write 5-6 tests for fatigue edge cases: 1) stamina at 0 (minimum fatigue factor), 2) stamina at max (factor=1.0), 3) guardFatigueFloor=0.5 interaction with 0 stamina, 4) fatigueFactor with maxStamina=0 (division safety), 5) stamina recovery in melee for unseated player. Add to calculator.test.ts or playtest.test.ts.",
-    "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/playtest.test.ts"],
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-007",
     "role": "css-artist",
     "priority": 1,
-    "status": "assigned",
+    "status": "done",
     "title": "Polish rarity card styling",
-    "description": "Improve RaritySelector card visuals: 1) add distinct border colors per rarity tier (common=gray, uncommon=green, rare=blue, epic=purple, legendary=orange, giga=gold), 2) subtle glow/shadow on hover and selected state, 3) ensure text remains readable on all backgrounds. Only edit src/App.css.",
-    "fileOwnership": ["src/App.css"],
+    "description": "COMPLETED Round 1: Added per-tier colored hover glow, selected state glow, prefers-reduced-motion support.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-008",
     "role": "css-artist",
     "priority": 2,
-    "status": "pending",
+    "status": "done",
     "title": "Improve variant toggle button UX",
-    "description": "Make the Agg/Bal/Def variant toggle buttons more visually distinct: 1) use color coding (red=aggressive, gray=balanced, blue=defensive), 2) clearer active/selected state, 3) smooth transition on toggle, 4) consistent sizing. Only edit src/App.css.",
-    "fileOwnership": ["src/App.css"],
+    "description": "COMPLETED Round 1: Added stance-colored active states (red=aggressive, gold=balanced, blue=defensive). Note: LoadoutScreen.tsx inline styles partially override CSS — deferred App.tsx change needed.",
+    "fileOwnership": [
+      "src/App.css"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-009",
     "role": "tech-lead",
     "priority": 1,
-    "status": "assigned",
+    "status": "done",
     "title": "Review balance-config.ts for magic numbers",
-    "description": "Audit phase-joust.ts, phase-melee.ts, and calculator.ts for any remaining hardcoded magic numbers that should be in balance-config.ts. Check: impact formula coefficients (0.5, 0.4), accuracy base values, melee stamina costs, pass scoring thresholds. Write findings to orchestrator/analysis/review-round-1.md. Do NOT move constants yourself — flag them for engine-dev or balance-analyst.",
-    "fileOwnership": ["src/engine/types.ts"],
+    "description": "COMPLETED Round 1: All balance-tunable constants are centralized. 8 inline formula coefficients are structural (not balance levers). One stale comment in types.ts:178. See analysis/review-round-1.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
     "id": "BL-010",
     "role": "tech-lead",
     "priority": 2,
-    "status": "pending",
+    "status": "done",
     "title": "Type safety audit of gear system",
-    "description": "Review gigling-gear.ts and player-gear.ts for type safety: 1) ensure all slot mappings are exhaustive, 2) verify rng parameter types, 3) check variant parameter validation, 4) ensure createFullLoadout and createFullPlayerLoadout handle edge cases. Write findings to orchestrator/analysis/review-round-1.md.",
-    "fileOwnership": ["src/engine/types.ts"],
+    "description": "COMPLETED Round 1: Engine/UI separation verified, type safety confirmed, no 'any' casts. See analysis/review-round-1.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
     "createdAt": "2026-02-08T00:00:00Z"
   },
   {
@@ -105,7 +139,7 @@
     "priority": 4,
     "status": "pending",
     "title": "Full tier sweep — run sims at all 7 tiers and document",
-    "description": "Run `npx tsx src/tools/simulate.ts` at all tiers: bare, uncommon, rare, epic, legendary, relic, giga. Document all 6 archetype win rates at each tier in a table. This creates the baseline reference for this session. No code changes — just data collection. Write results to the balance-tuner handoff.",
+    "description": "Run `npx tsx src/tools/simulate.ts` at all tiers: bare, uncommon, rare, epic, legendary, relic, giga. Document all 6 archetype win rates at each tier in a table. This creates the post-BL-001 baseline reference. No code changes — just data collection. Write results to analysis/balance-tuner-round-2.md.",
     "fileOwnership": [],
     "createdAt": "2026-02-09T00:00:00Z"
   },
@@ -116,17 +150,46 @@
     "status": "pending",
     "title": "Test breaker guard penetration mechanic",
     "description": "Write 3-5 tests verifying breaker guard penetration works correctly: 1) breaker vs non-breaker — breaker should see reduced opponent guard in impact calc, 2) non-breaker vs non-breaker — no guard reduction, 3) breakerGuardPenetration=0.20 means 20% of opponent effective guard is ignored, 4) penetration applies in both joust and melee phases. Add to calculator.test.ts or playtest.test.ts.",
-    "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/playtest.test.ts"],
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/playtest.test.ts"
+    ],
     "createdAt": "2026-02-09T00:00:00Z"
   },
   {
     "id": "BL-013",
     "role": "css-artist",
-    "priority": 3,
-    "status": "pending",
+    "priority": 2,
+    "status": "assigned",
     "title": "Polish combat result display",
     "description": "Improve the combat result screen visuals: 1) make win/loss state more visually dramatic (larger text, color emphasis), 2) style the score breakdown to be more readable, 3) add visual hierarchy to pass-by-pass results. Only edit src/App.css.",
-    "fileOwnership": ["src/App.css"],
+    "fileOwnership": [
+      "src/App.css"
+    ],
     "createdAt": "2026-02-09T00:00:00Z"
+  },
+  {
+    "id": "BL-015",
+    "role": "tech-lead",
+    "priority": 2,
+    "status": "assigned",
+    "title": "Review round 1 code changes for quality",
+    "description": "Review the code changes made by other agents in round 1: 1) balance-tuner's Technician MOM change in archetypes.ts — verify it's clean, 2) QA's 112 new tests in gear-variants.test.ts — check test quality, no flaky patterns, proper assertions, 3) polish's CSS changes in App.css and index.css — check for accessibility, no !important abuse, no broken selectors. Write findings to analysis/review-round-2.md.",
+    "fileOwnership": [
+      "src/engine/types.ts"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
+  },
+  {
+    "id": "BL-016",
+    "role": "css-artist",
+    "priority": 3,
+    "status": "pending",
+    "title": "Remove inline styles from LoadoutScreen variant toggle",
+    "description": "LoadoutScreen.tsx:199 has inline style={...} on variant-toggle buttons that overrides CSS stance token colors added in BL-008. Remove the inline style prop and the VARIANT_COLORS constant (lines 57-61). This is a deferred App.tsx-adjacent change flagged by polish agent in round 1. NOTE: This touches LoadoutScreen.tsx — coordinate with orchestrator for App.tsx-adjacent file access.",
+    "fileOwnership": [
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "createdAt": "2026-02-09T02:30:00Z"
   }
 ]

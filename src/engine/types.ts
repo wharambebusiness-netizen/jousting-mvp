@@ -175,8 +175,8 @@ export interface MatchState {
 // --- Counter Result ---
 
 export type CounterResult = {
-  player1Bonus: number; // +10, -10, or 0
-  player2Bonus: number; // +10, -10, or 0
+  player1Bonus: number; // Scaled: +(counterBaseBonus + CTL*0.1), negated, or 0
+  player2Bonus: number; // Scaled: +(counterBaseBonus + CTL*0.1), negated, or 0
 };
 
 // --- Gear Variant System ---

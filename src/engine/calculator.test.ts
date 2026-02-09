@@ -84,6 +84,162 @@ describe('Soft Cap (Diminishing Returns)', () => {
 });
 
 // ============================================================
+// 1b. Soft Cap Boundary Behavior (BL-005)
+// ============================================================
+describe('Soft Cap Boundary Behavior (BL-005)', () => {
+  const knee = BALANCE.softCapKnee; // 100
+  const K = BALANCE.softCapK;       // 50
+
+  it('stat exactly at knee returns knee unchanged', () => {
+    expect(softCap(knee)).toBe(knee);
+  });
+
+  it('stat 1 above knee is diminished but above knee', () => {
+    const result = softCap(knee + 1);
+    // excess=1, formula: knee + 1*50/(1+50) = 100 + 50/51 ≈ 100.98
+    expect(result).toBeLessThan(knee + 1);
+    expect(result).toBeGreaterThan(knee);
+    expect(r(result, 2)).toBe(r(knee + 1 * K / (1 + K), 2));
+  });
+
+  it('stat 1 below knee passes through unchanged', () => {
+    expect(softCap(knee - 1)).toBe(knee - 1);
+  });
+
+  it('Bulwark GRD at giga rarity can cross knee (65+13+gear)', () => {
+    // Bulwark GRD=65, giga rarity bonus=13 → base 78
+    // With max giga chamfron primary (9) + barding secondary (6) + armor secondary (6) = up to 99
+    // Only with extreme gear can Bulwark GRD cross 100
+    const bulwarkGrdBase = bulwark.guard; // 65
+    const rarityBonus = BALANCE.giglingRarityBonus.giga; // 13
+    const grdWithRarity = bulwarkGrdBase + rarityBonus; // 78
+    expect(grdWithRarity).toBe(78);
+    // At 78 (below knee), no compression
+    expect(softCap(grdWithRarity)).toBe(78);
+
+    // Simulate max gear pushing above knee: 78 + chamfron primary(9) + barding secondary(6) + attack deltaGuard(20) = 113
+    const grdWithMaxGearAndAttack = grdWithRarity + 9 + 6 + 20; // PdL deltaGuard=+20
+    expect(grdWithMaxGearAndAttack).toBe(113);
+    // excess=13, formula: 100 + 13*50/(13+50) = 100 + 650/63 ≈ 110.32
+    const capped = softCap(grdWithMaxGearAndAttack);
+    expect(capped).toBeLessThan(grdWithMaxGearAndAttack);
+    expect(capped).toBeGreaterThan(knee);
+    expect(r(capped, 2)).toBe(r(knee + 13 * K / (13 + K), 2));
+  });
+
+  it('softCap formula matches: knee + excess*K/(excess+K)', () => {
+    // Test at several points above knee
+    for (const excess of [1, 5, 10, 15, 20, 50, 100]) {
+      const input = knee + excess;
+      const expected = knee + excess * K / (excess + K);
+      expect(softCap(input)).toBeCloseTo(expected, 10);
+    }
+  });
+
+  it('stamina is NOT soft-capped (passes through unchanged in effective stats)', () => {
+    // Create a high-stamina archetype to verify stamina is used as-is for fatigue
+    const highStaArchetype: Archetype = {
+      ...charger,
+      stamina: 150, // Well above softCap knee
+    };
+    // fatigueFactor uses maxStamina directly (not soft-capped)
+    // threshold = 150 * 0.8 = 120
+    expect(fatigueFactor(120, 150)).toBe(1.0);
+    expect(fatigueFactor(60, 150)).toBeCloseTo(60 / 120, 10);
+
+    // computeEffectiveStats uses archetype.stamina for fatigue, not softCap
+    const stats = computeEffectiveStats(
+      highStaArchetype, SPEEDS[SpeedType.Standard], CdL, 150
+    );
+    // MOM and CTL are soft-capped but stamina is used raw for fatigue calc
+    // At full stamina (150 >= threshold 120), ff=1.0, so stats = raw values
+    expect(stats.momentum).toBe(highStaArchetype.momentum + 0 + 5); // Standard+CdL: MOM+5
+  });
+});
+
+// ============================================================
+// 1c. Exploratory Edge Cases
+// ============================================================
+describe('Exploratory Edge Cases', () => {
+  it('zero stamina produces zero fatigue factor', () => {
+    expect(fatigueFactor(0, 60)).toBe(0.0);
+    expect(fatigueFactor(0, 55)).toBe(0.0);
+    expect(fatigueFactor(0, 100)).toBe(0.0);
+  });
+
+  it('zero stamina: effective MOM and CTL are zero, guard at floor', () => {
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Standard], CdL, 0);
+    expect(stats.momentum).toBe(0); // raw * 0.0
+    expect(stats.control).toBe(0);
+    // guardFF = 0.5 + 0.5 * 0.0 = 0.5
+    const rawGuard = charger.guard + CdL.deltaGuard; // 50+5=55
+    expect(stats.guard).toBe(rawGuard * 0.5); // guard at fatigue floor
+  });
+
+  it('guard fatigue floor clamps at 0.5 (never below)', () => {
+    // ff=0 → guardFF = 0.5 + 0.5*0 = 0.5
+    expect(guardFatigueFactor(0)).toBe(BALANCE.guardFatigueFloor);
+    // ff=1 → guardFF = 0.5 + 0.5*1 = 1.0
+    expect(guardFatigueFactor(1)).toBe(1.0);
+    // ff=0.5 → guardFF = 0.5 + 0.5*0.5 = 0.75
+    expect(guardFatigueFactor(0.5)).toBe(0.75);
+  });
+
+  it('negative stamina is clamped to 0 by fatigueFactor', () => {
+    expect(fatigueFactor(-5, 60)).toBe(0.0);
+    expect(fatigueFactor(-100, 55)).toBe(0.0);
+  });
+
+  it('counter resolution with equal CTL values gives symmetric bonus magnitude', () => {
+    // CF beaten by CEP — counter winner is player 2
+    const result = resolveCounters(CF, CEP, 50, 50);
+    expect(result.player1Bonus).toBeLessThan(0);
+    expect(result.player2Bonus).toBeGreaterThan(0);
+    expect(Math.abs(result.player1Bonus)).toBe(Math.abs(result.player2Bonus));
+    // bonus = 4 + 50*0.1 = 9
+    expect(result.player2Bonus).toBe(4 + 50 * BALANCE.counterCtlScaling);
+  });
+
+  it('unseated impact boost multiplier is applied correctly', () => {
+    expect(BALANCE.unseatedImpactBoost).toBe(1.25);
+    // Verify the boost value is between 1 and 2 (reasonable range)
+    expect(BALANCE.unseatedImpactBoost).toBeGreaterThan(1.0);
+    expect(BALANCE.unseatedImpactBoost).toBeLessThan(2.0);
+  });
+
+  it('unseated stamina recovery is a positive value', () => {
+    expect(BALANCE.unseatedStaminaRecovery).toBe(8);
+    expect(BALANCE.unseatedStaminaRecovery).toBeGreaterThan(0);
+  });
+
+  it('carryover divisors match balance-config values', () => {
+    expect(BALANCE.carryoverDivisors.momentum).toBe(6);
+    expect(BALANCE.carryoverDivisors.control).toBe(7);
+    expect(BALANCE.carryoverDivisors.guard).toBe(9);
+  });
+
+  it('carryover penalties scale with unseat margin', () => {
+    const penalties = calcCarryoverPenalties(18);
+    // MOM: -floor(18/6) = -3
+    expect(penalties.momentumPenalty).toBe(-3);
+    // CTL: -floor(18/7) = -2
+    expect(penalties.controlPenalty).toBe(-2);
+    // GRD: -floor(18/9) = -2
+    expect(penalties.guardPenalty).toBe(-2);
+  });
+
+  it('all 6 archetypes have stat totals in range 290-300', () => {
+    const archetypeNames = Object.keys(ARCHETYPES);
+    for (const name of archetypeNames) {
+      const a = ARCHETYPES[name];
+      const total = a.momentum + a.control + a.guard + a.initiative + a.stamina;
+      expect(total, `${name} total=${total}`).toBeGreaterThanOrEqual(290);
+      expect(total, `${name} total=${total}`).toBeLessThanOrEqual(300);
+    }
+  });
+});
+
+// ============================================================
 // 2. Fatigue Factor (Relative to Max Stamina)
 // ============================================================
 describe('Fatigue Factor (Relative)', () => {
@@ -231,31 +387,31 @@ describe('Melee Thresholds (Guard-Relative)', () => {
 // ============================================================
 describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL→CEP', () => {
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(60, SPEEDS[SpeedType.Fast])).toBe(55);
+    expect(applySpeedStamina(65, SPEEDS[SpeedType.Fast])).toBe(60);
     expect(applySpeedStamina(55, SPEEDS[SpeedType.Standard])).toBe(55);
   });
 
   it('fatigue is 1.0 for both (above respective thresholds)', () => {
-    // Charger threshold = 48, sta = 55 → 1.0
-    expect(fatigueFactor(55, 60)).toBe(1.0);
+    // Charger threshold = 52, sta = 60 → 1.0
+    expect(fatigueFactor(60, 65)).toBe(1.0);
     // Technician threshold = 44, sta = 55 → 1.0
     expect(fatigueFactor(55, 55)).toBe(1.0);
   });
 
   it('Charger Fast+CF momentum is soft-capped (115 → 111.54)', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 55);
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 60);
     // Raw MOM = 75+15+25 = 115, softCap → 111.54, * ff 1.0
     expect(r(stats.momentum, 2)).toBe(r(100 + 15 * 50 / 65, 2));
     // CTL = 55-15-10 = 30 (below knee, no cap)
     expect(stats.control).toBe(30);
     // GRD = 50-5 = 45, guardFF = 1.0 (full stamina)
     expect(stats.guard).toBe(45);
-    expect(stats.initiative).toBe(80);
+    expect(stats.initiative).toBe(75);
   });
 
   it('Technician pre-shift stats are below knee (unchanged)', () => {
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CdL, 55);
-    expect(stats.momentum).toBe(60); // 55+0+5 = 60
+    expect(stats.momentum).toBe(63); // 58+0+5 = 63
     expect(stats.control).toBe(80);  // 70+0+10 = 80
     expect(stats.guard).toBe(60);    // 55+5 = 60
     expect(stats.initiative).toBe(70);
@@ -278,14 +434,14 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     const ff = 43 / 44;
     const guardFF = 0.5 + 0.5 * ff;
 
-    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));     // 58.64
+    expect(r(stats.momentum, 2)).toBe(r(63 * ff, 2));     // 61.57
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));      // 83.07
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));    // 64.26
     expect(stats.initiative).toBe(60);
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(55, CF)).toBe(35);
+    expect(applyAttackStaminaCost(60, CF)).toBe(40);
     expect(applyAttackStaminaCost(43, CEP)).toBe(29);
   });
 });
@@ -294,23 +450,23 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
 // 7. Effective Stats — Worked Example Pass 2
 // ============================================================
 describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+PdL', () => {
-  // Starting STA: Charger 35, Technician 29
+  // Starting STA: Charger 40, Technician 29
 
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(35, SPEEDS[SpeedType.Slow])).toBe(40);
+    expect(applySpeedStamina(40, SPEEDS[SpeedType.Slow])).toBe(45);
     expect(applySpeedStamina(29, SPEEDS[SpeedType.Standard])).toBe(29);
   });
 
   it('fatigue factors are below threshold for both', () => {
-    // Charger: threshold=48, sta=40 → ff = 40/48 ≈ 0.833
-    expect(r(fatigueFactor(40, 60), 3)).toBe(r(40 / 48, 3));
+    // Charger: threshold=52, sta=45 → ff = 45/52 ≈ 0.865
+    expect(r(fatigueFactor(45, 65), 3)).toBe(r(45 / 52, 3));
     // Technician: threshold=44, sta=29 → ff = 29/44 ≈ 0.659
     expect(r(fatigueFactor(29, 55), 3)).toBe(r(29 / 44, 3));
   });
 
   it('Charger stats use fatigue correctly', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 40);
-    const ff = 40 / 48;
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 45);
+    const ff = 45 / 52;
     const guardFF = 0.5 + 0.5 * ff;
     // MOM: (75-15+10) = 70 * ff
     expect(r(stats.momentum, 2)).toBe(r(70 * ff, 2));
@@ -318,22 +474,22 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     // GRD: (50-5) = 45 * guardFF
     expect(r(stats.guard, 2)).toBe(r(45 * guardFF, 2));
-    expect(stats.initiative).toBe(60);
+    expect(stats.initiative).toBe(55);
   });
 
   it('Technician stats use correct fatigue', () => {
     const ff = 29 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], PdL, 29);
-    // MOM: 50 * ff, CTL: 80 * ff, GRD: 75 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(50 * ff, 2));
+    // MOM: 53 * ff, CTL: 80 * ff, GRD: 75 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(53 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(80 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(75 * guardFF, 2));
     expect(stats.initiative).toBe(70);
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(40, BdG)).toBe(25);
+    expect(applyAttackStaminaCost(45, BdG)).toBe(30);
     expect(applyAttackStaminaCost(29, PdL)).toBe(21);
   });
 });
@@ -342,23 +498,23 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
 // 8. Effective Stats — Worked Example Pass 3
 // ============================================================
 describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CEP', () => {
-  // Starting STA: Charger 25, Technician 21
+  // Starting STA: Charger 30, Technician 21
 
   it('computes Speed Stamina correctly', () => {
-    expect(applySpeedStamina(25, SPEEDS[SpeedType.Slow])).toBe(30);
+    expect(applySpeedStamina(30, SPEEDS[SpeedType.Slow])).toBe(35);
     expect(applySpeedStamina(21, SPEEDS[SpeedType.Standard])).toBe(21);
   });
 
   it('fatigue factors correct', () => {
-    // Charger: threshold=48, sta=30 → 30/48 = 0.625
-    expect(r(fatigueFactor(30, 60), 3)).toBe(r(30 / 48, 3));
+    // Charger: threshold=52, sta=35 → 35/52 ≈ 0.673
+    expect(r(fatigueFactor(35, 65), 3)).toBe(r(35 / 52, 3));
     // Technician: threshold=44, sta=21 → 21/44 ≈ 0.477
     expect(r(fatigueFactor(21, 55), 3)).toBe(r(21 / 44, 3));
   });
 
   it('Charger guard now partially fatigued', () => {
-    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 30);
-    const ff = 30 / 48;
+    const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 35);
+    const ff = 35 / 52;
     const guardFF = 0.5 + 0.5 * ff;
     // GRD: (50+5) = 55 * guardFF
     expect(r(stats.guard, 2)).toBe(r(55 * guardFF, 2));
@@ -372,8 +528,8 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
     const ff = 21 / 44;
     const guardFF = 0.5 + 0.5 * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 21);
-    // MOM: 60 * ff, CTL: 85 * ff, GRD: 65 * guardFF
-    expect(r(stats.momentum, 2)).toBe(r(60 * ff, 2));
+    // MOM: 63 * ff, CTL: 85 * ff, GRD: 65 * guardFF
+    expect(r(stats.momentum, 2)).toBe(r(63 * ff, 2));
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));
     expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));
   });
@@ -385,7 +541,7 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
   });
 
   it('end-of-pass stamina correct', () => {
-    expect(applyAttackStaminaCost(30, CdL)).toBe(20);
+    expect(applyAttackStaminaCost(35, CdL)).toBe(25);
     expect(applyAttackStaminaCost(21, CEP)).toBe(7);
   });
 });
@@ -427,12 +583,13 @@ describe('Unseat Check', () => {
 describe('resolvePass — integration', () => {
   it('resolves Pass 1 with correct directional outcome', () => {
     const result = resolvePass(
-      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 60 },
+      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 65 },
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
-    // Charger wins on ImpactScore (guard coefficient 0.18 lets raw MOM dominate)
-    expect(result.p1.impactScore).toBeGreaterThan(result.p2.impactScore);
+    // With Technician MOM 58 and Charger INIT 55, Technician wins Pass 1 on impact
+    // (CEP counter bonus + high CTL accuracy overcomes Charger's raw MOM)
+    expect(result.p2.impactScore).toBeGreaterThan(result.p1.impactScore);
 
     // No unseat
     expect(result.unseat).toBe('none');
@@ -441,8 +598,8 @@ describe('resolvePass — integration', () => {
     expect(result.p2.shifted).toBe(true);
     expect(result.p2.finalAttack.id).toBe('coupEnPassant');
 
-    // End stamina: Charger 60-5(Fast)-20(CF)=35, Tech 55-12(shift)-14(CEP)=29
-    expect(result.p1.staminaAfter).toBe(35);
+    // End stamina: Charger 65-5(Fast)-20(CF)=40, Tech 55-12(shift)-14(CEP)=29
+    expect(result.p1.staminaAfter).toBe(40);
     expect(result.p2.staminaAfter).toBe(29);
 
     // Charger momentum is soft-capped (raw 115 → ~111.5)
@@ -452,15 +609,14 @@ describe('resolvePass — integration', () => {
 
   it('counter bonus in resolvePass scales with CTL', () => {
     const result = resolvePass(
-      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 60 },
+      { archetype: charger, speed: SpeedType.Fast, attack: CF, currentStamina: 65 },
       { archetype: technician, speed: SpeedType.Standard, attack: CdL, currentStamina: 55, shiftAttack: CEP },
     );
 
     // CEP beats CF. Winner is Technician with high CTL.
-    // Counter bonus helps Technician accuracy, but Charger's raw MOM
-    // advantage (115 vs 60) dominates impact with reduced guard coeff (0.18).
-    // Charger still wins overall on impact despite counter penalty.
-    expect(result.p1.impactScore - result.p2.impactScore).toBeGreaterThan(0);
+    // With Technician MOM 58 and Charger INIT 55, the counter bonus + CTL
+    // accuracy advantage overcomes Charger's raw MOM advantage on impact.
+    expect(result.p2.impactScore - result.p1.impactScore).toBeGreaterThan(0);
   });
 });
 
@@ -604,7 +760,7 @@ describe('Edge Cases — Zero Stamina', () => {
     // Guard = softCap(50-5) * guardFatigueFloor = 45 * 0.5 = 22.5
     expect(stats.guard).toBe(45 * BALANCE.guardFatigueFloor);
     // Initiative is unaffected by fatigue
-    expect(stats.initiative).toBe(70); // 60 + 10 (Standard)
+    expect(stats.initiative).toBe(65); // 55 + 10 (Standard)
   });
 
   it('melee effective stats at 0 stamina: MOM and CTL are 0', () => {

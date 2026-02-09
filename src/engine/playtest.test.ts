@@ -263,8 +263,8 @@ describe('Counter table — S15 changes', () => {
 // 5. Archetype stat verification — S15 rebalance
 // ============================================================
 describe('Archetype stats — S15 rebalance', () => {
-  it('Charger stamina is 60', () => {
-    expect(ARCHETYPES.charger.stamina).toBe(60);
+  it('Charger stamina is 65', () => {
+    expect(ARCHETYPES.charger.stamina).toBe(65);
   });
 
   it('Breaker guard is 55 and stamina is 60', () => {
@@ -306,7 +306,7 @@ describe('Charger stamina endurance', () => {
       { speed: SpeedType.Fast, attack: CF },
       { speed: SpeedType.Fast, attack: CF },
     );
-    expect(match.player1.currentStamina).toBe(35); // 60 -5 -20
+    expect(match.player1.currentStamina).toBe(40); // 65 -5 -20
     expect(match.player1.currentStamina).toBeGreaterThan(0);
 
     if (match.phase !== Phase.SpeedSelect) return; // unseat happened
@@ -316,7 +316,7 @@ describe('Charger stamina endurance', () => {
       { speed: SpeedType.Fast, attack: CF },
       { speed: SpeedType.Fast, attack: CF },
     );
-    expect(match.player1.currentStamina).toBe(10); // 35 -5 -20
+    expect(match.player1.currentStamina).toBe(15); // 40 -5 -20
     expect(match.player1.currentStamina).toBeGreaterThan(0);
 
     if (match.phase !== Phase.SpeedSelect) return;
@@ -326,7 +326,7 @@ describe('Charger stamina endurance', () => {
       { speed: SpeedType.Fast, attack: CF },
       { speed: SpeedType.Fast, attack: CF },
     );
-    expect(match.player1.currentStamina).toBe(0); // 10 -5 -20 → clamped 0
+    expect(match.player1.currentStamina).toBe(0); // 15 -5 -20 → clamped 0
   });
 });
 
