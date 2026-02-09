@@ -949,3 +949,244 @@
   .pass-pip,
   .ai-thinking__bar-fill { transition: none; }
 }
+
+/* ============================================================
+   Responsive Breakpoints
+   ============================================================ */
+
+/* --- Tablet (max-width: 768px) --- */
+@media (max-width: 768px) {
+  /* Reduce base padding */
+  #root { padding: 12px; }
+
+  /* Slightly smaller headings */
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.15rem; }
+  h3 { font-size: 1rem; }
+  .app-header h1 { font-size: 1.3rem; }
+
+  /* Archetype grid: keep 2-col but tighter */
+  .archetype-grid { gap: 8px; }
+  .archetype-card { padding: 10px; }
+  .archetype-card__name { font-size: 1rem; }
+
+  /* Attack and speed grids: 2-col stays but tighter gaps */
+  .attack-grid { gap: 8px; }
+  .speed-grid { gap: 8px; }
+  .speed-card { padding: 12px; }
+
+  /* Compact combat result tables */
+  .summary-table th, .summary-table td { padding: 5px 8px; font-size: 0.8rem; }
+  .summary-table th { font-size: 0.75rem; }
+
+  /* Impact rows tighter */
+  .impact-row { font-size: 0.85rem; }
+  .impact-row__values { gap: 16px; }
+
+  /* Reveal sides tighter */
+  .reveal-sides { gap: 10px; }
+  .pass-result__breakdown { padding: 12px; }
+
+  /* Scoreboard compact */
+  .scoreboard { padding: 8px 12px; }
+  .scoreboard__score { font-size: 1.3rem; }
+
+  /* Loadout: gear items tighter */
+  .gear-item { padding: 6px 10px; gap: 8px; }
+  .gear-item__slot { min-width: 80px; font-size: 0.8rem; }
+
+  /* Rarity grid stays 3-col but tighter */
+  .rarity-grid { gap: 6px; }
+  .rarity-card { padding: 8px; min-height: 50px; }
+
+  /* Stats preview tighter */
+  .stats-preview { gap: 8px; }
+
+  /* AI panels */
+  .ai-thinking__content { padding: 10px; }
+  .ai-thinking__atk-name { min-width: 90px; }
+
+  /* Match replay tighter */
+  .match-replay__header { padding: 6px 10px; }
+  .match-replay__details { padding: 6px 10px 10px; }
+
+  /* Winner banner */
+  .winner-banner { padding: 16px; }
+  .winner-banner h2 { font-size: 1.3rem; }
+
+  /* Melee transition */
+  .melee-transition { padding: 20px 12px 12px; }
+  .melee-transition h2 { font-size: 1.6rem; }
+
+  /* Combat log */
+  .combat-log__content { font-size: 0.68rem; }
+
+  /* Cards general */
+  .card { padding: 12px; }
+
+  /* Shift section */
+  .shift-section { padding: 12px; }
+
+  /* Variant toggle spacing */
+  .variant-toggle__btn { padding: 3px 6px; }
+}
+
+/* --- Mobile (max-width: 480px) --- */
+@media (max-width: 480px) {
+  /* Further reduce padding */
+  #root { padding: 8px; }
+
+  /* Smaller headings */
+  h1 { font-size: 1.25rem; }
+  h2 { font-size: 1.05rem; }
+  h3 { font-size: 0.95rem; }
+  .app-header { padding: 8px 0 6px; margin-bottom: 6px; }
+  .app-header h1 { font-size: 1.15rem; }
+  .app-header .subtitle { font-size: 0.75rem; }
+  .subtitle { margin-bottom: 12px; font-size: 0.82rem; }
+
+  /* Single-column archetype selection */
+  .archetype-grid { grid-template-columns: 1fr; gap: 8px; }
+  .archetype-card { padding: 10px; }
+  .archetype-card__name { font-size: 0.95rem; }
+  .archetype-card__identity { font-size: 0.75rem; margin-bottom: 6px; }
+
+  /* Single-column attack and speed grids */
+  .attack-grid { grid-template-columns: 1fr; gap: 8px; }
+  .attack-card { padding: 10px; }
+  .speed-grid { grid-template-columns: 1fr; gap: 8px; }
+  .speed-card { padding: 10px; }
+  .speed-card__name { font-size: 1rem; }
+
+  /* Stack reveal sides */
+  .reveal-sides { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Rarity grid: 2-col on mobile */
+  .rarity-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .rarity-card { padding: 8px; min-height: 48px; }
+  .rarity-card__name { font-size: 0.82rem; }
+
+  /* Stack stats preview */
+  .stats-preview { flex-direction: column; gap: 8px; }
+  .stats-preview__arrow { transform: rotate(90deg); }
+
+  /* Large touch targets for buttons (min 44px) */
+  .btn { min-height: 44px; min-width: 44px; padding: 12px 20px; font-size: 0.95rem; }
+  .btn--large { padding: 14px 28px; font-size: 1rem; }
+  .btn--small { min-height: 44px; padding: 10px 14px; font-size: 0.82rem; }
+
+  /* Reduce margins/padding on sections */
+  .card { padding: 10px; }
+  .divider { margin: 10px 0; }
+  .pass-result__breakdown { padding: 10px; margin-bottom: 10px; }
+  .shift-section { padding: 10px; margin-top: 10px; }
+
+  /* Gear items: stack vertically, prevent horizontal overflow */
+  .gear-item { padding: 8px; gap: 6px; flex-wrap: wrap; }
+  .gear-item__slot { min-width: 60px; font-size: 0.78rem; }
+  .gear-item__stats { gap: 6px; flex-wrap: wrap; }
+  .gear-stat { font-size: 0.72rem; padding: 2px 6px; }
+  .gear-bonus-summary { gap: 8px; padding: 6px 10px; }
+  .gear-bonus-summary__stat { font-size: 0.75rem; }
+
+  /* Stack melee wins vertically */
+  .melee-wins { flex-direction: column; gap: 8px; }
+
+  /* Scoreboard compact */
+  .scoreboard { padding: 8px 10px; }
+  .scoreboard__player { min-width: 70px; }
+  .scoreboard__score { font-size: 1.2rem; }
+  .scoreboard__name { font-size: 0.7rem; }
+
+  /* Timeline pips smaller */
+  .timeline-pip { width: 22px; height: 22px; font-size: 0.58rem; }
+  .timeline-separator { height: 16px; margin: 0 2px; }
+  .pass-pip { width: 6px; height: 6px; }
+
+  /* Impact rows compact */
+  .impact-row { padding: 4px 0; font-size: 0.82rem; }
+  .impact-row__values { gap: 12px; }
+  .impact-row__p1, .impact-row__p2 { min-width: 45px; }
+  .impact-row--impact-score { padding: 6px 8px; margin: 4px -8px; }
+
+  /* Summary table compact */
+  .summary-table th, .summary-table td { padding: 4px 5px; font-size: 0.72rem; }
+  .summary-table th { font-size: 0.68rem; }
+
+  /* Winner banner compact */
+  .winner-banner { padding: 14px; margin-bottom: 10px; }
+  .winner-banner h2 { font-size: 1.15rem; }
+  .winner-banner p { font-size: 0.82rem; }
+
+  /* Melee transition compact */
+  .melee-transition { padding: 16px 10px 10px; margin-bottom: 10px; }
+  .melee-transition__icon { font-size: 2.2rem; }
+  .melee-transition h2 { font-size: 1.4rem; letter-spacing: 0.06em; }
+  .melee-transition__subtitle { font-size: 0.85rem; }
+  .melee-transition__penalties { padding: 10px; }
+  .melee-transition__penalty-grid { gap: 12px; flex-wrap: wrap; }
+
+  /* Pass unseat banner */
+  .pass-result__unseat { font-size: 1rem; padding: 10px 12px; }
+
+  /* Pass winner banner */
+  .pass-winner-banner { padding: 8px 12px; margin-bottom: 10px; }
+  .pass-winner-banner__label { font-size: 1rem; }
+
+  /* Combat log */
+  .combat-log__content { font-size: 0.68rem; padding: 6px 8px; max-height: 200px; }
+  .combat-log__toggle { padding: 6px 10px; font-size: 0.8rem; }
+
+  /* AI panels */
+  .ai-thinking__content { padding: 8px; font-size: 0.75rem; }
+  .ai-thinking__bar-label { min-width: 50px; font-size: 0.7rem; }
+  .ai-thinking__bar-track { height: 12px; }
+  .ai-thinking__atk-name { min-width: 80px; font-size: 0.7rem; }
+  .ai-thinking__atk-row { padding: 3px 6px; font-size: 0.7rem; }
+  .ai-thinking__commentary { padding: 6px 10px; }
+
+  .ai-feedback { padding: 10px 12px; }
+  .ai-tips { padding: 10px 12px; }
+  .ai-tips__item { font-size: 0.75rem; }
+
+  /* Match replay */
+  .match-replay__header { padding: 6px 8px; font-size: 0.75rem; }
+  .match-replay__label { min-width: 50px; }
+  .match-replay__details { padding: 6px 8px 8px; font-size: 0.7rem; }
+
+  /* Variant toggles — larger touch targets */
+  .variant-toggle__btn { min-width: 36px; min-height: 32px; padding: 4px 10px; font-size: 0.72rem; }
+  .quick-set-buttons { flex-wrap: wrap; margin-left: 0; margin-top: 4px; }
+  .loadout-section__actions { flex-wrap: wrap; }
+  .loadout-section__header { flex-wrap: wrap; gap: 6px; }
+
+  /* Difficulty selector stacks */
+  .difficulty-selector { flex-wrap: wrap; gap: 6px; }
+
+  /* Player sides */
+  .player-side { padding: 8px; }
+  .player-label { font-size: 0.65rem; }
+
+  /* General grids single-column */
+  .grid-2, .grid-3 { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Prevent horizontal scrolling */
+  .app-header, .scoreboard, .match-timeline { max-width: 100%; overflow-x: hidden; }
+  .match-timeline { gap: 3px; }
+
+  /* Tooltips: avoid overflow on small screens */
+  .tip::after { max-width: 180px; white-space: normal; text-align: center; font-size: 0.68rem; }
+  .tip--wide::after { width: 180px; }
+
+  /* Stat bars tighter */
+  .stat-bar { gap: 4px; margin: 2px 0; }
+  .stat-bar__label { width: 30px; font-size: 0.65rem; }
+  .stat-bar__value { width: 24px; font-size: 0.7rem; }
+  .stat-bar__track { height: 8px; }
+
+  /* Stamina bar */
+  .stamina-bar { width: 60px; }
+
+  /* Loadout mini (summary) */
+  .loadout-mini__gear-line { font-size: 0.68rem; }
+}

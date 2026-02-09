@@ -43,7 +43,7 @@ export function runConsistencyCheck() {
     // Check archetype stats in CLAUDE.md
     const expectedStats = {
       charger: 'MOM=75, CTL=55, GRD=50, INIT=55, STA=65',
-      technician: 'MOM=61, CTL=70, GRD=55, INIT=59, STA=55',
+      technician: 'MOM=64, CTL=70, GRD=55, INIT=59, STA=55',
       bulwark: 'MOM=58, CTL=52, GRD=65, INIT=53, STA=62',
       tactician: 'MOM=55, CTL=65, GRD=50, INIT=75, STA=55',
       breaker: 'MOM=62, CTL=60, GRD=55, INIT=55, STA=60',
