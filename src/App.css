@@ -97,17 +97,80 @@
 .pass-result__unseat {
   text-align: center; padding: 14px 16px;
   background: linear-gradient(135deg, var(--red), var(--red-light));
-  color: white; border-radius: var(--radius-lg);
+  color: var(--white); border-radius: var(--radius-lg);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.2rem; font-weight: 700; margin-bottom: 16px;
   letter-spacing: 0.03em;
-  box-shadow: 0 4px 12px rgba(139, 37, 0, 0.3);
+  box-shadow: 0 4px 12px var(--glow-red);
   animation: unseat-entrance 0.5s ease-out;
 }
 @keyframes unseat-entrance {
   0% { transform: scale(0.9); opacity: 0; box-shadow: 0 0 0 rgba(139, 37, 0, 0); }
   60% { transform: scale(1.03); }
-  100% { transform: scale(1); opacity: 1; box-shadow: 0 4px 12px rgba(139, 37, 0, 0.3); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 4px 12px var(--glow-red); }
+}
+
+/* Pass winner banner — prominent indicator at top of result */
+.pass-winner-banner {
+  text-align: center; padding: 10px 16px;
+  border-radius: var(--radius-lg); margin-bottom: 16px;
+  font-family: Georgia, 'Times New Roman', serif;
+  animation: winner-banner-enter 0.4s ease-out;
+}
+.pass-winner-banner__label {
+  font-size: 1.15rem; font-weight: 700; letter-spacing: 0.02em;
+}
+.pass-winner-banner__advantage {
+  font-size: 0.85rem; font-weight: 600; margin-top: 2px; opacity: 0.85;
+}
+.pass-winner-banner--p1 {
+  background: var(--p1-bg); border: 2px solid var(--p1); color: var(--p1);
+}
+.pass-winner-banner--p2 {
+  background: var(--p2-bg); border: 2px solid var(--p2); color: var(--p2);
+}
+.pass-winner-banner--draw {
+  background: var(--parchment-dark); border: 2px solid var(--border); color: var(--ink-faint);
+}
+@keyframes winner-banner-enter {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.02); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Counter callout — visible notice when a counter triggers */
+.pass-counter-callout {
+  text-align: center; padding: 6px 12px; margin-bottom: 8px;
+  background: var(--callout-bg); border: 1.5px solid var(--callout-border); border-radius: var(--radius);
+  font-size: 0.8rem; font-weight: 600; color: var(--callout-text);
+  animation: counter-callout-flash 0.5s ease-out;
+}
+@keyframes counter-callout-flash {
+  0% { background: var(--callout-flash); }
+  100% { background: var(--callout-bg); }
+}
+
+/* Counter badge — more prominent version */
+.counter-badge--prominent {
+  font-size: 0.78rem; padding: 3px 10px;
+  animation: badge-appear 0.3s ease-out;
+}
+
+/* Reveal cell highlight when it has the counter advantage */
+.reveal-sides__cell--counter-win {
+  background: rgba(40, 167, 69, 0.06);
+  border-radius: var(--radius);
+  padding: 8px 4px;
+}
+
+/* Impact Score row: highlight the winning value */
+.impact-row--impact-score {
+  background: var(--parchment-dark); border-radius: var(--radius);
+  padding: 8px 12px; margin: 4px -12px;
+}
+.impact-score--winner {
+  color: var(--gold-dark); font-size: 1.15rem;
+  text-shadow: 0 0 6px rgba(201, 168, 76, 0.3);
 }
 
 /* Melee wins tracker */
@@ -144,8 +207,8 @@
 }
 .outcome-badge--hit { background: var(--gold-light); color: var(--ink); border: 1px solid var(--gold-dark); }
 .outcome-badge--critical {
-  background: var(--red); color: white;
-  box-shadow: 0 0 8px rgba(139, 37, 0, 0.4);
+  background: var(--red); color: var(--white);
+  box-shadow: 0 0 8px var(--glow-red-strong);
   animation: badge-appear 0.3s ease-out, crit-glow 1.5s ease-in-out 0.3s;
 }
 .outcome-badge--draw { background: var(--parchment-dark); color: var(--ink-light); border: 1px solid var(--border); }
@@ -155,7 +218,7 @@
   100% { transform: scale(1); opacity: 1; }
 }
 @keyframes crit-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(139, 37, 0, 0.4); }
+  0%, 100% { box-shadow: 0 0 8px var(--glow-red-strong); }
   50% { box-shadow: 0 0 16px rgba(139, 37, 0, 0.6); }
 }
 
@@ -179,8 +242,8 @@
 /* Melee transition interstitial */
 .melee-transition {
   text-align: center; padding: 24px 16px 16px;
-  background: linear-gradient(135deg, var(--red), #5c1a00);
-  color: #fff; border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--red), var(--red-dark));
+  color: var(--white); border-radius: var(--radius-lg);
   margin-bottom: 16px;
   animation: melee-entrance 0.6s ease-out;
 }
@@ -197,7 +260,7 @@
 @keyframes melee-entrance {
   0% { opacity: 0; transform: scaleY(0.3); box-shadow: 0 0 0 rgba(139, 37, 0, 0); }
   50% { opacity: 1; transform: scaleY(1.03); }
-  100% { transform: scaleY(1); box-shadow: 0 4px 20px rgba(139, 37, 0, 0.4); }
+  100% { transform: scaleY(1); box-shadow: 0 4px 20px var(--glow-red-strong); }
 }
 @keyframes melee-icon-slam {
   0% { transform: scale(2.5) rotate(-15deg); opacity: 0; }
@@ -234,33 +297,33 @@
 
 /* Rarity color variants — hover glow + selected glow per tier */
 .rarity-card--uncommon { border-color: var(--rarity-uncommon); }
-.rarity-card--uncommon.card--selectable:hover { border-color: var(--rarity-uncommon); box-shadow: 0 0 8px rgba(74, 138, 42, 0.3); }
-.rarity-card--uncommon.card--selected { background: var(--rarity-uncommon-bg); box-shadow: 0 0 0 2px var(--rarity-uncommon), 0 0 10px rgba(74, 138, 42, 0.25); }
+.rarity-card--uncommon.card--selectable:hover { border-color: var(--rarity-uncommon); box-shadow: 0 0 8px var(--glow-uncommon); }
+.rarity-card--uncommon.card--selected { background: var(--rarity-uncommon-bg); box-shadow: 0 0 0 2px var(--rarity-uncommon), 0 0 10px var(--glow-uncommon-soft); }
 .rarity-card--uncommon .rarity-card__name { color: var(--rarity-uncommon); }
 
 .rarity-card--rare { border-color: var(--rarity-rare); }
-.rarity-card--rare.card--selectable:hover { border-color: var(--rarity-rare); box-shadow: 0 0 8px rgba(42, 90, 143, 0.3); }
-.rarity-card--rare.card--selected { background: var(--rarity-rare-bg); box-shadow: 0 0 0 2px var(--rarity-rare), 0 0 10px rgba(42, 90, 143, 0.25); }
+.rarity-card--rare.card--selectable:hover { border-color: var(--rarity-rare); box-shadow: 0 0 8px var(--glow-rare); }
+.rarity-card--rare.card--selected { background: var(--rarity-rare-bg); box-shadow: 0 0 0 2px var(--rarity-rare), 0 0 10px var(--glow-rare-soft); }
 .rarity-card--rare .rarity-card__name { color: var(--rarity-rare); }
 
 .rarity-card--epic { border-color: var(--rarity-epic); }
-.rarity-card--epic.card--selectable:hover { border-color: var(--rarity-epic); box-shadow: 0 0 10px rgba(123, 63, 160, 0.35); }
-.rarity-card--epic.card--selected { background: var(--rarity-epic-bg); box-shadow: 0 0 0 2px var(--rarity-epic), 0 0 12px rgba(123, 63, 160, 0.3); }
+.rarity-card--epic.card--selectable:hover { border-color: var(--rarity-epic); box-shadow: 0 0 10px var(--glow-epic-strong); }
+.rarity-card--epic.card--selected { background: var(--rarity-epic-bg); box-shadow: 0 0 0 2px var(--rarity-epic), 0 0 12px var(--glow-epic-selected); }
 .rarity-card--epic .rarity-card__name { color: var(--rarity-epic); }
 
 .rarity-card--legendary { border-color: var(--rarity-legendary); }
-.rarity-card--legendary.card--selectable:hover { border-color: var(--rarity-legendary); box-shadow: 0 0 12px rgba(201, 138, 30, 0.4); }
-.rarity-card--legendary.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-legendary), 0 0 14px rgba(201, 138, 30, 0.35); }
+.rarity-card--legendary.card--selectable:hover { border-color: var(--rarity-legendary); box-shadow: 0 0 12px var(--glow-legendary-strong); }
+.rarity-card--legendary.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-legendary), 0 0 14px var(--glow-legendary-selected); }
 .rarity-card--legendary .rarity-card__name { color: var(--rarity-legendary); }
 
 .rarity-card--relic { border-color: var(--rarity-relic); }
-.rarity-card--relic.card--selectable:hover { border-color: var(--rarity-relic); box-shadow: 0 0 12px rgba(181, 32, 32, 0.4); }
-.rarity-card--relic.card--selected { background: var(--rarity-relic-bg); box-shadow: 0 0 0 2px var(--rarity-relic), 0 0 14px rgba(181, 32, 32, 0.35); }
+.rarity-card--relic.card--selectable:hover { border-color: var(--rarity-relic); box-shadow: 0 0 12px var(--glow-relic-strong); }
+.rarity-card--relic.card--selected { background: var(--rarity-relic-bg); box-shadow: 0 0 0 2px var(--rarity-relic), 0 0 14px var(--glow-relic-selected); }
 .rarity-card--relic .rarity-card__name { color: var(--rarity-relic); }
 
 .rarity-card--giga { border-color: var(--rarity-giga); }
-.rarity-card--giga.card--selectable:hover { border-color: var(--rarity-giga); box-shadow: 0 0 14px rgba(201, 168, 76, 0.5); }
-.rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 0 16px rgba(201, 168, 76, 0.45); }
+.rarity-card--giga.card--selectable:hover { border-color: var(--rarity-giga); box-shadow: 0 0 14px var(--glow-giga-strong); }
+.rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 0 16px var(--glow-giga-selected); }
 .rarity-card--giga .rarity-card__name { color: var(--rarity-giga); }
 
 /* Loadout section (gear + stats) */
@@ -301,25 +364,25 @@
 .gear-item--rare { border-color: var(--rarity-rare); }
 .gear-item--epic {
   border-color: var(--rarity-epic);
-  box-shadow: 0 0 6px rgba(123, 63, 160, 0.15);
+  box-shadow: 0 0 6px var(--glow-epic);
 }
 .gear-item--legendary {
   border-color: var(--rarity-legendary);
-  box-shadow: 0 0 8px rgba(201, 138, 30, 0.2);
+  box-shadow: 0 0 8px var(--glow-legendary);
 }
 .gear-item--relic {
   border-color: var(--rarity-relic);
-  box-shadow: 0 0 8px rgba(181, 32, 32, 0.2);
+  box-shadow: 0 0 8px var(--glow-relic);
 }
 .gear-item--giga {
   border-color: var(--rarity-giga);
-  box-shadow: 0 0 10px rgba(201, 168, 76, 0.25);
+  box-shadow: 0 0 10px var(--glow-giga);
 }
 /* Preserve rarity glow on hover for epic+ tiers */
-.gear-item--epic:hover { box-shadow: 0 0 6px rgba(123, 63, 160, 0.15), 0 2px 8px var(--shadow); }
-.gear-item--legendary:hover { box-shadow: 0 0 8px rgba(201, 138, 30, 0.2), 0 2px 8px var(--shadow); }
-.gear-item--relic:hover { box-shadow: 0 0 8px rgba(181, 32, 32, 0.2), 0 2px 8px var(--shadow); }
-.gear-item--giga:hover { box-shadow: 0 0 10px rgba(201, 168, 76, 0.25), 0 2px 8px var(--shadow); }
+.gear-item--epic:hover { box-shadow: 0 0 6px var(--glow-epic), 0 2px 8px var(--shadow); }
+.gear-item--legendary:hover { box-shadow: 0 0 8px var(--glow-legendary), 0 2px 8px var(--shadow); }
+.gear-item--relic:hover { box-shadow: 0 0 8px var(--glow-relic), 0 2px 8px var(--shadow); }
+.gear-item--giga:hover { box-shadow: 0 0 10px var(--glow-giga), 0 2px 8px var(--shadow); }
 
 /* Hover animation for gear cards */
 .gear-item {
@@ -465,12 +528,12 @@
 }
 .pass-pip--done {
   background: var(--gold); border-color: var(--gold-dark);
-  box-shadow: 0 0 4px rgba(201, 168, 76, 0.5);
+  box-shadow: 0 0 4px var(--glow-gold-soft);
 }
 .pass-pip--current {
   background: var(--gold-light); border-color: var(--gold);
   animation: pip-pulse 1.2s ease-in-out infinite;
-  box-shadow: 0 0 6px rgba(201, 168, 76, 0.6);
+  box-shadow: 0 0 6px var(--glow-gold-subtle);
 }
 @keyframes pip-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
@@ -508,7 +571,7 @@
 /* Victory / defeat banner animations */
 .winner-banner--victory {
   animation: victory-entrance 0.6s ease-out;
-  box-shadow: 0 4px 20px rgba(201, 168, 76, 0.4);
+  box-shadow: 0 4px 20px var(--glow-gold);
 }
 @keyframes victory-entrance {
   0% { transform: scale(0.8); opacity: 0; }
@@ -517,7 +580,7 @@
 }
 
 .winner-banner--defeat {
-  background: linear-gradient(135deg, #5c4033, #2c1810);
+  background: linear-gradient(135deg, var(--ink-light), var(--ink));
   border-color: var(--ink-light);
   animation: defeat-entrance 0.8s ease-out;
 }
@@ -554,8 +617,8 @@
 }
 .timeline-pip--p1 { background: var(--p1-bg); border-color: var(--p1); color: var(--p1); }
 .timeline-pip--p2 { background: var(--p2-bg); border-color: var(--p2); color: var(--p2); }
-.timeline-pip--unseat { background: var(--red); border-color: var(--red); color: #fff; font-size: 0.8rem; }
-.timeline-pip--crit { background: var(--red); border-color: var(--red); color: #fff; }
+.timeline-pip--unseat { background: var(--red); border-color: var(--red); color: var(--white); font-size: 0.8rem; }
+.timeline-pip--crit { background: var(--red); border-color: var(--red); color: var(--white); }
 .timeline-separator {
   width: 2px; height: 20px; background: var(--border-light); margin: 0 4px;
 }
@@ -870,7 +933,10 @@
   .scoreboard__score--anim,
   .outcome-badge,
   .outcome-badge--critical,
-  .pass-result__unseat { animation: none; }
+  .pass-result__unseat,
+  .pass-winner-banner,
+  .pass-counter-callout,
+  .counter-badge--prominent { animation: none; }
 
   .pass-pip--current { animation: none; }
 
