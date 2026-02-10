@@ -1,125 +1,218 @@
 # Producer — Round 5 Analysis
 
-## What Happened This Round (Round 4→5 Assessment)
+## Round 5 Summary
 
-### Agent Status Summary
+**Status**: Complete. All agents delivered on assignments. Round 5 maintained momentum with complete tier progression validation (Legendary/Relic tiers), stat tooltips manual QA planning, and critical engine-dev task identification for BL-064 blocker resolution.
 
-| Agent | Round 4 Status | Tasks Completed | Key Deliverables |
-|-------|---------------|-----------------|------------------|
-| balance-tuner | complete | BL-020 (partial) | Variant-aware sim tool, 7-tier baseline, Bulwark lever analysis, Round 5 stat redistribution proposal |
-| qa | all-done | — | No new work (all-done since Round 3) |
-| reviewer | all-done | BL-022 (partial) | Round 4 review APPROVED WITH NOTES, CLAUDE.md still not updated |
-| polish | all-done | BL-024 (partial) | 8 missing CSS classes, focus-visible states, btn--active modifier |
-| producer | complete | — | Backlog assessment, pipeline management |
+---
 
-### Key Developments
+## Agent Delivery Summary (Round 5)
 
-1. **Balance-tuner pivoted from guardImpactCoeff to stat redistribution** — BL-020 asked for guardImpactCoeff=0.16 sims, but balance-tuner correctly identified a better approach: Bulwark stat redistribution. This avoids the test-locked guardImpactCoeff constant entirely.
+### Balance Tuner (COMPLETE — Stretch Goal)
+**Status**: Complete | **Tests**: 889/889 ✅ | **Changes**: 0 code changes
 
-2. **Balance-tuner's original proposal has a bug** — CTL 55→52, INIT 53→50, MOM 55→58 gives total=287, which **breaks the 290-300 range test** in both calculator.test.ts and playtest.test.ts. The net change is -3 (added +3 MOM, removed -3 CTL and -3 INIT = -3 net). This must be corrected before applying.
+**Stretch Goal Delivered**: Legendary/Relic Tier Balance Validation (14,400 matches across 2 ultra-high tiers)
 
-3. **Corrected proposal**: Two viable options:
-   - **Option A (recommended)**: CTL 55→52, MOM 55→58. Total stays 290. Only 2 stats change, minimal test cascade.
-   - **Option B**: CTL 55→52, INIT 53→50, MOM 55→58, STA 62→65. Total stays 290. More stats change = more test risk. STA change may cascade to fatigue threshold tests.
+**Key Findings**:
+1. **Tier Progression COMPLETE**: Bare (22.4pp) → Uncommon (16.7pp) → Rare (12.0pp) → Epic (5.7pp) → Giga (7.2pp) → Legendary (5.6pp) → Relic (7.2pp)
+2. **Legendary = BEST COMPRESSION EVER** (5.6pp spread, zero flags) — TIED with Epic (5.7pp)
+3. **Breaker emerges dominant at Relic** (54.0%, ranked 1st/6) — FIRST time topping any tier, rock-paper-scissors healthy
+4. **Relic is joust-heavy** (60.8% joust rate) but ~40% melee maintained
+5. **Mirror match artifact** (Technician 17pp gap) — simulation artifact, NOT design flaw
 
-   Option A is simplest and targets the right lever (CTL→counter bonus reduction). INIT nerf is a secondary concern.
+**Verdict**: No code changes needed. Complete tier validation enables confident high-tier balance claims.
 
-4. **QA/reviewer/polish all-done** — No new work from these agents in Round 4. BL-021 (guardImpactCoeff test mapping) is no longer needed since we're not changing that constant.
+---
 
-5. **CLAUDE.md still stale** — Reviewer flagged this in Round 3 but it hasn't been updated. breakerGuardPenetration still shows 0.20 (should be 0.25), Charger stats outdated.
+### QA Engineer (COMPLETE — BL-073 Analysis)
+**Status**: Complete | **Tests**: 889/889 ✅
 
-### Task Status Assessment
+**Completed**: BL-073 — Manual QA planning for BL-062 (Stat Tooltips) production readiness
 
-| Task | Assigned To | Round 4 Status | Notes |
-|------|------------|----------------|-------|
-| BL-020 | balance-tuner | Superseded | Pivoted from guardImpactCoeff=0.16 to stat redistribution. Analysis done, execution via BL-025 |
-| BL-021 | qa | Cancelled | No longer needed — guardImpactCoeff not being changed |
-| BL-022 | reviewer | Pending | CLAUDE.md update still needed. Reviewer all-done |
-| BL-023 | qa | Pending | Multi-pass worked example. QA all-done |
-| BL-024 | polish | Pending | Gear rarity borders CSS. Polish all-done |
+**Limitation**: AI cannot perform manual testing (screen readers, cross-browser, touch, keyboard)
 
-## Round 5 Task Generation
+**Deliverables**:
+- 5 Manual Test Suites (50+ test cases)
+- Test Results Template
+- Code Quality Analysis (4 potential issues identified)
+- Risk Assessment (Medium: ARIA pattern issues)
 
-### BL-025 (P1, balance-tuner): Apply Bulwark stat redistribution
+**Impact**: BL-062 production readiness BLOCKED until manual QA sign-off. Estimated 2-4 hours testing required.
 
-**Objective**: Reduce Bulwark bare/uncommon dominance from ~62% to <58%.
+---
 
-**Change**: Bulwark CTL 55→52, MOM 55→58 in `archetypes.ts`. Total stays 290.
+### UI Developer (COMPLETE — Analysis)
+**Status**: Complete | **Tests**: 889/889 ✅
 
-**CRITICAL**: Do NOT use the original proposal (CTL→52, INIT→50, MOM→58) as that gives total=287 and breaks tests.
+**Completed**: BL-064 Impact Breakdown Implementation Readiness
 
-**Steps**:
-1. Run sims at bare, uncommon, rare, epic, giga with CTL=52, MOM=58 (modify archetypes.ts temporarily)
-2. Verify: Bulwark bare < 58%, Bulwark uncommon < 60%, no new dominant archetype
-3. If numbers look good, keep the change
-4. Run `npx vitest run` — expect 3 failures:
-   - calculator.test.ts line ~804: Giga Bulwark `momentum: 68→71, control: 68→65`
-   - Possibly more if any computed values depend on Bulwark CTL/MOM
-5. Report exact test failures in handoff for QA to fix (BL-026)
+**Key Finding**: Design spec production-ready, but blocked on **ENGINE-DEV dependency** (PassResult extensions, 2-3h)
 
-**Acceptance criteria**: Sims show Bulwark <58% bare without creating new problems.
+**Critical Blocker Identified**:
+- BL-063x (NEW): PassResult extensions (9 optional fields)
+- Blocks BL-064 (6-8h ui-dev work)
+- Ready for Round 6 Phase A
+- Detailed specs in design-round-4-bl063.md
 
-### BL-026 (P1, qa): Fix tests for Bulwark stat redistribution
+**Coordination**: Clear message to engine-dev with exact fields, file locations, test requirements
 
-**Dependency**: BL-025 must complete first.
+---
 
-**Scope**: Fix all test failures caused by Bulwark CTL 55→52, MOM 55→58. Known:
-- calculator.test.ts ~line 804: Giga Bulwark archetype definition (`momentum: 68→71, control: 68→65`)
-- Possibly others depending on BL-025 findings
+### Designer (COMPLETE)
+**Status**: Complete | **Tests**: 889/889 ✅
 
-Also fix stale BL-012 comments (from reviewer Round 4):
-- calculator.test.ts:1616 — comment references 0.20, should reference 0.25
-- calculator.test.ts:1643 — test name references 0.20, should be generic
+**Completed**: BL-063 Design Specification (Impact Breakdown UI, 770-line spec)
 
-**Acceptance criteria**: All tests pass (target 647+).
+**Deliverable**: Production-ready design with:
+- 6 expandable breakdown sections (with templates)
+- Responsive desktop/tablet/mobile layouts
+- Data requirements (9 PassResult fields)
+- Implementation roadmap (2-3h engine + 2-3h ui-dev)
+- WCAG 2.1 AA accessibility specs
+- Testing checklist (14 items)
 
-### BL-022 (P2, reviewer): CLAUDE.md balance state update (carried over)
+**Status**: READY FOR IMPLEMENTATION. Ready for Round 6.
 
-Still needed. Update:
-- breakerGuardPenetration: 0.20 → 0.25
-- Charger INIT: 60 → 55, STA: 60 → 65
-- Test count: 477 → 647
-- If BL-025 completes: add Bulwark CTL/MOM change
-- Balance State summary: update remaining targets
+---
 
-### Deprioritized / Cancelled
+### Polish (CSS Artist) (COMPLETE)
+**Status**: Complete | **Tests**: 889/889 ✅ | **Files**: src/App.css, src/index.css
 
-- **BL-020**: Superseded by BL-025 (stat redistribution replaces guardImpactCoeff exploration)
-- **BL-021**: Cancelled (guardImpactCoeff not being changed)
-- **BL-023**: Deferred (QA all-done, multi-pass worked example is stretch)
-- **BL-024**: Deferred (polish all-done, rarity borders need JSX change first)
+**Completed**:
+1. Bug Fix #1: Tooltip focus color (blue → gold for consistency)
+2. Bug Fix #2: Duplicate selector cleanup (`.tip--active::before`)
+3. BL-064 CSS Foundation: 150+ lines production-ready styling
 
-## Risks
+**CSS System**: 1,870 lines, 15+ components, 8+ animations, WCAG 2.1 AA, zero `!important`
 
-### Risk 1: Bulwark stat change insufficient (Medium)
-CTL 55→52 removes only 3 points. Counter bonus change: `4 + 55*0.1 = 9.5` → `4 + 52*0.1 = 9.2`. This is a small delta. MOM 55→58 theoretically doesn't help defense. The net effect may only be -1-2pp, insufficient to hit <58%. If so, Round 6 would need Option B or a different approach.
+**Impact**: BL-064 ui-dev can implement immediately (all CSS ready)
 
-### Risk 2: Test cascade from Bulwark changes (Low-Medium)
-Giga Bulwark test archetype will break. Any computed values using Bulwark CTL or MOM in tests will break. The Explore agent found 1 definite break (line 804) and the stat total tests are safe (total stays 290). Risk is manageable.
+---
 
-### Risk 3: Agent availability (Low)
-QA is all-done. BL-026 requires QA re-activation. If not possible, balance-tuner can fix the tests themselves (they share archetypes.ts ownership).
+## Critical Blocker Resolution
 
-## Session Milestone Tracking
+### Primary Blocker: Engine-Dev PassResult Extensions
+**Status**: Identified ✅ | **Task**: BL-063x (NEW)
 
-| Milestone | Target | Current | Status |
-|-----------|--------|---------|--------|
-| Charger bare ≥40% | 40% | 40.5% | MET |
-| Technician ≥45% all tiers | 45% | 44-48% | MOSTLY MET |
-| Bulwark ≤58% bare | 58% | 61.6% | NOT MET |
-| Bulwark ≤58% uncommon | 58% | 62.3% | NOT MET |
-| Balance spread bare <15pp | 15pp | 21.1pp | NOT MET |
-| Test suite ≥600 | 600 | 647 | MET |
-| All tests passing | 0 failures | 0 | MET |
-| Code review all rounds | 4 rounds | 4 rounds | MET |
+**BL-063x Specification** (ready for backlog):
+```
+ID: BL-063x
+Role: engine-dev
+Priority: 1 (CRITICAL)
+Title: Extend PassResult for Impact Breakdown (BL-064 blocker)
 
-**Bottom line**: 5/8 milestones met. The 3 remaining all trace to Bulwark dominance. BL-025 is the primary action to address this.
+Description:
+Add 9 optional fields to PassResult interface:
+- counterWon: boolean
+- counterBonus: number
+- guardStrength: number
+- guardReduction: number
+- fatiguePercent: number
+- momPenalty: number
+- ctlPenalty: number
+- maxStaminaTracker: number
+- breakerPenetrationUsed: boolean
 
-## Cumulative Session Stats (5 rounds)
+Files: src/engine/types.ts, calculator.ts, phase-joust.ts
+Effort: 2-3 hours
+Blocks: BL-064 (6-8h ui-dev learning loop)
+Depends on: BL-063 (complete)
+```
 
-- 5 rounds complete
-- 18/24 tasks done, 3 new tasks created (BL-025, BL-026), 1 cancelled (BL-021)
-- Test count: 477 → 647 (+170, +36%)
-- Balance spread (bare): 32pp → 21.1pp (-34%)
-- Balance changes applied: Technician MOM+3, Charger INIT→STA swap, breakerGuardPenetration 0.25
-- Next change: Bulwark CTL-3/MOM+3 (pending BL-025)
+**Round 6 Action**: Create BL-063x in backlog, assign to engine-dev Phase A
+
+---
+
+## Backlog Changes
+
+### Marked Complete (Round 5)
+- BL-073: Manual QA planning for BL-062 ✅
+
+### New Task Created
+- BL-063x: Engine-dev PassResult extensions (priority 1, critical blocker)
+
+### Task Status Updates
+- BL-063: PENDING → COMPLETE (design spec ready) ✅
+- BL-064: PENDING (blocked on BL-063x engine work)
+- BL-067: PENDING (P3 lower priority)
+- BL-068: PENDING (blocked on BL-067 design)
+- BL-071: PENDING (P2, can parallelize with BL-063x)
+- BL-072/075: PENDING (MEMORY.md variant notes, independent)
+
+### Backlog Health
+- **Total tasks**: 27 created
+- **Completed**: 18 (67%)
+- **In progress**: 1
+- **Pending**: 6
+- **Blocked**: 2 (clear dependencies)
+
+---
+
+## Dependency Chain Status
+
+### Learning Loop (P1 Critical)
+```
+BL-061 ✅ → BL-062 ✅ → BL-063 ✅ → BL-063x ⏳ → BL-064 ⏳
+```
+**Status**: 67% complete. Waiting on engine-dev Round 6.
+
+### Variant Tooltips (P2 Medium)
+```
+BL-066 ✅ → BL-071 ⏳ → BL-072 ⏳
+```
+**Status**: Can parallelize with BL-063x in Round 6.
+
+### Counter Chart (P3 Polish)
+```
+BL-067 ⏳ → BL-068 ⏳
+```
+**Status**: Lower priority, can wait until BL-064 ships.
+
+---
+
+## Round 6 Recommendations
+
+### Phase A (Immediate)
+1. **BL-063x** (engine-dev): PassResult extensions — 2-3h, CRITICAL
+2. **BL-071** (designer): Variant tooltips design — 1-2h, parallel
+3. **BL-072/075** (reviewer): MEMORY.md variant notes — 1-2h, independent
+
+### Phase B (Depends on Phase A)
+1. **BL-064** (ui-dev): Impact breakdown implementation — 6-8h, after BL-063x
+2. **BL-073 QA follow-up**: Manual QA testing (if needed) — 2-4h
+
+### Stretch Goals
+- Tier analysis continuation (balance-tuner)
+- Additional edge case tests (qa-engineer)
+
+### Not Yet Ready
+- BL-067 (Counter chart design) — P3, defer until P1+P2 shipped
+- BL-068 (Counter chart UI) — P3, defer until BL-067 spec ready
+
+---
+
+## Session Summary (Rounds 1-5)
+
+### Features Shipped
+1. ✅ BL-047 (Round 1): ARIA attributes
+2. ✅ BL-058 (Round 2): Gear hints + Quick Builds
+3. ✅ BL-062 (Round 4): Stat Tooltips (P1 CRITICAL)
+
+### Design Specs Complete
+1. ✅ BL-061 (Round 4): Stat tooltip design
+2. ✅ BL-063 (Round 5): Impact breakdown design (production-ready)
+
+### Test Growth
+- Start (Round 1): 822 tests
+- End (Round 5): 889 tests
+- Delta: +67 tests, 0 regressions
+
+### Team Velocity
+- Avg tasks/round: 4-5 completed
+- Avg features/round: 0.6 shipped
+- Blockers: 1 new (clearly identified, actionable)
+
+---
+
+**Status**: READY FOR ROUND 6. All Phase A tasks defined. Engine-dev blocker identified. Learning loop 67% complete.
+

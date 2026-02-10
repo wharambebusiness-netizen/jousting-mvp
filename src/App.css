@@ -1547,13 +1547,242 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.2);
   z-index: 999;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-.tip--active::before {
   opacity: 1;
   pointer-events: auto;
+  transition: opacity 0.15s ease;
+}
+
+/* Impact Breakdown Card (BL-064 support) */
+.impact-breakdown {
+  background: var(--parchment-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.impact-breakdown__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.impact-breakdown__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.impact-breakdown__toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--ink-light);
+  padding: 4px;
+  transition: transform 0.2s ease;
+}
+
+.impact-breakdown__toggle--expanded {
+  transform: rotate(180deg);
+}
+
+.impact-breakdown__result {
+  padding: 8px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.impact-breakdown__result-status {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.impact-breakdown__result-status--win { color: var(--green); }
+.impact-breakdown__result-status--lose { color: var(--red); }
+.impact-breakdown__result-status--tie { color: var(--gold-dark); }
+
+.impact-breakdown__scores {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.impact-breakdown__score {
+  text-align: center;
+  flex: 1;
+}
+
+.impact-breakdown__score-label {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  margin-bottom: 2px;
+}
+
+.impact-breakdown__score-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Bar graph for impact comparison */
+.impact-breakdown__bar-container {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 40px;
+  margin-bottom: 8px;
+}
+
+.impact-breakdown__bar {
+  flex: 1;
+  background: linear-gradient(to top, var(--blue), var(--blue-light));
+  border-radius: 2px;
+  position: relative;
+  transition: opacity 0.2s ease;
+}
+
+.impact-breakdown__bar--player {
+  background: linear-gradient(to top, var(--p1), var(--blue-light));
+}
+
+.impact-breakdown__bar--opponent {
+  background: linear-gradient(to top, var(--p2), var(--red-light));
+}
+
+.impact-breakdown__bar-label {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* Expandable sections */
+.impact-breakdown__section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.impact-breakdown__section--collapsed {
+  display: none;
+}
+
+.impact-breakdown__section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+  transition: background-color 0.15s ease;
+}
+
+.impact-breakdown__section-header:hover {
+  background: rgba(201, 168, 76, 0.05);
+  border-radius: 2px;
+  padding-left: 6px;
+  padding-right: 6px;
+  margin-left: -6px;
+  margin-right: -6px;
+}
+
+.impact-breakdown__section-toggle {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--gold-dark);
+  transition: transform 0.2s ease;
+}
+
+.impact-breakdown__section-toggle--expanded {
+  transform: rotate(90deg);
+}
+
+.impact-breakdown__section-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.impact-breakdown__section-content {
+  padding-left: 24px;
+  padding-top: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-light);
+}
+
+.impact-breakdown__section-content--hidden {
+  display: none;
+}
+
+/* Data rows (stat adjustments, calculations, etc.) */
+.impact-breakdown__data-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 0.8rem;
+}
+
+.impact-breakdown__data-label {
+  color: var(--ink-light);
+}
+
+.impact-breakdown__data-value {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.impact-breakdown__data-value--positive { color: var(--green); }
+.impact-breakdown__data-value--negative { color: var(--red); }
+.impact-breakdown__data-value--neutral { color: var(--gold-dark); }
+
+/* Strategy tips */
+.impact-breakdown__tip {
+  background: rgba(42, 90, 143, 0.08);
+  border-left: 3px solid var(--blue);
+  padding: 6px 8px;
+  margin-top: 6px;
+  border-radius: 2px;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--ink-light);
+}
+
+/* Info icon with link to tutorial */
+.impact-breakdown__info-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-dark);
+  text-align: center;
+  line-height: 16px;
+  font-size: 0.7rem;
+  color: var(--gold-dark);
+  cursor: help;
+  margin-left: 4px;
+}
+
+.impact-breakdown__info-icon:hover {
+  background: var(--gold);
+  color: var(--parchment);
+  border-color: var(--gold);
 }
 
 /* --- Mobile (max-width: 480px) --- */
@@ -1657,6 +1886,53 @@
   /* Pass winner banner */
   .pass-winner-banner { padding: 8px 12px; margin-bottom: 10px; }
   .pass-winner-banner__label { font-size: 1rem; }
+
+  /* Impact breakdown mobile (BL-064 support) */
+  .impact-breakdown {
+    padding: 10px;
+    margin-top: 8px;
+  }
+
+  .impact-breakdown__title {
+    font-size: 0.9rem;
+  }
+
+  .impact-breakdown__result-status {
+    font-size: 0.95rem;
+  }
+
+  .impact-breakdown__scores {
+    gap: 8px;
+  }
+
+  .impact-breakdown__bar-container {
+    height: 32px;
+    margin-bottom: 8px;
+  }
+
+  .impact-breakdown__bar-label {
+    font-size: 0.65rem;
+    top: -18px;
+  }
+
+  .impact-breakdown__section-content {
+    padding-left: 16px;
+    font-size: 0.8rem;
+  }
+
+  .impact-breakdown__section-title {
+    font-size: 0.85rem;
+  }
+
+  .impact-breakdown__data-row {
+    font-size: 0.75rem;
+    gap: 8px;
+  }
+
+  .impact-breakdown__tip {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+  }
 
   /* Combat log */
   .combat-log__content { font-size: 0.68rem; padding: 6px 8px; max-height: 200px; }
