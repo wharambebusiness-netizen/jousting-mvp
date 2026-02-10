@@ -359,6 +359,159 @@
 .rarity-card--giga.card--selected { background: var(--rarity-legendary-bg); box-shadow: 0 0 0 2px var(--rarity-giga), 0 0 16px var(--glow-giga-selected); }
 .rarity-card--giga .rarity-card__name { color: var(--rarity-giga); }
 
+/* Rarity glow stacking: Epic 1x, Legendary 2x (overlapping), Relic 3x (additive depth) */
+.gear-item--legendary { box-shadow: 0 0 8px var(--glow-legendary), 0 0 12px var(--glow-legendary); }
+.gear-item--relic { box-shadow: 0 0 8px var(--glow-relic), 0 0 12px var(--glow-relic), 0 0 16px var(--glow-relic); }
+.gear-item--legendary:hover { box-shadow: 0 0 8px var(--glow-legendary), 0 0 12px var(--glow-legendary), 0 2px 8px var(--shadow); }
+.gear-item--relic:hover { box-shadow: 0 0 8px var(--glow-relic), 0 0 12px var(--glow-relic), 0 0 16px var(--glow-relic), 0 2px 8px var(--shadow); }
+.rarity-card--legendary.card--selectable:hover { box-shadow: 0 0 12px var(--glow-legendary-strong), 0 0 16px var(--glow-legendary-strong); }
+.rarity-card--relic.card--selectable:hover { box-shadow: 0 0 12px var(--glow-relic-strong), 0 0 16px var(--glow-relic-strong), 0 0 20px var(--glow-relic-strong); }
+
+/* Quick Builds Section */
+.quick-builds-section {
+  background: var(--parchment-light);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.quick-builds-section__title {
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.quick-builds-section__subtitle {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+.quick-builds-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+.quick-build-card {
+  background: var(--parchment);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+.quick-build-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow);
+}
+.quick-build-card:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.quick-build-card:active {
+  transform: scale(0.98);
+}
+.quick-build-card--aggressive {
+  border-color: var(--p1);
+  background: linear-gradient(135deg, var(--parchment) 0%, rgba(220, 100, 80, 0.08) 100%);
+}
+.quick-build-card--aggressive:hover {
+  border-color: var(--p1);
+  box-shadow: 0 4px 12px rgba(220, 100, 80, 0.3);
+}
+.quick-build-card--balanced {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, var(--parchment) 0%, rgba(218, 180, 100, 0.08) 100%);
+}
+.quick-build-card--balanced:hover {
+  border-color: var(--gold);
+  box-shadow: 0 4px 12px rgba(218, 180, 100, 0.3);
+}
+.quick-build-card--defensive {
+  border-color: var(--p2);
+  background: linear-gradient(135deg, var(--parchment) 0%, rgba(100, 120, 180, 0.08) 100%);
+}
+.quick-build-card--defensive:hover {
+  border-color: var(--p2);
+  box-shadow: 0 4px 12px rgba(100, 120, 180, 0.3);
+}
+.quick-build-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.quick-build-card__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.quick-build-card__name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.quick-build-card__desc {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--ink-light);
+}
+
+/* Matchup Hint */
+.matchup-hint {
+  background: linear-gradient(135deg, var(--parchment-light) 0%, var(--parchment) 100%);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.matchup-hint__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.matchup-hint__icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.matchup-hint__title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.matchup-hint__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.matchup-hint__rate {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.matchup-hint__confidence {
+  font-size: 0.8rem;
+  color: var(--ink-light);
+}
+.matchup-hint__notes {
+  font-size: 0.8rem;
+  color: var(--ink);
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--parchment);
+  border-left: 3px solid var(--gold);
+  border-radius: 2px;
+}
+.matchup-hint__disclaimer {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  font-style: italic;
+  margin-top: 8px;
+}
+
 /* Loadout section (gear + stats) */
 .loadout-section { }
 .loadout-section__header {
@@ -1133,6 +1286,19 @@
 
   /* Variant toggle spacing */
   .variant-toggle__btn { padding: 3px 6px; }
+
+  /* Quick Builds responsive */
+  .quick-builds-section { padding: 12px; }
+  .quick-builds-grid { gap: 8px; }
+  .quick-build-card { padding: 10px; }
+  .quick-build-card__icon { font-size: 1.3rem; }
+  .quick-build-card__name { font-size: 0.9rem; }
+  .quick-build-card__desc { font-size: 0.7rem; }
+
+  /* Matchup hint responsive */
+  .matchup-hint { padding: 10px; }
+  .matchup-hint__rate { font-size: 1.6rem; }
+  .matchup-hint__body { gap: 12px; }
 }
 
 /* --- Mobile (max-width: 480px) --- */
@@ -1293,4 +1459,22 @@
 
   /* Loadout mini (summary) */
   .loadout-mini__gear-line { font-size: 0.68rem; }
+
+  /* Quick Builds mobile: single column */
+  .quick-builds-grid { grid-template-columns: 1fr; gap: 8px; }
+  .quick-build-card { padding: 10px; }
+  .quick-build-card__icon { font-size: 1.2rem; }
+  .quick-build-card__name { font-size: 0.85rem; }
+  .quick-build-card__desc { font-size: 0.68rem; }
+  .quick-builds-section { padding: 10px; }
+  .quick-builds-section__title { font-size: 1rem; }
+  .quick-builds-section__subtitle { font-size: 0.75rem; }
+
+  /* Matchup hint mobile */
+  .matchup-hint { padding: 10px; }
+  .matchup-hint__rate { font-size: 1.4rem; }
+  .matchup-hint__body { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .matchup-hint__confidence { font-size: 0.75rem; }
+  .matchup-hint__notes { font-size: 0.75rem; padding: 6px; }
+  .matchup-hint__disclaimer { font-size: 0.68rem; }
 }

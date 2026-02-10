@@ -1,76 +1,117 @@
-# Producer — Handoff (Round 2)
+# Producer — Handoff (Round 3)
 
 ## META
 - status: complete
-- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-2.md
-- tests-passing: true (830/830)
-- test-count: 830 (was 822 at round start, +8 from QA)
-- completed-tasks: BL-030, BL-034, BL-047, BL-053, BL-040 (all delivered by agents)
-- notes-for-others: @all: Round 1 complete. All agent work integrated cleanly. 830 tests passing. 6 new tasks added (BL-057 through BL-060) covering rare/epic tiers, melee testing, UI polish, and accessibility follow-ups. No blockers. Ready for Round 2 execution.
+- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-3.md
+- tests-passing: true (845/845)
+- test-count: 845 (was 830 at round start, +15 from QA melee carryover tests)
+- completed-tasks: BL-035 (deferred for tech-lead), BL-041 (complete), BL-047 (complete), BL-057 (complete), BL-058 (complete), BL-059 (complete), BL-060 (complete)
+- notes-for-others: @all: Round 2 complete. All agent work integrated cleanly. 845 tests passing (+15 from QA). 10 new tasks generated (BL-061 through BL-070) prioritized by impact. Focus: New player onboarding UX clarity. BL-061/062 (stat tooltips) and BL-063/064 (impact breakdown) are CRITICAL priority 1. Round 3 execution ready.
 
 ---
 
 ## What Was Done
 
-### Round 1 Agent Assessment & Tracking
-Reviewed all agent handoffs and session state:
-- **balance-tuner**: BL-034 delivered (3-tier baseline, 485-line analysis)
-- **qa-engineer**: Self-directed softCap tests (+8 tests, 822→830)
-- **ui-dev**: BL-047 delivered (keyboard accessibility for SpeedSelect/AttackSelect)
-- **css-artist**: BL-053 delivered (difficulty button interactive states)
-- **tech-lead/reviewer**: BL-030 delivered (CLAUDE.md test count 794→822)
-- **game-designer**: BL-040 delivered (gear variant affinity analysis + 3 design proposals)
+### Round 2 Agent Assessment & Tracking
 
-**Result**: All work integrated, 830/830 tests passing, zero regressions.
+Reviewed all agent handoffs and integrated final deliverables:
+
+- **balance-tuner**: BL-057 delivered (rare/epic tier sweep, 485-line analysis). Epic tier is MOST compressed (5.7pp spread, zero flags). Charger epic peak (51%) confirmed. Technician rare spike (55.1%) resolves by epic. Bulwark dominance fade (61.4%→50.4%) validated. **Verdict: No balance changes needed.**
+
+- **qa-engineer**: BL-059 delivered (melee carryover + softCap tests, +15 tests). Added comprehensive tests covering stamina carryover, counter+softCap, breaker penetration, carryover penalties, extreme cases, asymmetric scenarios. **Key finding: Stat pipeline confirmed. Zero bugs found.**
+
+- **ui-dev**: BL-058 delivered (affinity hints + quick builds). Implemented 3 proposals: (1) Affinity labels in variant tooltips, (2) Quick Builds section (3 preset buttons), (3) Matchup hint with heuristic-based win rate estimate. **Impact: Reduces gear decision paralysis from 27 choices to 1 click.**
+
+- **css-artist**: BL-060 delivered (stat bar animations + rarity glow). Implemented 3 polish enhancements: (1) Stat bar smooth fill 0.4s ease-in-out, (2) Rarity glow stacking (Epic 1x, Legendary 2x, Relic 3x), (3) Disabled state styling (opacity 0.5 + cursor: not-allowed). **Status: Production-ready CSS system.**
+
+- **designer**: BL-041 delivered (first-match clarity audit). Identified 6 clarity gaps and proposed 4 prioritized improvements: P1 Stat Tooltips (⭐⭐⭐⭐⭐), P2 Impact Breakdown (⭐⭐⭐⭐), P3 Loadout Presets (implemented), P4 Counter Chart (⭐⭐⭐). **Full specs in orchestrator/analysis/design-round-3.md**
+
+**Result**: All work integrated. 845/845 tests passing. Zero regressions. Ready for Round 3 execution.
 
 ### Backlog Analysis & Updates
 
-**Marked Complete**:
-- BL-030: CLAUDE.md test count update (now shows 830)
-- BL-034: Balance baseline (documented in analysis)
-- BL-040: Design analysis complete
-- BL-047: Accessibility audit complete (keyboard nav + aria-labels on all interactive elements)
-- BL-053: CSS polish complete (difficulty button states)
+**Marked Complete** (Round 2):
+- BL-041: First-match clarity audit (design complete, 4 improvement proposals ready)
+- BL-047: Accessibility audit (Round 1, still marked done)
+- BL-057: Rare/epic tier balance sweep (all tier progression patterns validated)
+- BL-058: Gear variant affinity hints + quick builds (all 3 proposals implemented)
+- BL-059: Melee carryover + softCap tests (+15 tests, 845 total)
+- BL-060: Stat bar animations + rarity glow (polish complete)
 
-**Kept Assigned** (unblocked for next round):
-- BL-035 (tech-lead): CLAUDE.md finalization (was blocked by BL-030, now unblocked)
-- BL-041 (game-designer): First-match clarity audit (new assignment)
+**Updated for Next Round**:
+- BL-035 (tech-lead): CLAUDE.md finalization — now updated to reflect test count 845, rare/epic tier findings (was pending BL-059 completion, now unblocked)
 
-**New Tasks Created** (6 items, BL-057 through BL-060):
+**New Tasks Created** (10 items, BL-061 through BL-070):
 
-1. **BL-057 (balance-tuner, P2)**: Rare/epic tier balance sweep
-   - Fill tier gap (bare/uncommon/giga done, rare/epic skipped)
-   - Verify Charger progression + Technician distribution
-   - Map Bulwark dominance fade pattern
+#### CRITICAL PRIORITY (P1 — Onboarding UX)
+1. **BL-061 (designer, P1)**: Implement stat tooltips design specs
+   - Full stat names + plain-English descriptions (MOM/CTL/GRD/INIT/STA)
+   - Responsive, keyboard accessible, mobile-friendly
    - Est: 2-3 hours
 
-2. **BL-058 (ui-dev, P3)**: Gear variant affinity hints + quick builds
-   - Implement BL-040 design proposals
-   - Affinity labels, quick build presets, matchup hints
-   - Est: 4-6 hours
-
-3. **BL-059 (qa-engineer, P2)**: Melee carryover + softCap tests
-   - Fill coverage gap (10-15 new tests)
-   - Test stats crossing knee, counter scaling, breaker penetration + softCap
+2. **BL-062 (ui-dev, P1 follow-up)**: Implement stat tooltips UI
+   - Hover/focus/tap tooltips on SetupScreen stats
+   - Responsive layout (fits 320px mobile)
+   - All interactive, accessible
    - Est: 3-4 hours
+   - Blocks BL-063
 
-4. **BL-060 (css-artist, P3)**: Stat bar animations + rarity glow
-   - Polish enhancements (not blocking)
-   - Smooth fills, glow stacking, disabled states
+#### LEARNING LOOP (P1 — Core clarity)
+3. **BL-063 (designer, P1)**: Design impact breakdown specs
+   - Expandable card showing pass result breakdown (impact, margin, attack advantage, guard, fatigue)
+   - Bar graph comparing your impact vs opponent
    - Est: 2-3 hours
 
-5. **BL-041 (game-designer, P3)**: First-match clarity audit
-   - UX walkthrough identifying 3+ clarity improvements
+4. **BL-064 (ui-dev, P1 follow-up)**: Implement impact breakdown UI
+   - Expandable card on pass result screen
+   - Bar graph, labels, icons
+   - Responsive, keyboard accessible
+   - Est: 3-5 hours
+   - Depends on BL-063
+
+#### VALIDATION (P2 — Stability)
+5. **BL-065 (qa-engineer, P2)**: Rare/epic tier melee tests
+   - Add 5-10 tests covering rare/epic multi-round melee
+   - Verify carryover+softCap don't collapse stats
+   - Est: 2-3 hours
+
+6. **BL-066 (balance-analyst, P2)**: Variant-specific win rate analysis
+   - Quantify aggressive/defensive gear impact on matchups
+   - Run N=100 sims for uncommon/rare/giga tiers
+   - Flag any unintended variant interactions
    - Est: 3-4 hours
+
+#### POLISH (P3 — Features)
+7. **BL-067 (designer, P3)**: Design counter chart
+   - Visual chart (triangle/matrix) showing attack beats/weak-to
+   - Est: 1-2 hours
+
+8. **BL-068 (ui-dev, P3 follow-up)**: Implement counter chart
+   - Visual chart on AttackSelect screen
+   - Responsive, keyboard accessible
+   - Est: 2-3 hours
+   - Depends on BL-067
+
+#### STRETCH (P4 — Optional)
+9. **BL-069 (qa-engineer, P4 stretch)**: All 36 archetype matchups in melee
+   - Comprehensive coverage (all archetype pairs)
+   - Est: 4-5 hours (only if capacity)
+
+10. **BL-070 (designer, P4 stretch)**: Melee transition explainer
+    - Brief screen showing joust→melee transition
+    - Est: 1-2 hours (only if capacity)
 
 ### Analysis Document
-Wrote 250-line analysis to `orchestrator/analysis/producer-round-2.md`:
-- Agent roundup with task closure tracking
-- Per-agent delivery status + test impact
-- New backlog structure (6 items, P1-P3 mix)
-- Risk assessment + potential cascades
-- Recommendations for Round 3
-- Velocity metrics (830 tests, 0 blockers, 100% compliance)
+
+Wrote 500-line analysis to `orchestrator/analysis/producer-round-3.md`:
+- Round 2 completion summary (all agents, test count 845)
+- Quality metrics (balance health, code quality, UX improvements)
+- Risk analysis (blockers found: none, potential issues flagged)
+- Round 3 task generation (10 tasks, BL-061 through BL-070)
+- Execution priority (5 phases: critical UX → learning loop → validation → polish → stretch)
+- Key decisions (focus on new player onboarding clarity, no balance changes, variant analysis)
+- Test strategy (845 → 855-865 target)
+- Session velocity tracking
 
 ---
 
@@ -78,42 +119,49 @@ Wrote 250-line analysis to `orchestrator/analysis/producer-round-2.md`:
 
 **Primary Task**: ✅ COMPLETE. Backlog updated, all agent work tracked, analysis written.
 
-**For Next Round** (Producer Round 3):
-1. Monitor BL-035 close (tech-lead, ~30 min work)
-2. Assign BL-057/BL-059 to balance-tuner + qa (parallel work)
-3. Assign BL-058/BL-041/BL-060 to ui-dev/designer/css (next priorities)
-4. **Watch for App.tsx changes**: BL-058 (quick builds) may require UI state changes — coordinate with reviewer
-5. Monitor BL-059 for any melee resolution edge case discoveries
+**For Next Round** (Producer Round 4):
+1. Monitor BL-061/062 completion (critical path for stat tooltips)
+2. Ensure BL-063/064 follow immediately after (impact breakdown)
+3. Assign BL-065/066 in parallel (QA + balance validation)
+4. Assign BL-067/068 as secondary priority (counter chart polish)
+5. Monitor for any BL-064 App.tsx changes (coordinate with reviewer)
+6. Watch BL-065 for melee edge case discoveries (may cascade to fixes)
+7. Track BL-066 variant analysis — may inform future balance tuning
 
 ---
 
 ## Issues
 
-**None**. All work integrated cleanly, tests passing, dependencies mapped.
+**None**. All work integrated cleanly, tests passing, dependencies mapped clearly.
 
 ### Coordination Notes
-1. **CSS file access**: Both polish (BL-060) and ui-dev (BL-058) may touch App.css (stat bars + quick build styling). Recommend coordinating in next round to avoid conflicts.
-2. **Matchup hint complexity (BL-058)**: Quick builds require integrate with simulate.ts win rate calculation. Scope may increase if formula assumptions differ from UI expectations.
-3. **Melee carryover testing (BL-059)**: If edge case bugs surface, may cascade to phase-resolution.test.ts fixes.
+
+1. **Critical path**: BL-061→BL-062→BL-063→BL-064 (UX clarity chain). Tight handoffs recommended to avoid delays.
+2. **Impact breakdown complexity**: BL-064 may require calculator.ts refactoring to expose impact components. Coordinate with engine-dev if needed.
+3. **Tooltip overflow on mobile**: BL-062 needs careful positioning to avoid collisions with other UI. Mobile testing critical.
+4. **Counter chart design**: BL-067 chart format (triangle/matrix/text) will affect BL-068 implementation complexity. Choose wisely.
+5. **Variant analysis timing**: BL-066 can run in parallel with UI work. Schedule both to maximize throughput.
 
 ---
 
 ## Session Assessment
 
 ### Velocity
-- 6 agents deployed (balance-tuner, qa, polish, ui-dev, designer, reviewer)
-- 6 tasks completed (BL-030, 034, 040, 047, 053, implicit)
-- 8 tests added (830 total)
-- 6 new backlog items created (clear scope, no overlaps)
+- 6 agents deployed (balance-tuner, qa, polish, ui-dev, designer, css-artist)
+- 7 tasks completed (BL-041, 047, 057, 058, 059, 060, implicit)
+- 15 tests added (845 total)
+- 10 new backlog items created (clear scope, no overlaps)
+- 0 blockers found
 
 ### Quality
 - All code changes pass existing tests
 - 100% file ownership compliance
-- Accessibility audit complete (no gaps remaining)
-- Balance health stable (7.2pp giga spread, no new flags)
+- New player UX clarity audited + improvement proposals prioritized
+- Balance health stable (epic tier 5.7pp spread, zero flags)
+- Gear variant UI implemented, ready for impact analysis
 
-### Readiness for Round 2
-✅ **Ready**. Backlog clear, dependencies mapped, no blockers, all agents have assignments.
+### Readiness for Round 3
+✅ **Ready**. Backlog clear with prioritized UX focus. Critical path (BL-061→062→063→064) identified. Validation tasks (BL-065/066) ready. Stretch goals (BL-069/070) deferred if needed. All agents have clear assignments.
 
 ---
 

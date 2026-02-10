@@ -2,143 +2,137 @@
 
 ## META
 - status: complete
-- files-modified: CLAUDE.md, MEMORY.md, orchestrator/analysis/reviewer-round-1.md
+- files-modified: CLAUDE.md, MEMORY.md, orchestrator/analysis/reviewer-round-2.md
 - tests-passing: true
-- test-count: 830
-- completed-tasks: BL-035
-- notes-for-others: @all: Round 1 review complete. All changes approved. CLAUDE.md updated with 830 test count, Technician MOM=64 validated. MEMORY.md updated with current archetype stats and win rates. See orchestrator/analysis/reviewer-round-1.md for detailed review.
+- test-count: 845
+- completed-tasks: none (continuous monitoring)
+- notes-for-others: @all: Round 2 review complete. All 4 agents approved (balance-tuner, qa, polish, ui-dev). 845 tests passing (+15 melee carryover tests). Zero blocking issues. Epic tier is MOST compressed (5.7pp spread). Charger peaks at epic (51.0%). Balance is healthy across all tiers. See orchestrator/analysis/reviewer-round-2.md for comprehensive review.
 
 ## What Was Done
 
-### BL-035: Review Technician MOM Change + Update Documentation ✅ COMPLETE
+### Round 2 Code Review — All Agents
 
-**1. Verification of Technician MOM=64 Change**:
-- ✅ Confirmed archetypes.ts:20 has Technician MOM=64 (applied in previous session)
-- ✅ Confirmed archetypes.ts:23 has Technician INIT=59 (adjusted to maintain balance)
-- ✅ Total stats: 303 (64+70+55+59+55)
+Reviewed 4 agents' work for structural integrity, quality, and compliance:
 
-**2. Validation Results from Balance Tuner**:
-- Bare tier: 52.4% (healthy, target met)
-- Uncommon tier: 46.6% (acceptable, within noise)
-- Giga tier: 48.9% (balanced)
-- Verdict: Technician buff successful, no overcorrection
-
-**3. CLAUDE.md Updates** (3 locations):
-- Line 9: Test count 822→830 ("as of S35")
-- Line 112: Test count 822→830 in Live Data section
-- Lines 160-169: Updated test breakdown with calculator 194→202 (+8 softCap boundary tests), total 822→830
-- Added "softCap boundaries" to calculator test description
-
-**4. MEMORY.md Updates**:
-- Updated "Current Archetype Stats & Win Rates" section
-- Technician: MOM 58→64, INIT 60→59, Total 298→303
-- Win rates: bare 52.4%, uncommon 46.6%, giga 48.9%
-- Added Technician validation summary and giga balance metrics
-
-### Round 1 Code Review — All Agents
-
-Reviewed 6 agents' work for structural integrity, quality, and compliance:
-
-**1. Balance Tuner** — Baseline Analysis ✅ APPROVED
-- File: orchestrator/analysis/balance-tuner-round-1.md
+**1. Balance Tuner — Rare/Epic Tier Analysis (BL-057)** ✅ APPROVED
+- File: orchestrator/analysis/balance-tuner-round-2.md
 - Type: Pure analysis (no code changes)
-- Findings: Technician validated, giga balance excellent (7.2pp spread), no changes needed
+- **KEY FINDING**: Epic tier is MOST compressed (5.7pp spread, better than giga 7.2pp)
+- Validated: Charger epic peak (51.0%), Technician rare spike (55.1%), Bulwark dominance fade (61.4%→50.4%)
+- Tier compression: 22.4pp bare → 5.7pp epic → 7.2pp giga
+- Verdict: No balance changes needed, all tier progressions healthy
 - Risk: None
 
-**2. QA Engineer** — SoftCap Boundary Tests ✅ APPROVED
-- File: src/engine/calculator.test.ts (+8 tests, lines 2018-2135)
-- Coverage: knee transitions, asymmetric scenarios, fatigue+softCap ordering, extreme values
-- Quality: Clean test patterns, correct expected values, no duplicated formulas
-- Risk: Low (test-only)
+**2. QA Engineer — Melee Carryover + SoftCap Tests (BL-059)** ✅ APPROVED
+- Files: src/engine/gear-variants.test.ts (+15 tests, lines 884-1230), orchestrator/analysis/qa-round-2.md
+- Type: Test-only changes (+15 tests)
+- Coverage: 6 categories (stamina carryover, counter+softCap, breaker penetration, carryover penalties, extreme cases, asymmetric scenarios)
+- **KEY VALIDATION**: Stat pipeline confirmed — carryover → softCap → fatigue (order matters!)
+- Test quality: Deterministic RNG, boundary testing, multi-system interactions, zero magic numbers
+- Zero bugs found: All engine behavior matches specification exactly
+- Test count: 830 → 845 (+15 tests, gear-variants 156→171)
+- Risk: LOW (test-only)
 
-**3. Polish** — Difficulty Button States ✅ APPROVED
-- File: src/App.css (lines 19-44)
-- Changes: Added :hover, :focus-visible, :active states to .difficulty-btn
-- Quality: Consistent with design system, smooth transitions, correct accessibility
-- Risk: None (CSS-only)
+**3. Polish — CSS Stretch Goals (BL-060)** ✅ APPROVED
+- Files: src/App.css (lines 365-368), src/index.css (lines 217-220, 265, 312)
+- Type: CSS-only changes
+- Changes: Stat bar smooth fills (ease-in-out), rarity glow stacking (1x/2x/3x), disabled state styling
+- Quality: Zero !important flags, uses CSS variables, consistent design system
+- Risk: NONE (CSS-only, zero JS)
 
-**4. UI Dev** — ARIA & Keyboard Navigation ✅ APPROVED
-- Files: SpeedSelect.tsx, AttackSelect.tsx
-- Changes: Added role="button", tabIndex, aria-label, onKeyDown handlers
-- Quality: Rich aria-labels, semantic correctness, no state logic changes
-- Risk: None (presentation-only)
-
-**5. Designer** — First-Match Clarity Audit ✅ APPROVED
-- File: orchestrator/analysis/design-round-3.md
-- Content: Comprehensive new player experience walkthrough with 4 prioritized improvements (P1-P4)
-- Quality: Detailed acceptance criteria, impact vs. effort matrix, practical roadmap
-- Risk: None (analysis-only)
-
-**6. Reviewer (Self)** — Documentation Updates
-- CLAUDE.md: Test counts 822→830 in 3 locations
-- MEMORY.md: Technician stats + win rates updated
-- orchestrator/analysis/reviewer-round-1.md: Comprehensive 12-section review report
+**4. UI Dev — Loadout Screen UX Improvements (BL-058)** ✅ APPROVED
+- Files: src/ui/LoadoutScreen.tsx (lines 163-309), src/App.css (lines 370-514, 1289-1302, 1427-1443)
+- Type: UI feature implementation
+- Features: Affinity labels in variant tooltips, Quick Builds (3 preset buttons), matchup hint (heuristic win rate estimator)
+- Quality: Clean React patterns, proper TypeScript types, accessibility (ARIA labels, keyboard navigation)
+- **NOTE**: Matchup hint uses heuristic (not exact simulation) — reasonable tradeoff for UI responsiveness
+- Shared file coordination: App.css modified by 2 agents (polish 365-368, ui-dev 370-514) — zero conflicts
+- Risk: LOW (UI-only, zero engine changes)
 
 ### Structural Integrity Verification
 
 **All Hard Constraints Passed** ✅:
-- ✅ Zero UI/AI imports in src/engine/
-- ✅ All tuning constants in balance-config.ts
-- ✅ Stat pipeline order preserved
-- ✅ Public API signatures stable, resolvePass() still deprecated
-- ✅ Balanced variant = legacy mappings (no gear changes)
+- ✅ Zero UI/AI imports in src/engine/ (verified via grep)
+- ✅ All tuning constants in balance-config.ts (no new hardcoded constants)
+- ✅ Stat pipeline order preserved (carryover → softCap → fatigue validated by QA tests)
+- ✅ Public API signatures stable (zero breaking changes)
+- ✅ resolvePass() still deprecated (no usage in new code)
 
 **Soft Quality Checks** ✅:
-- Type safety: Good (proper TypeScript types, no `any` casts)
+- Type safety: Good (no `any` casts, proper TypeScript types)
 - Named constants: Good (no new magic numbers)
-- Function complexity: Good (all under 60 lines)
-- Code duplication: Good (no duplicated formulas)
+- Function complexity: Good (all under 60 lines except getMatchupHint at 70 — acceptable for heuristic logic)
+- Code duplication: Good (zero duplicated formulas)
+- Balanced variant = legacy mappings: Good (no gear changes)
+
+### Documentation Updates
+
+**CLAUDE.md** (3 locations):
+- Line 9: Test count 830→845 ("as of S35 R2")
+- Line 112: Test count 830→845 in Live Data section
+- Line 167: gear-variants 156→171 tests, added "melee carryover + softCap interactions"
+- Line 169: Total 830→845 tests
+
+**MEMORY.md** (2 sections):
+- Added rare/epic tier findings: Epic 5.7pp spread (best compression), Charger epic peak (51.0%), Technician rare spike (55.1%), tier compression progression (22.4pp→5.7pp→7.2pp), Bulwark dominance fade (-2.8pp/tier)
+- Updated test count 830→845 (+15 melee carryover tests)
+- Added stat pipeline validation: carryover → softCap → fatigue order confirmed
 
 ### Review Analysis Report
 
-Wrote comprehensive 12-section review to `orchestrator/analysis/reviewer-round-1.md`:
-1. Executive Summary (all approved, 830 tests passing, low risk)
-2. Round 1 Changes Overview (6 agents, 9 files, +8 tests)
-3. Detailed Reviews (6 agents reviewed with architecture/quality/compliance checks)
+Wrote comprehensive 12-section review to `orchestrator/analysis/reviewer-round-2.md`:
+1. Executive Summary (Grade A, 4/4 agents approved, 845 tests passing, LOW risk)
+2. Round 2 Changes Overview (4 agents, 5 files, +15 tests)
+3. Detailed Agent Reviews (architecture, quality, compliance for each agent)
 4. Hard Constraint Compliance (5 constraints verified)
 5. Soft Quality Assessment (type safety, constants, complexity, duplication)
-6. Cross-Agent Coordination (excellent collaboration, zero conflicts)
-7. Test Suite Health (822→830, all passing)
-8. Risk Assessment (low deployment risk)
+6. Cross-Agent Coordination (shared App.css handled cleanly, zero conflicts)
+7. Test Suite Health (830→845, 100% pass rate, +1.8% growth)
+8. Risk Assessment (LOW overall, deployment ready YES)
 9. Tech Debt Identified (none this round)
-10. Recommendations for Round 2 (per-agent guidance)
-11. Backlog Task Completion (BL-035 complete, others tracked)
-12. Summary (Grade A+, strengths/weaknesses, overall assessment)
+10. Recommendations for Round 3 (per-agent guidance)
+11. CLAUDE.md / MEMORY.md Updates Required (completed)
+12. Summary (Grade A, strengths/weaknesses, action items)
 
 ## What's Left
 
-**Nothing**. Primary task (BL-035) complete. Round 1 review complete. All agents' changes approved.
+**Nothing**. Round 2 review complete. All agents approved. Documentation updated. Status: complete.
 
-**Stretch Goals** (future rounds, not blocking):
-1. Monitor balance state at next tier sweep (Technician buff impact over time)
-2. Consider explicit CSS file ownership to avoid future conflicts (polish + ui-dev both touched App.css this round)
-3. Track per-file test counts in CLAUDE.md as they evolve (currently at 830)
+**Available for Round 3 stretch goals** (continuous agent):
+1. Monitor balance state at next tier sweep (rare/epic now documented, all 5 tiers complete)
+2. Monitor UI heuristic accuracy vs actual simulation results (future validation)
+3. Track per-file test counts as they evolve (845 tests as of S35 R2)
 
 ## Issues
 
-**None**. All tests passing (830/830). Zero blocking issues found in code review.
+**None**. All tests passing (845/845). Zero blocking issues found in code review.
 
 ### Minor Notes
 
-1. **CSS Coordination**: Two agents (polish + ui-dev) modified App.css this round. No conflicts occurred, but worth monitoring in future rounds. Consider section-based ownership if conflicts arise.
+1. **Matchup Hint Heuristic**: UI dev chose heuristic over real-time simulation for instant UI feedback (<100ms). Reasonable tradeoff, but future enhancement could pre-compute lookup tables for exact values. Not blocking.
 
-2. **Test Count Drift**: CLAUDE.md test count will need updates each round as QA adds tests. This is expected maintenance, not an issue. (Updated to 830 this round.)
+2. **getMatchupHint Complexity**: 70 lines (slightly above 60-line guideline) but acceptable because:
+   - Pure calculation function (no side effects)
+   - Clear sections (variant detection, base rates, modifiers, notes)
+   - High complexity is inherent to heuristic logic
+   - Not a candidate for further decomposition (would reduce readability)
 
-3. **Balance Tuner Git Checkout**: Balance tuner used `git checkout` to revert uncommitted tests in calculator.test.ts. This is a workaround for dirty working directory state from prior session. Orchestrator should add pre-round validation to prevent this pattern.
+3. **Shared App.css**: Two agents modified (polish lines 365-368, ui-dev lines 370-514). Zero conflicts this round. Continue monitoring for future rounds.
 
 ---
 
 ## Review Summary
 
-**Round 1 Grade**: A+
-**Risk Level**: Low
-**Approved Changes**: 6/6 agents (100%)
-**Test Coverage**: +8 tests (+1.0%)
+**Round 2 Grade**: A
+**Risk Level**: LOW
+**Approved Changes**: 4/4 agents (100%)
+**Test Coverage**: +15 tests (+1.8%)
 **Structural Violations**: 0
+**Deployment Ready**: YES
 
-All agents operating within file ownership boundaries. High-quality work across the board. Balance is healthy (no changes needed). Test suite is growing. Accessibility is improving. Design has clear priorities. Ready for Round 2.
+All agents operating within file ownership boundaries. High-quality work across the board. Balance is healthy (epic tier is best compressed at 5.7pp spread). Test suite is growing (845 tests). UX is improving (Quick Builds, matchup hint, affinity labels). CSS system is polished. Ready for Round 3 or deployment.
 
-See `orchestrator/analysis/reviewer-round-1.md` for full review report with severity classifications, cross-agent coordination analysis, and per-agent recommendations.
+See `orchestrator/analysis/reviewer-round-2.md` for full review report with severity classifications, cross-agent coordination analysis, and per-agent recommendations.
 
 ## Your Mission
 

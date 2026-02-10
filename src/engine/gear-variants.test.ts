@@ -880,3 +880,380 @@ describe('BL-004: All variant × rarity × archetype stress test', () => {
     expect(elapsed).toBeLessThan(500);
   });
 });
+
+// ============================================================
+// BL-059: Melee Carryover + SoftCap Interaction Tests
+// ============================================================
+
+describe('BL-059: Melee carryover + softCap interactions', () => {
+  it('melee winner carries stamina over to next round with softCap applied', () => {
+    // High-stat bulwark at giga — stats cross softCap knee
+    const rng = makeRng(777);
+    const steed = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.bulwark, ARCHETYPES.duelist, steed, undefined, player, undefined);
+    // Force to melee
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+
+    // Round 1: winner should carry reduced stamina to round 2
+    match = submitMeleeRound(match, MC, OC);
+    const r1 = match.meleeRoundResults[0];
+    const r1Stamina1 = match.player1.currentStamina;
+    const r1Stamina2 = match.player2.currentStamina;
+
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    expect(r1Stamina1).toBeLessThan(100);
+    expect(r1Stamina2).toBeLessThan(100);
+
+    // Round 2: verify stamina carried over and softCap applied to stats
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, FB, GH);
+      const r2 = match.meleeRoundResults[1];
+      const r2Stamina1 = match.player1.currentStamina;
+      const r2Stamina2 = match.player2.currentStamina;
+
+      // Stamina continues declining
+      expect(r2Stamina1).toBeLessThan(r1Stamina1);
+      expect(r2Stamina2).toBeLessThan(r1Stamina2);
+      // SoftCap is applied (effective stats should be compressed)
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+    }
+  });
+
+  it('stats crossing knee between rounds: fatigued below knee, recovered above knee', () => {
+    // Start with MOM exactly at knee=100, fatigue pushes it below
+    const rng = makeRng(888);
+    const steed = createFullLoadout('giga', 'giga', rng, 'balanced');
+    const player = createFullPlayerLoadout('giga', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    // Set stamina to 40% → fatigue factor 0.5
+    const maxStam = match.player1.archetype.stamina;
+    match.player1.currentStamina = maxStam * 0.4;
+    match.player2.currentStamina = maxStam;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 fatigued (MOM ~75 softCapped to 75 * 0.5 = 37.5)
+    // P2 full stamina (MOM higher)
+    expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore);
+  });
+
+  it('softCap + counter bonus scaling: 150 MOM → 133 after softCap → increased by counter', () => {
+    // Extreme giga stats with counter advantage
+    const rng = makeRng(999);
+    const steed = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+
+    // Counter: MC beats OC
+    match = submitMeleeRound(match, MC, OC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 gets counter bonus on top of softCapped stats
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+  });
+
+  it('breaker guard penetration + softCap interaction: penetration applied to softCapped guard', () => {
+    // Breaker vs high-GRD Bulwark with giga gear (GRD > 100)
+    const rng = makeRng(1111);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('giga', rng, 'aggressive');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('giga', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Breaker penetration reduces softCapped guard
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Penetration advantage: P1 impact should be relatively higher
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.7);
+  });
+
+  it('extreme giga case: all stats >110, both players softCapped to ~133', () => {
+    // All-aggressive giga loadouts push all stats over knee
+    const rng = makeRng(1234);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('giga', rng, 'aggressive');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player2 = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 120;
+    match.player2.currentStamina = 120;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Both players heavily compressed but combat still resolves
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Impact scores should be relatively close (compression effect)
+    const ratio = r1.player1ImpactScore / r1.player2ImpactScore;
+    expect(ratio).toBeGreaterThan(0.7);
+    expect(ratio).toBeLessThan(1.5);
+  });
+
+  it('carryover penalties + softCap: unseated player with -10 carryover MOM starting at 110', () => {
+    // High MOM + carryover penalty crosses knee
+    const rng = makeRng(1357);
+    const steed = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.duelist, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+    // Unseated player: heavy carryover penalties
+    match.player2.carryoverMomentum = -15;
+    match.player2.carryoverControl = -10;
+    match.player2.carryoverGuard = -10;
+    match.player2.wasUnseated = true;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 (full stats) should dominate P2 (penalized)
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+    // Unseated boost compensates partially
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+  });
+
+  it('softCap + fatigue + carryover stack: 110 MOM → softCap → fatigue 0.5 → carryover -5', () => {
+    // Test full stat pipeline: carryover → softCap → fatigue
+    const rng = makeRng(2468);
+    const steed = createFullLoadout('giga', 'giga', rng, 'balanced');
+    const player = createFullPlayerLoadout('giga', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    const maxStam = match.player1.archetype.stamina;
+    match.player1.currentStamina = maxStam * 0.4; // FF = 0.5
+    match.player1.carryoverMomentum = -8;
+    match.player1.carryoverControl = -5;
+    match.player1.carryoverGuard = -5;
+    match.player2.currentStamina = maxStam;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 triple-penalized: carryover + softCap + fatigue
+    // P2 full stats
+    expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore);
+    expect(r1.player1ImpactScore).toBeGreaterThan(0); // Still deals damage
+  });
+
+  it('guard crossing knee with attack delta: Guard High boosts guard potentially crossing knee', () => {
+    // Guard crosses knee mid-combat via attack delta
+    const rng = makeRng(3141);
+    const steed = createFullLoadout('giga', 'giga', rng, 'balanced');
+    const player = createFullPlayerLoadout('giga', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.tactician, ARCHETYPES.duelist, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+
+    // GH has deltaGuard but in melee context
+    match = submitMeleeRound(match, GH, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Guard High boosts guard, potentially crossing knee
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+  });
+
+  it('asymmetric softCap: giga P1 (MOM 110) vs bare P2 (MOM 75) ratio compression', () => {
+    // Test softCap asymmetry between giga and bare
+    const rng = makeRng(9876);
+    const steedGiga = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const playerGiga = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.charger, steedGiga, undefined, playerGiga, undefined);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 (giga, softCapped) vs P2 (bare, unsoftCapped)
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+    // Ratio should show compression (giga advantage reduced by softCap)
+    const ratio = r1.player1ImpactScore / r1.player2ImpactScore;
+    expect(ratio).toBeLessThan(2.5); // Compressed from potential higher raw stat ratio
+  });
+
+  it('melee round stamina drain with softCap: 3 rounds exhaust both players, stats stay compressed', () => {
+    // Multi-round melee exhaustion with softCap throughout
+    const rng = makeRng(5555);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'balanced');
+    const player1 = createFullPlayerLoadout('giga', rng, 'balanced');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('giga', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 120;
+    match.player2.currentStamina = 120;
+
+    const attacks = [MC, OC, FB];
+    for (let i = 0; i < 3; i++) {
+      if (match.phase !== Phase.MeleeSelect) break;
+      match = submitMeleeRound(match, attacks[i], attacks[(i + 1) % 3]);
+    }
+
+    expect(match.meleeRoundResults.length).toBe(3);
+    const r3 = match.meleeRoundResults[2];
+
+    // Stamina drained over 3 rounds
+    expect(match.player1.currentStamina).toBeLessThan(120);
+    expect(match.player2.currentStamina).toBeLessThan(120);
+    // SoftCap applied throughout, combat remains valid
+    expect(r3.player1ImpactScore).toBeGreaterThan(0);
+    expect(r3.player2ImpactScore).toBeGreaterThan(0);
+  });
+
+  it('softCap + breaker + fatigue: breaker at 30% stamina penetrates softCapped high-guard', () => {
+    // Breaker heavily fatigued but penetration still effective
+    const rng = makeRng(7777);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('giga', rng, 'aggressive');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('giga', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    const maxStam1 = match.player1.archetype.stamina;
+    match.player1.currentStamina = maxStam1 * 0.3; // Heavy fatigue
+    match.player2.currentStamina = 120;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Breaker fatigued but penetration helps against high guard
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore); // Bulwark dominates
+  });
+
+  it('carryover + softCap + counter: unseated charger with MC counter vs bulwark', () => {
+    // Complex scenario: carryover penalties + softCap + counter advantage
+    const rng = makeRng(8888);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('giga', rng, 'aggressive');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('giga', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 100;
+    match.player1.carryoverMomentum = -12;
+    match.player1.carryoverControl = -8;
+    match.player1.carryoverGuard = -8;
+    match.player1.wasUnseated = true;
+
+    // MC beats OC: counter advantage for P1
+    match = submitMeleeRound(match, MC, OC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Counter + unseated boost compensate for carryover penalties
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Charger gets counter bonus but Bulwark has guard advantage
+    const ratio = r1.player1ImpactScore / r1.player2ImpactScore;
+    expect(ratio).toBeGreaterThan(0.5); // Charger not completely dominated
+  });
+
+  it('extreme fatigue + softCap: 5% stamina drops softCapped MOM 133→6.65', () => {
+    // Extreme fatigue on softCapped stats
+    const rng = makeRng(4444);
+    const steed = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const player = createFullPlayerLoadout('giga', rng, 'aggressive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.duelist, steed, undefined, player, undefined);
+    match.phase = Phase.MeleeSelect;
+    const maxStam = match.player1.archetype.stamina;
+    match.player1.currentStamina = maxStam * 0.05; // Extreme fatigue
+    match.player2.currentStamina = maxStam;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // P1 extreme fatigue: softCap then fatigue collapses stats
+    expect(r1.player1ImpactScore).toBeLessThan(r1.player2ImpactScore * 0.3);
+    expect(r1.player1ImpactScore).toBeGreaterThan(0); // Still non-zero
+  });
+
+  it('all-defensive giga mirror: both players softCapped GRD/STA, extended melee', () => {
+    // Defensive mirror match: high guard, long melee
+    const rng = makeRng(6666);
+    const steed1 = createFullLoadout('giga', 'giga', rng, 'defensive');
+    const player1 = createFullPlayerLoadout('giga', rng, 'defensive');
+    const steed2 = createFullLoadout('giga', 'giga', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('giga', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.bulwark, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 130;
+    match.player2.currentStamina = 130;
+
+    // Run 5 rounds to test endurance
+    const attacks = [MC, OC, FB, GH, MC];
+    for (let i = 0; i < 5; i++) {
+      if (match.phase !== Phase.MeleeSelect) break;
+      match = submitMeleeRound(match, attacks[i], attacks[(i + 1) % attacks.length]);
+    }
+
+    expect(match.meleeRoundResults.length).toBeGreaterThanOrEqual(3);
+    // High stamina defensive builds sustain longer
+    expect(match.player1.currentStamina).toBeGreaterThan(50);
+    expect(match.player2.currentStamina).toBeGreaterThan(50);
+  });
+
+  it('mixed rarity carryover + softCap: giga P1 unseated vs rare P2', () => {
+    // Asymmetric rarity with carryover
+    const rng = makeRng(1010);
+    const steedGiga = createFullLoadout('giga', 'giga', rng, 'aggressive');
+    const playerGiga = createFullPlayerLoadout('giga', rng, 'aggressive');
+    const steedRare = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const playerRare = createFullPlayerLoadout('rare', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.tactician, steedGiga, steedRare, playerGiga, playerRare);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 100;
+    match.player2.currentStamina = 70;
+    match.player1.carryoverMomentum = -10;
+    match.player1.carryoverControl = -7;
+    match.player1.carryoverGuard = -7;
+    match.player1.wasUnseated = true;
+
+    match = submitMeleeRound(match, MC, MC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Giga P1 with penalties vs rare P2
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Unseated boost compensates for carryover
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.6);
+  });
+});

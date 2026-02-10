@@ -4,7 +4,7 @@
     "role": "tech-lead",
     "priority": 2,
     "title": "Review Technician MOM change + update CLAUDE.md with validation results",
-    "description": "After BL-030 (completed) and BL-034 (validation complete), document Technician MOM 58→64 change:\n\n1. Review archetypes.ts change (Technician MOM=64) from prior session\n2. Verify test assertions across calculator.test.ts and match.test.ts\n3. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Live Data: Updated win rates from BL-034 sweep (52-53% bare, 45-47% uncommon, 48-50% epic, 48-51% giga)\n   - Test Suite: Confirm 830 tests (8 added by QA Round 1)\n\nDEPENDS ON: BL-030 (COMPLETE), BL-034 (COMPLETE).\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, current test count (830), recent balance findings.",
+    "description": "After BL-030 (completed) and BL-034 (validation complete), document Technician MOM 58→64 change:\n\n1. Review archetypes.ts change (Technician MOM=64) from prior session\n2. Verify test assertions across calculator.test.ts and match.test.ts\n3. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Live Data: Updated win rates from BL-034 sweep (52-53% bare, 45-47% uncommon, 48-50% epic, 48-51% giga)\n   - Test Suite: Confirm 845 tests (15 added by QA Round 2 melee carryover)\n\nDEPENDS ON: BL-030 (COMPLETE), BL-034 (COMPLETE), BL-059 (COMPLETE).\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, current test count (845), rare/epic tier findings.",
     "fileOwnership": [
       "CLAUDE.md"
     ],
@@ -16,11 +16,11 @@
     "id": "BL-041",
     "role": "game-designer",
     "priority": 3,
-    "status": "assigned",
-    "title": "New player experience — first-match clarity audit",
-    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. Write analysis to orchestrator/analysis/design-round-2.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
+    "status": "done",
+    "title": "New player experience — first-match clarity audit — COMPLETE",
+    "description": "✅ COMPLETED Round 2: Comprehensive walkthrough of first-time player experience identified 6 clarity gaps and 4 prioritized improvements. Full analysis written to orchestrator/analysis/design-round-3.md.\n\nClarity gaps: stat abbreviations (MOM/CTL/GRD/INIT/STA), gear overwhelm, speed/power tradeoff, counter system learn-by-losing, pass results unexplained, melee transition jarring.\n\nProposals ranked by impact:\n- P1: Stat Tooltips (⭐⭐⭐⭐⭐) — unblocks 80% of confusion\n- P2: Impact Breakdown (⭐⭐⭐⭐) — closes learning loop\n- P3: Loadout Presets (implemented in BL-058)\n- P4: Counter Chart (⭐⭐⭐)",
     "fileOwnership": [
-      "orchestrator/analysis/design-round-2.md"
+      "orchestrator/analysis/design-round-3.md"
     ],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -30,7 +30,7 @@
     "priority": 2,
     "status": "done",
     "title": "ARIA attributes and semantic markup for accessibility — COMPLETE",
-    "description": "✅ COMPLETED Round 1: Extended accessibility to SpeedSelect.tsx and AttackSelect.tsx (attack cards + melee wins dots). All interactive elements now keyboard-navigable with proper aria-labels. 822→830 tests (no breakage). Ready for deployment.",
+    "description": "✅ COMPLETED Round 1: Extended accessibility to SpeedSelect.tsx and AttackSelect.tsx (attack cards + melee wins dots). All interactive elements now keyboard-navigable with proper aria-labels. 830+ tests (no breakage).",
     "fileOwnership": [
       "src/ui/SpeedSelect.tsx",
       "src/ui/AttackSelect.tsx"
@@ -41,53 +41,183 @@
     "id": "BL-057",
     "role": "balance-analyst",
     "priority": 2,
-    "title": "Rare/epic tier balance sweep (fill tier gap)",
-    "description": "Round 1 baseline covered bare/uncommon/giga but skipped rare/epic. Run N=200 rare and epic tier simulations to:\n\n1. Fill tier gap in balance understanding\n2. Verify Charger progression (bare 41%→epic peak→giga 47%)\n3. Verify Technician buff doesn't spike at rare/epic\n4. Map Bulwark dominance fade pattern (bare 61.4%→uncommon 58%→?rare?→?epic?→giga 50%)\n\nWrite findings to orchestrator/analysis/balance-tuner-round-2.md.\n\nAcceptance criteria: Rare and epic tier win rates documented, no new balance flags, confidence in tier progression.",
+    "status": "done",
+    "title": "Rare/epic tier balance sweep (fill tier gap) — COMPLETE",
+    "description": "✅ COMPLETED Round 2: Rare and epic tier win rates documented with full analysis. Epic tier is MOST compressed (5.7pp spread, 0 flags). Charger epic peak confirmed (51%). Technician rare spike (55.1%) resolves by epic (49.2%). Bulwark dominance fade validated. All findings in orchestrator/analysis/balance-tuner-round-2.md. Verdict: No balance changes needed.",
     "fileOwnership": [
       "orchestrator/analysis/balance-tuner-round-2.md"
     ],
-    "status": "pending",
-    "dependsOn": [],
     "createdAt": "2026-02-10T03:50:00Z"
   },
   {
     "id": "BL-058",
     "role": "ui-dev",
     "priority": 3,
-    "title": "Gear variant affinity hints + quick build presets (design follow-up)",
-    "description": "Follow-up to BL-040 (design analysis complete). Implement designer's 3 proposals:\n\n1. **Affinity labels in variant tooltips**: Show which archetype each variant favors (aggressive→Charger, defensive→Breaker, balanced→neutral)\n2. **Quick Builds section** on LoadoutScreen: 3 pre-configured buttons (Aggressive Charger, Defensive Breaker, Balanced Duelist) that auto-select steed/player gear variants\n3. **Matchup hint**: Display estimated win rate for current archetype+variant combo vs opponent (requires integration with simulate.ts)\n\nUpdate LoadoutScreen.tsx with new UI sections + App.css styling.\n\nAcceptance criteria: All 3 proposals UI-complete, 830+ tests passing, tooltips informative, quick builds auto-populate correctly.",
+    "status": "done",
+    "title": "Gear variant affinity hints + quick build presets — COMPLETE",
+    "description": "✅ COMPLETED Round 2: Implemented all 3 proposals from BL-040: (1) Affinity labels in variant tooltips, (2) Quick Builds section (3 preset buttons reducing 27 gear choices to 1 click), (3) Matchup hint with heuristic-based win rate estimate + confidence level. All 830 tests passing. LoadoutScreen.tsx and App.css updated.",
     "fileOwnership": [
       "src/ui/LoadoutScreen.tsx",
       "src/App.css"
     ],
-    "status": "pending",
-    "dependsOn": [],
     "createdAt": "2026-02-10T03:52:00Z"
   },
   {
     "id": "BL-059",
     "role": "qa-engineer",
     "priority": 2,
-    "title": "Melee carryover + softCap interaction tests",
-    "description": "QA coverage gap: Melee carryover + softCap interactions are only partially tested. Add 10-15 new tests to gear-variants.test.ts:\n\n1. Melee round winner carries stamina over to next round with softCap applied\n2. Stats crossing knee between rounds (e.g., fatigued below knee, then recovered above knee)\n3. SoftCap + counter bonus scaling (e.g., 150 MOM → 133 after softCap → 136.3 after 0.1 counter bonus)\n4. Breaker guard penetration + softCap interaction (penetration applied pre-softCap or post?)\n5. Extreme giga cases (all stats >110, both softCapped to 133)\n\nWrite tests to src/engine/gear-variants.test.ts, update test-count in handoff.\n\nAcceptance criteria: 10-15 new tests added, all passing, zero regressions, coverage report included in handoff.",
+    "status": "done",
+    "title": "Melee carryover + softCap interaction tests — COMPLETE",
+    "description": "✅ COMPLETED Round 2: Added 15 comprehensive tests covering stamina carryover, counter+softCap, breaker penetration, carryover penalties, extreme cases, asymmetric scenarios. Tests 830→845 (+15). All passing. Zero bugs found. Stat pipeline confirmed (carryover → softCap → fatigue). Analysis in orchestrator/analysis/qa-round-2.md.",
     "fileOwnership": [
       "src/engine/gear-variants.test.ts"
     ],
-    "status": "pending",
-    "dependsOn": [],
     "createdAt": "2026-02-10T03:54:00Z"
   },
   {
     "id": "BL-060",
     "role": "css-artist",
     "priority": 3,
-    "title": "Stat bar animations + rarity glow stacking (polish stretch)",
-    "description": "Optional polish enhancements (not blocking):\n\n1. **Stat bar smooth fill**: Add 0.4s ease-in-out transition to stat bars (MOM/CTL/GRD/INIT/STA) when values change during match\n2. **Rarity glow stacking**: Epic gear gets 1x glow, Legendary 2x overlapping glows, Relic 3x (additive shadows for depth)\n3. **Disabled state styling**: When player can't take action (out of stamina, phase locked), add opacity 0.5 + cursor: not-allowed to disabled buttons\n\nUpdate src/App.css with new animation keyframes + modifier classes.\n\nAcceptance criteria: All animations smooth at 60fps on mobile, prefers-reduced-motion still honored, no visual regressions, 830+ tests passing.",
+    "status": "done",
+    "title": "Stat bar animations + rarity glow stacking — COMPLETE",
+    "description": "✅ COMPLETED Round 2: Implemented 3 polish enhancements: (1) Stat bar smooth fill 0.4s ease-in-out, (2) Rarity glow stacking (Epic 1x, Legendary 2x, Relic 3x), (3) Disabled state styling (opacity 0.5 + cursor: not-allowed). All 830 tests passing. Production-ready CSS system.",
     "fileOwnership": [
-      "src/App.css"
+      "src/App.css",
+      "src/index.css"
+    ],
+    "createdAt": "2026-02-10T03:56:00Z"
+  },
+  {
+    "id": "BL-061",
+    "role": "game-designer",
+    "priority": 1,
+    "title": "Design stat tooltips for Setup Screen (onboarding critical)",
+    "description": "CRITICAL: BL-041 identified stat abbreviations (MOM/CTL/GRD/INIT/STA) as opaque jargon blocking ~80% of new player clarity. Design tooltip specs for Setup Screen.\n\n**Specs**: For each stat, provide:\n1. Full name (e.g., Momentum, Control, Guard, Initiative, Stamina)\n2. Plain-English description (e.g., \"Attack speed and power\")\n3. Icon or visual indicator\n4. Interaction pattern (hover, focus, mobile tap)\n\n**Examples**:\n- MOM (Momentum) → \"Attack speed and power — faster attacks hit harder\"\n- CTL (Control) → \"Defense sharpness — sharper counters and parries\"\n- GRD (Guard) → \"Armor strength — better damage mitigation\"\n- INIT (Initiative) → \"Action order — higher INIT acts first in speed selection\"\n- STA (Stamina) → \"Fatigue resistance — higher STA sustains effort longer\"\n\n**Acceptance criteria**: Tooltip design specs (text + mockup), responsive layout (desktop/tablet/mobile), keyboard + screen reader accessible, integration notes for ui-dev.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-4.md"
     ],
     "status": "pending",
     "dependsOn": [],
-    "createdAt": "2026-02-10T03:56:00Z"
+    "createdAt": "2026-02-10T04:00:00Z"
+  },
+  {
+    "id": "BL-062",
+    "role": "ui-dev",
+    "priority": 1,
+    "title": "Implement stat tooltips UI on Setup Screen (onboarding critical)",
+    "description": "Follow-up to BL-061 design specs. Implement stat name + description tooltips on SetupScreen.\n\n**Acceptance criteria**:\n1. Hover tooltips on each stat label (MOM/CTL/GRD/INIT/STA) showing full name + description\n2. Keyboard accessible (Tab to stat, focus reveals tooltip)\n3. Mobile: tap/long-press reveals tooltip (persistent until dismissed)\n4. Responsive layout (tooltips fit within viewport on 320px mobile)\n5. Tooltips styled to match design system (colors, fonts, spacing)\n6. 845+ tests passing (no regressions)\n\n**Implementation notes**:\n- Update src/ui/SetupScreen.tsx with tooltip component\n- Add tooltip styling to src/App.css\n- Consider aria-describedby for screen readers\n- Test responsive layout on multiple viewports\n\nBlocks BL-063 (impact breakdown depends on SetupScreen patterns).",
+    "fileOwnership": [
+      "src/ui/SetupScreen.tsx",
+      "src/App.css"
+    ],
+    "status": "pending",
+    "dependsOn": ["BL-061"],
+    "createdAt": "2026-02-10T04:02:00Z"
+  },
+  {
+    "id": "BL-063",
+    "role": "game-designer",
+    "priority": 1,
+    "title": "Design impact breakdown UI for pass results (learning loop critical)",
+    "description": "CRITICAL: BL-041 identified \"pass results unexplained\" as major clarity gap. Players can't learn why they won/lost each pass. Design expandable Impact Breakdown card for pass result screen.\n\n**Proposal**: Show detailed breakdown of pass resolution:\n1. **Your Impact**: X (with bar graph showing vs opponent)\n2. **Opponent Impact**: Y\n3. **Margin**: ±Z (who won by how much)\n4. **Attack Advantage** (if any): e.g., \"Coup en Passant beats Guard Low\"\n5. **Guard Contribution** (if applicable): e.g., \"Your guard absorbed 15 impact\"\n6. **Fatigue Effect** (if applicable): e.g., \"You were 20% fatigued (MOM -15)\"\n\n**Interaction**:\n- Expandable card (collapsed by default on mobile, expanded on desktop)\n- Clear labels + icons for each stat\n- Bar graph showing relative impact (visual comparison)\n- Responsive layout\n\n**Acceptance criteria**: Detailed UI mockup, responsive design, accessibility notes, integration plan with PassResult component.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-4.md"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:04:00Z"
+  },
+  {
+    "id": "BL-064",
+    "role": "ui-dev",
+    "priority": 1,
+    "title": "Implement impact breakdown UI for pass results (learning loop critical)",
+    "description": "Follow-up to BL-063 design specs. Implement expandable impact breakdown card on pass result screen.\n\n**Acceptance criteria**:\n1. Expandable card showing impact breakdown (collapsed by default on mobile)\n2. Displays: Your Impact, Opponent Impact, Margin, Attack Advantage, Guard Contribution, Fatigue Effect\n3. Bar graph comparing your impact vs opponent impact\n4. Icons + clear labels for each stat\n5. Responsive layout (fits within viewport on 320px mobile)\n6. Keyboard accessible (Tab through components, arrow keys expand/collapse)\n7. Screen reader friendly (aria-expanded, descriptive labels)\n8. 845+ tests passing (no regressions)\n\n**Implementation notes**:\n- Find or create PassResult component (may be inline in App.tsx or separate file)\n- Extract impact breakdown data from resolveJoustPass output\n- Design bar graph component (simple SVG or CSS-based)\n- Add styling to src/App.css\n- Test responsive layout on multiple viewports\n- May require calculator.ts refactoring to expose impact components (MOM, CTL, etc.)\n\nDepends on BL-063 (design).",
+    "fileOwnership": [
+      "src/App.tsx",
+      "src/App.css"
+    ],
+    "status": "pending",
+    "dependsOn": ["BL-063"],
+    "createdAt": "2026-02-10T04:06:00Z"
+  },
+  {
+    "id": "BL-065",
+    "role": "qa-engineer",
+    "priority": 2,
+    "title": "Rare/epic tier melee exhaustion tests (validation)",
+    "description": "Follow-up to BL-059. QA identified coverage gap: melee exhaustion only tested at bare/giga extremes. Add 5-10 tests covering rare/epic tier stability.\n\n**Acceptance criteria**:\n1. Rare tier multi-round melee tests: 3 rounds without carryover penalties stacking infinitely\n2. Epic tier carryover + softCap interaction: verify stats don't collapse\n3. Mixed rare/epic gear variant interactions: aggressive vs balanced vs defensive in multi-round melee\n4. Verify no infinite loop edge cases at rare/epic\n5. 855+ tests passing (no regressions)\n\n**Test structure**:\n- 1-2 rare tier melee tests (representative archetypes)\n- 1-2 epic tier melee tests\n- 2-3 mixed tier + gear variant tests\n- All deterministic (set RNG seed)\n\nWrite tests to src/engine/gear-variants.test.ts, update test count in handoff.",
+    "fileOwnership": [
+      "src/engine/gear-variants.test.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:08:00Z"
+  },
+  {
+    "id": "BL-066",
+    "role": "balance-analyst",
+    "priority": 2,
+    "title": "Variant-specific win rate analysis (gear impact quantification)",
+    "description": "Follow-up to BL-058 (UI features implemented). BL-058 added variant UI but no balance analysis of gear impact. Quantify how aggressive/defensive variants affect matchup win rates.\n\n**Proposal**: Run N=100 sims per variant × tier combination:\n1. **Uncommon tier** (baseline): Full 6×6×3 grid (all archetype matchups × all variant combos)\n2. **Rare tier** (spot-check): High-spread matchups (Charger vs Bulwark, Technician vs Breaker)\n3. **Giga tier** (spot-check): Variant sensitivity (all archetypes with aggressive, balanced, defensive)\n\n**Key questions**:\n- Do aggressive variants give Charger +3-5pp advantage over balanced?\n- Do defensive variants help Bulwark stay dominant at uncommon?\n- Does variant choice matter more at low tiers (bare/uncommon) or high tiers (epic/giga)?\n- Any unintended interactions (e.g., defensive Technician dominance)?\n\n**Acceptance criteria**: Win rate matrices for uncommon + rare/giga spot-checks, impact quantification (variant effect size), any balance concerns flagged, recommendations for future variants.\n\nWrite analysis to orchestrator/analysis/balance-tuner-round-3.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/balance-tuner-round-3.md"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:10:00Z"
+  },
+  {
+    "id": "BL-067",
+    "role": "game-designer",
+    "priority": 3,
+    "title": "Design counter system learning aid (teachable mechanics)",
+    "description": "Follow-up to BL-041. Counter system identified as \"learn-by-losing\" — players don't understand rock-paper-scissors until they experience losses. Design visual counter chart for AttackSelect screen.\n\n**Proposal**: Visual chart showing all 6 attack relationships:\n- High Guard: beats Low Cut, weak to Measured Cut\n- Low Cut: beats Coup en Passant, weak to High Guard\n- Measured Cut: beats High Guard, weak to Low Cut\n- Port de Lance: beats Measured Cut, weak to High Guard  \n- Coup en Passant: beats High Guard, weak to Low Cut\n- (6th attack — verify in code)\n\n**Format options**:\n1. **Triangle diagram** (3 attacks arranged as triangle, each beats one side, weak to other)\n2. **Matrix chart** (6×6 grid showing all matchups)\n3. **Beats/Weak to text** with visual icons\n\n**Acceptance criteria**: Chart design mockup, visual clarity on beats/weak-to relationships, mobile-responsive layout, accessibility notes (screen reader friendly), integration plan for AttackSelect.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-4.md"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:12:00Z"
+  },
+  {
+    "id": "BL-068",
+    "role": "ui-dev",
+    "priority": 3,
+    "title": "Implement counter chart (attack select clarity)",
+    "description": "Follow-up to BL-067 design. Implement counter chart on AttackSelect screen or modal showing rock-paper-scissors relationships.\n\n**Acceptance criteria**:\n1. Visual chart (triangle, matrix, or other) showing all attack beats/weak-to relationships\n2. Chart is clear and intuitive for new players\n3. Responsive on mobile (may be modal/popup instead of inline)\n4. Keyboard accessible (Tab through attacks, focus shows relationships)\n5. Screen reader friendly (descriptive labels for each attack)\n6. Integrated with AttackSelect.tsx (visible during attack selection or modal)\n7. 845+ tests passing (no regressions)\n\n**Implementation notes**:\n- Determine chart format from BL-067 design (triangle/matrix/text)\n- May add modal component or inline chart to AttackSelect\n- Add styling to src/App.css\n- Test responsive layout on multiple viewports\n- Verify counter table in attacks.ts matches chart\n\nDepends on BL-067 (design).",
+    "fileOwnership": [
+      "src/ui/AttackSelect.tsx",
+      "src/App.css"
+    ],
+    "status": "pending",
+    "dependsOn": ["BL-067"],
+    "createdAt": "2026-02-10T04:14:00Z"
+  },
+  {
+    "id": "BL-069",
+    "role": "qa-engineer",
+    "priority": 4,
+    "title": "All 36 archetype matchups in melee (comprehensive coverage) — STRETCH",
+    "description": "STRETCH GOAL: BL-059 only spot-checked 4 archetypes. Add comprehensive melee tests for all 36 archetype matchups (6×6).\n\n**Proposal**: Add 36 deterministic melee tests (6 archetypes × 6 archetypes):\n- Each test simulates 2-3 rounds of melee\n- Both archetypes at uncommon rarity (representative)\n- All deterministic (set RNG seed for reproducibility)\n- Verify no infinite loop edge cases\n- Verify stat carryover + softCap work correctly\n\n**Acceptance criteria**:\n1. All 36 matchups tested (comprehensive coverage)\n2. Tests deterministic and reproducible\n3. No infinite loop edge cases\n4. 880+ total tests (845 + 36 new melee tests + BL-065 tests)\n5. All passing, no regressions\n\n**Note**: ONLY if capacity after BL-065 + BL-062/064 critical work complete.\n\nWrite tests to src/engine/gear-variants.test.ts.",
+    "fileOwnership": [
+      "src/engine/gear-variants.test.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:16:00Z"
+  },
+  {
+    "id": "BL-070",
+    "role": "game-designer",
+    "priority": 4,
+    "title": "Design melee transition explainer (phase clarity) — STRETCH",
+    "description": "STRETCH GOAL: BL-041 identified melee transition as jarring with no explanation. Design brief explainer screen between joust and melee phases.\n\n**Proposal**: 1-2 second explainer screen showing:\n1. \"Transition to Melee Phase\"\n2. Visual showing joust lance/shield → melee sword/shield\n3. Brief text: \"New attack set available — learn the new matchups\"\n4. Counter chart preview (if BL-067 complete)\n5. \"Continue\" button\n\n**Acceptance criteria**: Screen mockup, visual clarity, brief+informative text, integration notes for App.tsx.\n\n**Note**: ONLY if capacity after BL-061/062/063/064 critical work complete.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-4.md"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:18:00Z"
   }
 ]

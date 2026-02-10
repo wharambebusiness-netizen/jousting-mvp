@@ -156,6 +156,87 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
     });
   };
 
+  const setAllGearToVariant = (variant: GearVariant) => {
+    setAllSteedVariants(variant);
+    setAllPlayerVariants(variant);
+  };
+
+  // --- Matchup hint heuristics ---
+  // Based on balance findings from memory: bare tier patterns
+  const getMatchupHint = (): { estimate: string; confidence: string; notes: string } => {
+    // Check if most slots use the same variant (quick build applied)
+    const steedVarCounts = { aggressive: 0, balanced: 0, defensive: 0 };
+    const playerVarCounts = { aggressive: 0, balanced: 0, defensive: 0 };
+    STEED_SLOTS.forEach(s => steedVarCounts[steedVariants[s]]++);
+    PLAYER_SLOTS.forEach(s => playerVarCounts[playerVariants[s]]++);
+
+    const dominantSteed = steedVarCounts.aggressive >= 4 ? 'aggressive' :
+                          steedVarCounts.defensive >= 4 ? 'defensive' : 'balanced';
+    const dominantPlayer = playerVarCounts.aggressive >= 4 ? 'aggressive' :
+                           playerVarCounts.defensive >= 4 ? 'defensive' : 'balanced';
+    const overallVariant = dominantSteed === dominantPlayer ? dominantSteed : 'mixed';
+
+    // Base win rates from memory (bare tier, balanced gear)
+    const baseWinRates: Record<string, number> = {
+      charger: 39.0, technician: 52.4, bulwark: 61.4,
+      tactician: 49.6, breaker: 46.5, duelist: 51.1,
+    };
+
+    const baseRate = baseWinRates[archetype.id] || 50;
+
+    // Variant modifiers (heuristic from design analysis)
+    let variantMod = 0;
+    if (overallVariant === 'aggressive') {
+      // Aggressive gear amplifies momentum-based archetypes
+      if (archetype.id === 'charger') variantMod = +3;
+      else if (archetype.id === 'tactician') variantMod = +2;
+      else if (archetype.id === 'bulwark') variantMod = -5; // hurts defensive archetypes
+      else variantMod = +1;
+    } else if (overallVariant === 'defensive') {
+      // Defensive gear helps guard-based archetypes
+      if (archetype.id === 'bulwark') variantMod = +4;
+      else if (archetype.id === 'breaker') variantMod = +2;
+      else if (archetype.id === 'charger') variantMod = -2; // reduces momentum effectiveness
+      else variantMod = 0;
+    }
+
+    // Rarity modifier (higher tiers compress balance)
+    let rarityMod = 0;
+    if (gigRarity === 'giga') {
+      // Giga tier compresses win rates toward 50% (memory: 7.2pp spread at giga)
+      rarityMod = Math.sign(50 - baseRate) * 2;
+    }
+
+    const estimatedRate = Math.max(30, Math.min(70, baseRate + variantMod + rarityMod));
+    const roundedRate = Math.round(estimatedRate);
+
+    let confidence = 'Medium';
+    if (overallVariant === 'mixed') confidence = 'Low';
+    if (gigRarity === 'giga' || gigRarity === 'relic') confidence = 'Medium-High';
+
+    let notes = '';
+    if (archetype.id === 'bulwark' && gigRarity === 'uncommon') {
+      notes = 'Bulwark dominates at uncommon tier (~63% win rate).';
+    } else if (archetype.id === 'charger' && gigRarity === 'epic') {
+      notes = 'Charger peaks at epic tier (~56% win rate).';
+    } else if (overallVariant === 'aggressive' && archetype.id === 'bulwark') {
+      notes = 'Aggressive gear weakens Bulwark\'s defensive identity.';
+    } else if (overallVariant === 'defensive' && archetype.id === 'charger') {
+      notes = 'Defensive gear reduces Charger\'s momentum advantage.';
+    }
+
+    return {
+      estimate: `~${roundedRate}%`,
+      confidence,
+      notes,
+    };
+  };
+
+  const matchupHint = useMemo(
+    () => getMatchupHint(),
+    [archetype.id, steedVariants, playerVariants, gigRarity]
+  );
+
   // --- Shared rarity selector component ---
   const RaritySelector = ({ label, value, onChange }: {
     label: string;
@@ -183,24 +264,34 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
     </div>
   );
 
-  // --- Variant toggle component ---
-  const VariantToggle = ({ current, onSelect }: {
+  // --- Variant toggle component with affinity ---
+  const VariantToggle = ({ current, onSelect, slot, isSteed }: {
     current: GearVariant;
     onSelect: (v: GearVariant) => void;
+    slot: SteedGearSlot | PlayerGearSlot;
+    isSteed: boolean;
   }) => (
     <span className="variant-toggle">
-      {ALL_GEAR_VARIANTS.map(v => (
-        <button
-          key={v}
-          className={`variant-toggle__btn variant-toggle__btn--${v} ${current === v ? 'variant-toggle__btn--active' : ''}`}
-          onClick={() => onSelect(v)}
-          title={VARIANT_LABELS[v].full}
-          aria-label={`Select ${VARIANT_LABELS[v].full} variant`}
-          aria-pressed={current === v}
-        >
-          {VARIANT_LABELS[v].short}
-        </button>
-      ))}
+      {ALL_GEAR_VARIANTS.map(v => {
+        const def = isSteed
+          ? getSteedVariantDef(slot as SteedGearSlot, v)
+          : getPlayerVariantDef(slot as PlayerGearSlot, v);
+        const affinityLabel = def.affinity ? `Favors: ${def.affinity.charAt(0).toUpperCase() + def.affinity.slice(1)}` : '';
+        const fullTitle = `${VARIANT_LABELS[v].full}${affinityLabel ? ` — ${affinityLabel}` : ''}`;
+
+        return (
+          <button
+            key={v}
+            className={`variant-toggle__btn variant-toggle__btn--${v} ${current === v ? 'variant-toggle__btn--active' : ''}`}
+            onClick={() => onSelect(v)}
+            title={fullTitle}
+            aria-label={`Select ${VARIANT_LABELS[v].full} variant${affinityLabel ? `, ${affinityLabel}` : ''}`}
+            aria-pressed={current === v}
+          >
+            {VARIANT_LABELS[v].short}
+          </button>
+        );
+      })}
     </span>
   );
 
@@ -228,8 +319,72 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
         {archetype.name} vs {opponentName} — gear up your mount and knight
       </p>
 
+      {/* --- Quick Builds Section --- */}
+      <div className="quick-builds-section">
+        <h3 className="quick-builds-section__title">Quick Builds</h3>
+        <p className="quick-builds-section__subtitle">
+          Choose a build style to automatically configure all gear slots
+        </p>
+        <div className="quick-builds-grid">
+          <button
+            className="quick-build-card quick-build-card--aggressive"
+            onClick={() => setAllGearToVariant('aggressive')}
+          >
+            <div className="quick-build-card__header">
+              <span className="quick-build-card__icon">⚔️</span>
+              <span className="quick-build-card__name">Aggressive Build</span>
+            </div>
+            <div className="quick-build-card__desc">
+              High damage, fast strikes. Favors Charger, Tactician.
+            </div>
+          </button>
+          <button
+            className="quick-build-card quick-build-card--balanced"
+            onClick={() => setAllGearToVariant('balanced')}
+          >
+            <div className="quick-build-card__header">
+              <span className="quick-build-card__icon">⚖️</span>
+              <span className="quick-build-card__name">Balanced Build</span>
+            </div>
+            <div className="quick-build-card__desc">
+              Versatile, adaptable. Works well for Duelist.
+            </div>
+          </button>
+          <button
+            className="quick-build-card quick-build-card--defensive"
+            onClick={() => setAllGearToVariant('defensive')}
+          >
+            <div className="quick-build-card__header">
+              <span className="quick-build-card__icon">🛡️</span>
+              <span className="quick-build-card__name">Defensive Build</span>
+            </div>
+            <div className="quick-build-card__desc">
+              Tank damage, outlast opponents. Favors Bulwark, Breaker.
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* --- Matchup Hint --- */}
+      <div className="matchup-hint">
+        <div className="matchup-hint__header">
+          <span className="matchup-hint__icon">📊</span>
+          <span className="matchup-hint__title">Estimated Win Rate</span>
+        </div>
+        <div className="matchup-hint__body">
+          <div className="matchup-hint__rate">{matchupHint.estimate}</div>
+          <div className="matchup-hint__confidence">Confidence: {matchupHint.confidence}</div>
+          {matchupHint.notes && (
+            <div className="matchup-hint__notes">{matchupHint.notes}</div>
+          )}
+        </div>
+        <div className="matchup-hint__disclaimer">
+          Based on {archetype.name} stats, gear variant, and rarity. Actual results may vary.
+        </div>
+      </div>
+
       {/* --- Independent Rarity Selectors --- */}
-      <h3 className="mb-8">Gear Tiers</h3>
+      <h3 className="mb-8 mt-16">Gear Tiers</h3>
 
       <RaritySelector
         label="Mount Rarity"
@@ -276,6 +431,8 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
                 <VariantToggle
                   current={steedVariants[slot]}
                   onSelect={v => setSteedVariant(slot, v)}
+                  slot={slot}
+                  isSteed={true}
                 />
                 <span className="gear-item__stats">
                   {gear.primaryStat && (
@@ -318,6 +475,8 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
                 <VariantToggle
                   current={playerVariants[slot]}
                   onSelect={v => setPlayerVariant(slot, v)}
+                  slot={slot}
+                  isSteed={false}
                 />
                 <span className="gear-item__stats">
                   {gear.primaryStat && (
