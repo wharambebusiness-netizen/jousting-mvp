@@ -1,165 +1,189 @@
-# Producer — Handoff (Round 10)
+# Producer — Handoff (Round 11)
 
 ## META
 - status: complete
-- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-10.md
+- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-11.md
 - tests-passing: true (897/897)
 - test-count: 897
-- completed-tasks: none (all agents blocked/all-done)
-- notes-for-others: @orchestrator: CRITICAL ESCALATION — Engine-dev not scheduled in Round 10 (5-round recurring). BL-076 (PassResult extensions, 2-3h) is ONLY blocker for BL-064 (critical learning loop, 6-8h ui-dev). This is blocking 17% of onboarding completion. All specs ready, zero ramp-up. Recommend adding engine-dev to Round 11 roster immediately.
+- completed-tasks: none (all agents blocked or all-done)
+- notes-for-others: @orchestrator: **CRITICAL ESCALATION (FINAL)** — Engine-dev still not scheduled after 6 consecutive rounds (R5-R11). BL-076 (PassResult extensions, 2-3h) is ONLY blocker for BL-064 (critical learning loop, 6-8h ui-dev). New player onboarding stuck at 83% (4/5 features shipped). All specs ready, zero ramp-up. **DECISION REQUIRED FOR ROUND 12**: Add engine-dev to roster immediately. All design + implementation specs in design-round-4-bl063.md + ui-dev-round-11.md.
 
 ---
 
-## What Was Done (Round 10)
+## What Was Done (Round 11)
 
-### Agent Assessment & Deliverables
+### 1. Round 11 Agent Assessment
 
-**All 4 active agents completed Round 10 work (or all-done status)**:
+**Completed Agent Work**:
+- **polish** (Round 11): 2 CSS breakpoint fixes, verified 3,143-line system production-ready
+- **ui-dev** (Round 11): No new work (BL-064 still blocked on BL-076); reassessed implementation specs
+- **designer** (standby): All 5 critical design specs complete
+- **balance-tuner** (all-done): Retired after Round 7 tier validation
+- **qa** (all-done): Retired after Round 6 (897 tests complete)
+- **reviewer** (standby): Ready for code review/documentation
 
-1. **ui-dev** (all-done): No actionable work available
-   - BL-064 (Impact Breakdown UI, P1 critical) still BLOCKED on BL-076 (engine-dev PassResult extensions)
-   - BL-074 already complete (shipped as BL-071 in Round 9)
-   - Status: all-done, waiting on BL-076 to unblock 6-8h of critical work
-   - Test status: 897/897 passing (zero regressions)
+**All 7 agents clean** — Zero execution blockers, 100% dependency-based.
 
-2. **polish** (complete): Production readiness checkpoint
-   - CSS System Health Audit: 3,143 lines, zero debt, zero hardcodes, zero !important
-   - Verified all shipped features fully integrated (BL-062/068/070/071)
-   - No code changes needed (system production-ready)
-   - Test status: 897/897 passing (zero regressions)
-   - Analysis: orchestrator/analysis/polish-round-10.md
+### 2. Critical Blocker Escalation: BL-076 (Engine-Dev)
 
-3. **balance-tuner** (all-done): Retired
-   - No new tasks assigned
-   - All 8 tier configurations validated (bare → relic + mixed)
-   - Status: all-done (no new balance analysis needed)
+**Status**: **PENDING 6 CONSECUTIVE ROUNDS (R5-R10-R11)** — orchestrator scheduler decision required.
 
-4. **qa** (all-done): Retired
-   - No new tasks assigned
-   - 897 tests verified passing
-   - Status: all-done (all tier testing complete)
+| Round | Event | Action |
+|-------|-------|--------|
+| R5 | BL-063 design complete | Designer: "Create BL-063x immediately" |
+| R6 | BL-076 created in backlog | Producer: "Assign BL-076 in Round 7" |
+| R7-R9 | Engine-dev not scheduled | Producer: Escalated each round |
+| R10 | Producer escalation | "Recommend adding engine-dev to Round 11 roster" |
+| **R11** | Still not scheduled | **FINAL ESCALATION** |
 
-5. **reviewer** (standby): No new tasks
-   - Ready for code review or documentation updates
+**Impact**:
+- New player onboarding stuck at 83% (4/5 features shipped, 1 design complete)
+- BL-064 blocked indefinitely (6-8h ui-dev work waiting on 2-3h engine-dev)
+- Root cause: Engine-dev role not in orchestrator roster configuration
+- **All design + specs ready** (zero ramp-up time) — not a knowledge/planning issue
 
-6. **designer** (standby): No new tasks
-   - All 5 critical design specs complete (BL-061, BL-063, BL-067, BL-070, BL-071)
+**For Round 12**:
+- ⚠️ Add engine-dev to roster
+- ⚠️ Assign BL-076 (full spec: `orchestrator/backlog.json` + `design-round-4-bl063.md` + `ui-dev-round-11.md`)
+- ⚠️ Run BL-076 Phase A (2-3h target) → unblocks BL-064 Phase B (6-8h target)
 
-**All agents clean**: Zero blockers from execution side. **ALL BLOCKERS ARE DEPENDENCY-BASED** (engine-dev missing from roster).
+### 3. Feature Shipping Summary (R1-R11)
 
-### Key Metrics This Round
+**Onboarding Features Shipped**: 4/5 (80%)
+1. ✅ **BL-062**: Stat Tooltips (shipped R4)
+2. ✅ **BL-068**: Counter Chart (shipped R7)
+3. ✅ **BL-070**: Melee Transition Explainer (shipped R8)
+4. ✅ **BL-071**: Variant Tooltips (shipped R9)
+5. ⏳ **BL-064**: Impact Breakdown (design complete R5, blocked on BL-076)
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| Tests | 897/897 ✅ | Zero change, zero regressions |
-| Features Shipped (R1-R10) | 6/8 (75%) | BL-062, BL-068, BL-070, BL-071 complete; BL-064 blocked |
-| Onboarding Gaps Closed | 4/5 (80%) | Tooltips, counter chart, melee transition, variants; only impact breakdown blocked |
-| Code Quality | Excellent | CSS system production-ready, zero technical debt |
-| Critical Blockers | 1 identified | Engine-dev BL-076 not scheduled (5-round recurring issue) |
-| Team Health | 6/6 agents complete | Excellent |
+**Design Specs Complete**: 5/5 (100%)
+- BL-061, BL-063, BL-067, BL-070, BL-071 all finalized
 
-### Backlog Analysis (Round 10)
+**Code Quality**:
+- Tests: 897/897 passing ✅
+- CSS: 3,143 lines production-ready (verified Round 10-11)
+- Zero technical debt, zero regressions
 
-**Total**: 30 tasks
+### 4. Backlog Status (30 tasks total)
+
 **Completed**: 25 (83%)
-**Pending**: 4 (blocked)
-**Blocked**: 1 (dependency-based, NO EXECUTION BLOCKERS)
+- 6 features shipped (BL-047, BL-058, BL-062, BL-068, BL-070, BL-071)
+- 5 design specs (BL-061, BL-063, BL-067, BL-070, BL-071)
+- 8+ tests (BL-059, BL-065, BL-069)
+- 4 analysis/documentation tasks
 
-**Completed Features** (6/8):
-1. BL-047: ARIA attributes ✅ (Round 1)
-2. BL-058: Quick Builds + Variant Hints ✅ (Round 2)
-3. BL-062: Stat Tooltips ✅ (Round 4)
-4. BL-068: Counter Chart ✅ (Round 7)
-5. BL-070: Melee Transition Explainer ✅ (Round 8)
-6. BL-071: Variant Tooltips ✅ (Round 9)
+**Pending**: 4
+1. ⏳ **BL-076** (engine-dev PassResult) — NOT SCHEDULED (orchestrator decision)
+2. ⏳ **BL-064** (ui-dev impact breakdown) — BLOCKED on BL-076
+3. ⏳ **BL-035** (CLAUDE.md finalization) — Optional, low priority
+4. ⏳ **BL-073** (manual QA pending) — Human-only, scheduled separately
 
-**Completed Design Specs** (5/5):
-1. BL-061: Stat Tooltips ✅
-2. BL-063: Impact Breakdown ✅
-3. BL-067: Counter Chart ✅
-4. BL-070: Melee Transition ✅
-5. BL-071: Variant Tooltips ✅
+**Blocked**: 1
+- BL-064 (one unblocked once BL-076 complete)
 
-**Ready for Round 11 (Critical Path)**:
-1. ⚠️ **BL-076** (engine-dev PassResult) — MUST ADD ENGINE-DEV TO ROSTER
-2. BL-064 (ui-dev impact breakdown) — unblocked once BL-076 complete
+**No Execution Blockers** — All blockers are scheduler-dependent.
 
 ---
 
 ## What's Left
 
-**Primary Work**: ✅ COMPLETE (nothing more for current roster)
+### Round 12 CRITICAL ACTION ITEMS
 
-**For Round 11 (CRITICAL ACTION)**:
-1. ⚠️ **ADD ENGINE-DEV TO ROSTER** (5-round blocker, escalated repeatedly)
-2. ✅ BL-076 task ready in backlog — assign immediately
-3. ✅ BL-076 spec complete in design-round-4-bl063.md (zero ramp-up time)
-4. ✅ BL-064 unblocked once BL-076 complete (ui-dev ready with 6-8h implementation)
+1. **ADD ENGINE-DEV TO ROSTER** (scheduler decision, not task-based)
+2. **ASSIGN BL-076** — Full specs ready:
+   - Task config: `orchestrator/backlog.json` (lines 214-227)
+   - Design spec: `orchestrator/analysis/design-round-4-bl063.md` (Section 5)
+   - Implementation guide: `orchestrator/analysis/ui-dev-round-11.md`
+   - Estimate: 2-3 hours
+   - Unblocks: BL-064 (critical learning loop)
 
-**Critical Success Factor**: Engine-dev completes BL-076 in Round 11 Phase A to unblock BL-064 learning loop (critical for new player onboarding completion to 100%).
+3. **MONITOR BL-064** — Once BL-076 complete
+   - 6-8h ui-dev implementation
+   - Final onboarding feature (100% completion)
+   - High-priority critical path
+
+### Round 12+ Secondary Tasks
+
+1. **BL-035** (CLAUDE.md documentation) — Optional, low priority
+2. **Manual QA** (BL-073 + pending features) — Human-only, 6-10h estimated
+   - Priority: BL-073 (stat tooltips, P1) → BL-071 (variant tooltips, P2) → BL-068/070 (counter/melee, P3/P4)
 
 ---
 
 ## Issues
 
-**🔴 CRITICAL ESCALATION** — Engine-dev not scheduled for Round 10 (5-round recurring blocker)
-- **History**: Identified Round 5, escalated each round (R5-R9), still unscheduled in R10
-- **Cause**: Engine-dev role not assigned to orchestrator roster (same issue R5-R10)
-- **Impact**:
-  - BL-076 cannot start
-  - BL-064 learning loop blocked indefinitely
-  - 6-8h ui-dev work waiting on 2-3h engine work
-  - New player onboarding stuck at 80% (17% gap)
-- **Status**: Escalated to orchestrator for scheduler decision (Round 11 critical)
-- **Mitigation**: All specs complete and ready (zero ramp-up time). Engine-dev can ship in same round once added.
+### 🔴 CRITICAL: BL-076 Engine-Dev Not Scheduled (6 Rounds & Counting)
 
-**All other work clean**: Tests passing (897/897), zero regressions, excellent team coordination, all design specs complete.
+**Severity**: BLOCKING new player onboarding completion
+
+**History**: Escalated every round R5-R11, still not assigned
+
+**Root Cause**: Engine-dev not added to orchestrator roster
+
+**Impact**:
+- 4/5 onboarding features shipped (80%)
+- 1 feature blocked at design stage (17% gap)
+- 6-8h ui-dev work waiting on 2-3h engine-dev work
+- Recurrence pattern suggests systemic scheduler issue
+
+**Resolution Required**: Orchestrator must add engine-dev + assign BL-076 for Round 12.
+
+**All Other Work**: ✅ Clean (zero execution issues, excellent code quality)
 
 ---
 
-## Session Velocity (Rounds 1-10)
+## Velocity (R1-R11)
 
-| Metric | Result |
-|--------|--------|
-| Features Shipped | 6/8 (75%) — BL-047, BL-058, BL-062, BL-068, BL-070, BL-071 |
-| Design Specs Complete | 5/5 (100%) — BL-061, BL-063, BL-067, BL-070, BL-071 |
-| Tests Added | +67 total (830→897) |
+| Category | R1-R11 Total |
+|----------|-------------|
+| Features Shipped | 6/8 (75%) |
+| Design Specs Complete | 5/5 (100%) |
+| Tests Added | +67 (830→897) |
+| CSS System | 3,143 lines (production-ready) |
+| Code Quality | Excellent (zero debt) |
 | Test Regressions | 0 ✅ |
-| Critical Blockers | 1 escalated (engine-dev, 5-round recurring) |
-| Team Coordination | Excellent (all agents clean) |
-| Code Quality | Production-ready (all work high quality, zero debt) |
+| Critical Blockers | 1 (recurring 6 rounds) |
+| Team Coordination | Perfect (zero execution issues) |
+
+**Session Assessment**: Exceptional feature delivery (4/5 onboarding in 5 rounds), all infrastructure production-ready. Only blocker is orchestrator-level scheduler decision (recurring pattern suggests need for systemic review).
 
 ---
 
-## New Player Onboarding (4/5 Complete = 80%)
+## New Player Onboarding Completion
 
 | Gap | Feature | Status | Round |
 |-----|---------|--------|-------|
-| 1. Stat confusion | Stat tooltips | ✅ SHIPPED | R4 |
-| 2. Counter system | Counter chart | ✅ SHIPPED | R7 |
-| 3. Melee transition | Transition explainer | ✅ SHIPPED | R8 |
-| 4. Variant strategy | Variant tooltips | ✅ SHIPPED | R9 |
-| 5. Why won/lost | Impact breakdown | ⏳ BLOCKED | Pending BL-076 |
+| Stat confusion | Stat Tooltips | ✅ SHIPPED | R4 |
+| Counter system | Counter Chart | ✅ SHIPPED | R7 |
+| Melee transition | Transition Explainer | ✅ SHIPPED | R8 |
+| Variant strategy | Variant Tooltips | ✅ SHIPPED | R9 |
+| **Why won/lost** | **Impact Breakdown** | 📋 DESIGN DONE, ⏳ BLOCKED | R5 design / ⏳ BL-076 |
 
-**Final gap**: Impact breakdown (BL-064) — requires BL-076 engine-dev work (2-3h) → unblocks 6-8h ui-dev work.
-
----
-
-## Your Mission Going Forward (Round 11+)
-
-Each round:
-1. Read all agent handoffs (parse every META section)
-2. Check for working directory corruption first (git diff engine/ui files)
-3. Update backlog.json: mark done tasks, assign new tasks, identify blockers
-4. Generate 3-5 new tasks if backlog thin (balance > bugs > features > polish)
-5. Write analysis to `orchestrator/analysis/producer-round-{N}.md`
-6. **FLAG CAPACITY ISSUES + MISSING ROLES** in handoff notes-for-others
-
-**Critical Path Focus**: **IMMEDIATE: Get engine-dev on roster → BL-076 → BL-064 learning loop** (new player onboarding critical).
-
-**Key Insight**: All design specs are high-leverage (2-3h design → 6-8h value unlocked). Engine is bottleneck. Once PassResult extended, UI + design work flows quickly. Momentum is strong — ensure engine-dev gets scheduled immediately for Round 11.
+**Current**: 80% (4/5 shipped)
+**Target**: 100% (all 5 shipped)
+**Gap**: 1 feature blocked on 1 engine-dev task (2-3h work)
 
 ---
 
-**Status**: COMPLETE (Round 10 work done, critical escalation documented, Round 11 actions clear). As continuous agent, ready for Round 11 orchestration.
+## Your Mission Going Forward
 
+**Each Round**:
+1. Read all agent handoffs (parse META section)
+2. Update backlog.json: mark complete, identify new blockers
+3. Generate 3-5 new tasks if backlog thin (balance > bugs > features > polish)
+4. Write analysis to `orchestrator/analysis/producer-round-{N}.md`
+5. **FLAG SCHEDULER ISSUES** in notes-for-others (engine-dev recurring issue pattern)
+
+**Critical Path Focus**: **BL-076 → BL-064** (2-3h + 6-8h = new player onboarding 100%)
+
+**Success Metric**: New player onboarding reaches 100% completion (all 5 features shipped + passing manual QA).
+
+---
+
+**Status**: COMPLETE (Round 11 work done, critical blocker final escalation documented, Round 12 actions clear). Continuous agent ready for Round 12.
+
+**Test Status**: 897/897 ✅
+**Documentation**: Complete ✅
+**Team Readiness**: 100% (zero execution blockers) ✅
+
+**Awaiting orchestrator decision on engine-dev roster scheduling.**
