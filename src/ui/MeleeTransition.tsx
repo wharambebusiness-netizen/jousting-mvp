@@ -38,7 +38,7 @@ export function MeleeTransition({ match, lastPassResult, onContinue }: {
         <p className="melee-transition__subtitle">
           {unseater} unseats {unseated} with a margin of {lastPassResult.unseatMargin.toFixed(1)}!
         </p>
-        <p className="melee-transition__subtitle" style={{ marginTop: 8 }}>
+        <p className="melee-transition__subtitle mt-8">
           The knights draw swords for melee combat.
         </p>
       </div>
@@ -59,7 +59,7 @@ export function MeleeTransition({ match, lastPassResult, onContinue }: {
             <span className="delta delta--neg">{penalties.guardPenalty}</span>
           </div>
         </div>
-        <p style={{ fontSize: '0.8rem', color: 'var(--ink-faint)', marginTop: 8, textAlign: 'center' }}>
+        <p className="melee-transition__hint">
           First to 4 round wins. Critical hits count as 2 wins!
         </p>
       </div>

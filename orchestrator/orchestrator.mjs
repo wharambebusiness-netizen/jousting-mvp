@@ -18,6 +18,14 @@
 // - Failed task reassignment (immediate on crash/timeout)
 // - Consistency check at startup
 //
+// v6.1 additions (S35):
+// - Prompt token estimation logging (Phase 4 cost analysis)
+// - Smarter de-escalation (require 2 consecutive successes, not 1)
+// - Empty work auto-escalation (3 consecutive empty rounds → trigger escalation)
+// - Skip Phase B after auto-revert (prevent stale coordination)
+// - Idle/wasted round metrics in efficiency report (from decision log)
+// - Analysis rotation error logging (fix silent catch)
+//
 // v3 additions:
 // - Mission config files (orchestrator/missions/*.json)
 // - Role templates (orchestrator/roles/*.md)
@@ -475,6 +483,11 @@ function validateFileOwnership(agentResults, agents) {
     if (!agent?.fileOwnership?.length) continue;
     const meta = parseHandoffMeta(result.agentId);
     for (const file of meta.filesModified) {
+      // v6.1: Allow agents to write their own analysis/handoff files
+      const isOwnAnalysis = file.startsWith(`orchestrator/analysis/${result.agentId}-`);
+      const isOwnHandoff = file === `orchestrator/handoffs/${result.agentId}.md`;
+      if (isOwnAnalysis || isOwnHandoff) continue;
+
       const owned = agent.fileOwnership.some(pattern => {
         if (pattern.includes('*')) {
           const prefix = pattern.split('*')[0];
@@ -682,7 +695,9 @@ function runAgent(agent, round) {
 
     const prompt = promptParts.join('\n');
 
-    log(`  Starting ${agent.id}...`);
+    // v6.1: Log estimated prompt tokens for Phase 4 cost analysis
+    const estimatedTokens = Math.ceil(prompt.length / 4);
+    log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'})`);
     const startTime = Date.now();
 
     // v5/v6: Build CLI args with optional per-agent model + budget
@@ -843,7 +858,9 @@ function rotateAnalysisFiles(keepRounds = 5) {
       try {
         renameSync(join(ANALYSIS_DIR, f.name), join(archiveDir, f.name));
         archived++;
-      } catch (_) {}
+      } catch (err) {
+        log(`  WARNING: Failed to archive ${f.name}: ${err.message}`);
+      }
     }
   }
 
@@ -997,7 +1014,9 @@ function runTests() {
 
     proc.on('close', (code) => {
       clearTimeout(timer);
-      const passMatch = output.match(/(\d+)\s+passed/);
+      // v6.1: Match "Tests  N passed" (individual tests), not "Test Files  N passed" (file count)
+      const testLineMatch = output.match(/Tests\s+(\d+)\s+passed/);
+      const passMatch = testLineMatch || output.match(/(\d+)\s+passed/);
       const failMatch = output.match(/(\d+)\s+failed/);
       const passCount = passMatch ? passMatch[1] : '?';
       const failCount = failMatch ? failMatch[1] : '0';
@@ -1077,6 +1096,9 @@ async function main() {
   // v5C: Track per-agent failure cooldown
   const lastFailedRound = {};           // agentId → round number of last failure
   const lastEscalatedRound = {};        // agentId → round number of last escalation
+
+  // v6.1: Track consecutive successes after escalation (require 2 before de-escalating)
+  const successesAfterEscalation = {};  // agentId → consecutive success count since escalation
 
   // v6: Cost tracking accumulator — per-agent cost data across rounds
   const costLog = {};  // agentId → { totalCost, inputTokens, outputTokens, rounds, escalations }
@@ -1243,6 +1265,7 @@ async function main() {
     const coordAgents = activeAgents.filter(a => COORD_AGENT_ROLES.has(a.role));
     const roundAgents = [];
     let testResult = null;
+    let didRevert = false;  // v6.1: Track if auto-revert happened (skip Phase B if so)
 
     // Phase A: Code agents
     if (codeAgents.length) {
@@ -1268,7 +1291,12 @@ async function main() {
         if (isEmptyWork) {
           consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
           if (consecutiveEmptyRounds[r.agentId] >= 3) {
-            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — recommend escalating model or reassigning tasks`);
+            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — auto-escalating model`);
+            // v6.1: Auto-escalate after 3 empty rounds (agent may need smarter model)
+            const agent = AGENTS.find(a => a.id === r.agentId);
+            if (agent) {
+              consecutiveAgentFailures[r.agentId] = 2; // trigger escalation in handleModelEscalation
+            }
           }
         } else if (r.code === 0 && !r.timedOut) {
           // Reset on successful non-empty work
@@ -1287,9 +1315,10 @@ async function main() {
       if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
         log(`  ⚠ Tests regressed this round! Reverting to round-${round}-start...`);
         await gitRevertToTag(round);
-        log(`  Reverted src/ to pre-round state. Agents that caused regression will retry.`);
+        log(`  Reverted src/ to pre-round state. Agents that caused regression will retry next round.`);
         // Re-run tests to confirm revert worked
         testResult = await runTests();
+        didRevert = true;
       }
 
       // Refresh task-board so Phase B agents see updated state
@@ -1297,7 +1326,11 @@ async function main() {
     }
 
     // Phase B: Coordination agents (see fresh handoffs from Phase A)
-    if (coordAgents.length) {
+    // v6.1: Skip Phase B if auto-revert happened — handoffs reference reverted work
+    if (didRevert && coordAgents.length) {
+      log(`\nPhase B: SKIPPED (auto-revert happened — coordination agents would see stale state)`);
+    }
+    if (coordAgents.length && !didRevert) {
       log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s)...`);
       const coordResults = await runAgentsWithConcurrency(coordAgents, round, CONFIG.maxConcurrency);
 
@@ -1319,7 +1352,11 @@ async function main() {
         if (isEmptyWork) {
           consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
           if (consecutiveEmptyRounds[r.agentId] >= 3) {
-            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — recommend escalating model or reassigning tasks`);
+            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — auto-escalating model`);
+            const agent = AGENTS.find(a => a.id === r.agentId);
+            if (agent) {
+              consecutiveAgentFailures[r.agentId] = 2;
+            }
           }
         } else if (r.code === 0 && !r.timedOut) {
           consecutiveEmptyRounds[r.agentId] = 0;
@@ -1458,6 +1495,7 @@ async function main() {
           log(`  ${result.agentId}: Escalating ${currentModel}->${nextModel} (${consecutiveAgentFailures[result.agentId]} consecutive failures)`);
           agent.model = nextModel;
           consecutiveAgentFailures[result.agentId] = 0;
+          successesAfterEscalation[result.agentId] = 0;  // v6.1: Reset success counter on escalation
           escalationCounts[result.agentId] = (escalationCounts[result.agentId] || 0) + 1;
           // v5C: Track escalation round so cooldown is bypassed
           lastEscalatedRound[result.agentId] = round;
@@ -1465,11 +1503,17 @@ async function main() {
           ensureCostLogEntry(costLog, result.agentId).escalations++;
         }
       } else {
-        // Success — de-escalate if agent was previously escalated
+        // Success — de-escalate if agent was previously escalated (v6.1: require 2 consecutive successes)
         if (agent._originalModel && agent.model !== agent._originalModel) {
-          log(`  ${result.agentId}: De-escalating ${agent.model}->${agent._originalModel} (success after escalation)`);
-          agent.model = agent._originalModel;
-          delete agent._originalModel;
+          successesAfterEscalation[result.agentId] = (successesAfterEscalation[result.agentId] || 0) + 1;
+          if (successesAfterEscalation[result.agentId] >= 2) {
+            log(`  ${result.agentId}: De-escalating ${agent.model}->${agent._originalModel} (${successesAfterEscalation[result.agentId]} consecutive successes after escalation)`);
+            agent.model = agent._originalModel;
+            delete agent._originalModel;
+            successesAfterEscalation[result.agentId] = 0;
+          } else {
+            log(`  ${result.agentId}: Success on escalated model (${successesAfterEscalation[result.agentId]}/2 before de-escalation)`);
+          }
         }
         consecutiveAgentFailures[result.agentId] = 0;
       }
@@ -1562,7 +1606,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
     analysisFiles.sort((a, b) => a.round - b.round);
   } catch (_) {}
 
-  // v6E: Agent efficiency metrics
+  // v6E: Agent efficiency metrics (v6.1: enriched with idle/skipped data from decisions)
   const efficiencyMetrics = agentSummaries.map(a => {
     const totalTime = roundLog.flatMap(r => r.agents)
       .filter(ra => ra.id === a.id)
@@ -1574,7 +1618,15 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
     const filesPerRound = a.roundsActive > 0
       ? (a.meta.filesModified.length / a.roundsActive).toFixed(1)
       : '0';
-    return { id: a.id, model: a.model || 'default', avgTime, successRate, filesPerRound, roundsActive: a.roundsActive, totalRounds };
+
+    // v6.1: Calculate idle/skipped/blocked from decision log
+    const agentDecisions = roundDecisions.filter(d => d.agentId === a.id);
+    const roundsSkipped = agentDecisions.filter(d => d.decision === 'skipped').length;
+    const roundsBlocked = agentDecisions.filter(d => d.decision === 'blocked').length;
+    const roundsIdle = roundsSkipped + roundsBlocked;
+    const idlePct = totalRounds > 0 ? Math.round((roundsIdle / totalRounds) * 100) : 0;
+
+    return { id: a.id, model: a.model || 'default', avgTime, successRate, filesPerRound, roundsActive: a.roundsActive, totalRounds, roundsSkipped, roundsBlocked, idlePct };
   });
 
   // Build report
@@ -1628,12 +1680,12 @@ ${allFiles.length ? allFiles.map(f => `- ${f}`).join('\n') : '(none)'}
 ## Test Trajectory
 ${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no test data)'}
 
-## Agent Efficiency (v5 Metrics)
+## Agent Efficiency (v6.1 Metrics)
 
-| Agent | Model | Avg Time (min) | Success Rate | Files/Round | Utilization |
-|-------|-------|----------------|-------------|-------------|-------------|
+| Agent | Model | Avg Time | Success | Files/Rnd | Active | Skipped | Blocked | Idle% |
+|-------|-------|----------|---------|-----------|--------|---------|---------|-------|
 ${efficiencyMetrics.map(m =>
-  `| ${m.id} | ${m.model} | ${m.avgTime} | ${m.successRate}% | ${m.filesPerRound} | ${m.roundsActive}/${m.totalRounds} rounds |`
+  `| ${m.id} | ${m.model} | ${m.avgTime}m | ${m.successRate}% | ${m.filesPerRound} | ${m.roundsActive}/${m.totalRounds} | ${m.roundsSkipped} | ${m.roundsBlocked} | ${m.idlePct}% |`
 ).join('\n')}
 
 ## Cost Summary

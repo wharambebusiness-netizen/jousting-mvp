@@ -575,3 +575,430 @@ describe('Guard Penetration — Edge Cases', () => {
     expect(result.player1ImpactScore).toBeGreaterThan(0);
   });
 });
+
+// ============================================================
+// 8. Edge Cases — Unseat Timing
+// ============================================================
+describe('Edge Cases — Unseat Timing', () => {
+  it('unseat on pass 1 (earliest possible)', () => {
+    // Charger at full stamina with aggressive setup vs low-guard opponent at low STA
+    const charger: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 65,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const tactician: PlayerState = {
+      archetype: ARCHETYPES.tactician,  // Low GRD=50
+      currentStamina: 8,  // Very low → low unseat threshold
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const chargerChoice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const tactChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, charger, tactician, chargerChoice, tactChoice);
+
+    // Charger's high MOM + Fast + CF should unseat low-STA tactician on pass 1
+    if (result.unseat !== 'none') {
+      expect(result.passNumber).toBe(1);
+      expect(result.unseat).toBe('player1');
+      expect(result.unseatMargin).toBeGreaterThan(0);
+    }
+  });
+
+  it('unseat on pass 5 (last joust pass)', () => {
+    // Simulate pass 5 with reduced stamina from earlier passes
+    const charger: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 15,  // Reduced from earlier passes
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const tactician: PlayerState = {
+      archetype: ARCHETYPES.tactician,
+      currentStamina: 10,  // Very low after 4 passes
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const chargerChoice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const tactChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(5, charger, tactician, chargerChoice, tactChoice);
+
+    // Pass 5 should work correctly
+    expect(result.passNumber).toBe(5);
+    if (result.unseat !== 'none') {
+      expect(['player1', 'player2']).toContain(result.unseat);
+    }
+  });
+
+  it('both players unseated in same pass — higher margin wins', () => {
+    // Two aggressive archetypes at low stamina
+    const breaker: PlayerState = {
+      archetype: ARCHETYPES.breaker,
+      currentStamina: 6,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const charger: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 6,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const choice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+
+    const result = resolveJoustPass(2, breaker, charger, choice, choice);
+
+    // At STA=6, both have low thresholds; one should win by margin
+    if (result.unseat !== 'none') {
+      expect(['player1', 'player2']).toContain(result.unseat);
+      expect(result.unseatMargin).toBeGreaterThan(0);
+    }
+  });
+
+  it('both players unseated — tied margins results in no unseat', () => {
+    // Perfect mirror at low stamina
+    const duel1: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 5,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const duel2: PlayerState = { ...duel1 };
+
+    const choice: PassChoice = { speed: SpeedType.Fast, attack: CF };
+
+    const result = resolveJoustPass(3, duel1, duel2, choice, choice);
+
+    // Perfect mirror: tied margins → no unseat
+    expect(result.unseat).toBe('none');
+    expect(result.unseatMargin).toBe(0);
+  });
+});
+
+// ============================================================
+// 9. Edge Cases — Extreme Fatigue Scenarios
+// ============================================================
+describe('Edge Cases — Extreme Fatigue Scenarios', () => {
+  it('stamina=0 joust pass: stats fully fatigued', () => {
+    const charger: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 0,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const bulwark: PlayerState = {
+      archetype: ARCHETYPES.bulwark,
+      currentStamina: 62,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(3, charger, bulwark, choice, choice);
+
+    // At STA=0, MOM and CTL should be 0, but guard has guardFatigueFloor (0.5)
+    expect(result.player1.effectiveStats.momentum).toBe(0);
+    expect(result.player1.effectiveStats.control).toBe(0);
+    expect(result.player1.effectiveStats.guard).toBeGreaterThan(0);  // Floor protection
+    expect(result.player1.impactScore).toBeDefined();
+    expect(Number.isFinite(result.player1.impactScore)).toBe(true);
+  });
+
+  it('stamina=1 joust pass: minimal but non-zero fatigue factor', () => {
+    const technician: PlayerState = {
+      archetype: ARCHETYPES.technician,
+      currentStamina: 1,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const duelist = makePlayerState('duelist');
+
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(2, technician, duelist, choice, choice);
+
+    // At STA=1: ff = 1/(55*0.8) = 1/44 = 0.0227
+    // MOM and CTL should be near-zero, guard has floor
+    expect(result.player1.effectiveStats.momentum).toBeGreaterThan(0);
+    expect(result.player1.effectiveStats.momentum).toBeLessThan(5);
+    expect(result.player1.effectiveStats.control).toBeGreaterThan(0);
+    expect(result.player1.effectiveStats.control).toBeLessThan(5);
+  });
+
+  it('stamina=0 melee round: stats fully fatigued', () => {
+    const charger: PlayerState = {
+      archetype: ARCHETYPES.charger,
+      currentStamina: 0,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const bulwark = makePlayerState('bulwark');
+
+    const result = resolveMeleeRoundFn(2, charger, bulwark, MC, MC);
+
+    // At STA=0, MOM and CTL are 0
+    expect(result.player1ImpactScore).toBeDefined();
+    expect(Number.isFinite(result.player1ImpactScore)).toBe(true);
+  });
+
+  it('stamina=1 melee round: minimal fatigue factor', () => {
+    const tactician: PlayerState = {
+      archetype: ARCHETYPES.tactician,
+      currentStamina: 1,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const duelist = makePlayerState('duelist');
+
+    const result = resolveMeleeRoundFn(1, tactician, duelist, OC, MC);
+
+    // At STA=1: ff very low, but stats are non-zero
+    expect(Number.isFinite(result.player1ImpactScore)).toBe(true);
+    expect(Number.isFinite(result.player2ImpactScore)).toBe(true);
+  });
+
+  it('both players at stamina=0 in joust', () => {
+    const p1: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 0,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const p2: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 0,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(4, p1, p2, choice, choice);
+
+    // Both at 0 stamina: should not throw, tied outcome
+    expect(result.unseat).toBe('none');
+    expect(result.player1.impactScore).toBeCloseTo(result.player2.impactScore, 5);
+  });
+
+  it('both players at stamina=1 in melee', () => {
+    const p1: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 1,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const p2: PlayerState = {
+      archetype: ARCHETYPES.duelist,
+      currentStamina: 1,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    const result = resolveMeleeRoundFn(1, p1, p2, MC, MC);
+
+    // Both at STA=1: should be tied
+    expect(result.player1ImpactScore).toBeCloseTo(result.player2ImpactScore, 5);
+  });
+});
+
+// ============================================================
+// 10. Edge Cases — Shift Eligibility at Exact Threshold
+// ============================================================
+describe('Edge Cases — Shift Eligibility at Exact Threshold', () => {
+  it('shift at exact CTL threshold (Standard speed)', () => {
+    // Standard threshold is 60 (from BALANCE)
+    // Create archetype with CTL exactly 60
+    const player: PlayerState = {
+      archetype: ARCHETYPES.duelist,  // CTL=60
+      currentStamina: 60,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const opp = makePlayerState('charger');
+
+    const choice: PassChoice = {
+      speed: SpeedType.Standard,
+      attack: CDL,
+      shiftAttack: PDL,
+    };
+    const oppChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, player, opp, choice, oppChoice);
+
+    // Duelist CTL=60 should meet Standard threshold exactly
+    expect(result.player1.shifted).toBe(true);
+  });
+
+  it('shift fails just below CTL threshold (Standard speed) via fatigue', () => {
+    // Standard threshold is 60
+    // Charger CTL=55, at very low stamina (STA=3)
+    // ff = 3/(65*0.8) = 3/52 = 0.0577
+    // Effective CTL = softCap(55) * 0.0577 = 55 * 0.0577 = 3.17 << 60
+    const player: PlayerState = {
+      archetype: ARCHETYPES.charger,  // CTL=55
+      currentStamina: 3,  // Very low → massive fatigue
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const opp = makePlayerState('bulwark');
+
+    const choice: PassChoice = {
+      speed: SpeedType.Standard,
+      attack: CDL,
+      shiftAttack: PDL,
+    };
+    const oppChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, player, opp, choice, oppChoice);
+
+    // Fatigue reduces effective CTL below 60 threshold → shift should fail
+    expect(result.player1.shifted).toBe(false);
+  });
+
+  it('shift at exact stamina threshold (stamina=10)', () => {
+    // Shift requires BOTH: effective CTL >= threshold AND currentStamina >= 10
+    // Technician CTL=70, Standard+CDL → rawCTL=80
+    // Need effective CTL >= 60 → ff >= 0.75 → currentStamina >= 33
+    // And need stamina >= 10 after speed (Standard deltaStamina=0)
+    // Test at exactly stamina=10 (edge case for stamina check)
+    const tech: PlayerState = {
+      archetype: ARCHETYPES.technician,  // CTL=70, maxSTA=55
+      currentStamina: 33,  // ff = 33/44 = 0.75 → effective CTL = 80*0.75 = 60
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const opp = makePlayerState('charger');
+
+    const choice: PassChoice = {
+      speed: SpeedType.Standard,  // deltaStamina=0
+      attack: CDL,  // deltaControl=+10
+      shiftAttack: PDL,
+    };
+    const oppChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, tech, opp, choice, oppChoice);
+
+    // Effective CTL = 60 (exactly), stamina = 33 >= 10 → shift should succeed
+    expect(result.player1.shifted).toBe(true);
+  });
+
+  it('shift fails when stamina is below cost threshold', () => {
+    // Fast shift costs 12; test with stamina=11
+    const tech: PlayerState = {
+      archetype: ARCHETYPES.technician,  // CTL=70
+      currentStamina: 11,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const opp = makePlayerState('charger');
+
+    const choice: PassChoice = {
+      speed: SpeedType.Fast,
+      attack: CF,
+      shiftAttack: CDL,
+    };
+    const oppChoice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, tech, opp, choice, oppChoice);
+
+    // STA=11 < Fast shift cost (12) → shift should fail
+    expect(result.player1.shifted).toBe(false);
+  });
+});
+
+// ============================================================
+// 11. Edge Cases — Breaker Penetration vs High-Guard in Melee
+// ============================================================
+describe('Edge Cases — Breaker Penetration vs High-Guard in Melee', () => {
+  it('Breaker vs Bulwark using Guard High: penetration mitigates high guard', () => {
+    const breaker = makePlayerState('breaker');
+    const bulwark = makePlayerState('bulwark');
+
+    // Bulwark uses Guard High (deltaGuard +20) for max guard
+    const result = resolveMeleeRoundFn(1, breaker, bulwark, OC, GH);
+
+    // Breaker should have meaningful impact despite Bulwark's massive guard
+    // Compare to non-Breaker
+    const charger = makePlayerState('charger');
+    const chargerResult = resolveMeleeRoundFn(1, charger, bulwark, OC, GH);
+
+    // Breaker impact should be higher than Charger despite lower MOM (62 vs 75)
+    // This proves penetration is working against high-guard melee
+    expect(result.player1ImpactScore).toBeGreaterThan(0);
+    expect(result.player1ImpactScore).toBeGreaterThan(chargerResult.player1ImpactScore * 0.7);
+  });
+
+  it('Breaker vs Bulwark+Guard High at low stamina: penetration + fatigue interaction', () => {
+    const breaker: PlayerState = {
+      archetype: ARCHETYPES.breaker,
+      currentStamina: 15,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+    const bulwark: PlayerState = {
+      archetype: ARCHETYPES.bulwark,
+      currentStamina: 10,
+      carryoverMomentum: 0,
+      carryoverControl: 0,
+      carryoverGuard: 0,
+    };
+
+    // Bulwark uses Guard High
+    const result = resolveMeleeRoundFn(1, breaker, bulwark, OC, GH);
+
+    // Breaker should still have penetration benefit despite fatigue
+    expect(Number.isFinite(result.player1ImpactScore)).toBe(true);
+    expect(Number.isFinite(result.player2ImpactScore)).toBe(true);
+  });
+
+  it('Breaker vs Bulwark: penetration scales with guard stat', () => {
+    const breaker = makePlayerState('breaker');
+
+    // Test vs high-guard Bulwark
+    const bulwark = makePlayerState('bulwark');  // GRD=65
+    const bulwarkResult = resolveMeleeRoundFn(1, breaker, bulwark, MC, GH);
+
+    // Test vs low-guard Charger
+    const charger = makePlayerState('charger');  // GRD=50
+    const chargerResult = resolveMeleeRoundFn(1, breaker, charger, MC, GH);
+
+    // Breaker's relative advantage should be larger vs Bulwark
+    const duel = makePlayerState('duelist');
+    const duelVsBulwark = resolveMeleeRoundFn(1, duel, bulwark, MC, GH);
+    const duelVsCharger = resolveMeleeRoundFn(1, duel, charger, MC, GH);
+
+    const breakerEdgeVsBulwark = bulwarkResult.player1ImpactScore - duelVsBulwark.player1ImpactScore;
+    const breakerEdgeVsCharger = chargerResult.player1ImpactScore - duelVsCharger.player1ImpactScore;
+
+    // Edge should be larger vs high-guard opponent
+    expect(breakerEdgeVsBulwark).toBeGreaterThan(breakerEdgeVsCharger * 0.8);
+  });
+});

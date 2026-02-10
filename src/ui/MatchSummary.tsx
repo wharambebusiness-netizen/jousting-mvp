@@ -90,13 +90,12 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                       {pr.player2.shifted && ' *'}
                     </td>
                     <td className="text-p2">{pr.player2.impactScore.toFixed(1)}</td>
-                    <td style={{
-                      fontWeight: 600,
-                      color: pr.unseat !== 'none' ? 'var(--red)'
-                        : diff > 0 ? 'var(--p1)'
-                        : diff < 0 ? 'var(--p2)'
-                        : 'var(--ink-faint)',
-                    }}>
+                    <td className={
+                      pr.unseat !== 'none' ? 'summary-table__result--unseat'
+                        : diff > 0 ? 'summary-table__result--p1'
+                        : diff < 0 ? 'summary-table__result--p2'
+                        : 'summary-table__result--tie'
+                    }>
                       {pr.unseat !== 'none'
                         ? `Unseat!`
                         : diff > 0 ? 'P1' : diff < 0 ? 'P2' : 'Tie'}
@@ -132,13 +131,12 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                   <td className="text-p1">{mr.player1ImpactScore.toFixed(1)}</td>
                   <td>{mr.player2Attack.name}</td>
                   <td className="text-p2">{mr.player2ImpactScore.toFixed(1)}</td>
-                  <td style={{
-                    fontWeight: 600,
-                    color: mr.outcome === 'Critical' ? 'var(--red)'
-                      : mr.winner === 'player1' ? 'var(--p1)'
-                      : mr.winner === 'player2' ? 'var(--p2)'
-                      : 'var(--ink-faint)',
-                  }}>
+                  <td className={
+                    mr.outcome === 'Critical' ? 'summary-table__result--crit'
+                      : mr.winner === 'player1' ? 'summary-table__result--p1'
+                      : mr.winner === 'player2' ? 'summary-table__result--p2'
+                      : 'summary-table__result--tie'
+                  }>
                     {mr.outcome === 'Critical' ? 'CRIT!' : mr.outcome === 'Hit'
                       ? (mr.winner === 'player1' ? 'P1' : 'P2')
                       : 'Draw'}
@@ -189,7 +187,7 @@ function MatchTimeline({ match }: { match: MatchState }) {
             key={`p${i}`}
             className={`timeline-pip ${cls}`}
             title={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'P1 wins' : diff < 0 ? 'P2 wins' : 'Tie'}`}
-            style={{ animationDelay: `${i * 0.1}s` }}
+            style={{ '--anim-delay': `${i * 0.1}s` } as React.CSSProperties}
           >
             {isUnseat ? '\u2694' : `P${pr.passNumber}`}
           </span>
@@ -207,7 +205,7 @@ function MatchTimeline({ match }: { match: MatchState }) {
             key={`m${i}`}
             className={`timeline-pip ${cls}`}
             title={`Melee R${mr.roundNumber}: ${isCrit ? 'Critical!' : mr.winner === 'player1' ? 'P1' : mr.winner === 'player2' ? 'P2' : 'Draw'}`}
-            style={{ animationDelay: `${(match.passResults.length + i) * 0.1}s` }}
+            style={{ '--anim-delay': `${(match.passResults.length + i) * 0.1}s` } as React.CSSProperties}
           >
             {isCrit ? '!!' : `M${mr.roundNumber}`}
           </span>

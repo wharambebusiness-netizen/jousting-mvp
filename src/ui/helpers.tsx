@@ -96,7 +96,7 @@ export function StanceTag({ stance }: { stance: Stance }) {
 export function DeltaVal({ label, value }: { label: string; value: number }) {
   return (
     <span className="attack-card__delta">
-      <span style={{ color: 'var(--ink-faint)' }}>{label}</span>{' '}
+      <span className="text-faint">{label}</span>{' '}
       <span className={deltaClass(value)}>{deltaStr(value)}</span>
     </span>
   );
@@ -109,7 +109,7 @@ export function StaminaBar({ current, max }: { current: number; max: number }) {
     : 'stamina-bar__fill';
   return (
     <div className="stamina-display tip" data-tip={current < 40 ? `Fatigued! Stats reduced to ${Math.round(current / 40 * 100)}%` : `Stamina: ${current}/${max}`}>
-      <span style={{ fontWeight: 600, minWidth: 24 }}>{current}</span>
+      <span className="stamina-display__value">{current}</span>
       <div className="stamina-bar">
         <div className={fillClass} style={{ width: `${pct}%` }} />
       </div>

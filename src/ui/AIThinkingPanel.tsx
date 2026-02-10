@@ -61,7 +61,7 @@ function SpeedWeights({ reasoning }: { reasoning: AIReasoning['speed'] }) {
         <div className="ai-thinking__bar-track">
           <div
             className={`ai-thinking__bar-fill ai-thinking__bar-fill--slow${chosen === 'Slow' ? ' ai-thinking__bar-fill--chosen' : ''}`}
-            style={{ width: `${pct(weights.slow)}%` }}
+            style={{ '--bar-width': `${pct(weights.slow)}%` } as React.CSSProperties}
           />
         </div>
         <span className="ai-thinking__bar-val">{pct(weights.slow)}%</span>
@@ -71,7 +71,7 @@ function SpeedWeights({ reasoning }: { reasoning: AIReasoning['speed'] }) {
         <div className="ai-thinking__bar-track">
           <div
             className={`ai-thinking__bar-fill ai-thinking__bar-fill--std${chosen === 'Standard' ? ' ai-thinking__bar-fill--chosen' : ''}`}
-            style={{ width: `${pct(weights.standard)}%` }}
+            style={{ '--bar-width': `${pct(weights.standard)}%` } as React.CSSProperties}
           />
         </div>
         <span className="ai-thinking__bar-val">{pct(weights.standard)}%</span>
@@ -81,7 +81,7 @@ function SpeedWeights({ reasoning }: { reasoning: AIReasoning['speed'] }) {
         <div className="ai-thinking__bar-track">
           <div
             className={`ai-thinking__bar-fill ai-thinking__bar-fill--fast${chosen === 'Fast' ? ' ai-thinking__bar-fill--chosen' : ''}`}
-            style={{ width: `${pct(weights.fast)}%` }}
+            style={{ '--bar-width': `${pct(weights.fast)}%` } as React.CSSProperties}
           />
         </div>
         <span className="ai-thinking__bar-val">{pct(weights.fast)}%</span>

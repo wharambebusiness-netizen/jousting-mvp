@@ -49,24 +49,24 @@ export function MeleeResultScreen({ match, result, onContinue }: {
 
       <div className="text-center mb-16">
         <span className={`outcome-badge ${outcomeClass}`}>{result.outcome}</span>
-        <p style={{ marginTop: 8, fontWeight: 600, fontSize: '1.05rem' }}>{winnerText}</p>
+        <p className="melee-result__winner-text">{winnerText}</p>
         {result.outcome !== MeleeOutcome.Draw && (
-          <p style={{ fontSize: '0.85rem', color: 'var(--ink-light)' }}>
+          <p className="melee-result__margin">
             Margin: {result.margin.toFixed(1)}
           </p>
         )}
       </div>
 
       <div className="pass-result__breakdown">
-        <div className="reveal-sides" style={{ marginBottom: 12 }}>
-          <div style={{ textAlign: 'center' }}>
+        <div className="reveal-sides mb-12">
+          <div className="text-center">
             <div className="player-label player-label--p1">You</div>
-            <div style={{ fontWeight: 700 }}>{result.player1Attack.name}</div>
+            <div className="melee-result__attack-name">{result.player1Attack.name}</div>
             <StanceTag stance={result.player1Attack.stance} />
           </div>
-          <div style={{ textAlign: 'center' }}>
+          <div className="text-center">
             <div className="player-label player-label--p2">Opponent</div>
-            <div style={{ fontWeight: 700 }}>{result.player2Attack.name}</div>
+            <div className="melee-result__attack-name">{result.player2Attack.name}</div>
             <StanceTag stance={result.player2Attack.stance} />
           </div>
         </div>
@@ -97,10 +97,10 @@ function Row({ label, v1, v2, fmt = 1, bold }: {
     <div className="impact-row">
       <span className="impact-row__label">{label}</span>
       <div className="impact-row__values">
-        <span className="impact-row__p1" style={bold ? { fontSize: '1.05rem' } : undefined}>
+        <span className={`impact-row__p1${bold ? ' impact-row__p1--large' : ''}`}>
           {v1.toFixed(fmt)}
         </span>
-        <span className="impact-row__p2" style={bold ? { fontSize: '1.05rem' } : undefined}>
+        <span className={`impact-row__p2${bold ? ' impact-row__p2--large' : ''}`}>
           {v2.toFixed(fmt)}
         </span>
       </div>

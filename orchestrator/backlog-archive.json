@@ -336,5 +336,146 @@
     ],
     "status": "done",
     "createdAt": "2026-02-09T05:00:00Z"
+  },
+  {
+    "id": "BL-031",
+    "role": "balance-analyst",
+    "priority": 1,
+    "title": "Apply Technician MOM 61→64 to fix persistent weakness",
+    "description": "COMPLETED S33: Technician MOM changed from 61 to 64 in archetypes.ts. 6 test assertions updated. 794 tests passing.",
+    "fileOwnership": [
+      "src/engine/archetypes.ts"
+    ],
+    "status": "completed",
+    "completedAt": "2026-02-09T23:00:00Z",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-033",
+    "role": "qa-engineer",
+    "priority": 1,
+    "title": "Fix test assertions broken by Technician MOM 61→64",
+    "description": "COMPLETED S33 Phase 2: All test assertions fixed after Technician MOM change. 794 tests passing (was 699 before AI test suite added).",
+    "fileOwnership": [
+      "src/engine/calculator.test.ts",
+      "src/engine/match.test.ts",
+      "src/engine/playtest.test.ts",
+      "src/engine/gear-variants.test.ts"
+    ],
+    "status": "completed",
+    "completedAt": "2026-02-09T23:00:00Z",
+    "dependsOn": [
+      "BL-031"
+    ],
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-036",
+    "role": "ui-dev",
+    "priority": 1,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Migrate top-priority inline styles to CSS classes",
+    "description": "COMPLETED S33: 35 inline styles migrated to CSS classes across 5 components (commit dcd0dd0).",
+    "fileOwnership": [
+      "src/ui/MatchSummary.tsx",
+      "src/ui/PassResult.tsx",
+      "src/ui/SetupScreen.tsx",
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-037",
+    "role": "ui-dev",
+    "priority": 2,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Improve combat result readability in PassResult",
+    "description": "COMPLETED S33: Winner banner, impact advantage display, counter visibility improvements (commit 6d7676d).",
+    "fileOwnership": [
+      "src/ui/PassResult.tsx"
+    ],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-038",
+    "role": "ui-dev",
+    "priority": 2,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Add rarity-colored borders to gear items in LoadoutScreen",
+    "description": "COMPLETED S33: Rarity-colored gear borders activated from dormant CSS (commit b98a7e0).",
+    "fileOwnership": [
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-039",
+    "role": "game-designer",
+    "priority": 1,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Player experience audit — archetype identity and fun factor",
+    "description": "COMPLETED S33: 485-line design analysis with fun tier list and 5 mechanic proposals (commit 264f327). Output: orchestrator/analysis/design-round-1.md.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-1.md"
+    ],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-042",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Consolidate and clean up App.css color variables",
+    "description": "COMPLETED S33: 40+ CSS custom properties created, colors consolidated (commit 9f43489).",
+    "fileOwnership": [
+      "src/App.css",
+      "src/index.css"
+    ],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-043",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Add responsive breakpoints for mobile layout",
+    "description": "COMPLETED S33: Responsive breakpoints added (tablet ≤768px, mobile ≤480px) (commit a66c30f).",
+    "fileOwnership": [
+      "src/App.css",
+      "src/index.css"
+    ],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-044",
+    "role": "balance-analyst",
+    "priority": 2,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Analyze gear variant win rate impact per archetype",
+    "description": "COMPLETED S33: 57,600 matches simulated, 375-line report. Variant system graded B-. Output: orchestrator/analysis/balance-tuner-variant-analysis.md (commit f5e97c2).",
+    "fileOwnership": [
+      "orchestrator/analysis/balance-tuner-variant-analysis.md"
+    ],
+    "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-045",
+    "role": "qa-engineer",
+    "priority": 2,
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
+    "title": "Add AI opponent test coverage",
+    "description": "COMPLETED S33: 95 AI tests created in src/ai/ai.test.ts covering validity, reasoning, patterns, edge cases (commit bfd9f17).",
+    "fileOwnership": [
+      "src/ai/ai.test.ts"
+    ],
+    "createdAt": "2026-02-09T23:00:00Z"
   }
 ]

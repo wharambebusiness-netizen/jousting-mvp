@@ -16,14 +16,21 @@
   display: flex; justify-content: center;
   gap: 0.5rem; margin-bottom: 1rem;
 }
-/* Difficulty button overrides — smaller, pill-shaped. Active state via .btn--active */
-.difficulty-selector .btn {
-  padding: 0.4rem 1rem; border-radius: 4px;
+.difficulty-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--ink-faint);
+  color: var(--ink);
+  font-weight: normal;
   font-size: 0.9rem;
 }
-.difficulty-selector .btn:not(.btn--active) {
-  background: transparent; border-width: 1px;
-  border-color: var(--ink-faint); font-weight: 400;
+.difficulty-btn--active {
+  border: 2px solid var(--ink);
+  background: var(--ink);
+  color: var(--parchment);
+  font-weight: bold;
 }
 
 /* Back / change-archetype button */
@@ -51,7 +58,10 @@
 
 /* Attack cards */
 .attack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.attack-card { padding: 12px; cursor: pointer; }
+.attack-card { padding: 12px; cursor: pointer; transition: all 0.15s ease; }
+.attack-card:hover { filter: brightness(1.05); box-shadow: 0 3px 10px var(--shadow); }
+.attack-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.attack-card:active { transform: scale(0.98); box-shadow: 0 1px 4px var(--shadow); }
 .attack-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .attack-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 0.95rem; font-weight: 700; }
 .attack-card__ratings { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.7rem; color: var(--ink-light); }
@@ -61,7 +71,10 @@
 
 /* Speed cards */
 .speed-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-.speed-card { padding: 16px; text-align: center; }
+.speed-card { padding: 16px; text-align: center; cursor: pointer; transition: all 0.15s ease; }
+.speed-card:hover { filter: brightness(1.05); box-shadow: 0 3px 10px var(--shadow); }
+.speed-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.speed-card:active { transform: scale(0.98); box-shadow: 0 1px 4px var(--shadow); }
 .speed-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
 .speed-card__deltas { display: flex; flex-direction: column; gap: 3px; font-size: 0.8rem; }
 .speed-card__threshold { margin-top: 8px; font-size: 0.7rem; color: var(--ink-faint); }
@@ -93,6 +106,7 @@
 .pass-result__breakdown {
   background: var(--parchment-light); border: 1px solid var(--border-light);
   border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px;
+  line-height: 1.6;
 }
 .pass-result__unseat {
   text-align: center; padding: 14px 16px;
@@ -196,7 +210,7 @@
   font-size: 0.72rem; line-height: 1.5; max-height: 300px; overflow-y: auto;
 }
 .combat-log__section { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(201, 168, 76, 0.2); }
-.combat-log__entry { padding: 1px 0; }
+.combat-log__entry { padding: 2px 0 2px 8px; border-left: 2px solid rgba(201, 168, 76, 0.3); margin-bottom: 2px; }
 
 /* Outcome badges */
 .outcome-badge {
@@ -237,7 +251,8 @@
   background: var(--parchment-dark); font-family: Georgia, 'Times New Roman', serif;
   font-size: 0.8rem; color: var(--ink-light); text-transform: uppercase;
 }
-.summary-table td { background: var(--parchment-light); }
+.summary-table td { background: var(--parchment-light); transition: background-color 0.15s ease; }
+.summary-table tbody tr:hover td { background: var(--parchment-dark); }
 
 /* Melee transition interstitial */
 .melee-transition {
@@ -282,6 +297,10 @@
 .melee-transition__penalty-label {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
   color: var(--ink-light); letter-spacing: 0.05em;
+}
+.melee-transition__hint {
+  font-size: 0.8rem; color: var(--ink-faint);
+  margin-top: 8px; text-align: center;
 }
 
 /* Loadout screen — Rarity grid */
@@ -343,6 +362,17 @@
   background: var(--parchment-light);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
+  animation: slideInLeft 0.4s ease-out backwards;
+}
+.gear-item:nth-child(1) { animation-delay: 0s; }
+.gear-item:nth-child(2) { animation-delay: 0.05s; }
+.gear-item:nth-child(3) { animation-delay: 0.1s; }
+.gear-item:nth-child(4) { animation-delay: 0.15s; }
+.gear-item:nth-child(5) { animation-delay: 0.2s; }
+.gear-item:nth-child(6) { animation-delay: 0.25s; }
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 .gear-item__slot {
   font-family: Georgia, 'Times New Roman', serif;
@@ -466,16 +496,19 @@
 /* Active state — filled pill with stance color */
 .variant-toggle__btn--active {
   font-weight: 700;
-  box-shadow: 0 1px 3px var(--shadow);
+  box-shadow: 0 2px 6px var(--shadow), inset 0 1px 3px rgba(255,255,255,0.3);
 }
 .variant-toggle__btn--active.variant-toggle__btn--aggressive {
   background: var(--stance-agg-bg); border-color: var(--stance-agg); color: var(--stance-agg);
+  box-shadow: 0 2px 6px rgba(139,37,0,0.2), inset 0 1px 3px rgba(255,255,255,0.3);
 }
 .variant-toggle__btn--active.variant-toggle__btn--balanced {
   background: var(--stance-bal-bg); border-color: var(--stance-bal); color: var(--stance-bal);
+  box-shadow: 0 2px 6px rgba(160,124,46,0.2), inset 0 1px 3px rgba(255,255,255,0.3);
 }
 .variant-toggle__btn--active.variant-toggle__btn--defensive {
   background: var(--stance-def-bg); border-color: var(--stance-def); color: var(--stance-def);
+  box-shadow: 0 2px 6px rgba(30,58,95,0.2), inset 0 1px 3px rgba(255,255,255,0.3);
 }
 
 /* Quick-set variant buttons */
@@ -556,6 +589,12 @@
 .melee-result__margin {
   font-size: 0.85rem; color: var(--ink-light);
 }
+.melee-result__winner-text {
+  margin-top: 8px; font-weight: 600; font-size: 1.05rem;
+}
+.melee-result__attack-name {
+  font-weight: 700;
+}
 
 /* Summary table: conditional result colors — ready for className migration */
 .summary-table__result--p1 { font-weight: 600; color: var(--p1); }
@@ -567,6 +606,16 @@
 /* Counter bonus colors */
 .impact-row--positive { color: var(--green); }
 .impact-row--negative { color: var(--red); }
+
+/* Pass winner text */
+.pass-winner--p1 { font-weight: 700; color: var(--p1); }
+.pass-winner--p2 { font-weight: 700; color: var(--p2); }
+.pass-winner--tie { font-weight: 700; color: var(--ink-faint); }
+
+/* Impact row label modifiers */
+.impact-row__label--bold { font-weight: 700; }
+.impact-row__p1--large,
+.impact-row__p2--large { font-size: 1.05rem; }
 
 /* Victory / defeat banner animations */
 .winner-banner--victory {
@@ -614,7 +663,9 @@
   background: var(--parchment-dark);
   color: var(--ink-faint);
   animation: timeline-pop 0.3s ease-out backwards;
+  animation-delay: var(--anim-delay, 0s);
 }
+.timeline-separator { animation: timeline-pop 0.3s ease-out backwards; }
 .timeline-pip--p1 { background: var(--p1-bg); border-color: var(--p1); color: var(--p1); }
 .timeline-pip--p2 { background: var(--p2-bg); border-color: var(--p2); color: var(--p2); }
 .timeline-pip--unseat { background: var(--red); border-color: var(--red); color: var(--white); font-size: 0.8rem; }
@@ -703,6 +754,29 @@
 
   /* Difficulty selector stacks on very narrow screens */
   .difficulty-selector { flex-wrap: wrap; }
+
+  /* Reduce animation durations on mobile for performance */
+  @keyframes timeline-pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes unseat-entrance { 0% { transform: scale(0.9); opacity: 0; box-shadow: 0 0 0 rgba(139, 37, 0, 0); } 60% { transform: scale(1.03); } 100% { transform: scale(1); opacity: 1; box-shadow: 0 4px 12px var(--glow-red); } }
+  @keyframes winner-banner-enter { 0% { transform: scale(0.9); opacity: 0; } 60% { transform: scale(1.02); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes counter-callout-flash { 0% { background: var(--callout-flash); } 100% { background: var(--callout-bg); } }
+  @keyframes badge-appear { 0% { transform: scale(0.7); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes melee-entrance { 0% { opacity: 0; transform: scaleY(0.3); box-shadow: 0 0 0 rgba(139, 37, 0, 0); } 50% { opacity: 1; transform: scaleY(1.03); } 100% { transform: scaleY(1); box-shadow: 0 4px 20px var(--glow-red-strong); } }
+  @keyframes melee-icon-slam { 0% { transform: scale(2.5) rotate(-15deg); opacity: 0; } 60% { transform: scale(0.9) rotate(3deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+
+  .timeline-pip { animation-duration: 0.2s; }
+  .gear-item { animation-duration: 0.25s; }
+  .unseat-entrance { animation-duration: 0.35s; }
+  .winner-banner-enter { animation-duration: 0.3s; }
+  .counter-callout-flash { animation-duration: 0.35s; }
+  .badge-appear { animation-duration: 0.2s; }
+  .melee-entrance { animation-duration: 0.4s; }
+  .melee-icon-slam { animation-duration: 0.35s; }
+  .victory-entrance { animation-duration: 0.4s; }
+  .defeat-entrance { animation-duration: 0.5s; }
+  .draw-entrance { animation-duration: 0.4s; }
+  .score-count { animation-duration: 0.5s; }
 }
 
 /* AI Thinking Panel */
@@ -758,6 +832,7 @@
 .ai-thinking__bar-fill {
   height: 100%; border-radius: 2px;
   transition: width 0.3s ease;
+  width: var(--bar-width, 0%);
 }
 .ai-thinking__bar-fill--slow { background: var(--p1); opacity: 0.6; }
 .ai-thinking__bar-fill--std { background: var(--gold); opacity: 0.6; }
@@ -912,10 +987,22 @@
 /* Player color text utilities */
 .text-p1 { color: var(--p1); }
 .text-p2 { color: var(--p2); }
+.text-faint { color: var(--ink-faint); }
+.text-center { text-align: center; }
 
 /* Hint / footnote text */
 .hint-text { font-size: 0.8rem; color: var(--ink-faint); }
 .hint-text-sm { font-size: 0.75rem; color: var(--ink-faint); }
+
+/* Spacing utilities */
+.mt-8 { margin-top: 8px; }
+.mb-12 { margin-bottom: 12px; }
+
+/* Stamina display */
+.stamina-display__value {
+  font-weight: 600;
+  min-width: 24px;
+}
 
 /* Opponent-selection header wrapper */
 .setup-opponent-header { text-align: center; margin-bottom: 1rem; }
@@ -929,6 +1016,7 @@
   .melee-transition,
   .melee-transition__icon,
   .timeline-pip,
+  .timeline-separator,
   .final-score--reveal .scoreboard__score,
   .scoreboard__score--anim,
   .outcome-badge,
@@ -936,18 +1024,20 @@
   .pass-result__unseat,
   .pass-winner-banner,
   .pass-counter-callout,
-  .counter-badge--prominent { animation: none; }
+  .counter-badge--prominent,
+  .gear-item { animation: none; }
 
   .pass-pip--current { animation: none; }
 
   .card--selectable,
   .stat-bar__fill,
   .stamina-bar__fill,
-  .gear-item,
   .variant-toggle__btn,
   .archetype-card,
   .pass-pip,
-  .ai-thinking__bar-fill { transition: none; }
+  .ai-thinking__bar-fill,
+  .attack-card,
+  .speed-card { transition: none; }
 }
 
 /* ============================================================

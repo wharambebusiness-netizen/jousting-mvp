@@ -43,18 +43,9 @@ export function SetupScreen({ onStart }: {
         {DIFFICULTIES.map(d => (
           <button
             key={d.value}
-            className={`btn ${difficulty === d.value ? 'btn--active' : ''}`}
+            className={`difficulty-btn ${difficulty === d.value ? 'difficulty-btn--active' : ''}`}
             onClick={() => setDifficulty(d.value)}
             title={d.desc}
-            style={{
-              padding: '0.4rem 1rem',
-              border: difficulty === d.value ? '2px solid var(--ink)' : '1px solid var(--ink-faint)',
-              background: difficulty === d.value ? 'var(--ink)' : 'transparent',
-              color: difficulty === d.value ? 'var(--parchment)' : 'var(--ink)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: difficulty === d.value ? 'bold' : 'normal',
-            }}
           >
             {d.label}
           </button>

@@ -7,7 +7,7 @@ import { JOUST_ATTACKS, MELEE_ATTACKS } from './attacks';
 import { Phase, SpeedType, MeleeOutcome, type GiglingLoadout, type PlayerLoadout } from './types';
 import { createMatch, submitJoustPass, submitMeleeRound } from './match';
 import { createFullLoadout, createStatGear, GEAR_SLOT_STATS } from './gigling-gear';
-import { createFullPlayerLoadout, createPlayerGear, PLAYER_GEAR_SLOT_STATS } from './player-gear';
+import { createFullPlayerLoadout, createPlayerGear, PLAYER_GEAR_SLOT_STATS, applyPlayerLoadout } from './player-gear';
 import { BALANCE } from './balance-config';
 import { softCap } from './calculator';
 
@@ -1494,5 +1494,236 @@ describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () =
     const unboosted = r.player1ImpactScore / BALANCE.unseatedImpactBoost;
     expect(unboosted).toBeLessThan(r.player1ImpactScore);
     expect(r.player1ImpactScore / unboosted).toBeCloseTo(1.25, 5);
+  });
+});
+
+// ============================================================
+// Gear Integration Tests — Full Stat Pipeline
+// ============================================================
+describe('Gear Integration — Full Stat Pipeline', () => {
+  it('uncommon steed + player gear: full stat pipeline from base to softCap', () => {
+    const steedLoadout = createFullLoadout('uncommon', 'uncommon');
+    const playerLoadout = createFullPlayerLoadout('uncommon');
+
+    const match = createMatch(
+      ARCHETYPES.duelist,
+      ARCHETYPES.duelist,
+      steedLoadout,
+      steedLoadout,
+      playerLoadout,
+      playerLoadout,
+    );
+
+    // Verify gear bonuses applied (exact values depend on RNG, but should be > base)
+    expect(match.player1.archetype.momentum).toBeGreaterThan(ARCHETYPES.duelist.momentum);
+    expect(match.player1.archetype.stamina).toBeGreaterThan(ARCHETYPES.duelist.stamina);
+  });
+
+  it('giga steed gear: verify softCap activates on high stats', () => {
+    const gigaSteed = createFullLoadout('giga', 'giga');
+    const gigaPlayer = createFullPlayerLoadout('giga');
+
+    const match = createMatch(
+      ARCHETYPES.charger,  // MOM=75
+      ARCHETYPES.charger,
+      gigaSteed,
+      gigaSteed,
+      gigaPlayer,
+      gigaPlayer,
+    );
+
+    // Charger MOM=75 + giga rarity (13) = 88
+    // Steed: chamfron(+25 MOM), stirrups(+25 MOM), horseshoes(+17 MOM) = +67 MOM
+    // Player: lance(+25 MOM), melee_weapon(+17 MOM) = +42 MOM
+    // Total raw: 88 + 67 + 42 = 197 >> 100 (knee)
+    // softCap should reduce this significantly
+    expect(match.player1.archetype.momentum).toBeGreaterThan(100);
+    expect(match.player1.archetype.momentum).toBeLessThan(170);
+  });
+
+  it('mixed variants: aggressive steed + defensive player gear', () => {
+    const aggressiveSteed = createFullLoadout('rare', 'rare', undefined, 'aggressive');
+    const defensivePlayer = createFullPlayerLoadout('rare', undefined, 'defensive');
+
+    const match = createMatch(
+      ARCHETYPES.breaker,
+      ARCHETYPES.bulwark,
+      aggressiveSteed,
+      undefined,  // Bulwark has no gear
+      defensivePlayer,
+      undefined,
+    );
+
+    // Breaker with aggressive steed should have higher MOM than raw
+    // Breaker with defensive player gear should have higher GRD/STA
+    expect(match.player1.archetype.momentum).toBeGreaterThan(ARCHETYPES.breaker.momentum);
+    expect(match.player1.archetype.guard).toBeGreaterThan(ARCHETYPES.breaker.guard);
+  });
+
+  it('bare vs giga: giga produces higher impact scores', () => {
+    const gigaSteed = createFullLoadout('giga', 'giga');
+    const gigaPlayer = createFullPlayerLoadout('giga');
+
+    const bareMatch = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist);
+    const gigaMatch = createMatch(
+      ARCHETYPES.duelist,
+      ARCHETYPES.duelist,
+      gigaSteed,
+      gigaSteed,
+      gigaPlayer,
+      gigaPlayer,
+    );
+
+    const barePass = submitJoustPass(bareMatch,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+    const gigaPass = submitJoustPass(gigaMatch,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    const bareImpact = barePass.passResults[0].player1.impactScore;
+    const gigaImpact = gigaPass.passResults[0].player1.impactScore;
+
+    // Giga gear should produce significantly higher impact
+    expect(gigaImpact).toBeGreaterThan(bareImpact * 1.5);
+  });
+
+  it('createMatch() with 0 loadout args: bare match', () => {
+    const match = createMatch(ARCHETYPES.charger, ARCHETYPES.tactician);
+
+    expect(match.player1.archetype.momentum).toBe(ARCHETYPES.charger.momentum);
+    expect(match.player2.archetype.momentum).toBe(ARCHETYPES.tactician.momentum);
+  });
+
+  it('createMatch() with 2 loadout args: steed only', () => {
+    const steedLoadout = createFullLoadout('uncommon', 'uncommon');
+
+    const match = createMatch(
+      ARCHETYPES.duelist,
+      ARCHETYPES.duelist,
+      steedLoadout,
+      steedLoadout,
+    );
+
+    // Steed gear + rarity bonus applied
+    expect(match.player1.archetype.momentum).toBeGreaterThan(ARCHETYPES.duelist.momentum);
+  });
+
+  it('createMatch() with 4 loadout args: steed + player gear', () => {
+    const steedLoadout = createFullLoadout('rare', 'rare');
+    const playerLoadout = createFullPlayerLoadout('rare');
+
+    const match = createMatch(
+      ARCHETYPES.charger,
+      ARCHETYPES.technician,
+      steedLoadout,
+      undefined,
+      playerLoadout,
+      undefined,
+    );
+
+    // P1 has both steed + player gear, P2 has nothing
+    expect(match.player1.archetype.momentum).toBeGreaterThan(ARCHETYPES.charger.momentum);
+    expect(match.player2.archetype.momentum).toBe(ARCHETYPES.technician.momentum);
+  });
+
+  it('createMatch() with 6 loadout args: asymmetric gear', () => {
+    const gigaSteed = createFullLoadout('giga', 'giga');
+    const uncommonSteed = createFullLoadout('uncommon', 'uncommon');
+    const gigaPlayer = createFullPlayerLoadout('giga');
+    const uncommonPlayer = createFullPlayerLoadout('uncommon');
+
+    const match = createMatch(
+      ARCHETYPES.duelist,
+      ARCHETYPES.duelist,
+      gigaSteed,
+      uncommonSteed,
+      gigaPlayer,
+      uncommonPlayer,
+    );
+
+    // P1 has giga gear, P2 has uncommon gear
+    expect(match.player1.archetype.momentum).toBeGreaterThan(match.player2.archetype.momentum);
+  });
+
+  it('applyPlayerLoadout does NOT add rarity bonus (regression guard)', () => {
+    const playerLoadout = createFullPlayerLoadout('giga');
+
+    // Apply player gear to base archetype
+    const geared = applyPlayerLoadout(ARCHETYPES.duelist, playerLoadout);
+
+    // Expected: base 60 + player bonuses (NO rarity bonus, which is 13 for giga)
+    // Geared momentum should be > base, but NOT by 13 (the giga rarity bonus)
+    // If rarity bonus were included, it would be much higher
+    expect(geared.momentum).toBeGreaterThan(ARCHETYPES.duelist.momentum);
+    expect(geared.momentum).toBeLessThan(ARCHETYPES.duelist.momentum + 50); // Player bonuses only
+  });
+
+  it('full match with uncommon gear: stat pipeline verified', () => {
+    const steedLoadout = createFullLoadout('uncommon', 'uncommon');
+    const playerLoadout = createFullPlayerLoadout('uncommon');
+
+    let match = createMatch(
+      ARCHETYPES.tactician,
+      ARCHETYPES.breaker,
+      steedLoadout,
+      steedLoadout,
+      playerLoadout,
+      playerLoadout,
+    );
+
+    // Play through a pass to verify effective stats after fatigue
+    match = submitJoustPass(match,
+      { speed: SpeedType.Standard, attack: CdL },
+      { speed: SpeedType.Standard, attack: CdL },
+    );
+
+    const result = match.passResults[0];
+
+    // Verify effective stats are computed correctly (after softCap and fatigue)
+    expect(result.player1.effectiveStats.momentum).toBeGreaterThan(0);
+    expect(result.player1.effectiveStats.control).toBeGreaterThan(0);
+    expect(result.player2.effectiveStats.momentum).toBeGreaterThan(0);
+  });
+
+  it('full match comparing bare vs giga outcomes: verify stat advantage translates to match advantage', () => {
+    const gigaSteed = createFullLoadout('giga', 'giga');
+    const gigaPlayer = createFullPlayerLoadout('giga');
+
+    // Bare match: Charger vs Technician
+    let bareMatch = createMatch(ARCHETYPES.charger, ARCHETYPES.technician);
+
+    // Giga match: same matchup with giga gear
+    let gigaMatch = createMatch(
+      ARCHETYPES.charger,
+      ARCHETYPES.technician,
+      gigaSteed,
+      gigaSteed,
+      gigaPlayer,
+      gigaPlayer,
+    );
+
+    // Play 3 passes
+    for (let i = 0; i < 3; i++) {
+      bareMatch = submitJoustPass(bareMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+      gigaMatch = submitJoustPass(gigaMatch,
+        { speed: SpeedType.Standard, attack: CdL },
+        { speed: SpeedType.Standard, attack: CdL },
+      );
+    }
+
+    const bareCumP1 = bareMatch.cumulativeScore1;
+    const bareCumP2 = bareMatch.cumulativeScore2;
+    const gigaCumP1 = gigaMatch.cumulativeScore1;
+    const gigaCumP2 = gigaMatch.cumulativeScore2;
+
+    // Giga cumulative scores should be significantly higher
+    expect(gigaCumP1).toBeGreaterThan(bareCumP1 * 1.3);
+    expect(gigaCumP2).toBeGreaterThan(bareCumP2 * 1.3);
   });
 });

@@ -235,6 +235,10 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
+.card--selectable:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 6px var(--shadow);
+}
 .card--selected {
   background: var(--card-selected);
   border-color: var(--gold-dark);
@@ -328,7 +332,7 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
 .player-label--p2 { color: var(--p2); }
 
 /* Impact rows */
-.impact-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-light); font-size: 0.9rem; }
+.impact-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 0.9rem; line-height: 1.5; }
 .impact-row:last-child { border-bottom: none; }
 .impact-row__label { color: var(--ink-light); }
 .impact-row__values { display: flex; gap: 24px; }

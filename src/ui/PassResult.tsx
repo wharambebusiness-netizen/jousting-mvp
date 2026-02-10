@@ -105,14 +105,10 @@ export function PassResultScreen({ match, result, onContinue }: {
           <div className="impact-row">
             <span className="impact-row__label">Counter Bonus</span>
             <div className="impact-row__values">
-              <span className="impact-row__p1" style={{
-                color: counters.player1Bonus > 0 ? 'var(--green)' : counters.player1Bonus < 0 ? 'var(--red)' : undefined,
-              }}>
+              <span className={`impact-row__p1 ${counters.player1Bonus > 0 ? 'impact-row--positive' : counters.player1Bonus < 0 ? 'impact-row--negative' : ''}`}>
                 {counters.player1Bonus > 0 ? `+${counters.player1Bonus.toFixed(1)}` : counters.player1Bonus < 0 ? counters.player1Bonus.toFixed(1) : '0'}
               </span>
-              <span className="impact-row__p2" style={{
-                color: counters.player2Bonus > 0 ? 'var(--green)' : counters.player2Bonus < 0 ? 'var(--red)' : undefined,
-              }}>
+              <span className={`impact-row__p2 ${counters.player2Bonus > 0 ? 'impact-row--positive' : counters.player2Bonus < 0 ? 'impact-row--negative' : ''}`}>
                 {counters.player2Bonus > 0 ? `+${counters.player2Bonus.toFixed(1)}` : counters.player2Bonus < 0 ? counters.player2Bonus.toFixed(1) : '0'}
               </span>
             </div>
@@ -128,10 +124,7 @@ export function PassResultScreen({ match, result, onContinue }: {
 
         <div className="impact-row">
           <span className="impact-row__label">Pass Winner</span>
-          <span style={{
-            fontWeight: 700,
-            color: scoreDiff > 0 ? 'var(--p1)' : scoreDiff < 0 ? 'var(--p2)' : 'var(--ink-faint)',
-          }}>
+          <span className={scoreDiff > 0 ? 'pass-winner--p1' : scoreDiff < 0 ? 'pass-winner--p2' : 'pass-winner--tie'}>
             {scoreDiff > 0 ? 'You' : scoreDiff < 0 ? 'Opponent' : 'Tied'}
             {' '}({scoreDiff > 0 ? '+' : ''}{scoreDiff.toFixed(1)})
           </span>
@@ -177,7 +170,7 @@ function ImpactScoreRow({ v1, v2 }: { v1: number; v2: number }) {
   const p2Wins = v2 > v1;
   return (
     <div className="impact-row impact-row--impact-score">
-      <span className="impact-row__label" style={{ fontWeight: 700 }}>Impact Score</span>
+      <span className="impact-row__label impact-row__label--bold">Impact Score</span>
       <div className="impact-row__values">
         <span className={`impact-row__p1 impact-row__p1--bold${p1Wins ? ' impact-score--winner' : ''}`}>
           {v1.toFixed(1)}
