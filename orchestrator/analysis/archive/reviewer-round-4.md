@@ -1,506 +1,427 @@
-# Tech Lead — Round 4 Code Review
+# Tech Lead — Round 4 Analysis
 
 **Date**: 2026-02-10
-**Round**: 4
-**Agents Reviewed**: 4 (balance-tuner, qa, polish, ui-dev)
-**Status**: ✅ ALL APPROVED
-**Tests**: 889/889 PASSING
-**Risk Level**: LOW
+**Round**: 4 of 5
+**Grade**: A
+**Risk Level**: ZERO
+**Test Status**: 897/897 passing ✅
 
 ---
 
 ## Executive Summary
 
-**Grade: A** — All 4 agents delivered high-quality work. BL-062 (stat tooltips) SHIPPED production-ready. QA completed stretch goal BL-069 (+36 comprehensive melee matchup tests). Zero structural violations. Zero test breakage. Deployment ready.
+**STATUS**: ✅ **COMPLETE** — Analysis-only round (4th consecutive), zero code changes to review
 
-**Key Achievements**:
-- ✅ BL-062 COMPLETE — Stat tooltips now fully accessible (keyboard + screen reader + mobile)
-- ✅ BL-069 COMPLETE — All 36 archetype melee matchups now tested (100% coverage)
-- ✅ Test count: 853 → 889 (+36 tests, +4.2%)
-- ✅ Zero regressions — all tests passing
-- ✅ Working directory clean — no unauthorized balance changes
-- ✅ Zero structural violations
+**Round 4 Activity**:
+- **ui-dev**: Analysis only (ui-dev-round-4.md) — status "all-done"
+- **producer**: Analysis only (producer-round-3.md persists) — status "complete"
+- **All other agents**: Terminal states from Rounds 1-2 (no Round 4 activity)
 
-**Unblocked**: P1 onboarding task BL-062 shipped in under 1 hour, unblocks ~80% of new player confusion on Setup Screen.
+**Code Changes**: ZERO (orchestrator-only file changes)
 
-**Next Priority**: BL-064 (Impact Breakdown) when BL-063 design spec completes.
+**Test Status**: 897/897 passing (stable across Rounds 1-4) ✅
 
----
+**Working Directory**: CLEAN (4th consecutive check, no unauthorized balance changes) ✅
 
-## Round 4 Agent Reviews
-
-### 1. Balance Tuner — Status Checkpoint ✅ APPROVED
-
-**Files**: `orchestrator/analysis/balance-tuner-round-4.md`
-**Type**: Status verification (no simulations this round)
-**Risk**: NONE (analysis-only)
-
-**Review**:
-- No new balance tasks in backlog (coordination round)
-- Verified working directory clean (no unauthorized changes) ✅
-- Confirmed tests passing 889/889 ✅
-- Documented all prior balance work (Rounds 1-3) remains valid
-- Identified QA's +36 test increase from BL-069 completion
-
-**Structural Compliance**:
-- ✅ Zero engine modifications
-- ✅ No hardcoded constants
-- ✅ All tuning constants remain in balance-config.ts
-
-**Quality**: Excellent status tracking. Clean documentation of current balance state.
-
-**Verdict**: APPROVED. No action needed.
+**Key Finding**: BL-076 blocker continues to Round 20+ (R5 prev session → R4 current session). All execution preconditions remain met. Producer consolidation complete (BL-063x duplicate removed Round 2). 100% scheduler-level policy decision.
 
 ---
 
-### 2. QA Engineer — Comprehensive Melee Matchup Testing (BL-069) ✅ APPROVED
+## Round 4 Review
 
-**Files**:
-- `src/engine/gear-variants.test.ts` (+418 lines, +36 tests)
-- `orchestrator/analysis/qa-round-4.md`
+### 1. Agent Activity Assessment ✅
 
-**Type**: Test-only changes (853 → 889 tests)
-**Risk**: LOW (test-only, zero engine changes)
+**Round 4 Activity**:
 
-**Changes**:
-- Added 36 comprehensive tests covering all 6×6 archetype melee matchups
-- Each test validates 3 rounds (MC vs FB, OC vs GH, FB vs MC)
-- Deterministic RNG (seeds 10000-10035) ensures reproducibility
-- Validation: no infinite loops, positive impact, stamina drain, carryover stability
+| Agent | Status | Work Done | Analysis |
+|-------|--------|-----------|----------|
+| **ui-dev** | all-done | Round 4 analysis (ui-dev-round-4.md) | ✅ Excellent — comprehensive 334-line checkpoint |
+| **producer** | complete | No new work (R3 analysis persists) | ✅ Excellent — awaiting orchestrator decision |
+| **balance-tuner** | all-done | Terminal (no R4 activity) | ✅ Excellent — all tier validation complete |
+| **qa** | all-done | Terminal (no R4 activity) | ✅ Excellent — 897/897 tests passing |
+| **polish** | all-done | Terminal (no R4 activity) | ✅ Excellent — CSS 100% complete |
+| **designer** | all-done | Terminal (no R4 activity) | ✅ Excellent — all 6 specs complete |
+| **reviewer** | complete (R3) | Writing R4 analysis now | ✅ (current work) |
 
-**Structural Verification**:
-- ✅ Zero UI/AI imports (only engine imports: types, archetypes, attacks, match, gear)
-- ✅ No engine code modifications (test-only)
-- ✅ Test structure mirrors existing patterns (consistent with gear-variants suite)
-- ✅ Named constants from imports (MC, OC, FB, GH from MELEE_ATTACKS)
+**Code Changes**: ZERO (orchestrator files only — backlog.json, handoffs, task-board.md, session-changelog.md)
 
-**Quality Checks**:
-- ✅ Deterministic RNG (reproducible)
-- ✅ Boundary testing (0 < impact < 1000, stamina > 10)
-- ✅ Clear comments ("Round 1: Basic impact validation", "Round 2: Carryover mechanics")
-- ✅ Realistic scenarios (uncommon rarity, balanced variant, multi-round combat)
-- ✅ Function complexity: All test functions <60 lines
+**Test Status**: 897/897 passing ✅
 
-**Test Coverage Analysis**:
-- **Before BL-069**: Spot-checked melee matchups (incomplete coverage)
-- **After BL-069**: 100% archetype matchup coverage (36/36)
-- **Findings**: Zero bugs discovered, all archetypes viable in all matchups
+### 2. Structural Integrity Check ✅
 
-**Key Validations**:
-- Melee phase stability: Zero infinite loops across 108 rounds (36 matchups × 3 rounds)
-- Stamina mechanics: Consistent drain without catastrophic collapse
-- Carryover system: Penalties persist correctly without exponential stacking
-- Breaker penetration: 11 matchups validate guard penetration across all opponents
+**Hard Constraints** (all passed):
+- ✅ Zero UI/AI imports in src/engine/ (no engine changes)
+- ✅ All tuning constants in balance-config.ts (no balance changes)
+- ✅ Stat pipeline order preserved (no calculator changes)
+- ✅ Public API signatures stable (no types.ts changes)
+- ✅ resolvePass() still deprecated (no new usage)
 
-**Test Performance**: 889 tests in 2.01s (~0.04ms overhead per test)
+**Working Directory Check** ✅:
+```bash
+git diff src/engine/archetypes.ts        # EMPTY ✅
+git diff src/engine/balance-config.ts    # EMPTY ✅
+git status --short                        # Only orchestrator/ changes ✅
+```
 
-**Verdict**: APPROVED. Excellent comprehensive coverage. Zero bugs found. High-quality test design.
+**Status**: CLEAN — working directory corruption pattern NOT present (4th consecutive check across Rounds 1-4)
 
----
+### 3. BL-076 Blocker Status ✅
 
-### 3. Polish — CSS Foundation for BL-062 (Stat Tooltips) ✅ APPROVED
+**Timeline Update**:
+```
+R5 prev:    BL-076 created
+R6-R21 prev: 16 rounds escalation
+R1 current: 17+ rounds blocked
+R2 current: 18+ rounds blocked + consolidation (BL-063x deleted)
+R3 current: 19+ rounds blocked
+R4 current: 20+ rounds blocked ← YOU ARE HERE
+```
 
-**Files**:
-- `src/index.css` (lines 358-407, tooltip CSS enhancements)
-- `src/App.css` (lines 105-114, stat-bar label focus states)
-- `src/App.css` (lines 1540-1542, mobile overlay CSS)
-- `orchestrator/analysis/polish-round-4.md`
+**Duration**: 20+ consecutive rounds across 2 sessions
 
-**Type**: CSS-only changes (zero JavaScript)
-**Risk**: NONE (pure CSS, zero behavioral changes)
+**All Execution Preconditions Remain Met** ✅:
+- ✅ Spec: 100% complete (design-round-4-bl063.md, 770 lines)
+- ✅ Implementation guide: Complete (ui-dev-round-20.md Appendix)
+- ✅ Estimate: 2-3 hours (small, clear)
+- ✅ Design: Complete (BL-063 done R5 prev)
+- ✅ Dependencies: Resolved (zero blockers)
+- ✅ Files: 3 identified (types.ts, calculator.ts, phase-joust.ts)
+- ✅ Risk: LOW (backwards compatible, optional fields)
+- ✅ Consolidation: Complete (BL-063x duplicate removed R2)
 
-**Changes**:
-1. **Enhanced tooltip CSS** (index.css:358-407):
-   - Added `:focus::after` for keyboard navigation
-   - Changed `white-space: normal` (multi-line support)
-   - Increased font-size `0.72rem` → `0.8rem`, line-height `1.4` → `1.5`, padding `6px 10px` → `8px 12px`
-   - Added mobile breakpoint: tooltips below element on <480px
-   - Responsive width (`90vw`, max `280px`), scrollable (`max-height: 40vh`)
-   - Increased z-index `10` → `1000`
+**Impact**: Blocks BL-064 (P1 critical learning loop, 6-8h ui-dev work, 14% of MVP)
 
-2. **Stat label keyboard navigation** (App.css:105-114):
-   - Added `.stat-bar__label` with padding (4px 6px), border-radius (2px)
-   - Added `:focus-visible` with gold outline (2px solid var(--gold), offset 2px)
-   - Light gold background on focus (`rgba(201,168,76,0.1)`)
-   - Smooth transition (0.15s ease)
+**Escalation Paths** (from producer-round-3.md):
+- **Path A (Recommended)**: Add engine-dev to Round 5 roster → 10-12h to 100% MVP closure
+- **Path B (Current State)**: Continue without engine-dev → close MVP at 86% (6/7 onboarding features)
 
-3. **Mobile overlay CSS** (App.css:1540-1542):
-   - Added `.tip--active::before` for modal overlay (React toggles this class)
-   - Semi-transparent background (`rgba(0,0,0,0.2)`), z-index 999
-   - Smooth transition (0.15s ease)
+**Note**: This is an **orchestrator-level policy decision**, not a code quality issue.
 
-**Structural Compliance**:
-- ✅ Zero JavaScript changes (CSS-only)
-- ✅ No behavioral changes (all interactive logic in React)
-- ✅ Design token usage (var(--gold), var(--ink), var(--parchment))
-- ✅ BEM naming conventions
+### 4. Test Suite Validation ✅
 
-**Quality Checks**:
-- ✅ Zero `!important` flags
-- ✅ WCAG 2.1 AA compliant: 17:1 color contrast (dark bg #1a1a1a + light text #f5f1e8)
-- ✅ Responsive breakpoints (480px)
-- ✅ Accessibility: focus states, screen reader support (via React aria-labels)
-- ✅ Mobile touch targets: 44px minimum (via stat-bar padding)
-- ✅ `prefers-reduced-motion` respected (animations only on interaction)
+**Command**: `npx vitest run` (executed at 12:21:04)
 
-**Shared File Coordination** (App.css):
-- **This round**: polish modified lines 105-114, 1540-1542
-- **Previous rounds**: polish lines 459-680 (counter chart), lines 365-368 (stat bars); ui-dev lines 370-514 (loadout)
-- **Conflict Status**: ✅ NONE — different sections, no overlap
-- **Monitoring**: 4 agents have modified App.css (polish, ui-dev, prior rounds) — continue tracking
+**Results**:
+```
+✓ src/engine/phase-resolution.test.ts (55 tests) 26ms
+✓ src/engine/player-gear.test.ts (46 tests) 31ms
+✓ src/engine/calculator.test.ts (202 tests) 79ms
+✓ src/engine/gigling-gear.test.ts (48 tests) 46ms
+✓ src/ai/ai.test.ts (95 tests) 57ms
+✓ src/engine/match.test.ts (100 tests) 60ms
+✓ src/engine/gear-variants.test.ts (223 tests) 124ms
+✓ src/engine/playtest.test.ts (128 tests) 242ms
 
-**Impact**: Unblocks BL-062 keyboard accessibility + mobile responsiveness. UI-dev implemented with this CSS in <1 hour.
+Test Files  8 passed (8)
+     Tests  897 passed (897)
+  Duration  795ms (transform 1.96s, setup 0ms, import 2.75s, tests 666ms)
+```
 
-**Verdict**: APPROVED. High-quality accessible CSS foundation. Zero violations.
+**Status**: ✅ PASSING (zero regressions)
 
----
+**Test Count Stability**:
+- Round 1: 897/897 ✅
+- Round 2: 897/897 ✅ (stable)
+- Round 3: 897/897 ✅ (stable)
+- Round 4: 897/897 ✅ (stable)
 
-### 4. UI Dev — Stat Tooltips Implementation (BL-062) ✅ APPROVED
+### 5. Backlog Review ✅
 
-**Files**:
-- `src/ui/helpers.tsx` (+17 lines: refined tooltip content, keyboard accessibility)
-- `src/index.css` (lines 390-393: focus states) — already approved under polish review
-- `orchestrator/analysis/ui-dev-round-4.md`
+**Current Backlog** (3 tasks):
 
-**Type**: React component updates (StatBar) + tooltip content refinement
-**Risk**: LOW (small focused changes, zero engine dependencies)
+| ID | Role | Priority | Status | Notes |
+|----|------|----------|--------|-------|
+| **BL-035** | tech-lead | P2 | completed | CLAUDE.md update (completed R1) |
+| **BL-064** | ui-dev | P1 | pending | Impact breakdown UI (blocked on BL-076) |
+| **BL-076** | engine-dev | P1 | pending | PassResult extensions (20+ rounds blocked) |
 
-**Changes**:
-1. **Refined tooltip content** (helpers.tsx:18-24):
-   - Updated all 5 STAT_TIPS with designer-approved wording from BL-061 spec
-   - **MOM**: Added "Attack speed and power", strategic trade-off ("vulnerable to counters")
-   - **CTL**: Added "Defense and precision", resilience benefit ("keeps you resilient")
-   - **GRD**: Added fatigue immunity clarification ("The only stat that doesn't get reduced by fatigue")
-   - **INIT**: Added "Speed and reflexes", phase context ("in the speed selection phase")
-   - **STA**: Added "Endurance and fatigue resistance", strategic guidance ("Choose attacks carefully late in combat")
+**Consolidation Status** (from R2):
+- ✅ BL-063x duplicate removed
+- ✅ BL-076 kept as single source of truth
+- ✅ BL-064 dependsOn updated: [BL-063, BL-063x] → [BL-063, BL-076]
+- ✅ Backlog cleaned: 4 tasks → 3 tasks
 
-2. **Keyboard accessibility** (helpers.tsx:66-83):
-   - Added `tabIndex={0}` to `.stat-bar__label` (keyboard focusable)
-   - Added `role="tooltip"` (semantic ARIA)
-   - Added `aria-label={fullLabel}` (screen reader support: "MOM: Momentum — Attack speed and power...")
+**Quality**: Excellent — backlog accurate, single source of truth, dependencies correct
 
-**Structural Compliance**:
-- ✅ Zero engine modifications (UI-only changes)
-- ✅ No engine imports in UI files
-- ✅ Existing StatBar component architecture preserved
-- ✅ React best practices: semantic HTML, ARIA attributes
+### 6. CLAUDE.md Accuracy Check ✅
 
-**Quality Checks**:
-- ✅ Type safety: `type: 'mom' | 'ctl' | 'grd' | 'init' | 'sta'` — discriminated union preserved
-- ✅ Named constants: STAT_TIPS dictionary (DRY principle)
-- ✅ Function complexity: StatBar component <30 lines (simple, maintainable)
-- ✅ Accessibility: tabIndex, role, aria-label (WCAG 2.1 AA compliant)
+**Verified Sections** (no changes needed):
+- ✅ **Archetype Stats Table** (lines 118-127): ACCURATE (Technician MOM=64, Bulwark MOM=58 CTL=52)
+- ✅ **Win Rate Validation** (lines 129-149): ACCURATE (bare 22.4pp, epic 5.7pp, giga 7.2pp)
+- ✅ **Variant Impact** (lines 151-161): ACCURATE (defensive 6.6pp spread = best balance)
+- ✅ **Test Count** (line 100): ACCURATE (897 tests)
 
-**Design Spec Compliance** (BL-061):
-- ✅ Content (5 stat tooltips with full names + descriptions)
-- ✅ Desktop hover interaction
-- ✅ Keyboard navigation (Tab → focus → tooltip)
-- ✅ Screen reader support (aria-label)
-- ✅ Mobile responsive (320px viewport)
-- ✅ Focus outline (2px blue, WCAG AA)
-- ✅ Color contrast (17:1 ratio)
-- ⏸️ Mobile tap-toggle (DEFERRED — optional, CSS :hover sufficient for MVP)
-
-**Manual QA Needed** (flagged by ui-dev):
-- Screen reader testing (NVDA, JAWS, VoiceOver)
-- Cross-browser (Chrome, Safari, Firefox, Edge)
-- Touch devices (iOS Safari, Android Chrome)
-
-**Performance**:
-- **Code Delta**: +17 lines (12 added, 5 modified)
-- **Bundle Impact**: <1KB (negligible)
-- **Runtime Cost**: Zero (CSS-only tooltips)
-
-**Impact**: Unblocks ~80% of new player confusion on Setup Screen (per BL-041 design analysis).
-
-**Verdict**: APPROVED. Clean implementation. Zero test breakage. Production-ready.
+**Status**: CLAUDE.md is 100% accurate (no updates needed)
 
 ---
 
-## Structural Integrity Verification
+## What Was Done (Rounds 1-4 Summary)
 
-### Hard Constraints ✅ ALL PASSED
+### Round 1 Work
+- ✅ Completed BL-035 (CLAUDE.md update with Technician MOM=64 validation)
+- ✅ Added archetype stats table (lines 118-127)
+- ✅ Added win rate validation (lines 129-149)
+- ✅ Added variant impact notes (lines 151-161)
+- ✅ Verified 897/897 tests passing
+- ✅ Wrote reviewer-round-1.md analysis
+- **Status**: "complete"
 
-1. **Zero UI/AI imports in src/engine/** ✅
-   - Modified engine file: `src/engine/gear-variants.test.ts` (test-only)
-   - Imports: vitest, engine types, archetypes, attacks, match, gear (all valid)
-   - ✅ NO UI imports, NO AI imports
+### Round 2 Work
+- ✅ Reviewed all agent handoffs (zero code changes)
+- ✅ Verified 897/897 tests passing (stable)
+- ✅ Verified working directory clean (no unauthorized changes)
+- ✅ Identified BL-076/BL-063x duplicate tasks
+- ✅ Wrote reviewer-round-2.md analysis (400+ lines)
+- **Status**: "complete"
 
-2. **All tuning constants in balance-config.ts** ✅
-   - Verified `git diff src/engine/balance-config.ts` — EMPTY
-   - No new hardcoded constants in test code (all use imports: MC, OC, FB, GH)
-   - ✅ Single source of truth preserved
+### Round 3 Work
+- ✅ Reviewed all agent handoffs (zero code changes)
+- ✅ Verified 897/897 tests passing (stable)
+- ✅ Verified working directory clean (3rd consecutive check)
+- ✅ Verified producer consolidation complete (BL-063x removed)
+- ✅ Wrote reviewer-round-3.md analysis (240+ lines)
+- **Status**: "complete"
 
-3. **Stat pipeline order preserved** ✅
-   - No changes to calculator.ts, phase-joust.ts, phase-melee.ts
-   - QA tests validate carryover → softCap → fatigue order
-   - ✅ Pipeline order unchanged
+### Round 4 Work (This Round)
+- ✅ Reviewed all agent handoffs (zero code changes)
+- ✅ Verified 897/897 tests passing (stable, 4th consecutive)
+- ✅ Verified working directory clean (4th consecutive check)
+- ✅ Verified backlog accuracy (3 tasks, single source of truth)
+- ✅ Writing reviewer-round-4.md analysis (this document)
+- **Status**: "complete"
 
-4. **Public API signatures stable** ✅
-   - No changes to types.ts, archetypes.ts, attacks.ts, calculator.ts, match.ts
-   - StatBar component signature unchanged (backward compatible)
-   - ✅ Zero breaking changes
-
-5. **resolvePass() stays deprecated** ✅
-   - No new usage of deprecated `resolvePass()` function
-   - All melee tests use `submitMeleeRound()` (correct API)
-   - ✅ Deprecation path respected
-
-### Soft Quality Checks ✅ ALL PASSED
-
-1. **Type safety** ✅
-   - `type: 'mom' | 'ctl' | 'grd' | 'init' | 'sta'` — discriminated union
-   - No `any` casts, no unsafe type assertions
-   - Proper TypeScript types throughout
-
-2. **Named constants over magic numbers** ✅
-   - STAT_TIPS dictionary in helpers.tsx
-   - Test attacks use MC, OC, FB, GH from imports
-   - RNG seeds use meaningful ranges (10000-10035)
-
-3. **Function complexity** ✅
-   - StatBar component: 18 lines (simple, maintainable)
-   - All test functions: <60 lines (readable)
-
-4. **Code duplication** ✅
-   - Zero duplicated tooltip content (STAT_TIPS dictionary)
-   - Zero duplicated formulas (tests use shared engine code)
-
-5. **Balanced variant = legacy mappings** ✅
-   - No gear changes this round
-   - Tests use balanced variant (default)
-   - ✅ Legacy compatibility preserved
-
-### Working Directory Check ✅ CLEAN
-
-**Verified no unauthorized balance changes**:
-- `git diff src/engine/archetypes.ts` — EMPTY ✅
-- `git diff src/engine/balance-config.ts` — EMPTY ✅
-
-**Known corruption pattern** (from MEMORY.md):
-- Round 5 (previous session): guardImpactCoeff changed to 0.16 (caught by reviewer)
-- Session 2 Round 1: Technician MOM changed to 61 (caught by reviewer)
-
-**Round 4 Status**: ✅ CLEAN — zero unauthorized changes detected
+**Delta**: Rounds 1-4 all analysis-only (after R1 documentation changes)
 
 ---
 
-## Cross-Agent Coordination
+## What's Left
 
-### Shared File Coordination (App.css)
+**Nothing** for Round 4. Zero code changes to review.
 
-**This round**:
-- polish modified lines 105-114 (stat-bar label focus states)
-- polish modified lines 1540-1542 (mobile overlay CSS)
+**Available for Round 5**:
 
-**Previous rounds**:
-- polish modified lines 459-680 (counter chart CSS foundation — Round 3)
-- polish modified lines 365-368 (stat bar glow stacking — Round 2)
-- ui-dev modified lines 370-514 (loadout section — Round 2)
+1. **Review engine-dev changes if BL-076 unblocks** (PassResult extensions)
+   - Expected changes: types.ts + calculator.ts + phase-joust.ts
+   - Expected lines: ~50-100 (9 optional fields + population logic)
+   - Risk: Low (backwards compatible, comprehensive spec)
+   - Review time: 30-60 minutes
 
-**Conflict Status**: ✅ NONE — different sections, no overlap
-**Monitoring**: 4 agents have touched App.css (polish 3 times, ui-dev 1 time) — continue tracking for future rounds
+2. **Review ui-dev changes if BL-064 unblocks** (impact breakdown UI)
+   - Expected changes: App.tsx + App.css + PassResultBreakdown.tsx
+   - Expected lines: ~300-500 (component + CSS + integration)
+   - Risk: Low (pure UI work after BL-076 complete)
+   - Review time: 60-90 minutes
 
-### Inter-Agent Requests
-
-1. **ui-dev → qa**: BL-062 ready for manual QA
-   - **Request**: Test screen readers (NVDA/JAWS/VoiceOver), cross-browser, touch devices
-   - **Status**: NOTED — QA should perform manual accessibility testing next round
-
-2. **ui-dev → designer**: BL-062 COMPLETE (7/8 requirements)
-   - **Status**: ACKNOWLEDGED — only optional JS tap-toggle deferred (CSS :hover sufficient for MVP)
-   - **Next**: Ready for BL-063 (Impact Breakdown) and BL-067 (Counter Chart) design specs
-
-3. **ui-dev → tech-lead**: BL-064 may require calcImpactScore refactoring
-   - **Request**: Expose guard contribution, fatigue components from calculator.ts
-   - **Status**: NOTED — will address if/when BL-064 implementation begins
-   - **Coordination**: UI-dev should implement with mock data first, then integrate real API when ready
-
-4. **balance-tuner → qa**: Tests jumped 853→889 (+36)
-   - **Status**: CONFIRMED — BL-069 (36 archetype melee matchups) completed during this round
-
-### Deferred Work
-
-**None this round** — all agents completed their assigned work or documented dependencies.
+3. **Continue "complete" status if agents remain in terminal states**
+   - Monitor for any new code changes
+   - Verify working directory stays clean
+   - Update CLAUDE.md if balance findings emerge
 
 ---
 
-## Test Suite Health
+## Issues
 
-### Test Count Evolution
+**None** for code quality. All tests passing (897/897). Zero structural violations.
 
-| Session | Round | Tests | Delta | Source |
-|---------|-------|-------|-------|--------|
-| S35 | R1 | 822 | baseline | start of session |
-| S35 | R1 | 830 | +8 | qa: softCap boundary tests |
-| S35 | R2 | 845 | +15 | qa: melee carryover + softCap tests (BL-059) |
-| S35 | R3 | 853 | +8 | qa: rare/epic tier melee exhaustion (BL-065) |
-| **S35** | **R4** | **889** | **+36** | **qa: all 36 archetype melee matchups (BL-069)** |
+### Orchestrator-Level Findings
 
-**Total growth this session**: 822 → 889 (+67 tests, +8.1%)
+**1. Backlog Consolidation Complete** ✅:
+- **Achievement**: BL-076 and BL-063x duplicates successfully merged in Round 2
+- **Result**: Backlog cleaned from 4 tasks to 3 tasks (single source of truth)
+- **Quality**: Excellent — all dependencies updated correctly, zero execution issues
+- **Validation**: Backlog accuracy confirmed in Rounds 3-4 (stable across 2 rounds)
 
-### Test Distribution (Current)
+**2. BL-076 Blocker Continues** ⚠️:
+- **Status**: BL-076 (engine-dev PassResult extensions) pending for **20+ consecutive rounds** (R5 prev session → R4 current session)
+- **Duration Assessment**: **Exceeds acceptable threshold** (20+ rounds for 2-3h task is excessive)
+- **Impact**: Blocks BL-064 (P1 critical learning loop, 6-8h ui-dev work, 14% of MVP)
+- **Root Cause**: Engine-dev agent not yet added to roster (scheduler-level decision)
+- **All Execution Preconditions Met**: ✅ Spec, ✅ Guide, ✅ Consolidation, ✅ Dependencies, ✅ Risk, ✅ Files
+- **Escalation Paths**:
+  - **Path A (Recommended)**: Add engine-dev to Round 5 roster → 10-12h to 100% MVP closure
+  - **Path B (Current State)**: Continue 20-round pattern → close MVP at 86% (6/7 onboarding features)
+- **Recommendation**: Orchestrator-level policy decision required
 
-| Suite | Tests | Round 4 | Focus Area |
-|-------|-------|---------|------------|
-| calculator | 202 | unchanged | Core math, guard penetration, fatigue, counter table, softCap boundaries |
-| phase-resolution | 55 | unchanged | Phase resolution, breaker edge cases, unseat timing, extreme fatigue |
-| gigling-gear | 48 | unchanged | 6-slot steed gear |
-| player-gear | 46 | unchanged | 6-slot player gear |
-| match | 100 | unchanged | State machine, integration, joust/melee worked examples, gear pipeline |
-| playtest | 128 | unchanged | Property-based, stress, balance config, gear boundaries |
-| **gear-variants** | **215** | **+36** | **Gear variant system, archetype matchups, melee carryover, softCap, rare/epic tier, ALL 36 MELEE MATCHUPS** |
-| ai | 95 | unchanged | AI opponent validity, reasoning, patterns, edge cases |
-| **TOTAL** | **889** | **+36** | **Comprehensive coverage** |
+**3. Zero MVP Progress** ⚠️:
+- **Rounds 1-4**: 86% → 86% → 86% → 86% (no progress, blocked on BL-076)
+- **Agent Time Cost**: ~70+ hours of analysis-only rounds (R6-21 prev + R1-R4 current)
+- **Value**: Marginal (no code changes while BL-064 blocked)
 
-### Test Quality Metrics
-
-**Performance**: 889 tests in 2.01s (excellent, ~0.04ms per test)
-**Flakiness**: Zero flakes detected
-**Determinism**: All tests use fixed RNG seeds (100% reproducible)
-**Coverage Depth**:
-- ✅ Bare/uncommon/rare/epic/giga tier validation
-- ✅ All 36 archetype melee matchups (100% coverage)
-- ✅ Gear variant system (aggressive/balanced/defensive)
-- ✅ Carryover + softCap + stamina + fatigue validated
-- ✅ Breaker guard penetration across all opponents
-
-**Gaps** (low priority, for future sessions):
-- Legendary/Relic tier: Not yet tested (rarely seen in gameplay)
-- Mixed variant stress: Only 3 tests (acceptable coverage)
-- Unseated carryover exhaustive: Spot-checked only
+**4. All Agents in Terminal States** ✅:
+- **Round 4 Status**: 6/7 agents "all-done" or "complete" (no actionable work)
+- **Agent Coordination**: Perfect — zero inter-agent blockers, all handoffs professional
+- **Test Stability**: 897/897 passing across 4 consecutive rounds (zero regressions)
+- **Working Directory**: Clean across 4 consecutive checks (no unauthorized changes)
 
 ---
 
-## Risk Assessment
+## Review Summary
 
-### Overall Risk: LOW
+**Round 4 Grade**: A
+**Risk Level**: ZERO
+**Approved Changes**: 0 files (analysis-only round)
+**Test Coverage**: 897/897 passing (zero regressions)
+**Code Changes**: 0 lines
+**Structural Violations**: 0
+**Deployment Ready**: YES (pending manual QA)
 
-**Deployment Ready**: YES
-
-**Risk Factors**:
-
-1. **BL-062 Manual QA Pending** — MEDIUM RISK (mitigated)
-   - Automated tests pass (889/889)
-   - Screen reader/cross-browser/mobile testing flagged for next round
-   - Mitigation: CSS is standard, likely to work across browsers
-   - Impact: If issues found, CSS-only fixes (no JavaScript changes needed)
-
-2. **BL-064 Engine Dependency** — MEDIUM RISK (future)
-   - May require calcImpactScore refactoring to expose impact components
-   - Not immediate concern (BL-063 design spec not yet complete)
-   - Mitigation: UI-dev will implement with mock data first, coordinate with tech-lead for engine changes
-
-3. **App.css Shared File** — LOW RISK (monitored)
-   - 4 agents have modified App.css this session
-   - No conflicts yet (different sections)
-   - Mitigation: Continue monitoring, coordinate via handoffs
-
-4. **Test Count Growth** — LOW RISK (healthy)
-   - 822 → 889 tests (+67, +8.1% this session)
-   - Performance remains excellent (2.01s)
-   - Mitigation: Test suite is well-organized, no cleanup needed
-
-**No Blockers**: All agents unblocked or documented dependencies.
-
----
-
-## Documentation Updates
-
-### CLAUDE.md Updates (3 locations)
-
-Updated test counts to reflect 889 tests:
-
-1. **Line 9**: "npx vitest run (889 tests as of S35 R4)" — Quick Reference section
-2. **Line 112**: "Test count 889" — Live Data section
-3. **Line 166**: "gear-variants (215 tests)" — Test Suite breakdown
-4. **Line 169**: "Total: 889 tests" — Test Suite summary
-
-### MEMORY.md Updates
-
-No updates needed this round. Balance state unchanged (no new simulations). Variant-aware win rate notes added in Round 3 remain current.
-
----
-
-## Recommendations for Round 5
-
-### Per-Agent Guidance
-
-**Balance Tuner**:
-- Status checkpoint complete ✅
-- No new balance tasks in backlog
-- Stretch goals available: legendary/relic tier validation, mixed tier analysis, variant interaction deep-dive
-- Recommendation: Hold on stretch goals until P1 onboarding tasks (BL-063/064) complete
-
-**QA Engineer**:
-- BL-069 complete ✅ (all 36 archetype melee matchups)
-- Status: all-done (comprehensive coverage achieved)
-- Recommendation: Perform manual QA for BL-062 (screen readers, cross-browser, touch devices)
-
-**Polish**:
-- BL-062 CSS foundation complete ✅
-- Counter chart CSS foundation ready (3 layouts)
-- Recommendation: Await BL-063/067 design specs, prepare CSS foundation when available
-
-**UI Dev**:
-- BL-062 complete ✅ (stat tooltips shipped)
-- Blocked: BL-064 (awaiting BL-063 design), BL-068 (awaiting BL-067 design)
-- Recommendation: Await designer specs, support QA with BL-062 manual testing
-
-**Designer**:
-- BL-061 complete ✅ (stat tooltip design spec)
-- Next priority: BL-063 (Impact Breakdown design spec) — CRITICAL P1
-- Then: BL-067 (Counter Chart design spec) — POLISH P3
-
-**Producer**:
-- Backlog coordination
-- Recommendation: Monitor BL-063/064 progress, ensure design specs unblock UI implementation
-
-**Tech Lead** (self):
-- Round 4 review complete ✅
-- Next: Monitor BL-064 engine dependency if/when implementation begins
-- Potential refactoring: calcImpactScore to expose guard contribution, fatigue components
-
-### Cross-Cutting Concerns
-
-1. **Manual QA for BL-062**: High priority for next round
-2. **BL-064 Engine Refactoring**: Coordinate tech-lead + ui-dev when BL-063 design completes
-3. **App.css Shared File**: Continue monitoring for conflicts (4 agents touching it)
-
----
-
-## Tech Debt
-
-**None identified this round.**
-
-All code changes follow established patterns. No new technical debt introduced.
-
----
-
-## Summary
-
-### Grade: A
+**Key Achievement**: Fourth consecutive clean round (Rounds 1-4). Working directory corruption-free for 4 consecutive checks. Producer backlog consolidation stable (BL-063x duplicate removed Round 2, backlog accurate Rounds 3-4). All agents executing cleanly (no coordination issues, zero test regressions).
 
 **Strengths**:
-- ✅ BL-062 shipped production-ready in <1 hour (unblocks 80% of new player confusion)
-- ✅ BL-069 comprehensive melee matchup testing (100% archetype coverage)
-- ✅ Zero structural violations
-- ✅ Zero test breakage (889/889 passing)
-- ✅ High-quality code across all agents (type safety, accessibility, maintainability)
-- ✅ Working directory clean (no unauthorized changes)
+1. ✅ Zero test regressions (897/897 passing across Rounds 1-4)
+2. ✅ Working directory clean (no unauthorized balance changes, 4th consecutive check)
+3. ✅ Producer consolidation stable (BL-063x removed R2, accurate R3-R4)
+4. ✅ All agents coordinated (zero inter-agent blockers)
+5. ✅ CLAUDE.md accurate (100% matches source)
+6. ✅ Test count stable (897 across 4 rounds)
 
 **Weaknesses**:
-- Manual QA pending for BL-062 (screen reader, cross-browser, touch devices)
-- BL-064/068 blocked on designer specs (expected, not agent failure)
+- ⚠️ **20+ round blocker** (BL-076 pending since R5 previous session, excessive for 2-3h task)
+- ⚠️ **Zero MVP progress** (86% → 86% across Rounds 1-4, blocked)
+- ⚠️ **Analysis-only rounds** (~70+ hours of agent time with no code changes)
+- ⚠️ **Agent capacity idle** (6/7 agents terminal, no actionable work)
 
-**Action Items**:
-1. **QA**: Perform manual accessibility testing for BL-062 (screen readers, cross-browser, mobile)
-2. **Designer**: Complete BL-063 (Impact Breakdown) design spec — CRITICAL P1
-3. **Tech Lead**: Prepare for potential calcImpactScore refactoring when BL-064 begins
-4. **All**: Continue monitoring App.css for shared file conflicts
-
-**Deployment Status**: ✅ YES — Ready for deployment. BL-062 adds significant value to new player onboarding.
+**Note**: Weaknesses are orchestrator-level issues (scheduler policy), not code quality issues.
 
 ---
 
-**End of Round 4 Review**
+## Coordination Messages
+
+### @producer
+BL-076 blocker continues to Round 20+ (R5 prev → R4 current). Consolidation stable (BL-063x duplicate removed Round 2, backlog accurate Rounds 3-4) ✅. Engine-dev should be added to Round 5 roster immediately (20+ rounds excessive for 2-3h task). Two paths: (A) Add engine-dev → 10-12h to 100% MVP, or (B) Continue pattern → close MVP at 86%. All execution preconditions remain met (spec ready, zero ramp-up, low risk, consolidation complete).
+
+### @all
+Round 4 zero code changes (analysis-only). 897/897 tests passing (stable across Rounds 1-4). Working directory clean (4th consecutive check, no unauthorized balance changes). Backlog accurate (3 tasks, single source of truth). All agents executing cleanly. Tech lead status: "complete" (available for code review when changes occur).
+
+---
+
+## Next Round Preview (Round 5)
+
+### If BL-076 Unblocks (Path A Selected)
+
+**Engine-dev work** (2-3h):
+1. Extend PassResult interface in types.ts (9 optional fields)
+2. Populate fields in calculator.ts resolveJoustPass()
+3. Test validation (897+ tests pass)
+4. Unblocks BL-064 for ui-dev
+
+**UI-dev work** (6-8h, after engine-dev):
+1. Create PassResultBreakdown.tsx component
+2. Implement 6 subcomponents + bar graph
+3. Add expandable animation + accessibility
+4. Integrate with App.tsx MatchScreen
+5. Test validation (897+ tests pass)
+
+**Reviewer work** (1-2h):
+- Review engine-dev changes (types.ts, calculator.ts, phase-joust.ts)
+- Review ui-dev changes (App.tsx, App.css, PassResultBreakdown.tsx)
+- Verify structural integrity (no UI/engine coupling, no hardcoded constants)
+- Validate test coverage (897+ tests passing)
+- Write reviewer-round-5.md analysis
+
+**MVP Impact**: 86% → 100% (critical learning loop closed)
+
+### If BL-076 Remains Blocked (Path B Continues)
+
+**Reviewer work** (30 min):
+- Continue "complete" status (no code changes to review)
+- Verify working directory clean (5th consecutive check)
+- Verify test stability (5th consecutive round 897/897)
+- Write reviewer-round-5.md analysis (analysis-only)
+- Monitor for orchestrator decision
+
+---
+
+## Quality Metrics (Session 2, Rounds 1-4)
+
+**Test Stability**:
+- ✅ 897/897 tests passing (4 consecutive rounds, zero regressions)
+- ✅ Test duration stable (~700-800ms)
+- ✅ Zero flaky tests
+- ✅ Zero test breakage
+
+**Code Quality**:
+- ✅ Zero structural violations (4 consecutive rounds)
+- ✅ Zero unauthorized changes (4 consecutive working directory checks)
+- ✅ CLAUDE.md accuracy 100% (all sections verified)
+- ✅ Backlog accuracy 100% (consolidation stable Rounds 2-4)
+
+**Agent Coordination**:
+- ✅ Zero inter-agent blockers (all handoffs professional)
+- ✅ Zero coordination issues (all agents aligned)
+- ✅ All agents in terminal states (6/7 "all-done" or "complete")
+- ✅ Producer consolidation excellent (BL-063x removed cleanly)
+
+**MVP Status**:
+- ⚠️ 86% complete (6/7 gaps closed, stable across Rounds 1-4)
+- ⚠️ Zero new features shipped (blocked on BL-076)
+- ⚠️ 20+ rounds blocker (excessive for critical learning loop)
+- ⚠️ 14% gap blocked by 2-3h task (architectural mismatch)
+
+---
+
+## Recommendations
+
+### Immediate (Round 5)
+
+1. **Orchestrator Decision Required**: Choose Path A or Path B before Round 5 roster configuration
+   - **Path A (Recommended)**: Add engine-dev to Round 5 roster → BL-076 (2-3h) → BL-064 (6-8h) → MVP 100% complete
+   - **Path B (Current)**: Continue without engine-dev → MVP closes at 86% → BL-064 deferred to Phase 2
+
+2. **If Path A**: Add engine-dev to Round 5 roster, assign BL-076 immediately
+   - Spec: `orchestrator/analysis/design-round-4-bl063.md` (Section 5, lines 410-448)
+   - Guide: `orchestrator/analysis/ui-dev-round-20.md` (Appendix, still valid)
+   - Expected: 2-3h engine work → 6-8h ui-dev work → 10-12h to 100% MVP
+
+3. **If Path B**: Document Phase 2 deferral, archive BL-076 + BL-064, close session at 86%
+
+### Long-term
+
+1. **Manual QA Scheduling**: 4 features ready for human testing (6-10h total)
+   - BL-073 (Stat Tooltips, P1, 2-4h)
+   - BL-071 (Variant Tooltips, P2, 1-2h)
+   - BL-068 (Counter Chart, P3, 1-2h)
+   - BL-070 (Melee Transition, P4, 1-2h)
+
+2. **Phase 2 Planning** (if Path B selected):
+   - Archive BL-076 + BL-064 to Phase 2 backlog
+   - Document 86% MVP closure rationale
+   - Update CLAUDE.md with Phase 2 feature list
+
+---
+
+## Appendix: Blocker Impact Analysis
+
+### Cost to Project
+
+**Agent Time Wasted** (20+ rounds):
+- R6-21 prev: ~16 rounds × 3-4h/round = 48-64 agent-hours (analysis-only)
+- R1-4 current: 4 rounds × 2-3h/round = 8-12 agent-hours (analysis-only)
+- **Total**: ~56-76 agent-hours of analysis with zero code output
+
+**Opportunity Cost**:
+- Could ship BL-076 (2-3h) + BL-064 (6-8h) = 8-11h work
+- Currently spending 56-76h on escalation/analysis instead
+- **ROI**: 8-11h work for 56-76h cost = 15-25% efficiency
+
+**MVP Impact**:
+- 14% of MVP (1/7 features) blocked by 2-3h task
+- Critical learning loop (P1, highest user impact) unshipped
+- New player onboarding incomplete (86% vs 100%)
+
+### Cost to Users
+
+**Learning Loop Gap**:
+- New players see "You win/lose" with no explanation
+- Impact Score opaque (no breakdown shown)
+- "Learn by losing" pattern persists (high friction)
+- Onboarding incomplete (6/7 gaps closed)
+
+**User Experience Impact**:
+- ~80% of new player confusion addressed (6/7 features)
+- **Missing**: Critical feedback loop (why did I win/lose?)
+- **Result**: Players still confused after pass resolution
+
+---
+
+**End of Round 4 Analysis**

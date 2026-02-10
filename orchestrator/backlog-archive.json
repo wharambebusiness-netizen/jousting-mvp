@@ -859,5 +859,50 @@
     "status": "done",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:34:00Z"
+  },
+  {
+    "id": "BL-035",
+    "role": "tech-lead",
+    "priority": 2,
+    "title": "Review Technician MOM change + update CLAUDE.md with validation results",
+    "description": "After BL-030 (completed) and BL-034 (validation complete), document Technician MOM 58→64 change:\n\n1. Review archetypes.ts change (Technician MOM=64) from prior session\n2. Verify test assertions across calculator.test.ts and match.test.ts\n3. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Live Data: Updated win rates from BL-034 sweep (52-53% bare, 45-47% uncommon, 48-50% epic, 48-51% giga)\n   - Test Suite: Confirm 889 tests (8 added by QA Round 3 rare/epic melee tests, +36 by QA Round 4 melee matchups)\n\nDEPENDS ON: BL-030 (COMPLETE), BL-034 (COMPLETE), BL-065 (COMPLETE), BL-069 (COMPLETE).\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, current test count (889), rare/epic tier findings, variant impact notes.",
+    "fileOwnership": [
+      "CLAUDE.md"
+    ],
+    "status": "completed",
+    "dependsOn": [],
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-064",
+    "role": "ui-dev",
+    "priority": 1,
+    "title": "Implement impact breakdown UI for pass results (learning loop critical)",
+    "description": "Completed in S38. ImpactBreakdownCard component in PassResult.tsx + MeleeResult.tsx. Expandable, ARIA, bar graph, counter badges.",
+    "fileOwnership": [
+      "src/App.tsx",
+      "src/App.css"
+    ],
+    "status": "completed",
+    "dependsOn": [
+      "BL-063",
+      "BL-076"
+    ],
+    "createdAt": "2026-02-10T04:06:00Z"
+  },
+  {
+    "id": "BL-076",
+    "role": "engine-dev",
+    "priority": 1,
+    "title": "CRITICAL: Extend PassResult for Impact Breakdown (BL-064 blocker)",
+    "description": "Completed in S38. ImpactBreakdown interface added to types.ts with momentumComponent, accuracyComponent, guardPenalty, counterBonus, opponentIsBreaker, opponentEffectiveGuard. Populated in phase-joust.ts resolveJoustPass() and phase-melee.ts resolveMeleeRoundFn(). +11 tests.",
+    "fileOwnership": [
+      "src/engine/types.ts",
+      "src/engine/calculator.ts",
+      "src/engine/phase-joust.ts"
+    ],
+    "status": "completed",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:52:00Z"
   }
 ]

@@ -60,6 +60,7 @@ const HANDOFF_DIR = join(ORCH_DIR, 'handoffs');
 const LOG_DIR = join(ORCH_DIR, 'logs');
 const ANALYSIS_DIR = join(ORCH_DIR, 'analysis');
 const ROLES_DIR = join(ORCH_DIR, 'roles');
+const BALANCE_DATA_DIR = join(ORCH_DIR, 'balance-data');
 const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
 
 // ============================================================
@@ -103,6 +104,21 @@ const CONFIG = {
   allowedTools: 'Edit,Read,Write,Glob,Grep,Bash',
   maxConcurrency: 0,                     // 0 = unlimited; >0 = max parallel agents per phase
   reportFile: join(ORCH_DIR, 'overnight-report.md'),
+  // Balance sim config (enabled via mission balanceConfig or set here)
+  // When null, no automated sims are run. Set to an object to enable.
+  balanceConfig: null,
+  // balanceConfig example:
+  // {
+  //   sims: [
+  //     { tier: 'bare', variant: 'balanced' },
+  //     { tier: 'epic', variant: 'balanced' },
+  //     { tier: 'giga', variant: 'balanced' },
+  //   ],
+  //   matchesPerMatchup: 200,    // default 200
+  //   simTimeoutMs: 60000,       // default 60s
+  //   runPreSim: true,           // sim before code agents (baseline)
+  //   runPostSim: true,          // sim after code agents (validate)
+  // }
 };
 
 // ============================================================
@@ -327,6 +343,12 @@ function loadMission(missionPath) {
     }
   }
 
+  // Load balance config if present in mission
+  if (mission.balanceConfig) {
+    CONFIG.balanceConfig = mission.balanceConfig;
+    log(`  Balance config: ${mission.balanceConfig.sims?.length || 0} sim configs, pre=${mission.balanceConfig.runPreSim ?? true}, post=${mission.balanceConfig.runPostSim ?? true}`);
+  }
+
   return { agents, missionName: mission.name, designDoc: mission.designDoc || null };
 }
 
@@ -364,7 +386,7 @@ function log(msg) {
 }
 
 function ensureDirs() {
-  for (const dir of [HANDOFF_DIR, LOG_DIR, ANALYSIS_DIR]) {
+  for (const dir of [HANDOFF_DIR, LOG_DIR, ANALYSIS_DIR, BALANCE_DATA_DIR]) {
     mkdirSync(dir, { recursive: true });
   }
 }
@@ -870,6 +892,119 @@ function rotateAnalysisFiles(keepRounds = 5) {
 }
 
 // ============================================================
+// Balance Simulation Runner (v7 — Phase 1)
+// ============================================================
+// Runs balance sims via `npx tsx src/tools/simulate.ts --json`
+// and saves structured results to orchestrator/balance-data/.
+// Enabled when CONFIG.balanceConfig is set (via mission config).
+
+/**
+ * Run a single balance simulation and return parsed JSON.
+ * @param {string} tier - Gear tier (bare, uncommon, epic, giga, etc.)
+ * @param {string|null} variant - Gear variant (aggressive, balanced, defensive) or null
+ * @param {number} timeoutMs - Timeout for the sim process
+ * @returns {Promise<{success: boolean, data: object|null, error: string|null, elapsedMs: number}>}
+ */
+function runBalanceSim(tier, variant, timeoutMs = 60000) {
+  return new Promise((resolvePromise) => {
+    const startTime = Date.now();
+    const args = ['tsx', 'src/tools/simulate.ts', tier];
+    if (variant) args.push(variant);
+    args.push('--json');
+
+    const proc = spawn('npx', args, {
+      cwd: MVP_DIR,
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { proc.kill('SIGTERM'); } catch (_) {}
+    }, timeoutMs);
+
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      const elapsedMs = Date.now() - startTime;
+
+      if (timedOut) {
+        resolvePromise({ success: false, data: null, error: `Sim timed out after ${timeoutMs}ms`, elapsedMs });
+        return;
+      }
+
+      if (code !== 0) {
+        resolvePromise({ success: false, data: null, error: `Sim exited with code ${code}: ${stderr.slice(0, 200)}`, elapsedMs });
+        return;
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        resolvePromise({ success: true, data, error: null, elapsedMs });
+      } catch (parseErr) {
+        resolvePromise({ success: false, data: null, error: `JSON parse error: ${parseErr.message}`, elapsedMs });
+      }
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      resolvePromise({ success: false, data: null, error: `Spawn error: ${err.message}`, elapsedMs: Date.now() - startTime });
+    });
+  });
+}
+
+/**
+ * Run all configured balance sims and save results.
+ * @param {number} round - Current orchestrator round
+ * @param {string} phase - 'pre' (before code agents) or 'post' (after code agents)
+ * @returns {Promise<{results: Array, allSucceeded: boolean}>}
+ */
+async function runBalanceSims(round, phase) {
+  const bc = CONFIG.balanceConfig;
+  if (!bc || !bc.sims?.length) return { results: [], allSucceeded: true };
+
+  mkdirSync(BALANCE_DATA_DIR, { recursive: true });
+
+  const timeoutMs = bc.simTimeoutMs || 60000;
+  const results = [];
+
+  log(`  Balance sims (${phase}): running ${bc.sims.length} sim(s)...`);
+
+  for (const sim of bc.sims) {
+    const tier = sim.tier || 'bare';
+    const variant = sim.variant || null;
+    const label = `${tier}${variant ? '/' + variant : ''}`;
+
+    const result = await runBalanceSim(tier, variant, timeoutMs);
+
+    if (result.success) {
+      // Save to balance-data directory
+      const filename = `round-${round}-${phase}-${tier}${variant ? '-' + variant : ''}.json`;
+      const filepath = join(BALANCE_DATA_DIR, filename);
+      writeFileSync(filepath, JSON.stringify(result.data, null, 2));
+
+      const spread = result.data.balanceMetrics?.overallSpreadPp ?? '?';
+      const top = result.data.balanceMetrics?.topArchetype?.archetype ?? '?';
+      const bottom = result.data.balanceMetrics?.bottomArchetype?.archetype ?? '?';
+      log(`    ${label}: spread=${spread}pp (${top} → ${bottom}) [${result.elapsedMs}ms]`);
+    } else {
+      log(`    ${label}: FAILED — ${result.error}`);
+    }
+
+    results.push({ tier, variant, phase, ...result });
+  }
+
+  const allSucceeded = results.every(r => r.success);
+  return { results, allSucceeded };
+}
+
+// ============================================================
 // Cost Tracking (v6 — Action 1.3)
 // ============================================================
 // Approximate pricing per 1M tokens (USD)
@@ -1266,6 +1401,14 @@ async function main() {
     const roundAgents = [];
     let testResult = null;
     let didRevert = false;  // v6.1: Track if auto-revert happened (skip Phase B if so)
+    let preSimResults = null;  // v7: Balance sim baseline
+    let postSimResults = null; // v7: Balance sim after changes
+
+    // v7: Pre-sim — capture balance baseline before code agents make changes
+    if (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length && codeAgents.length) {
+      log(`\nBalance Pre-Sim (baseline):`);
+      preSimResults = await runBalanceSims(round, 'pre');
+    }
 
     // Phase A: Code agents
     if (codeAgents.length) {
@@ -1323,6 +1466,12 @@ async function main() {
 
       // Refresh task-board so Phase B agents see updated state
       generateTaskBoard(round, testResult.passed ? `PASSING (${testResult.count} tests)` : lastTestStatus, consecutiveTestFailures);
+
+      // v7: Post-sim — measure balance after code agent changes (only if tests passed and no revert)
+      if (CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length && testResult.passed && !didRevert) {
+        log(`\nBalance Post-Sim (after changes):`);
+        postSimResults = await runBalanceSims(round, 'post');
+      }
     }
 
     // Phase B: Coordination agents (see fresh handoffs from Phase A)
@@ -1402,6 +1551,10 @@ async function main() {
       testsPassed: testResult?.passed ?? null,
       testCount: testResult?.count ?? '-',
       failCount: testResult?.failCount || '0',
+      balanceSims: {
+        pre: preSimResults?.results?.map(r => ({ tier: r.tier, variant: r.variant, success: r.success, spread: r.data?.balanceMetrics?.overallSpreadPp ?? null })) || null,
+        post: postSimResults?.results?.map(r => ({ tier: r.tier, variant: r.variant, success: r.success, spread: r.data?.balanceMetrics?.overallSpreadPp ?? null })) || null,
+      },
     });
 
     // --- Circuit breaker ---

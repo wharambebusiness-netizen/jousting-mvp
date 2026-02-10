@@ -9,7 +9,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (897 passing as of S35 R6)
+npx vitest run                              # Run all tests (908 passing as of S38)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
@@ -216,7 +216,7 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - **player-gear** (46 tests) — 6-slot player gear
 - **match** (100 tests) — State machine + integration + joust/melee worked examples + carryover/unseated + gear pipeline
 - **playtest** (128 tests) — Property-based + stress + balance config + gear boundaries
-- **gear-variants** (215 tests) — Gear variant system + archetype x variant matchups + melee carryover + softCap interactions + rare/epic tier melee exhaustion + all 36 archetype melee matchups
+- **gear-variants** (223 tests) — Gear variant system + archetype x variant matchups + melee carryover + softCap interactions + rare/epic tier melee exhaustion + all 36 archetype melee matchups + legendary/relic tier
 - **ai** (95 tests) — AI opponent validity, reasoning, patterns, edge cases
 
-**Total: 908 tests** (as of S35 R6). Run `npx vitest run` for current test counts (per-file counts drift).
+**Total: 908 tests** (as of S38). Run `npx vitest run` for current test counts (per-file counts drift).
