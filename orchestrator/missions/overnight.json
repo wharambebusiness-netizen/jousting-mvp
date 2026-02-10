@@ -83,7 +83,7 @@
       "maxTasksPerRound": 1,
       "minFrequencyRounds": 2,
       "maxBudgetUsd": 3,
-      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md"],
+      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md", "MEMORY.md"],
       "tasks": {
         "primary": "Each round: review changes made by other agents this session. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling, UI/engine coupling violations. Write review report to orchestrator/analysis/review-round-N.md. Keep CLAUDE.md updated with correct test counts and balance state. If you find issues, note them in your handoff notes-for-others so the relevant agent can fix them next round."
       }
@@ -99,7 +99,7 @@
       "maxTasksPerRound": 2,
       "minFrequencyRounds": 0,
       "maxBudgetUsd": 5,
-      "fileOwnership": ["src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx", "src/ui/PassResult.tsx", "src/ui/MeleeResult.tsx", "src/ui/MatchSummary.tsx", "src/ui/MeleeTransition.tsx", "src/ui/SpeedSelect.tsx", "src/ui/AttackSelect.tsx", "src/ui/RevealScreen.tsx", "src/ui/helpers.tsx", "src/ui/AIThinkingPanel.tsx", "src/ui/AIEndScreenPanels.tsx", "src/ui/CombatLog.tsx", "src/App.tsx", "src/App.css"],
+      "fileOwnership": ["src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx", "src/ui/PassResult.tsx", "src/ui/MeleeResult.tsx", "src/ui/MatchSummary.tsx", "src/ui/MeleeTransition.tsx", "src/ui/SpeedSelect.tsx", "src/ui/AttackSelect.tsx", "src/ui/RevealScreen.tsx", "src/ui/helpers.tsx", "src/ui/AIThinkingPanel.tsx", "src/ui/AIEndScreenPanels.tsx", "src/ui/CombatLog.tsx", "src/App.tsx", "src/App.css", "src/index.css"],
       "tasks": {
         "primary": "Each round: pick ONE UI improvement task. Priority order: 1) Migrate inline styles to CSS classes created by the polish agent (59 inline styles identified, class replacements ready in App.css), 2) Add rarity class to gear-item divs in LoadoutScreen for rarity-colored borders, 3) Improve combat result readability (who won, by how much, why), 4) Polish state transitions between screens, 5) Improve archetype/stat display clarity for new players. Run tests before handoff. Coordinate with polish agent on CSS class names."
       }

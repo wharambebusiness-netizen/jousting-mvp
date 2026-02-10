@@ -1306,7 +1306,7 @@ async function main() {
       validateFileOwnership(codeResults, AGENTS);
 
       // v6: Model escalation check
-      handleModelEscalation(codeResults);
+      handleModelEscalation(codeResults, round);
 
       // Run tests after code agents
       testResult = await runTests();
@@ -1363,7 +1363,7 @@ async function main() {
         }
       }
       validateFileOwnership(coordResults, AGENTS);
-      handleModelEscalation(coordResults);
+      handleModelEscalation(coordResults, round);
     }
 
     // --- Update test status ---
@@ -1453,7 +1453,7 @@ async function main() {
 
   // --- v6: Model escalation (haiku→sonnet→opus after 2 consecutive failures, with maxModel cap + de-escalation) ---
   // Also tracks lastFailedRound for v5C cooldown and lastEscalatedRound for cooldown bypass
-  function handleModelEscalation(results) {
+  function handleModelEscalation(results, round) {
     for (const result of results) {
       const meta = parseHandoffMeta(result.agentId);
       const agent = AGENTS.find(a => a.id === result.agentId);
