@@ -329,6 +329,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
           <button
             className="quick-build-card quick-build-card--aggressive"
             onClick={() => setAllGearToVariant('aggressive')}
+            aria-label="Aggressive Build: Higher offense, lower defense. Favors quick unseats and melee strategies."
           >
             <div className="quick-build-card__header">
               <span className="quick-build-card__icon">⚔️</span>
@@ -337,10 +338,25 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             <div className="quick-build-card__desc">
               High damage, fast strikes. Favors Charger, Tactician.
             </div>
+            <div className="variant-tooltip">
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">⚡ Strategy:</span>
+                <span className="variant-tooltip__text">Pressure early. Win before fatigue sets in.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">⚠️ Risk:</span>
+                <span className="variant-tooltip__text">Stamina cliff — vulnerable if match extends past turn 3.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">📊 Impact:</span>
+                <span className="variant-tooltip__text">Favors melee-heavy matches (+16% melee rate).</span>
+              </div>
+            </div>
           </button>
           <button
             className="quick-build-card quick-build-card--balanced"
             onClick={() => setAllGearToVariant('balanced')}
+            aria-label="Balanced Build: Equal offense and defense. Reliable for all playstyles."
           >
             <div className="quick-build-card__header">
               <span className="quick-build-card__icon">⚖️</span>
@@ -349,10 +365,25 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             <div className="quick-build-card__desc">
               Versatile, adaptable. Works well for Duelist.
             </div>
+            <div className="variant-tooltip">
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">✓ Strategy:</span>
+                <span className="variant-tooltip__text">Adapt to opponent. Works everywhere.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">✓ Advantage:</span>
+                <span className="variant-tooltip__text">No hard counters. Beginner-friendly.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">📊 Impact:</span>
+                <span className="variant-tooltip__text">Neutral baseline. Predictable outcomes.</span>
+              </div>
+            </div>
           </button>
           <button
             className="quick-build-card quick-build-card--defensive"
             onClick={() => setAllGearToVariant('defensive')}
+            aria-label="Defensive Build: Higher defense, lower offense. Favors long jousts and stamina endurance."
           >
             <div className="quick-build-card__header">
               <span className="quick-build-card__icon">🛡️</span>
@@ -360,6 +391,20 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             </div>
             <div className="quick-build-card__desc">
               Tank damage, outlast opponents. Favors Bulwark, Breaker.
+            </div>
+            <div className="variant-tooltip">
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">⛑️ Strategy:</span>
+                <span className="variant-tooltip__text">Outlast opponents. Win late-game.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">✓ Advantage:</span>
+                <span className="variant-tooltip__text">Better guard → fewer unseats. Charger +3% win rate at giga.</span>
+              </div>
+              <div className="variant-tooltip__row">
+                <span className="variant-tooltip__label">📊 Impact:</span>
+                <span className="variant-tooltip__text">Best overall balance (6.6pp spread at giga tier).</span>
+              </div>
             </div>
           </button>
         </div>
