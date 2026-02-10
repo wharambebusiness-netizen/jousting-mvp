@@ -2325,3 +2325,299 @@
     font-size: 0.8rem;
   }
 }
+
+/* ============================================================
+   Melee Transition Screen (BL-070)
+   ============================================================ */
+
+/* Full-screen overlay */
+.melee-transition-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  padding: 20px;
+  animation: fade-in 0.3s ease-in;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal container */
+.melee-transition-modal {
+  background: var(--parchment);
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slide-up 0.3s ease-out;
+  text-align: center;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .melee-transition-overlay,
+  .melee-transition-modal,
+  .weapon-diagram .weapon-set,
+  .weapon-diagram .arrow-icon {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Title */
+.transition-title {
+  font-size: 1.5rem;
+  color: var(--ink);
+  margin-bottom: 32px;
+  font-weight: bold;
+}
+
+/* Weapon Diagram */
+.weapon-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.weapon-set {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: weapon-slide 0.5s ease-in-out;
+}
+
+@keyframes weapon-slide {
+  from {
+    transform: translateX(-10px);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.weapon-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.weapon-label {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.arrow-icon {
+  font-size: 2rem;
+  color: var(--gold);
+  font-weight: bold;
+  animation: arrow-pulse 0.5s ease-in-out 0.3s;
+}
+
+@keyframes arrow-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+/* Explanatory Text */
+.transition-text {
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.transition-text p {
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.transition-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* Optional Unseat Details */
+.unseat-details {
+  background: var(--parchment-light);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.unseat-summary {
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.unseat-penalties {
+  text-align: center;
+}
+
+.penalty-label {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.penalty-grid {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.penalty-item {
+  font-size: 0.9rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.penalty-value {
+  color: var(--red, #c53030);
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+/* Continue Button */
+.continue-button {
+  width: 100%;
+  padding: 14px 24px;
+  background: var(--gold);
+  color: var(--ink);
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.continue-button:hover {
+  background: var(--gold-dark);
+  border-color: var(--gold-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.continue-button:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.continue-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive: Tablet (768px - 1023px) */
+@media (max-width: 1023px) {
+  .melee-transition-modal {
+    max-width: 450px;
+    padding: 32px;
+  }
+
+  .transition-title {
+    font-size: 1.3rem;
+    margin-bottom: 28px;
+  }
+
+  .weapon-icon {
+    font-size: 2.5rem;
+  }
+
+  .arrow-icon {
+    font-size: 1.8rem;
+  }
+
+  .transition-text p {
+    font-size: 0.9rem;
+  }
+}
+
+/* Responsive: Mobile (<768px) */
+@media (max-width: 767px) {
+  .melee-transition-overlay {
+    padding: 12px;
+  }
+
+  .melee-transition-modal {
+    max-width: 100%;
+    padding: 24px 16px;
+  }
+
+  .transition-title {
+    font-size: 1.1rem;
+    margin-bottom: 24px;
+  }
+
+  .weapon-diagram {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .weapon-icon {
+    font-size: 2rem;
+  }
+
+  .weapon-label {
+    font-size: 0.7rem;
+  }
+
+  .arrow-icon {
+    font-size: 1.5rem;
+  }
+
+  .transition-text {
+    margin-bottom: 24px;
+  }
+
+  .transition-text p {
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+  }
+
+  .continue-button {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+  }
+}

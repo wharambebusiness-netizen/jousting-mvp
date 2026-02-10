@@ -27,7 +27,7 @@ import { PassResultScreen } from './ui/PassResult';
 import { MeleeResultScreen } from './ui/MeleeResult';
 import { MatchSummary } from './ui/MatchSummary';
 import { CombatLog } from './ui/CombatLog';
-import { MeleeTransition } from './ui/MeleeTransition';
+import { MeleeTransitionScreen } from './ui/MeleeTransitionScreen';
 import { AIThinkingPanel } from './ui/AIThinkingPanel';
 import { DifficultyFeedback, StrategyTips, MatchReplay } from './ui/AIEndScreenPanels';
 
@@ -237,7 +237,7 @@ function App() {
       )}
 
       {screen === 'melee-transition' && match && lastPassResult && (
-        <MeleeTransition
+        <MeleeTransitionScreen
           match={match}
           lastPassResult={lastPassResult}
           onContinue={() => setScreen('melee')}

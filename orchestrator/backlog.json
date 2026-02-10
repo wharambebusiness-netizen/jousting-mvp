@@ -227,14 +227,16 @@
   },
   {
     "id": "BL-070",
-    "role": "game-designer",
+    "role": "ui-dev",
     "priority": 4,
-    "title": "Design melee transition explainer (phase clarity) — STRETCH",
-    "description": "STRETCH GOAL: BL-041 identified melee transition as jarring with no explanation. Design brief explainer screen between joust and melee phases.\n\n**Proposal**: 1-2 second explainer screen showing:\n1. \"Transition to Melee Phase\"\n2. Visual showing joust lance/shield → melee sword/shield\n3. Brief text: \"New attack set available — learn the new matchups\"\n4. Counter chart preview (if BL-067 complete)\n5. \"Continue\" button\n\n**Acceptance criteria**: Screen mockup, visual clarity, brief+informative text, integration notes for App.tsx.\n\n**Note**: ONLY if capacity after BL-061/062/063/064 critical work complete.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "title": "Implement melee transition explainer screen — COMPLETE STRETCH",
+    "description": "✅ COMPLETED Round 8 (STRETCH): Melee transition explainer implemented and shipped. Replaced existing MeleeTransition component with enhanced version combining educational content + optional unseat details.\n\n**Deliverable**:\n- NEW FILE: src/ui/MeleeTransitionScreen.tsx (120 lines) — Modal component with weapon transition visual, educational text (3 paragraphs), optional unseat penalties\n- MODIFIED: src/App.tsx — Integrated new component\n- MODIFIED: src/App.css — Added 300+ lines modal styling (overlay, weapon diagram, animations, responsive layouts)\n\n**Features**:\n- Weapon diagram (🛡️🗡️ → 🛡️⚔️) with slide animation\n- Educational text explaining new attack set\n- Conditional unseat details (if unseated: MOM/CTL/GRD penalties)\n- Responsive layouts (320px–1920px)\n- Keyboard nav (Escape/Spacebar/Enter to close)\n- Screen reader support (role=\"dialog\", aria-labels)\n- Touch-friendly (44px+ targets)\n- Animations respect prefers-reduced-motion\n\n**Impact**: Closes \"jarring melee transition\" gap identified in BL-041. Players now understand phase change + weapon switch.\n\n**Test Status**: 897/897 passing (zero regressions)\n**Manual QA**: Ready for testing (screen readers, cross-browser, mobile, animations)\n\nAnalysis: orchestrator/analysis/ui-dev-round-8.md",
     "fileOwnership": [
-      "orchestrator/analysis/design-round-4.md"
+      "src/ui/MeleeTransitionScreen.tsx",
+      "src/App.tsx",
+      "src/App.css"
     ],
-    "status": "assigned",
+    "status": "done",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:18:00Z"
   },
@@ -242,8 +244,8 @@
     "id": "BL-071",
     "role": "game-designer",
     "priority": 2,
-    "title": "NEW: Design variant tooltips (aggressive/balanced/defensive strategy explanations)",
-    "description": "Follow-up to BL-066 (balance-tuner variant analysis). BL-066 discovered variant system creates MASSIVE balance swings (±7pp for Bulwark, ±3pp for Charger) but players don't understand aggressive≠better.\n\n**Problem**: Players assume \"Aggressive = Better\" and miss strategic depth. Without tooltips, players may optimize for wrong variant (e.g., aggressive Charger at giga is WORSE than defensive +2.9pp).\n\n**Solution**: Add variant tooltips on gear selection screen explaining strategic impact:\n- **Aggressive**: \"Higher offense, lower defense. Favors quick unseats and melee. Riskier stamina. ±6pp swing at giga.\"\n- **Balanced**: \"Equal offense and defense. Reliable for all playstyles. Legacy baseline.\"\n- **Defensive**: \"Higher defense, lower offense. Favors long jousts and stamina endurance. Safer against unseats. ±1-3pp swing at giga.\"\n\n**Key insights for tooltips**:\n- Variant choice = 3+ rarity tiers of impact (NOT cosmetic)\n- Aggressive creates \"snowball\" melee-favored dynamics (+15.8pp more melee matches)\n- Defensive produces BEST GIGA BALANCE EVER (6.6pp spread, zero flags)\n- Charger better with defensive (+2.9pp), NOT aggressive (+0.3pp)\n\n**Acceptance criteria**: Variant strategy tooltips (text for all 3 variants), placement on LoadoutScreen, mockup showing tooltip positioning, acceptance criteria for ui-dev implementation.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "title": "Design variant tooltips (aggressive/balanced/defensive strategy explanations) — READY",
+    "description": "Follow-up to BL-066 (balance-tuner variant analysis). BL-066 discovered variant system creates MASSIVE balance swings (±7pp for Bulwark, ±3pp for Charger) but players don't understand aggressive≠better.\n\n**Problem**: Players assume \"Aggressive = Better\" and miss strategic depth. Without tooltips, players may optimize for wrong variant (e.g., aggressive Charger at giga is WORSE than defensive +2.9pp).\n\n**Solution**: Add variant tooltips on gear selection screen explaining strategic impact:\n- **Aggressive**: \"Higher offense, lower defense. Favors quick unseats and melee. Riskier stamina. ±6pp swing at giga.\"\n- **Balanced**: \"Equal offense and defense. Reliable for all playstyles. Legacy baseline.\"\n- **Defensive**: \"Higher defense, lower offense. Favors long jousts and stamina endurance. Safer against unseats. ±1-3pp swing at giga.\"\n\n**Key insights for tooltips**:\n- Variant choice = 3+ rarity tiers of impact (NOT cosmetic)\n- Aggressive creates \"snowball\" melee-favored dynamics (+15.8pp more melee matches)\n- Defensive produces BEST GIGA BALANCE EVER (6.6pp spread, zero flags)\n- Charger better with defensive (+2.9pp), NOT aggressive (+0.3pp)\n\n**Acceptance criteria**: Variant strategy tooltips (text for all 3 variants), placement on LoadoutScreen, mockup showing tooltip positioning, acceptance criteria for ui-dev implementation.\n\n**STATUS**: Ready to start Round 9. Can parallelize with BL-076 (engine-dev) work.\n\nWrite to orchestrator/analysis/design-round-4.md.",
     "fileOwnership": [
       "orchestrator/analysis/design-round-4.md"
     ],
