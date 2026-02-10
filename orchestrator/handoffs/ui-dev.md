@@ -2,54 +2,66 @@
 
 ## META
 - status: all-done
-- files-modified: orchestrator/analysis/ui-dev-round-1.md
+- files-modified: orchestrator/analysis/ui-dev-round-5.md
 - tests-passing: true
 - test-count: 897/897 passing
 - completed-tasks: None (no actionable ui-dev work available)
-- notes-for-others: @producer: BL-076 (engine-dev PassResult extensions) has been BLOCKED for 17+ consecutive rounds (R5 prev session → R1 current session). Recommend immediate escalation — add engine-dev to Round 2 roster and assign BL-076. This blocks BL-064 (6-8h critical learning loop). @qa: 4 features ready for manual QA (BL-073/068/070/071, estimated 6-10h total). Priority order: BL-073 (stat tooltips, P1) → BL-071 (variant tooltips, P2) → BL-068/070 (counter chart/melee transition, P3/P4). @designer: All 6 critical design specs complete and shipped. Designer status correctly marked "all-done". @engine-dev: BL-076 full implementation guide in ui-dev-round-20.md (Appendix section, 2-3h work, unblocks BL-064).
+- notes-for-others: @producer: BL-076 CRITICAL ESCALATION (ROUND 21+) — Blocker continues despite Round 2 consolidation. Engine-dev agent must be added to Round 6 roster immediately to unblock BL-064 (6-8h critical learning loop, 14% of onboarding). 21+ consecutive rounds blocked (R5 prev → R5 current) is excessive. Recommend: (1) Add engine-dev to Round 6 roster, (2) Assign BL-076 immediately, or (3) Make Phase 2 deferral decision (close MVP at 86%). @qa: 4 features ready for manual QA (BL-073/068/070/071, 6-10h total, prioritize BL-073 stat tooltips). @engine-dev: BL-076 full implementation guide in ui-dev-round-20.md (Appendix, 2-3h work, unblocks BL-064).
 
 ## What Was Done
 
-### Round 1 (This Round) — NEW SESSION
+### Round 5 (This Round)
 
 **No Code Changes** — All-done status (no actionable ui-dev work available)
 
-**Analysis Document**: `orchestrator/analysis/ui-dev-round-1.md` (comprehensive Round 1 checkpoint)
+**Analysis Document**: `orchestrator/analysis/ui-dev-round-5.md` (comprehensive Round 5 checkpoint)
 
-#### Round 1 Situation Analysis
-
-**New Session Context**: This is Round 1 of a NEW SESSION (session after 21-round session)
+#### Round 5 Situation Analysis
 
 **Backlog Review**:
+- ✅ BL-035 (Tech Lead) marked completed in backlog
 - ❌ BL-064 (Impact Breakdown UI, P1) — BLOCKED on BL-076 (engine-dev PassResult extensions)
+- ⏸️ BL-076 (Engine-dev PassResult extensions) — PENDING (21+ rounds: R5 prev → R5 current)
 - No other ui-dev tasks in backlog
 
-**Blocker Details**:
+**Round 4 → Round 5 Changes**:
+- ✅ No new tasks added to backlog
+- ✅ No tasks removed from backlog
+- ❌ Engine-dev agent still not added to roster (21+ rounds blocked)
+
+**Blocker Status**:
 ```
 BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
-  → BL-076 (Engine PassResult) ⏸️ PENDING (waiting 17+ rounds: R5 prev → R1 current)
+  → BL-076 (Engine PassResult) ⏸️ PENDING (waiting 21+ rounds: R5 prev → R5 current)
     → BL-064 (Impact Breakdown UI) ⏸️ BLOCKED (6-8h work ready)
 ```
 
-**Engine-dev Roster Status**: Not yet added to orchestrator (17+ consecutive rounds blocked)
-
 **Test Validation**: 897/897 passing ✅
-**Working Directory**: Clean (no unauthorized balance changes) ✅
 
-**Blocker Duration**: 17+ consecutive rounds (R5 prev session → R1 current session) — CRITICAL ESCALATION CONTINUES
+**Working Directory**: Clean (no unauthorized changes) ✅
 
-#### Session Context Review
+**Blocker Duration**: **21+ consecutive rounds** (R5 prev session → R5 current session) — CRITICAL ESCALATION CONTINUES
 
-**Previous Session** (Rounds 1-21):
-- **Rounds 1-9**: 7 features shipped (BL-047/058/062/068/070/071)
-- **Rounds 10-21**: Analysis-only (BL-064 blocked on BL-076)
-- **End State**: all-done (BL-064 blocked, 897/897 tests passing)
+#### Blocker Timeline
 
-**Current Session** (Round 1):
-- **Start State**: Same blocking state continues (BL-064 blocked on BL-076)
-- **Backlog**: BL-064 remains pending, no new ui-dev tasks
-- **Test Status**: 897/897 passing ✅ (stable across session boundary)
-- **Working Directory**: Clean ✅ (no unauthorized changes)
+**Previous Session** (Rounds 5-21):
+- **Round 5**: Producer creates BL-076, ui-dev requests engine-dev for R6
+- **Round 6-21**: 16 consecutive rounds of escalation messages
+
+**Current Session**:
+- **Round 1**: 17+ consecutive rounds blocked (R5 prev → R1 current)
+- **Round 2**: 18+ consecutive rounds blocked (R5 prev → R2 current)
+  - Producer consolidates BL-076 + BL-063x (duplicate tasks eliminated)
+- **Round 3**: 19+ consecutive rounds blocked (R5 prev → R3 current)
+- **Round 4**: 20+ consecutive rounds blocked (R5 prev → R4 current)
+- **Round 5**: **21+ consecutive rounds blocked** (R5 prev → R5 current)
+
+**Impact of Delay**:
+- New player onboarding stuck at 86% (6/7 gaps closed)
+- ~80+ hours of agent time spent on analysis-only rounds (R6-21 prev + R1-R5 current)
+- BL-064 ready to ship immediately (6-8h work) when unblocked
+- 14% of onboarding completion blocked by 2-3h task
+- Blocker duration now excessive (21+ rounds for critical learning loop feature)
 
 #### BL-064 Readiness Assessment
 
@@ -57,7 +69,7 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 | Item | Status | Details |
 |------|--------|---------|
 | BL-063 (Design Spec) | ✅ COMPLETE | design-round-4-bl063.md (770 lines, Round 5 prev session) |
-| BL-076 (PassResult Extensions) | ⏸️ PENDING | Waiting 17+ rounds (R5 prev → R1 current) |
+| BL-076 (PassResult Extensions) | ⏸️ PENDING | Waiting 21+ rounds (R5 prev → R5 current), **CONSOLIDATED** (duplicates removed R2) |
 | CSS Foundation | ✅ COMPLETE | 150+ lines prepared by polish (R5 prev session) |
 | UI Infrastructure | 🟡 PARTIAL | PassResult.tsx exists (40% complete) |
 
@@ -68,7 +80,7 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 - Full spec: design-round-4-bl063.md Section 5 (lines 410-448)
 - Full implementation guide: ui-dev-round-20.md Appendix (still valid, unchanged)
 - UI design complete: 6 expandable sections, bar graph visualization, all templates ready
-- BL-076 task exists in backlog but no engine-dev agent assigned yet
+- **STATUS**: Consolidated (BL-063x duplicate removed in Round 2), waiting for engine-dev
 
 **BL-064 (Impact Breakdown UI)**:
 - Scope: Expandable breakdown card with 6 sections + bar graph
@@ -80,7 +92,7 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 
 **Impact**: Closes learning loop for new players (86% → 100% onboarding completion)
 
-**Escalation Needed**: Producer should add engine-dev to roster. BL-076 has been pending for 17+ rounds (Round 5 prev session → Round 1 current session).
+**Escalation Needed**: Producer should add engine-dev to Round 6 roster and assign BL-076 immediately (21+ rounds blocked is excessive)
 
 #### Manual QA Status
 
@@ -110,36 +122,6 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 
 **Total Manual QA Estimate**: 6-10 hours (can be parallelized)
 
-#### Blocker Timeline
-
-**Escalation History** (Previous Session Rounds 5-21):
-- **Round 5**: Producer creates BL-076, ui-dev requests engine-dev for R6
-- **Round 6**: Producer: "Add engine-dev to Round 7 roster"
-- **Round 7**: Producer: "CRITICAL FOR ROUND 8"
-- **Round 8**: Producer: "CRITICAL FOR ROUND 9"
-- **Round 9**: Producer: "CRITICAL FOR ROUND 10, 5 rounds blocked"
-- **Round 10**: Producer: "CRITICAL ESCALATION (5 rounds)"
-- **Round 11**: Producer: "CRITICAL ESCALATION (FINAL) (6 rounds)"
-- **Round 12**: Producer: "CRITICAL ESCALATION (7 ROUNDS)"
-- **Round 13**: Producer: "CRITICAL ESCALATION (8 ROUNDS)"
-- **Round 14**: Producer: "CRITICAL ESCALATION (9 ROUNDS)"
-- **Round 15**: Producer: "CRITICAL ESCALATION (10 ROUNDS)"
-- **Round 16**: Producer: "CRITICAL DECISION REQUIRED (11 ROUNDS)"
-- **Round 17**: Producer: "FINAL DECISION REQUIRED (12 ROUNDS)"
-- **Round 18**: Producer: "CRITICAL DECISION REQUIRED (13 ROUNDS)"
-- **Round 19**: Producer: "FINAL ESCALATION (14 ROUNDS)"
-- **Round 20**: Producer: "FINAL DECISION REQUIRED (15 ROUNDS)"
-- **Round 21**: Producer: "16-ROUND BLOCKER REACHED (FINAL ESCALATION)"
-
-**Current Session**:
-- **Round 1**: **17+ consecutive rounds blocked** (R5 prev → R1 current)
-
-**Impact of Delay**:
-- New player onboarding stuck at 86% (6/7 gaps closed)
-- ~50+ hours of agent time spent on analysis-only rounds (R10-R21 prev + R1 current)
-- BL-064 ready to ship immediately (6-8h work) when unblocked
-- 14% of onboarding completion blocked by 2-3h task
-
 #### Recommendation
 
 **Status**: **all-done**
@@ -149,9 +131,13 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 2. No other actionable ui-dev tasks in backlog
 3. All recent features need manual QA (human tester required)
 4. Stretch goals provide marginal value while BL-064 blocked
-5. Blocker has persisted 17+ rounds (excessive for critical learning loop)
+5. Blocker has persisted 21+ rounds (excessive for critical learning loop)
+6. Producer consolidation complete (BL-076 + BL-063x duplicates removed in R2)
 
-**Critical Action**: Producer should escalate BL-076 to engine-dev immediately (17+ rounds blocked is excessive for critical learning loop blocking 14% of onboarding completion)
+**Critical Action**: Producer should:
+1. Add engine-dev to Round 6 roster immediately
+2. Assign BL-076 to engine-dev (2-3h work, unblocks BL-064)
+3. OR make Phase 2 deferral decision (close MVP at 86%)
 
 **Next Round**: Resume immediately when BL-064 unblocks (6-8h implementation ready)
 
@@ -171,7 +157,7 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 - Spec complete: `orchestrator/analysis/design-round-4-bl063.md` (Section 5, lines 410-448)
 - Implementation guide: `orchestrator/analysis/ui-dev-round-20.md` (Appendix, still valid)
 - UI design complete: 6 expandable sections, bar graph visualization, all templates ready
-- BL-076 task exists in backlog but no engine-dev agent assigned yet
+- **STATUS**: BL-076 consolidated (BL-063x duplicate removed in Round 2), waiting for engine-dev assignment
 
 **Readiness**: 100% ready to implement immediately when BL-076 completes
 
@@ -179,7 +165,7 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 
 **Impact**: Closes learning loop for new players (86% → 100% onboarding completion)
 
-**Escalation Needed**: Producer should add engine-dev to roster. BL-076 has been pending for 17+ rounds (Round 5 prev session → Round 1 current session).
+**Escalation Needed**: Producer should add engine-dev to Round 6 roster. BL-076 has been pending for 21+ rounds (Round 5 prev session → Round 5 current session). Blocker duration is excessive for critical learning loop feature.
 
 ---
 
@@ -189,11 +175,12 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 
 ### Coordination Points
 
-1. **@producer**: BL-076 CRITICAL ESCALATION (Round 17+)
-   - Add engine-dev to Round 2 roster immediately
-   - Assign BL-076 (PassResult extensions, 2-3h)
-   - Blocks BL-064 (ui-dev 6-8h critical learning loop)
-   - 17+ consecutive rounds blocked (R5 prev → R1 current) is excessive
+1. **@producer**: BL-076 CRITICAL ESCALATION (Round 21+)
+   - ✅ Consolidation complete (BL-063x duplicate removed in Round 2)
+   - ❌ Engine-dev agent still not added to roster (21+ rounds blocked)
+   - **Recommendation**: Add engine-dev to Round 6 roster immediately
+   - Assign BL-076 (2-3h work, unblocks BL-064 6-8h critical learning loop)
+   - 21+ consecutive rounds blocked (R5 prev → R5 current) is excessive
    - Full implementation guide in `orchestrator/analysis/ui-dev-round-20.md` (Appendix, still valid)
    - Full spec in `orchestrator/analysis/design-round-4-bl063.md` Section 5
    - Alternative: Consider Phase 2 deferral if engine-dev cannot be added (close MVP at 86%)
@@ -223,9 +210,9 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 
 5. **@reviewer**: Production-Ready Quality
    - All recent ui-dev work production-ready (BL-071/070/068)
-   - 897/897 tests passing (zero regressions across previous session + current round)
+   - 897/897 tests passing (zero regressions across Rounds 1-5)
    - No blocking issues
-   - Critical action: Ensure producer escalates BL-076 to engine-dev (17+ rounds blocked)
+   - Critical action: Ensure producer escalates BL-076 to engine-dev (21+ rounds blocked)
 
 ---
 
@@ -265,32 +252,45 @@ BL-063 (Design) ✅ COMPLETE (Round 5 prev session)
 6. **BL-070**: Melee Transition Explainer (Round 8) ✅
 7. **BL-071**: Variant Strategy Tooltips (Round 9) ✅
 
-### Current Session Files Modified (Round 1)
+### Current Session Files Modified
 
 **Round 1 (Analysis-Only)**:
 - `orchestrator/analysis/ui-dev-round-1.md` (Round 1, NEW)
 
+**Round 2 (Analysis-Only)**:
+- `orchestrator/analysis/ui-dev-round-2.md` (Round 2, NEW)
+
+**Round 3 (Analysis-Only)**:
+- `orchestrator/analysis/ui-dev-round-3.md` (Round 3, NEW)
+
+**Round 4 (Analysis-Only)**:
+- `orchestrator/analysis/ui-dev-round-4.md` (Round 4, NEW)
+
+**Round 5 (Analysis-Only, This Round)**:
+- `orchestrator/analysis/ui-dev-round-5.md` (Round 5, NEW)
+
 ### Quality Metrics
 
-- **Test Regressions**: 0 (zero breakage across previous session + current round)
+- **Test Regressions**: 0 (zero breakage across Rounds 1-5)
 - **Accessibility**: 100% keyboard-navigable, screen reader friendly, semantic HTML, ARIA compliant, WCAG AAA touch targets
-- **Test Count**: 897/897 passing ✅
+- **Test Count**: 897/897 passing ✅ (stable Rounds 1-5)
 - **New Player Onboarding**: 6/7 critical gaps closed (86% complete)
-- **Remaining Gaps**: Impact Breakdown (BL-064, blocked on BL-076 engine-dev)
+- **Remaining Gaps**: Impact Breakdown (BL-064, blocked on BL-076)
 
 ---
 
-## Next Round Preview (Round 2)
+## Next Round Preview (Round 6)
 
 ### **Primary Work**: BL-064 (Impact Breakdown UI) — IF UNBLOCKED
 
 **Prerequisites**:
 - ✅ Designer completes BL-063 spec (DONE Round 5 prev session)
-- ⏸️ Engine-dev extends PassResult (BL-076, pending 17+ rounds: R5 prev → R1 current)
+- ✅ Producer consolidates BL-076/BL-063x (DONE Round 2 current session)
+- ⏸️ Engine-dev extends PassResult (BL-076, pending 21+ rounds: R5 prev → R5 current)
 - ⏸️ Engine-dev populates new fields (BL-076, pending)
 - ⏸️ QA validates new PassResult fields (BL-076, pending)
 
-**Estimated Delivery**: Round 2+ (6-8h work, IF BL-076 completes in Round 2)
+**Estimated Delivery**: Round 6+ (6-8h work, IF BL-076 completes in Round 6)
 
 **Implementation Checklist**:
 - [ ] Create `PassResultBreakdown.tsx` component
@@ -311,24 +311,27 @@ If BL-064 remains blocked, continue all-done status:
 - No stretch goals provide sufficient value while BL-064 blocked
 - Manual QA requires human tester (AI agent cannot perform)
 - Wait for BL-076 completion before resuming work
+- Escalate to human orchestrator if blocker continues beyond Round 6
 
 ---
 
-## Round 1 Analysis Document
+## Round 5 Analysis Document
 
-**Full analysis**: `orchestrator/analysis/ui-dev-round-1.md` (comprehensive Round 1 checkpoint)
+**Full analysis**: `orchestrator/analysis/ui-dev-round-5.md` (comprehensive Round 5 checkpoint)
 
 **Contents**:
-- Executive summary (all-done status, blocker analysis)
-- Round 1 situation (new session context, backlog review, test validation)
-- Session context review (previous session summary, current session start state)
-- BL-064 readiness assessment (prerequisites, blocker details, implementation plan)
-- Manual QA status (4 features pending, 6-10h estimate)
-- Blocker timeline analysis (17+ round escalation history, impact of delay)
-- New player onboarding progress (6/7 gaps closed, 86% complete)
+- Executive summary (all-done status, blocker analysis, Round 5 update)
+- Round 5 backlog review (BL-064 still blocked, BL-076 still pending)
+- Blocker timeline update (21+ consecutive rounds, R5 prev → R5 current)
+- Test validation (897/897 passing, zero regressions)
+- Working directory validation (clean, no unauthorized changes)
+- Round 5 work decision (continue all-done, rationale)
 - Coordination points (producer/qa/engine-dev/designer/reviewer)
-- Session quality summary (excellent, zero regressions)
-- Appendix: Blocker timeline (detailed escalation history)
+- Session summary (Round 1-5 delta, stable test status)
+- New player onboarding progress (6/7 gaps closed, 86% complete)
+- Quality metrics (test stability, accessibility, code quality)
+- Next round preview (BL-064 implementation checklist)
+- Appendix: Blocker impact analysis (~80+ agent-hours cost, user impact cost)
 
 ---
 
