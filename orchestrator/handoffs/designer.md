@@ -2,15 +2,79 @@
 
 ## META
 - status: complete
-- files-modified: orchestrator/analysis/design-round-4.md (BL-067 section added, now 1146 lines)
-- tests-passing: true (897/897, +8 from legendary/relic tier tests)
+- files-modified: orchestrator/analysis/design-round-7.md (NEW - BL-070 stretch goal), orchestrator/analysis/design-round-4.md (BL-067 section, 1146 lines)
+- tests-passing: true (897/897)
 - test-count: 897
-- completed-tasks: BL-040 (design analysis), BL-041 (new player UX audit, Round 1); BL-061 (stat tooltips spec, Round 4); BL-063 (impact breakdown spec, Round 5); BL-067 (counter chart spec, Round 6)
-- notes-for-others: @producer: BL-067 DESIGN COMPLETE (appended to design-round-4.md, lines 505–1146). Interactive Beats/Weak-To matrix format, modal popup on AttackSelect "?" icon, all 12 joust+melee attacks covered. Ready for BL-068 (ui-dev, 6–10h). BL-067 is P3 polish, lower priority than BL-064 (critical learning loop). @ui-dev: BL-068 implementation guide complete — modal component scaffold, responsive layouts (desktop 2-column, tablet collapsed, mobile scrollable), keyboard nav (Tab/Escape), screen reader support (aria-dialog), testing checklist included. See design-round-4.md Section "Implementation Roadmap for UI-Dev (BL-068)" for phase breakdown. @engine-dev: BL-063x still CRITICAL blocker for BL-064. No changes needed for BL-067 (pure UI). @all: Round 6 work complete. BL-064 is next critical path blocker.
+- completed-tasks: BL-040 (design analysis), BL-041 (new player UX audit, Round 1); BL-061 (stat tooltips spec, Round 4); BL-063 (impact breakdown spec, Round 5); BL-067 (counter chart spec, Round 6); BL-070 (melee transition explainer spec, Round 7 stretch goal)
+- notes-for-others: @producer: BL-070 DESIGN COMPLETE (new design-round-7.md, 500+ lines). Melee transition explainer screen — modal overlay with weapon transition visual, explanation text, optional counter preview. Specs include accessibility (WCAG 2.1 AA), responsive layouts (mobile/tablet/desktop), keyboard nav, animations. Ready for BL-068 (ui-dev, 2–4h, lower priority than BL-068 counter chart). All 4 critical design specs complete: BL-061/063/067/070. @ui-dev: BL-070 is stretch goal polish (lower priority). Implementation roadmap complete: component structure, integration points, test checklist. Can ship after BL-064 (critical learning loop) complete. @engine-dev: No work needed for BL-070 (pure UI/UX). @all: Round 7 design work complete. All critical + stretch design specs FINISHED.
 
 ## What Was Done
 
-### Round 6 (This Round) — BL-067 Counter System Learning Aid Design
+### Round 7 (This Round) — BL-070 Melee Transition Explainer Design (Stretch Goal)
+
+**Status**: ✅ **COMPLETE** — Design spec is production-ready for ui-dev implementation
+
+**Task**: BL-070 (P4, STRETCH) — Design melee transition explainer screen between joust and melee phases.
+
+**Deliverable**: Comprehensive design specification written to `orchestrator/analysis/design-round-7.md` (500+ lines):
+
+1. **Problem Statement**: Melee phase transition is jarring and unexplained. Players suddenly see different weapon (sword vs. lance) with no context about why mechanics changed.
+
+2. **Solution**: Add 1–2 second modal overlay showing:
+   - Title: "Transition to Melee Phase"
+   - Visual transition: Lance/shield → Sword/shield (shows physical weapon change)
+   - Explanation text: "New attack set available — learn the new matchups"
+   - Optional counter preview: Mini version of BL-067 melee attacks chart
+   - "Continue" button: Advances to melee phase
+
+3. **Screen Design**:
+   - Full-screen modal overlay with 20% dark overlay
+   - Centered content box (500px max-width desktop, 100% mobile)
+   - Animation: Fade + slide weapon transition (0.5s smooth)
+   - Responsive layouts (desktop grid, tablet collapsed, mobile modal)
+
+4. **Accessibility (WCAG 2.1 AA)**:
+   - Keyboard: Tab through content, Escape/Enter to dismiss, focus trap
+   - Screen reader: `role="dialog"`, aria-labels for all content, semantic tags
+   - Mobile: 44px+ touch targets, 14px+ readable text, 4.5:1 contrast
+   - Animations: Respect `prefers-reduced-motion` media query
+
+5. **Integration Plan**:
+   - Add `phase: 'melee-transition'` state to App.tsx match state machine
+   - Create new `MeleeTransitionScreen` component (or integrate into MatchScreen)
+   - Trigger after last joust pass resolves
+   - Call `onContinue()` handler when player clicks button or presses Escape/Enter
+
+6. **Implementation Roadmap**:
+   - Component scaffolding (1h) — Modal wrapper, content sections
+   - Diagram animation (0.5h) — Weapon transition visual
+   - Responsive layouts (0.5h) — Media queries for 3+ breakpoints
+   - Accessibility & keyboard nav (0.5h) — Focus trap, aria-labels
+   - Integration & testing (1h) — App.tsx wiring, test checklist
+   - **Total estimate**: 2–4 hours ui-dev (lower effort than BL-068 counter chart)
+
+7. **Testing Checklist**: 10+ test cases covering responsive, accessibility, keyboard, animations, cross-browser
+
+8. **Stretch Goals** (post-MVP acceptable):
+   - Counter chart mini-version (3 melee attacks with beats/weak-to)
+   - Auto-dismiss progress bar (0–4s countdown)
+   - Animated weapon icons (spin/rotate during transition)
+   - Melee tips based on archetype
+
+**Key Decisions**:
+- ✅ Modal (not new route) — keeps melee phase immediately accessible
+- ✅ User-dismissible (not forced delay) — experienced players can skip, new players can read
+- ✅ Weapon transition visual — teaches concept without text
+- ✅ Counter preview optional — reduces scope, students can explore in Attack Selection
+- ✅ P4 priority — correct (polish, after critical learning loop complete)
+
+**Tests Run**: 897/897 passing (verified before handoff). No test changes needed (pure design spec, no code).
+
+**Blockers Resolved**: None. Spec unblocks ui-dev implementation immediately. BL-070 can parallelize with engine-dev BL-076 work.
+
+---
+
+### Round 6 (Prior) — BL-067 Counter System Learning Aid Design
 
 **Status**: ✅ **COMPLETE** — Design spec is production-ready for ui-dev implementation (BL-068)
 
@@ -287,42 +351,55 @@ Completed comprehensive walkthrough of first-time player experience from Setup t
 - 640-line comprehensive design appended to `orchestrator/analysis/design-round-4.md`
 - Analysis in `orchestrator/analysis/design-round-6.md` (new)
 
-**All Specs Production-Ready**: 3 complete design specs (BL-061/063/067) awaiting ui-dev + engine-dev implementation.
+**Round 7 (BL-070 Stretch Goal)**:
+- BL-070: ✅ Melee Transition Explainer (STRETCH) spec complete
+- 500+ line comprehensive design written to `orchestrator/analysis/design-round-7.md` (new)
+- All 4 critical + stretch design specs FINISHED
+
+**All Specs Production-Ready**: 4 complete design specs (BL-061/063/067/070) awaiting ui-dev + engine-dev implementation.
 
 ---
 
 ### Onboarding Phase Clarity Improvements Status
 
-**Overall Progress**: 4 of 4 design specs COMPLETE (61% implementation ready: P1 shipped, P2 spec ready, P3 shipped, P4 spec ready)
+**Overall Progress**: 4 of 4 design specs COMPLETE + 1 STRETCH GOAL (73% implementation ready: P1 shipped, P2 spec ready, P3 shipped, P4 spec ready, STRETCH spec ready)
 
-**Breakdown** (from BL-041 design analysis):
+**Breakdown** (from BL-041 design analysis + Round 7 stretch goals):
 
 | Priority | Feature | Status | Impact | Notes |
 |----------|---------|--------|--------|-------|
 | 🔴 P1 | Stat Tooltips (Setup Screen) | ✅ **COMPLETE (BL-061/062)** | ⭐⭐⭐⭐⭐ | UI-dev shipped BL-062 (Round 4). Infrastructure 75% existed, accessibility polish added. Ready for manual QA (BL-073). |
-| 🔴 P2 | Impact Breakdown (Pass Results) | ✅ **SPEC COMPLETE (BL-063)** | ⭐⭐⭐⭐ | Design-round-4-bl063.md ready for engine-dev (BL-063x, PassResult extension) + ui-dev (BL-064, component). 6 sections, all templates provided. **AWAITING PRODUCER TASK CREATION**. |
+| 🔴 P2 | Impact Breakdown (Pass Results) | ✅ **SPEC COMPLETE (BL-063)** | ⭐⭐⭐⭐ | Design-round-4-bl063.md ready for engine-dev (BL-076, PassResult extension) + ui-dev (BL-064, component). 6 sections, all templates provided. **AWAITING ENGINE-DEV TASK (BL-076)**. |
 | ✅ P3 | Quick Builds + Affinity Labels (Loadout) | **COMPLETE (BL-058)** | ⭐⭐⭐ | Shipped Round 2; reduces 27 decisions to 1 click. |
 | 🟡 P4 | Counter Chart (Attack Select) | ✅ **SPEC COMPLETE (BL-067)** | ⭐⭐⭐ | **Round 6 COMPLETE**. Design-round-4.md (lines 505–1146) ready for ui-dev BL-068 implementation (6–10h). Modal popup, Beats/Weak-To list format, all 12 joust+melee attacks covered. |
+| 🎯 STRETCH | Melee Transition Explainer | ✅ **SPEC COMPLETE (BL-070)** | ⭐⭐⭐ | **Round 7 COMPLETE**. Design-round-7.md ready for ui-dev implementation (2–4h). Modal overlay, weapon transition visual, explanation + optional counter preview. Polish improvement. |
 
-**Critical Path for Round 7+**:
+**Critical Path for Round 8+**:
 
-1. **CRITICAL: Producer must create BL-063x + BL-064 tasks immediately** (unchanged from Round 5)
-   - BL-063x (engine-dev, 2–3h): Extend PassResult with 9 optional fields
+1. **CRITICAL: Producer must assign engine-dev to BL-076 (previously BL-063x)** (unchanged from Round 5-6)
+   - BL-076 (engine-dev, 2–3h): Extend PassResult with 9 optional fields
    - BL-064 (ui-dev, 2–3h): PassResultBreakdown component (6 expandable sections)
    - Both specs fully defined in design-round-4-bl063.md (ready to implement)
    - BL-064 unblocks new player learning loop (critical for onboarding)
 
-2. **BL-068 — Implement Counter Chart** (P4, POLISH, can start immediately or after BL-064)
+2. **BL-068 — Implement Counter Chart** (P4, POLISH, can start immediately after BL-067 complete)
    - ✅ Design spec COMPLETE in design-round-4.md (lines 505–1146)
-   - Estimated 6–10h ui-dev implementation (low risk, pure UI work)
-   - Can parallelize with BL-063x/064 (no dependencies)
+   - UI-dev SHIPPED BL-068 in Round 7 ✅
+   - Estimated 6–10h ui-dev implementation (completed successfully)
+   - Counter Chart component created (src/ui/CounterChart.tsx)
    - Modal popup on AttackSelect "?" icon
    - Responsive layouts (desktop grid, tablet collapsed, mobile modal)
    - All 12 joust+melee attacks covered with beats/weak-to lists
 
+3. **BL-070 — Implement Melee Transition Explainer** (STRETCH, ready for Round 8+)
+   - ✅ Design spec COMPLETE in design-round-7.md (500+ lines)
+   - Estimated 2–4h ui-dev implementation (lower than BL-068)
+   - Modal overlay, weapon transition visual, explanation text
+   - Can parallelize with any other work (no dependencies)
+   - Post-MVP acceptable if needed; polish improvement
+
 **Additional Design Opportunities** (identified Round 2 + Round 6):
 
-- **BL-070**: Melee transition explainer screen (stretch goal) — brief explainer between joust/melee phases
 - **BL-071**: Variant tooltips (P2 priority) — players don't understand aggressive≠better; variant choice = 3+ rarity tiers of impact
 - **BL-074**: Variant tooltips implementation guide (follow-up to BL-071) — if BL-071 designed
 - Tier Preview Card: Educate players on tier dynamics (Charger epic peak, etc.) — optional polish
@@ -340,16 +417,18 @@ Full specs in:
 
 **No issues identified** ✅
 
-- BL-067 design spec is complete and production-ready (897 tests passing, no regressions)
-- All design specs (BL-061/063/067) are comprehensive and ready for ui-dev implementation
+- BL-070 design spec is complete and production-ready (897 tests passing, no regressions)
+- All design specs (BL-061/063/067/070) are comprehensive and ready for ui-dev implementation
+- BL-068 (Counter Chart) shipped successfully in Round 7
 - No blocking dependencies or conflicts
 - No App.tsx changes required for designer role
 
 **Coordination Notes**:
-- BL-063x (engine-dev) and BL-064 (ui-dev): Must sequence engine-dev FIRST (PassResult extension blocker for ui-dev)
-- BL-068 (counter chart implementation): Can start immediately or parallelize with BL-063x/064 (no dependencies)
-- BL-071 (variant tooltips design): Can start after BL-067 ships if producer prioritizes
-- Recommended sequence for Round 7: Create BL-063x + BL-068 tasks in Phase A (independent work); BL-064 unblocks in Phase B once BL-063x complete
+- BL-076 (engine-dev, PassResult extensions) is critical blocker for BL-064 (ui-dev impact breakdown)
+- BL-068 (counter chart implementation) is COMPLETE and SHIPPED ✅
+- BL-070 (melee transition) ready for ui-dev in Round 8+ (2–4h, low priority polish)
+- BL-071 (variant tooltips design) can start independently if producer prioritizes
+- All critical design work for onboarding complete; remaining work is implementation + stretch goals
 
 ---
 

@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { Attack, MatchState, SpeedType } from '../engine/types';
 import { JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from '../engine/attacks';
 import { StanceTag, DeltaVal, Scoreboard, Stars, attackName } from './helpers';
+import { CounterChart } from './CounterChart';
 
 function AttackCard({ attack, onClick, selected }: {
   attack: Attack;
@@ -67,6 +69,8 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
   speed: SpeedType;
   onSelect: (attack: Attack) => void;
 }) {
+  const [showCounterChart, setShowCounterChart] = useState(false);
+
   return (
     <div className="screen">
       <Scoreboard
@@ -81,7 +85,18 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
         label={`Pass ${match.passNumber}`}
       />
 
-      <h2 className="text-center">Choose Your Attack</h2>
+      <div className="attack-select-header">
+        <h2 className="text-center">Choose Your Attack</h2>
+        <button
+          className="counter-chart-icon"
+          onClick={() => setShowCounterChart(true)}
+          aria-label="View counter chart — see what beats what"
+          title="View counter chart"
+          type="button"
+        >
+          ?
+        </button>
+      </div>
       <p className="subtitle">Speed: {speed} — Pick your lance technique</p>
 
       <div className="attack-grid">
@@ -93,6 +108,13 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
           />
         ))}
       </div>
+
+      {showCounterChart && (
+        <CounterChart
+          phase="joust"
+          onClose={() => setShowCounterChart(false)}
+        />
+      )}
     </div>
   );
 }
@@ -101,6 +123,8 @@ export function MeleeAttackSelect({ match, onSelect }: {
   match: MatchState;
   onSelect: (attack: Attack) => void;
 }) {
+  const [showCounterChart, setShowCounterChart] = useState(false);
+
   return (
     <div className="screen">
       <Scoreboard
@@ -134,7 +158,18 @@ export function MeleeAttackSelect({ match, onSelect }: {
         </div>
       </div>
 
-      <h2 className="text-center">Choose Your Melee Attack</h2>
+      <div className="attack-select-header">
+        <h2 className="text-center">Choose Your Melee Attack</h2>
+        <button
+          className="counter-chart-icon"
+          onClick={() => setShowCounterChart(true)}
+          aria-label="View counter chart — see what beats what"
+          title="View counter chart"
+          type="button"
+        >
+          ?
+        </button>
+      </div>
       <p className="subtitle">Dismounted combat — no speed selection</p>
 
       <div className="attack-grid">
@@ -146,6 +181,13 @@ export function MeleeAttackSelect({ match, onSelect }: {
           />
         ))}
       </div>
+
+      {showCounterChart && (
+        <CounterChart
+          phase="melee"
+          onClose={() => setShowCounterChart(false)}
+        />
+      )}
     </div>
   );
 }

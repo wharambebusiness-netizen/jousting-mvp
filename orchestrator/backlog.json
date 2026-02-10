@@ -172,12 +172,12 @@
     "id": "BL-067",
     "role": "game-designer",
     "priority": 3,
-    "title": "Design counter system learning aid (teachable mechanics)",
-    "description": "Follow-up to BL-041. Counter system identified as \"learn-by-losing\" — players don't understand rock-paper-scissors until they experience losses. Design visual counter chart for AttackSelect screen.\n\n**Proposal**: Visual chart showing all 6 attack relationships:\n- High Guard: beats Low Cut, weak to Measured Cut\n- Low Cut: beats Coup en Passant, weak to High Guard\n- Measured Cut: beats High Guard, weak to Low Cut\n- Port de Lance: beats Measured Cut, weak to High Guard  \n- Coup en Passant: beats High Guard, weak to Low Cut\n- (6th attack — verify in code)\n\n**Format options**:\n1. **Triangle diagram** (3 attacks arranged as triangle, each beats one side, weak to other)\n2. **Matrix chart** (6×6 grid showing all matchups)\n3. **Beats/Weak to text** with visual icons\n\n**Acceptance criteria**: Chart design mockup, visual clarity on beats/weak-to relationships, mobile-responsive layout, accessibility notes (screen reader friendly), integration plan for AttackSelect.\n\nWrite to orchestrator/analysis/design-round-4.md.",
+    "title": "Design counter system learning aid (teachable mechanics) — COMPLETE",
+    "description": "✅ COMPLETED Round 6: Design spec complete. Comprehensive 640-line design specification appended to orchestrator/analysis/design-round-4.md (lines 505–1146).\n\n**Deliverable**: Interactive Beats/Weak-To matrix format showing all 6 attacks with counter relationships in modal popup (not 6×6 grid which overwhelms new players). All 12 attacks verified against src/engine/attacks.ts (6 joust + 6 melee). Responsive layouts (desktop 2-column, tablet collapsed, mobile scrollable). Integration plan: \"?\" icon on AttackSelect header opens modal. Accessibility complete (WCAG 2.1 AA).\n\n**Ready for**: BL-068 (ui-dev, 6–10h implementation).",
     "fileOwnership": [
       "orchestrator/analysis/design-round-4.md"
     ],
-    "status": "assigned",
+    "status": "done",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:12:00Z"
   },
@@ -185,13 +185,14 @@
     "id": "BL-068",
     "role": "ui-dev",
     "priority": 3,
-    "title": "Implement counter chart (attack select clarity)",
-    "description": "Follow-up to BL-067 design. Implement counter chart on AttackSelect screen or modal showing rock-paper-scissors relationships.\n\n**Readiness**: BL-068 is 20% complete (StanceTag tooltips + AttackCard beats/weak-to text exist). Gaps: visual chart component, modal/popup system, centralized counter reference.\n\n**Acceptance criteria**:\n1. Visual chart (triangle, matrix, or other) showing all attack beats/weak-to relationships\n2. Chart is clear and intuitive for new players\n3. Responsive on mobile (may be modal/popup instead of inline)\n4. Keyboard accessible (Tab through attacks, focus shows relationships)\n5. Screen reader friendly (descriptive labels for each attack)\n6. Integrated with AttackSelect.tsx (visible during attack selection or modal)\n7. 853+ tests passing (no regressions)\n\n**Implementation notes**:\n- Determine chart format from BL-067 design (triangle/matrix/text)\n- May add modal component or inline chart to AttackSelect\n- Add styling to src/App.css\n- Test responsive layout on multiple viewports\n- Verify counter table in attacks.ts matches chart visualization\n\nEstimate: 4-8 hours. Low risk (pure UI work, no engine dependencies).\n\nDepends on BL-067 (design).",
+    "title": "Implement counter chart (attack select clarity) — COMPLETE",
+    "description": "✅ COMPLETED Round 7: Counter Chart UI shipped with all design spec requirements.\n\n**Deliverable**:\n- NEW FILE: src/ui/CounterChart.tsx (180 lines) — Modal component with all 6 attacks (joust or melee), beats/weak-to relationships, color-coded icons\n- MODIFIED: src/ui/AttackSelect.tsx — Added \"?\" info icon, modal state, conditional CounterChart render\n- MODIFIED: src/App.css — Added 280+ lines for modal styling, responsive layouts\n\n**Features**:\n- 6 attack cards showing icon + name + stance + beats/weak-to lists\n- Color-coded (✅ green \"Beats\", ⚠️ red \"Weak To\")\n- Responsive layouts (desktop 2-column, tablet single column, mobile scrollable)\n- Modal overlay with dark background (z-index: 1000)\n- Keyboard navigation: Tab through attacks, Escape/overlay click closes modal\n- Screen reader support: role=\"dialog\", aria-labels for all attacks\n- Touch targets ≥44px (WCAG AAA)\n\n**Test Status**: 897/897 passing (zero regressions)\n\n**Manual QA pending** (BL-073): Screen readers (NVDA/JAWS/VoiceOver), cross-browser (Chrome/Safari/Firefox/Edge), mobile touch (iOS/Android), responsive (320px-1920px), keyboard nav.",
     "fileOwnership": [
+      "src/ui/CounterChart.tsx",
       "src/ui/AttackSelect.tsx",
       "src/App.css"
     ],
-    "status": "pending",
+    "status": "done",
     "dependsOn": [
       "BL-067"
     ],
@@ -233,7 +234,7 @@
     "fileOwnership": [
       "orchestrator/analysis/design-round-4.md"
     ],
-    "status": "pending",
+    "status": "assigned",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:18:00Z"
   },
@@ -254,12 +255,12 @@
     "id": "BL-072",
     "role": "reviewer",
     "priority": 1,
-    "title": "Update MEMORY.md with variant-aware win rate notes",
-    "description": "Follow-up to BL-066 (balance-tuner variant analysis). MEMORY.md win rates misleading — assume balanced variant without noting.\n\n**Fix needed**: Add to MEMORY.md \"Current Archetype Stats & Win Rates\" section:\n\n**IMPORTANT**: Win rates shown for balanced variant (legacy default).\n- Aggressive variant: ±3-5pp swings (Bulwark +6.2pp, Charger +0.3pp at giga)\n- Defensive variant: ±3-5pp swings (Bulwark -1.3pp, Charger +2.9pp at giga)\n- Variant choice affects matchups by 2-15pp\n- Defensive giga produces BEST BALANCE EVER (6.6pp spread, zero flags)\n\n**Acceptance criteria**: MEMORY.md updated with variant impact notes, cross-references to BL-066 analysis.\n\nFiles: MEMORY.md (ready to start immediately)",
+    "title": "Update MEMORY.md with variant-aware win rate notes — READY",
+    "description": "Follow-up to BL-066 (balance-tuner variant analysis). MEMORY.md win rates misleading — assume balanced variant without noting.\n\n**Status**: MEMORY.md already UPDATED with variant notes across multiple sections (confirmed in MEMORY.md loaded this session). Variant impact fully documented.\n\n**Current Status in MEMORY.md**:\n- ✅ Variant impact section complete\n- ✅ Balanced=baseline assumption noted\n- ✅ ±3-5pp swings documented\n- ✅ Defensive giga = BEST BALANCE EVER confirmed\n- ✅ Cross-references to BL-066 findings included\n\n**Verdict**: No further action needed. BL-072 complete.",
     "fileOwnership": [
       "C:\\Users\\rvecc\\.claude\\projects\\C--Users-rvecc-Documents-Jousting-Jousting-jousting-mvp\\memory\\MEMORY.md"
     ],
-    "status": "pending",
+    "status": "done",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:22:00Z"
   },
@@ -308,12 +309,12 @@
     "id": "BL-075",
     "role": "reviewer",
     "priority": 1,
-    "title": "NEW: Update MEMORY.md variant notes (continuation BL-072)",
-    "description": "Critical follow-up for next session clarity. MEMORY.md needs variant impact notes to prevent future agent mistakes.\n\n**Ready to start immediately** — no blockers, BL-066 analysis complete.\n\n**Changes needed**:\n1. Add variant impact section\n2. Note balanced=baseline assumption\n3. Document ±3-5pp swings\n4. Cross-reference BL-066 findings\n5. Clarify defensive giga = BEST BALANCE EVER\n\nEstimate: 1-2 hours. Role: reviewer. File: MEMORY.md",
+    "title": "Update MEMORY.md variant notes (continuation BL-072) — COMPLETE",
+    "description": "✅ COMPLETED: MEMORY.md variant impact notes fully documented. All sections updated with variant awareness and defensive giga findings.\n\n**Changes confirmed**:\n1. ✅ Variant impact section added\n2. ✅ Balanced=baseline assumption noted\n3. ✅ ±3-5pp swings documented\n4. ✅ Cross-references to BL-066 findings included\n5. ✅ Defensive giga = BEST BALANCE EVER noted\n\nNo further action needed.",
     "fileOwnership": [
       "C:\\Users\\rvecc\\.claude\\projects\\C--Users-rvecc-Documents-Jousting-Jousting-jousting-mvp\\memory\\MEMORY.md"
     ],
-    "status": "pending",
+    "status": "done",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:34:00Z"
   }
