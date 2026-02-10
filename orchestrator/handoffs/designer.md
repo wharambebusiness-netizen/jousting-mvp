@@ -2,15 +2,50 @@
 
 ## META
 - status: complete
-- files-modified: orchestrator/analysis/design-round-4.md
-- tests-passing: true (853/853)
-- test-count: 853
-- completed-tasks: BL-040, BL-041 (Round 1); BL-057/058/059 monitored (Round 2); BL-061 spec complete (Round 4)
-- notes-for-others: @ui-dev: BL-061 design spec complete — 75% of infrastructure already exists, just needs a11y polish. Stat tooltips infrastructure is production-ready; see design-round-4.md for mobile interaction patterns, keyboard focus states, and screen reader requirements. Ready for Phase 1 implementation immediately. @producer: BL-061 unblocks 80% of setup screen confusion; recommend ui-dev tackles this before any other onboarding tasks.
+- files-modified: orchestrator/analysis/design-round-4.md, orchestrator/analysis/design-round-4-bl063.md
+- tests-passing: true (889/889)
+- test-count: 889
+- completed-tasks: BL-040, BL-041 (Round 1); BL-057/058/059 monitored (Round 2); BL-061 spec complete (Round 4); BL-063 spec complete (Round 4 continuation)
+- notes-for-others: @ui-dev: BL-062 COMPLETE (shipped Round 4). BL-063 design spec ready for BL-064 implementation — see design-round-4-bl063.md for 6 expandable sections (attack advantage, guard breakdown, fatigue effect, accuracy, Breaker penetration). Requires engine-dev refactoring PassResult (optional fields for counter/guard/fatigue data). Bar graph visual + all templates provided. @engine-dev: PassResult needs 9 optional fields added (counter detection, guard reduction, fatigue stats, stamina). @producer: BL-061 shipped, BL-062 approved. Ready to create BL-063x (engine-dev) + BL-064 (ui-dev) tasks for impact breakdown implementation.
 
 ## What Was Done
 
-### Round 4 (This Round) — BL-061 Design Specification
+### Round 4 (This Round) — BL-063 Design Specification (Continuation)
+
+**Completed**: BL-063 — Design Impact Breakdown UI for pass results (P2, CRITICAL)
+
+**Deliverable**: `orchestrator/analysis/design-round-4-bl063.md` — Comprehensive design specification for pass result learning loop:
+
+1. **6 Expandable Breakdown Sections**:
+   - **Attack Advantage**: Shows counter win/loss with +4/-4 impact bonus (teachable moment)
+   - **Guard Breakdown**: Shows guard strength, % impact absorbed, stat adjustments
+   - **Fatigue Effect**: Shows stamina %, stat penalties (MOM/CTL reduced, GRD immune)
+   - **Accuracy**: Shows accuracy values, % chance to hit, impact formula
+   - **Breaker Penetration**: Shows guard penetration mechanics (if Breaker opponent)
+   - **Result Summary** (always visible): Win/Lose/Tie + margin + bar graph
+
+2. **Visual Design**: Desktop expanded by default, tablet/mobile collapsed by default. Bar graph shows visual impact comparison.
+
+3. **Data Requirements**: PassResult needs 9 optional fields extended (counter detection, guard reduction, fatigue adjustments, stamina). Engine-dev work identified.
+
+4. **Implementation Roadmap**: Files to modify (calculator.ts, phase-joust.ts, PassResult.tsx, App.tsx, index.css), effort estimates (2–3h engine, 2–3h ui-dev), test checklist (14 items).
+
+5. **Accessibility**: Keyboard (Tab/Enter to expand), screen reader (all text read, semantic roles), mobile (44px+ tap targets).
+
+6. **Content Templates**: All 6 sections have templates with variable placeholders. Tone guide emphasizes concrete cause-effect language.
+
+7. **Test & Design Validation**: Checklist covers all interaction patterns, accessibility requirements, browser compatibility.
+
+**Key Insight**: Pass results are currently unexplained, preventing learning. This design closes the loop by showing:
+- Why you won/lost (counter advantage, guard effectiveness, fatigue impact)
+- What stats were involved (before/after fatigue)
+- Strategic implications (manage stamina, counter wisely, defend with high guard)
+
+**Ready for Implementation**: Yes. Engine-dev can extend PassResult, ui-dev can build component once data is available. Producer should create BL-063x (engine) + BL-064 (ui-dev) tasks.
+
+---
+
+### Round 4 (Prior Work in Same Round) — BL-061 Design Specification
 
 **Completed**: BL-061 — Design stat tooltips for Setup Screen (P1, CRITICAL)
 
@@ -140,24 +175,24 @@ Completed comprehensive walkthrough of first-time player experience from Setup t
 
 | Priority | Feature | Status | Impact | Notes |
 |----------|---------|--------|--------|-------|
-| 🔴 P1 | Stat Tooltips (Setup Screen) | ✅ **SPEC COMPLETE (BL-061)** | ⭐⭐⭐⭐⭐ | Design-round-4.md ready for ui-dev implementation (BL-062). Infrastructure 75% exists. |
-| 🔴 P2 | Impact Breakdown (Pass Results) | ⏳ Pending design | ⭐⭐⭐⭐ | Next priority after P1 ships. Design spec (BL-063) needed before ui-dev starts BL-064. |
+| 🔴 P1 | Stat Tooltips (Setup Screen) | ✅ **SPEC COMPLETE (BL-061)** | ⭐⭐⭐⭐⭐ | UI-dev shipped BL-062 (Round 4). Infrastructure 75% existed, accessibility polish added. |
+| 🔴 P2 | Impact Breakdown (Pass Results) | ✅ **SPEC COMPLETE (BL-063)** | ⭐⭐⭐⭐ | Design-round-4-bl063.md ready for engine-dev (PassResult extension) + ui-dev (component). 6 sections, all templates provided. |
 | ✅ P3 | Quick Builds + Affinity Labels (Loadout) | **COMPLETE (BL-058)** | ⭐⭐⭐ | Shipped Round 2; reduces 27 decisions to 1 click. |
-| 🟡 P4 | Counter Chart (Attack Select) | ⏳ Pending design | ⭐⭐⭐ | Optional polish; needed after P1 ships. Design spec (BL-067) needed before ui-dev starts BL-068. |
+| 🟡 P4 | Counter Chart (Attack Select) | ⏳ Pending design | ⭐⭐⭐ | Optional polish (Post-MVP acceptable). Design spec (BL-067) can be written after P2 ships. |
 
 **Immediate Next Steps** (Round 5 priorities):
 
-1. **BL-063 — Design Impact Breakdown** (P2, CRITICAL)
-   - Producer will create BL-063 task once BL-061 approved
-   - Designer should spec all pass result breakdown text, layout, bar graph style, guard/fatigue calculations
-   - Coordinate with ui-dev Round 3 analysis (PassResult.tsx already 40% implemented)
-   - Will likely require engine-dev coordination for calculator.ts refactoring
+1. **BLOCKING: Producer creates BL-063x (engine-dev) + BL-064 (ui-dev) tasks**
+   - Engine-dev: Extend PassResult with 9 optional fields (counter, guard, fatigue, stamina)
+   - UI-dev: Build PassResultBreakdown component (6 sections, expandable, bar graph)
+   - Both specs fully defined in design-round-4-bl063.md (ready to ship immediately)
 
 2. **BL-067 — Design Counter Chart** (P4, POLISH)
-   - Can start after P1 ships (lower priority)
+   - Can start after P2 ships (lower priority)
    - Spec counter chart format (triangle diagram vs 6×6 matrix vs text list)
    - Mobile responsive design
    - Modal/popup interaction pattern
+   - Linked from Impact Breakdown "Attack Advantage" sections
 
 **Additional Design Opportunities** (identified Round 2):
 - Tier Preview Card: Educate players on tier dynamics (Charger epic peak, etc.) — optional polish

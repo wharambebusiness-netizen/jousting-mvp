@@ -102,6 +102,20 @@
 .archetype-card__identity { font-size: 0.8rem; font-style: italic; color: var(--ink-light); margin-bottom: 8px; }
 .archetype-card__stats { margin-top: 4px; }
 
+/* Stat bar tooltips (BL-061 support) */
+.stat-bar__label {
+  position: relative;
+  cursor: help;
+  padding: 4px 6px;
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+}
+.stat-bar__label:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  background: rgba(201, 168, 76, 0.1);
+}
+
 /* Reveal layout */
 .reveal-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .reveal-attack { text-align: center; }
@@ -1521,6 +1535,25 @@
   .matchup-hint { padding: 10px; }
   .matchup-hint__rate { font-size: 1.6rem; }
   .matchup-hint__body { gap: 12px; }
+}
+
+/* Tooltip overlay for mobile (BL-061 support) */
+.tip--active::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.tip--active::before {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* --- Mobile (max-width: 480px) --- */

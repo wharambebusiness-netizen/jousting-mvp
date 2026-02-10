@@ -16,11 +16,11 @@ const ALL_ATTACKS: Record<string, Attack> = { ...JOUST_ATTACKS, ...MELEE_ATTACKS
 
 // --- Stat descriptions for tooltips ---
 const STAT_TIPS: Record<string, string> = {
-  mom: 'Momentum — raw hitting power. Drives Impact Score.',
-  ctl: 'Control — precision. Drives Accuracy and shift eligibility.',
-  grd: 'Guard — defense. Reduces opponent Impact Score. Not affected by fatigue.',
-  init: 'Initiative — speed advantage. Adds to Accuracy, decides shift priority.',
-  sta: 'Stamina — endurance. Below 40, Momentum and Control are reduced.',
+  mom: 'Momentum — Attack speed and power. Determines how much damage you deal. High Momentum lets you hit first, but leaves you more vulnerable to counters.',
+  ctl: 'Control — Defense and precision. Determines your attack accuracy and when you can shift attacks mid-speed. High Control keeps you resilient.',
+  grd: 'Guard — Armor strength. Reduces damage from opponent attacks. The only stat that doesn\'t get reduced by fatigue—your armor stays effective.',
+  init: 'Initiative — Speed and reflexes. Helps you act first and improves attack accuracy. Higher Initiative means you\'ll react before your opponent in the speed selection phase.',
+  sta: 'Stamina — Endurance and fatigue resistance. When it drops below 40, your Momentum and Control are reduced. Choose attacks carefully late in combat.',
 };
 
 export function stanceClass(stance: Stance): string {
@@ -71,9 +71,18 @@ export function StatBar({ label, value, max, type }: {
 }) {
   const pct = Math.min(100, (value / max) * 100);
   const tip = STAT_TIPS[type];
+  const fullLabel = `${label}: ${tip}`;
   return (
     <div className={`stat-bar stat-bar--${type}`}>
-      <span className="stat-bar__label tip" data-tip={tip}>{label}</span>
+      <span
+        className="stat-bar__label tip"
+        data-tip={tip}
+        tabIndex={0}
+        role="tooltip"
+        aria-label={fullLabel}
+      >
+        {label}
+      </span>
       <div className="stat-bar__track">
         <div className="stat-bar__fill" style={{ width: `${pct}%` }} />
       </div>

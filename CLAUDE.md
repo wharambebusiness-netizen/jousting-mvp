@@ -6,7 +6,7 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (853 passing as of S35 R3)
+npx vitest run                              # Run all tests (889 passing as of S35 R4)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
@@ -109,7 +109,7 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (853 as of S35 R3)
+- **Test count**: run `npx vitest run` (889 as of S35 R4)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
@@ -163,7 +163,7 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - **player-gear** (46 tests) — 6-slot player gear
 - **match** (100 tests) — State machine + integration + joust/melee worked examples + carryover/unseated + gear pipeline
 - **playtest** (128 tests) — Property-based + stress + balance config + gear boundaries
-- **gear-variants** (179 tests) — Gear variant system + archetype x variant matchups + melee carryover + softCap interactions + rare/epic tier melee exhaustion
+- **gear-variants** (215 tests) — Gear variant system + archetype x variant matchups + melee carryover + softCap interactions + rare/epic tier melee exhaustion + all 36 archetype melee matchups
 - **ai** (95 tests) — AI opponent validity, reasoning, patterns, edge cases
 
-**Total: 853 tests** (as of S35 R3). Run `npx vitest run` for current test counts (per-file counts drift).
+**Total: 889 tests** (as of S35 R4). Run `npx vitest run` for current test counts (per-file counts drift).

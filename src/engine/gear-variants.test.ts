@@ -1528,4 +1528,72 @@ describe('BL-059: Melee carryover + softCap interactions', () => {
       expect(match.player2.currentStamina).toBeGreaterThan(30);
     }
   });
+
+  // BL-069: All 36 Archetype Matchups in Melee (Comprehensive Coverage)
+  // Test all 6×6 archetype matchups in melee to verify:
+  // - No infinite loop edge cases
+  // - Stat carryover + softCap work correctly
+  // - All matchups produce reasonable impact scores
+  // All tests at uncommon rarity (representative tier), deterministic RNG
+
+  const archetypeList: Array<{ key: string; arch: Archetype }> = [
+    { key: 'charger', arch: ARCHETYPES.charger },
+    { key: 'technician', arch: ARCHETYPES.technician },
+    { key: 'bulwark', arch: ARCHETYPES.bulwark },
+    { key: 'tactician', arch: ARCHETYPES.tactician },
+    { key: 'breaker', arch: ARCHETYPES.breaker },
+    { key: 'duelist', arch: ARCHETYPES.duelist },
+  ];
+
+  // Generate all 36 matchups (6×6)
+  archetypeList.forEach((p1, i) => {
+    archetypeList.forEach((p2, j) => {
+      it(`melee matchup ${i * 6 + j + 1}/36: ${p1.key} vs ${p2.key}`, () => {
+        // Unique seed for each matchup (10000 + matchup index)
+        const seed = 10000 + i * 6 + j;
+        const rng = makeRng(seed);
+        const steed1 = createFullLoadout('uncommon', 'uncommon', rng, 'balanced');
+        const player1 = createFullPlayerLoadout('uncommon', rng, 'balanced');
+        const steed2 = createFullLoadout('uncommon', 'uncommon', rng, 'balanced');
+        const player2 = createFullPlayerLoadout('uncommon', rng, 'balanced');
+
+        let match = createMatch(p1.arch, p2.arch, steed1, steed2, player1, player2);
+        match.phase = Phase.MeleeSelect;
+        // Representative stamina (mid-range)
+        match.player1.currentStamina = 70;
+        match.player2.currentStamina = 70;
+
+        // Round 1
+        match = submitMeleeRound(match, MC, FB);
+        const r1 = match.meleeRoundResults[0];
+        expect(r1.player1ImpactScore).toBeGreaterThan(0);
+        expect(r1.player2ImpactScore).toBeGreaterThan(0);
+        // Verify reasonable impact (no extreme outliers)
+        expect(r1.player1ImpactScore).toBeLessThan(1000);
+        expect(r1.player2ImpactScore).toBeLessThan(1000);
+
+        // Round 2: verify no infinite loop, carryover works
+        if (match.phase === Phase.MeleeSelect) {
+          match = submitMeleeRound(match, OC, GH);
+          const r2 = match.meleeRoundResults[1];
+          expect(r2.player1ImpactScore).toBeGreaterThan(0);
+          expect(r2.player2ImpactScore).toBeGreaterThan(0);
+          // Stamina should decrease
+          expect(match.player1.currentStamina).toBeLessThan(70);
+          expect(match.player2.currentStamina).toBeLessThan(70);
+          // But not collapse entirely
+          expect(match.player1.currentStamina).toBeGreaterThan(10);
+          expect(match.player2.currentStamina).toBeGreaterThan(10);
+        }
+
+        // Round 3: stress test for edge cases
+        if (match.phase === Phase.MeleeSelect) {
+          match = submitMeleeRound(match, FB, MC);
+          expect(match.meleeRoundResults.length).toBe(3);
+          // Verify match terminates (either MeleeSelect or MatchOver)
+          expect([Phase.MeleeSelect, Phase.MatchOver]).toContain(match.phase);
+        }
+      });
+    });
+  });
 });
