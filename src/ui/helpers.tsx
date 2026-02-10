@@ -74,15 +74,14 @@ export function StatBar({ label, value, max, type }: {
   const fullLabel = `${label}: ${tip}`;
   return (
     <div className={`stat-bar stat-bar--${type}`}>
-      <span
+      <abbr
         className="stat-bar__label tip"
-        data-tip={tip}
+        title={tip}
         tabIndex={0}
-        role="tooltip"
         aria-label={fullLabel}
       >
         {label}
-      </span>
+      </abbr>
       <div className="stat-bar__track">
         <div className="stat-bar__fill" style={{ width: `${pct}%` }} />
       </div>

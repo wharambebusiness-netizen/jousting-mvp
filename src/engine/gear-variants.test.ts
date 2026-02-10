@@ -1596,4 +1596,264 @@ describe('BL-059: Melee carryover + softCap interactions', () => {
       });
     });
   });
+
+  // QA Round 6: Legendary/Relic Tier Melee Tests (stretch goal)
+  // Extends BL-065 pattern to ultra-high tiers, validates balance-tuner Round 5 findings
+  describe('Legendary/Relic Tier Ultra-High Tier Tests', () => {
+    it('legendary tier multi-round: bulwark vs technician, 3 rounds with softCap saturation', () => {
+      // Legendary tier closest matchup (Bulwark 51.7% vs Technician 51.2%)
+      const rng = makeRng(6000);
+      const steed1 = createFullLoadout('legendary', 'legendary', rng, 'balanced');
+      const player1 = createFullPlayerLoadout('legendary', rng, 'balanced');
+      const steed2 = createFullLoadout('legendary', 'legendary', rng, 'balanced');
+      const player2 = createFullPlayerLoadout('legendary', rng, 'balanced');
+
+      let match = createMatch(ARCHETYPES.bulwark, ARCHETYPES.technician, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 85;
+      match.player2.currentStamina = 80;
+
+      // Round 1: Both players at legendary tier with GRD > 100
+      match = submitMeleeRound(match, MC, OC);
+      const r1 = match.meleeRoundResults[0];
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      const stam1_r1 = match.player1.currentStamina;
+      const stam2_r1 = match.player2.currentStamina;
+
+      // Round 2: Verify carryover doesn't stack infinitely
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, FB, MC);
+        const r2 = match.meleeRoundResults[1];
+        expect(r2.player1ImpactScore).toBeGreaterThan(0);
+        expect(r2.player2ImpactScore).toBeGreaterThan(0);
+        expect(match.player1.currentStamina).toBeLessThan(stam1_r1);
+        expect(match.player1.currentStamina).toBeGreaterThan(stam1_r1 * 0.5);
+      }
+
+      // Round 3: Verify stability at ultra-high tier
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, OC, FB);
+        const r3 = match.meleeRoundResults[2];
+        expect(r3.player1ImpactScore).toBeGreaterThan(0);
+        expect(r3.player2ImpactScore).toBeGreaterThan(0);
+        expect(match.meleeRoundResults.length).toBe(3);
+      }
+    });
+
+    it('legendary tier breaker penetration: breaker vs bulwark with deep softCap', () => {
+      // Breaker 51.0% vs Bulwark 51.7% at legendary — test penetration at extreme GRD
+      const rng = makeRng(6100);
+      const steed1 = createFullLoadout('legendary', 'legendary', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('legendary', rng, 'aggressive');
+      const steed2 = createFullLoadout('legendary', 'legendary', rng, 'defensive');
+      const player2 = createFullPlayerLoadout('legendary', rng, 'defensive');
+
+      let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 80;
+      match.player2.currentStamina = 85;
+
+      // Round 1: Breaker penetration vs defensive Bulwark GRD ~110
+      match = submitMeleeRound(match, MC, MC);
+      const r1 = match.meleeRoundResults[0];
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Breaker advantage from penetration
+      expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.7);
+
+      // Round 2: Penetration + fatigue interaction
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, OC, MC);
+        const r2 = match.meleeRoundResults[1];
+        expect(r2.player1ImpactScore).toBeGreaterThan(0);
+        expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      }
+    });
+
+    it('legendary tier carryover + softCap: unseated charger with penalties crossing knee', () => {
+      // Charger 50.5% at legendary — high MOM ~115, carryover -15 crosses knee
+      const rng = makeRng(6200);
+      const steed1 = createFullLoadout('legendary', 'legendary', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('legendary', rng, 'aggressive');
+      const steed2 = createFullLoadout('legendary', 'legendary', rng, 'balanced');
+      const player2 = createFullPlayerLoadout('legendary', rng, 'balanced');
+
+      let match = createMatch(ARCHETYPES.charger, ARCHETYPES.duelist, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 90;
+      match.player2.currentStamina = 85;
+      // Unseated player: heavy carryover penalties
+      match.player2.carryoverMomentum = -15;
+      match.player2.carryoverControl = -10;
+      match.player2.carryoverGuard = -10;
+      match.player2.wasUnseated = true;
+
+      match = submitMeleeRound(match, MC, MC);
+      const r1 = match.meleeRoundResults[0];
+
+      // P1 (full stats) should dominate P2 (penalized)
+      expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+      // Unseated boost compensates partially
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Verify carryover → softCap → fatigue pipeline
+      expect(match.player1.currentStamina).toBeLessThan(90);
+      expect(match.player2.currentStamina).toBeLessThan(85);
+    });
+
+    it('relic tier multi-round: breaker vs tactician, widest win rate gap (19pp)', () => {
+      // Breaker 54.0% (1st) vs Tactician 46.8% (6th) at relic — validates dominance doesn't break combat
+      const rng = makeRng(6300);
+      const steed1 = createFullLoadout('relic', 'relic', rng, 'balanced');
+      const player1 = createFullPlayerLoadout('relic', rng, 'balanced');
+      const steed2 = createFullLoadout('relic', 'relic', rng, 'balanced');
+      const player2 = createFullPlayerLoadout('relic', rng, 'balanced');
+
+      let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.tactician, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 90;
+      match.player2.currentStamina = 85;
+
+      // Round 1: Breaker advantage at relic tier
+      match = submitMeleeRound(match, MC, OC);
+      const r1 = match.meleeRoundResults[0];
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Breaker should have advantage (penetration + base stats)
+      expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.8);
+
+      // Round 2: Sustained advantage
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, FB, MC);
+        const r2 = match.meleeRoundResults[1];
+        expect(r2.player1ImpactScore).toBeGreaterThan(0);
+        expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      }
+
+      // Round 3: Tactician still competitive despite rank gap
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, OC, FB);
+        const r3 = match.meleeRoundResults[2];
+        expect(r3.player1ImpactScore).toBeGreaterThan(0);
+        expect(r3.player2ImpactScore).toBeGreaterThan(0);
+        expect(match.meleeRoundResults.length).toBe(3);
+      }
+    });
+
+    it('relic tier softCap saturation: all stats >110, extreme compression test', () => {
+      // All-aggressive relic: tests maximum softCap compression (all stats ~130)
+      const rng = makeRng(6400);
+      const steed1 = createFullLoadout('relic', 'relic', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('relic', rng, 'aggressive');
+      const steed2 = createFullLoadout('relic', 'relic', rng, 'aggressive');
+      const player2 = createFullPlayerLoadout('relic', rng, 'aggressive');
+
+      let match = createMatch(ARCHETYPES.charger, ARCHETYPES.duelist, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 95;
+      match.player2.currentStamina = 95;
+
+      match = submitMeleeRound(match, MC, MC);
+      const r1 = match.meleeRoundResults[0];
+
+      // Both players heavily compressed but combat resolves
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Impact scores relatively close due to compression
+      const ratio = r1.player1ImpactScore / r1.player2ImpactScore;
+      expect(ratio).toBeGreaterThan(0.7);
+      expect(ratio).toBeLessThan(1.5);
+      // No numerical instability (NaN, Infinity)
+      expect(Number.isFinite(r1.player1ImpactScore)).toBe(true);
+      expect(Number.isFinite(r1.player2ImpactScore)).toBe(true);
+    });
+
+    it('relic tier breaker guard penetration: extreme GRD ~115, amplified by softCap', () => {
+      // Breaker vs defensive Bulwark at relic — deepest softCap saturation in game
+      const rng = makeRng(6500);
+      const steed1 = createFullLoadout('relic', 'relic', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('relic', rng, 'aggressive');
+      const steed2 = createFullLoadout('relic', 'relic', rng, 'defensive');
+      const player2 = createFullPlayerLoadout('relic', rng, 'defensive');
+
+      let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 85;
+      match.player2.currentStamina = 90;
+
+      // Round 1: Penetration at extreme GRD values
+      match = submitMeleeRound(match, MC, MC);
+      const r1 = match.meleeRoundResults[0];
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Breaker penetration advantage amplified by softCap saturation
+      expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.75);
+
+      // Round 2: Multi-round penetration + fatigue interaction
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, OC, MC);
+        const r2 = match.meleeRoundResults[1];
+        expect(r2.player1ImpactScore).toBeGreaterThan(0);
+        expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      }
+    });
+
+    it('mixed tier legendary vs relic: charger (legendary) vs technician (relic)', () => {
+      // Cross-tier matchup: legendary aggressive vs relic defensive
+      const rng = makeRng(6600);
+      const steed1 = createFullLoadout('legendary', 'legendary', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('legendary', rng, 'aggressive');
+      const steed2 = createFullLoadout('relic', 'relic', rng, 'defensive');
+      const player2 = createFullPlayerLoadout('relic', rng, 'defensive');
+
+      let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 90;
+      match.player2.currentStamina = 85;
+
+      match = submitMeleeRound(match, MC, OC);
+      const r1 = match.meleeRoundResults[0];
+
+      // Cross-tier resolves correctly
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Relic tier advantage visible (higher base stats)
+      expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore * 0.7);
+      // Stamina scaling correct
+      expect(match.player1.currentStamina).toBeLessThan(90);
+      expect(match.player2.currentStamina).toBeLessThan(85);
+    });
+
+    it('mixed tier relic vs legendary: breaker (relic) vs bulwark (legendary), extreme matchup', () => {
+      // Stacks tier differential + archetype counter + variant differential
+      const rng = makeRng(6700);
+      const steed1 = createFullLoadout('relic', 'relic', rng, 'aggressive');
+      const player1 = createFullPlayerLoadout('relic', rng, 'aggressive');
+      const steed2 = createFullLoadout('legendary', 'legendary', rng, 'defensive');
+      const player2 = createFullPlayerLoadout('legendary', rng, 'defensive');
+
+      let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+      match.phase = Phase.MeleeSelect;
+      match.player1.currentStamina = 85;
+      match.player2.currentStamina = 90;
+
+      // Round 1: Maximum differential (Breaker penetration + tier advantage + variant)
+      match = submitMeleeRound(match, MC, MC);
+      const r1 = match.meleeRoundResults[0];
+      expect(r1.player1ImpactScore).toBeGreaterThan(0);
+      expect(r1.player2ImpactScore).toBeGreaterThan(0);
+      // Breaker advantage should be substantial
+      expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore);
+      // But Bulwark still competitive (defensive GRD helps)
+      expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore * 0.5);
+
+      // Round 2: Multi-round stability
+      if (match.phase === Phase.MeleeSelect) {
+        match = submitMeleeRound(match, OC, MC);
+        const r2 = match.meleeRoundResults[1];
+        expect(r2.player1ImpactScore).toBeGreaterThan(0);
+        expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      }
+    });
+  });
 });

@@ -705,3 +705,442 @@ Player UNDERSTANDS their choice and is invested in the archetype.
 ---
 
 **End of Design Specification — Ready for UI-Dev Implementation**
+
+---
+
+# Design Spec: BL-067 — Counter System Learning Aid (Attack Select Screen)
+
+**Round**: Design Round 6
+**Date**: 2026-02-10
+**Task**: BL-067 (P3, POLISH) — Design counter chart for Attack Select screen
+**Status**: Complete — Design specification ready for ui-dev implementation
+
+---
+
+## Executive Summary
+
+**Problem**: Counter system is "learn-by-losing" — players see "Beats: High Guard | Weak to: Measured Cut" text on attack cards but don't understand the rock-paper-scissors structure until they lose multiple passes. New players can't predict counter outcomes and feel punished.
+
+**Solution**: Add **visual counter chart** showing all 6 attack relationships in a teachable format. Chart displays explicitly which attack beats which, reducing trial-and-error learning to strategic planning.
+
+**Impact**: Makes counter system learnable in first 1-2 jousts instead of 5-10 losses. Improves player confidence and tactical decision-making.
+
+**Implementation**: Medium effort. Pure UI work, no engine changes needed. Two format options (triangle diagram preferred for mobile clarity, matrix backup for comprehensive view).
+
+---
+
+## Current State Analysis
+
+### What Already Exists
+
+From `src/engine/attacks.ts`, counter relationships are explicitly defined:
+
+**Joust Phase (6 attacks)**:
+- `Coup Fort`: beats Port de Lance, weak to Coup en Passant, Course de Lance
+- `Bris de Garde`: beats Port de Lance + Coup de Pointe, weak to Course de Lance
+- `Course de Lance`: beats Coup Fort + Bris de Garde, weak to Port de Lance
+- `Coup de Pointe`: beats Port de Lance, weak to Bris de Garde + Coup en Passant
+- `Port de Lance`: beats Course de Lance + Coup en Passant, weak to Coup Fort + Bris de Garde + Coup de Pointe
+- `Coup en Passant`: beats Coup Fort + Coup de Pointe, weak to Port de Lance
+
+**Melee Phase (6 attacks)**:
+- `Overhand Cleave`: beats Guard High + Riposte Step, weak to Measured Cut + Precision Thrust
+- `Feint Break`: beats Precision Thrust, weak to Riposte Step
+- `Measured Cut`: beats Overhand Cleave + Riposte Step, weak to Guard High
+- `Precision Thrust`: beats Overhand Cleave, weak to Feint Break + Riposte Step
+- `Guard High`: beats Measured Cut, weak to Overhand Cleave
+- `Riposte Step`: beats Feint Break + Precision Thrust, weak to Overhand Cleave + Measured Cut
+
+**Current Display** (`src/ui/AttackSelect.tsx`, `AttackCard` component):
+- Each attack card shows 2-3 text lines: "Beats: [attacks]" and "Weak to: [attacks]"
+- Text layout is dense and requires reading individual attack names
+- No visual pattern or summary to help predict outcomes
+
+### Critical Gaps
+
+1. **No visual pattern** — text-only format requires memorizing 6+ attack names per attack
+2. **No teaching moment** — players must experience loss to learn, not click a chart
+3. **No summary view** — no way to see all 6 relationships at once; must click 6 attack cards to understand full system
+4. **Mobile-hostile** — text layout breaks on small screens; chart could be modal/popup instead
+5. **No accessibility considerations** — chart design must support keyboard nav + screen readers
+
+---
+
+## Design Solution: Triangle Diagram (PRIMARY)
+
+### Why Triangle Diagram?
+
+The joust counter system forms a **3-triangle structure**:
+
+**Triangle 1** (Aggressive):
+- Coup Fort beats Port de Lance
+- Port de Lance beats Course de Lance
+- Course de Lance beats Coup Fort
+- ⚠️ Coup Fort also beats Bris de Garde (breaks triangle)
+
+**Triangle 2** (Balanced):
+- Coup de Pointe beats Port de Lance
+- Port de Lance beats Coup en Passant
+- Coup en Passant beats Coup de Pointe
+- ⚠️ All three are beaten by at least one other attack (not a pure triangle)
+
+**ACTUAL STRUCTURE**: The joust counter table has **hybrid relationships** (not pure rock-paper-scissors). Some attacks beat 2, some beat 1. This suggests a **"Beats/Weak To" Matrix** format is more accurate than a triangle.
+
+### Recommended Format: Interactive Beats/Weak To Matrix
+
+**Primary Format** (Recommended for all screen sizes):
+
+```
+┌─────────────────────────────────────────────────────┐
+│  COUNTER RELATIONSHIPS                              │
+│  (What beats what in Joust phase)                   │
+├─────────────────────────────────────────────────────┤
+│                                                       │
+│  COUP FORT          BEATS: Port de Lance            │
+│  🎯 Power play      WEAK TO: Coup en Passant        │
+│                             Course de Lance         │
+│                                                       │
+│  BRIS DE GARDE      BEATS: Port de Lance            │
+│  ⚔️  Balanced       WEAK TO: Course de Lance        │
+│                                                       │
+│  COURSE DE LANCE    BEATS: Coup Fort                │
+│  🛡️  Defensive      WEAK TO: Bris de Garde         │
+│                             Port de Lance           │
+│                                                       │
+│  COUP DE POINTE     BEATS: Port de Lance            │
+│  ✦ Control         WEAK TO: Bris de Garde          │
+│                             Coup en Passant         │
+│                                                       │
+│  PORT DE LANCE      BEATS: Course de Lance          │
+│  🏰 Fortress        WEAK TO: Coup Fort              │
+│                             Bris de Garde           │
+│                             Coup de Pointe          │
+│                                                       │
+│  COUP EN PASSANT    BEATS: Coup Fort                │
+│  ⚡ Swift          WEAK TO: Coup de Pointe         │
+│                             Port de Lance           │
+└─────────────────────────────────────────────────────┘
+```
+
+**Desktop Layout** (≥1024px):
+- Two-column grid: Attack name + icon | Beats + Weak To
+- Each attack shows full relationships
+- Always visible, no toggling needed
+- ~450px width
+
+**Tablet Layout** (768–1023px):
+- Single column (stacked vertically)
+- Each attack is a collapsible card
+- "Tap to expand" prompt
+- Fits portrait orientation
+
+**Mobile Layout** (<768px):
+- Modal popup triggered by "?" info icon on AttackSelect screen
+- Scrollable vertical list of attacks
+- Each attack shows 2-3 lines (Beats | Weak To)
+- "Tap outside to close" hint
+- Fits within 320-640px viewport
+
+---
+
+## Format Option 2: 6×6 Matrix Table (BACKUP)
+
+If team prefers comprehensive overview instead of individual attack focus:
+
+```
+         │ Coup F │ Bris G │ Course│ Coup P │ Port L │ Coup E
+─────────┼────────┼────────┼───────┼────────┼────────┼────────
+Coup F   │   —    │   loses│ beats │  loses │ beats  │  loses
+Bris G   │  beats │   —    │ loses │  beats │ beats  │  —
+Course   │  loses │  beats │   —   │  —     │ loses  │  —
+Coup P   │  beats │  loses │   —   │   —    │ beats  │  loses
+Port L   │  loses │  loses │ beats │  loses │   —    │  beats
+Coup E   │  beats │   —    │   —   │  beats │  loses │   —
+```
+
+**Pros**: Complete view, all matchups visible at once
+**Cons**: Overwhelming for new players, dense text, hard to focus on one attack
+**Recommendation**: Use as reference guide (help screen), not primary teaching tool
+
+---
+
+## Visual Design Details (Primary Format)
+
+### Attack Icons & Color Coding
+
+Each attack shows stance via **icon + color**:
+
+| Attack | Icon | Color | Stance |
+|--------|------|-------|--------|
+| Coup Fort | 🎯 | #D14E3A (Red) | Aggressive |
+| Bris de Garde | ⚔️ | #8B5A3C (Orange) | Aggressive |
+| Course de Lance | 🛡️ | #4A90E2 (Blue) | Balanced |
+| Coup de Pointe | ✦ | #7B68EE (Purple) | Balanced |
+| Port de Lance | 🏰 | #2ECC71 (Green) | Defensive |
+| Coup en Passant | ⚡ | #F39C12 (Gold) | Defensive |
+
+**Rationale**:
+- Red/Orange = Aggressive (attack-focused)
+- Blue/Purple = Balanced (mixed)
+- Green/Gold = Defensive (resilience-focused)
+- Icons are memorable, reinforce playstyle
+- Colors match UI design system
+
+### Text Layout
+
+**Each Attack Card**:
+```
+[ICON] ATTACK NAME        [POWER/CONTROL/DEFENSE STATS]
+Stance: Aggressive | Risk: 5
+
+BEATS:     [Attack 1], [Attack 2]         ✅ Green highlight
+WEAK TO:   [Attack 1], [Attack 2]         ⚠️ Red highlight
+```
+
+**Line Spacing**:
+- 12px between cards (generous white space)
+- 4px between "Beats" and "Weak To" labels
+- Attack names left-aligned for easy scanning
+
+### Responsive Behavior
+
+| Screen Size | Layout | Interaction | Visibility |
+|------------|--------|-------------|-----------|
+| ≥1024px | 2-column grid | Hover tooltip | All 6 visible |
+| 768–1023px | Single column cards | Tap to expand | All 6 scrollable |
+| <768px | Modal/popup | Swipe to scroll | 2-3 visible, scroll |
+
+**Mobile Modal**:
+- Triggered by "?" icon on AttackSelect header
+- Overlays entire screen (z-index: 1000)
+- "Tap outside" or "✕" button closes
+- 20% dark overlay focuses attention
+- Safe area padding on notched devices
+
+---
+
+## Integration Plan for AttackSelect Screen
+
+### Current AttackSelect Structure
+- Header: "Choose your attack"
+- Attack cards: 6 attacks displayed in grid (3 columns on desktop, 1 column mobile)
+- Each card shows: Name, Stance, Beats/Weak To text, Speed selector
+
+### Proposed Integration
+
+**Option A: Inline Chart** (Desktop ≥1024px)
+- Add "Counter Chart" section ABOVE attack cards
+- Collapsible/expandable toggle (default: collapsed)
+- When expanded, shows 2-column grid
+- Attack cards below for player to select
+
+**Option B: Modal/Popup** (All screen sizes, recommended)
+- Add "?" info icon next to "Choose your attack" header
+- Clicking icon opens modal overlay
+- Modal shows all 6 attacks with beats/weak-to relationships
+- Modal positioned above attack cards, doesn't push layout
+- Player closes modal, then selects attack from cards
+- **Accessibility**: Focus trap in modal, Escape key closes, `role="dialog"` on modal
+
+**Recommended: Option B** — cleaner layout, doesn't crowd AttackSelect, teachable moment before selection
+
+### File Modifications
+
+- `src/ui/AttackSelect.tsx` (main changes):
+  - Add "?" icon button to header
+  - Add modal component (new `<CounterChart />` component)
+  - Wire modal open/close state
+  - Pass `phase: 'joust' | 'melee'` prop to CounterChart (shows correct attacks)
+
+- `src/App.css` (styling):
+  - Modal overlay styling (dark background, semi-transparent)
+  - Counter chart grid layout
+  - Attack card styling in modal
+  - Icon styling (color-coded attack stances)
+  - Focus ring styling for keyboard nav
+
+- `src/index.css` (responsive):
+  - Desktop 2-column layout (media query ≥1024px)
+  - Tablet single-column stacked (media query 768–1023px)
+  - Mobile modal sizing (<768px)
+
+- May create `src/ui/CounterChart.tsx` (new component):
+  - Receives `phase: 'joust' | 'melee'`
+  - Maps JOUST_ATTACKS or MELEE_ATTACKS and renders beats/weak-to
+  - Shows attack icon, name, stance, beats/weak-to lists
+  - Handles keyboard nav (Tab through attacks)
+  - Screen reader support (aria-labels, semantic structure)
+
+---
+
+## Accessibility Requirements (WCAG 2.1 AA)
+
+### Keyboard Navigation
+- Tab through attack cards to navigate
+- Focus ring visible on each card (4px solid outline, high contrast)
+- Modal: Escape key closes
+- Modal: Focus trap (Tab cycles within modal only)
+- Spacebar / Enter opens counter chart from info icon
+
+### Screen Reader Support
+- Counter chart marked with `<section role="dialog" aria-labelledby="chart-title">`
+- Each attack marked with `<article>` with `aria-label="[Attack Name] — [Stance]"`
+- "Beats" list with aria-label: "Beats: [list of attacks]"
+- "Weak To" list with aria-label: "Weak to: [list of attacks]"
+- All text descriptive (not abbreviations like "Agg", "Def")
+
+### Color Contrast
+- Attack icon colors must pass WCAG AA (4.5:1 minimum for text, 3:1 for graphics)
+- Test: Black text on colored background (icon + attack name)
+- Test: Icons alone (non-text element, 3:1 contrast ratio OK)
+
+### Mobile/Touch
+- Info icon: 44px × 44px tap target (meets WCAG 2.1 level AAA)
+- Attack cards in modal: 44px minimum height for touch
+- Modal dismiss area: Full screen clickable (outside modal closes)
+
+### Focus Management
+- Modal opens: Focus moves to modal title (autofocus on aria-label)
+- Modal closes: Focus returns to info icon button
+- No keyboard traps
+
+---
+
+## Content Templates
+
+### Attack Card (Modal)
+
+```
+[ICON] ATTACK NAME                      [Defensive] | Risk: 2
+
+Beats:    ✅ Course de Lance, Coup en Passant
+Weak to:  ⚠️ Coup Fort, Bris de Garde, Coup de Pointe
+```
+
+**Tone**: Direct, specific. Show concrete matchups, not abstract descriptions.
+
+### Modal Header
+
+```
+Counter Relationships — Joust Phase
+(Tap attack cards to see what beats what)
+```
+
+### Info Icon Tooltip (on hover)
+
+```
+"View counter chart — see what beats what"
+```
+
+---
+
+## Testing Checklist
+
+### Functional Testing
+- [ ] Modal opens on "?" icon click
+- [ ] Modal closes on "✕" button click
+- [ ] Modal closes on Escape key press
+- [ ] Modal closes on tap outside (overlay dismissal)
+- [ ] All 6 attacks display with beats/weak-to relationships
+- [ ] Beats list shows correct attacks (verify against JOUST_ATTACKS.beats)
+- [ ] Weak To list shows correct attacks (verify against JOUST_ATTACKS.beatenBy)
+- [ ] Icons display correctly (no broken images)
+- [ ] Colors match design (red, orange, blue, purple, green, gold)
+
+### Accessibility Testing
+- [ ] Tab through attacks: Focus ring visible on each
+- [ ] Keyboard-only user can open/close modal (space/Enter on icon, Escape to close)
+- [ ] Screen reader announces modal title when opened
+- [ ] Screen reader reads each attack's beats/weak-to lists
+- [ ] No duplicate announcements (aria-hidden on decorative icons if needed)
+- [ ] Focus trap: Tab doesn't escape modal to page behind
+- [ ] Focus returns to info icon on modal close
+
+### Responsive Testing
+- [ ] Desktop (1920px): 2-column layout, fully visible
+- [ ] Tablet (768px): Single column, scrollable
+- [ ] Mobile (320px): Modal fits viewport, no overflow
+- [ ] Landscape mobile (568px): Modal readable without horizontal scroll
+
+### Cross-Browser Testing
+- [ ] Chrome/Edge: Modal renders, icons display, focus ring visible
+- [ ] Safari: Same as above
+- [ ] Firefox: Same as above
+- [ ] Mobile Safari (iOS): Modal dismisses on tap, icons render
+- [ ] Chrome Android: Same as iOS Safari
+
+### Screen Reader Testing (Manual)
+- [ ] NVDA (Windows): Announces modal dialog, all attack names, beats/weak-to lists
+- [ ] JAWS (Windows): Same as NVDA
+- [ ] VoiceOver (macOS/iOS): Same as NVDA
+
+---
+
+## Definition of Done
+
+Chart design is **COMPLETE** when:
+
+1. ✅ Attack counter relationships verified against `src/engine/attacks.ts` (all 12 attacks covered)
+2. ✅ Visual mockups provided (desktop, tablet, mobile layouts)
+3. ✅ Icon set selected and color-coded (6 unique icons, stance colors)
+4. ✅ Accessibility spec documented (keyboard, screen reader, touch, focus management)
+5. ✅ Integration plan detailed (file modifications, component architecture)
+6. ✅ Testing checklist comprehensive (functional, responsive, accessibility, cross-browser)
+7. ✅ Content templates written (attack cards, modal header, icon tooltip)
+8. ✅ Responsive breakpoints defined (≥1024px, 768–1023px, <768px)
+
+---
+
+## Implementation Roadmap for UI-Dev (BL-068)
+
+**Phase 1** (1–2h): Create CounterChart component scaffold
+- Map JOUST_ATTACKS / MELEE_ATTACKS into attack card components
+- Wire beats/weak-to lists from attack.beats and attack.beatenBy
+- Basic layout (single column, mobile-first)
+
+**Phase 2** (2–3h): Responsive layouts
+- Desktop 2-column grid (CSS media query)
+- Tablet collapsible cards (state management)
+- Mobile modal with overlay (z-index, positioning)
+
+**Phase 3** (1–2h): Accessibility & keyboard nav
+- Add ARIA labels (role="dialog", aria-labelledby, aria-label)
+- Focus trap in modal
+- Keyboard handlers (Tab, Escape, Spacebar/Enter)
+
+**Phase 4** (1h): Integration with AttackSelect
+- Add "?" icon to AttackSelect header
+- Wire modal open/close state
+- Pass `phase` prop to show correct attack set (joust vs melee)
+- Test interaction with attack card selection
+
+**Phase 5** (1–2h): Testing & polish
+- Cross-browser testing
+- Screen reader spot-check (manual)
+- Mobile/touch testing
+- Responsive validation (3+ breakpoints)
+
+**Estimate**: 6–10 hours total (low risk, pure UI work, no engine dependencies)
+
+---
+
+## Summary & Recommendations
+
+| Aspect | Decision | Rationale |
+|--------|----------|-----------|
+| **Format** | Beats/Weak To Matrix (interactive list) | Easier to learn than triangle; matches actual game mechanics |
+| **Chart Type** | Inline list, not 6×6 matrix | Reduces cognitive load; users focus on 1 attack at a time |
+| **Display** | Modal popup (not inline on AttackSelect) | Cleaner UI, teaches before selection, scales to mobile |
+| **Icons** | 6 unique stance-colored icons | Memorable, reinforces playstyle, accessible |
+| **Mobile** | Modal fits in viewport, scrollable | Better than inline grid that pushes layout |
+| **Launch** | "?" info icon on AttackSelect header | Clear affordance, doesn't clutter attack cards |
+| **Priority** | P3 (POLISH) — after BL-062/064 | BL-064 is critical path (learning loop); BL-067 improves quality |
+
+**Stretch Goals** (if time permits):
+- Animated counter highlights (fade in beats/weak-to when attack hovered in chart)
+- Compare two attacks side-by-side (swipe between attacks on mobile)
+- Quick guide card summarizing rock-paper-scissors for new players (1-sentence summary)
+
+---
+
+**End of BL-067 Design Specification — Ready for UI-Dev Implementation (BL-068)****

@@ -359,6 +359,7 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
 .tip {
   position: relative;
   cursor: help;
+  text-decoration: none;
 }
 .tip::after {
   content: attr(data-tip);

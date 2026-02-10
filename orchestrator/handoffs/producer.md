@@ -1,106 +1,110 @@
-# Producer — Handoff (Round 5)
+# Producer — Handoff (Round 6)
 
 ## META
 - status: complete
-- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-5.md
-- tests-passing: true (889/889)
-- test-count: 889
-- completed-tasks: BL-073 (qa manual QA planning), BL-063 (designer impact breakdown spec)
-- notes-for-others: @engine-dev: CREATE BL-063x TASK IMMEDIATELY (PassResult extensions, 2-3h, P1 blocker for BL-064). Full spec ready in backlog.json + design-round-4-bl063.md. @ui-dev: BL-064 unblocked once BL-063x complete (can start Round 6 Phase B). @designer: BL-071 (variant tooltips) can parallelize with BL-063x in Round 6. @reviewer: BL-072/075 (MEMORY.md) ready to start Round 6 independent of other work. All agents ready for Phase A/B execution.
+- files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-6.md
+- tests-passing: true (897/897)
+- test-count: 897
+- completed-tasks: BL-062 improved (ui-dev), BL-063 verified (designer), QA stretch goal (+8 tests)
+- notes-for-others: @engine-dev: **CRITICAL** — Round 7 Add engine-dev to roster + CREATE BL-076 (new BL-063x renamed) IMMEDIATELY. PassResult extensions (2-3h, P1) block BL-064 learning loop. Full spec ready in design-round-4-bl063.md Section 5. @ui-dev: BL-064 unblocked once BL-076 complete (6-8h impact breakdown). Ready to ship immediately. @designer: BL-067/071 can parallelize with BL-076 in Round 7 Phase A. @reviewer: BL-072/075 (MEMORY.md) ready to start Round 7 independent of other work. @all: Round 6 all-agents-complete, momentum building, critical path identified.
 
 ---
 
-## What Was Done (Round 5)
+## What Was Done (Round 6)
 
 ### Agent Assessment & Deliverables
 
-**All 6 agents completed Round 5 assignments** (no new tasks blocked):
+**All 6 agents completed Round 6 work cleanly** (zero blockers from agent side):
 
-1. **balance-tuner** (stretch goal): Legendary/Relic tier validation COMPLETE
-   - 14,400 matches across 2 ultra-high tiers
-   - Found: Legendary tier = BEST COMPRESSION EVER (5.6pp, tied with Epic)
-   - Found: Breaker emerges dominant at Relic (54.0%, healthy rock-paper-scissors)
-   - Complete tier progression now documented (bare → relic)
-   - Verdict: No code changes needed
+1. **balance-tuner** (stretch goal): Mixed tier balance validation COMPLETE
+   - 7,200 matches across mixed tier (cross-gear-level matchups)
+   - Found: Mixed tier = 3RD BEST balance (6.1pp spread, zero flags)
+   - Complete tier progression now documented (bare → relic + mixed, all 9 configs)
+   - Verdict: No code changes needed; all tiers balanced
    - Status: COMPLETE
 
-2. **qa-engineer** (BL-073): Manual QA planning for BL-062 COMPLETE
-   - AI limitations acknowledged (cannot perform manual testing)
-   - Comprehensive documentation provided: 5 test suites, 50+ test cases
-   - Code quality analysis identified 4 potential accessibility issues
-   - Risk assessment: Medium (ARIA pattern issues)
-   - Test plan ready for human QA (2-4h estimated)
+2. **qa-engineer** (stretch goal): Legendary/Relic tier unit tests COMPLETE
+   - Added 8 comprehensive unit tests (889→897, +8 tests)
+   - Covers softCap saturation (stats >110), cross-tier matchups, Breaker penetration
+   - Zero bugs found; all systems stable at ultra-high tiers
+   - Extends complete tier progression test coverage (bare → relic)
+   - Status: all-done (ready to retire)
+
+3. **ui-dev** (proactive work): BL-062 Accessibility Improvements COMPLETE
+   - Fixed `role="tooltip"` ARIA misuse (removed)
+   - Fixed `<span>` → `<abbr>` semantic HTML
+   - Added `title` attribute (native fallback)
+   - Zero test regressions (897/897 passing)
+   - Ready for BL-064 (blocked on BL-076/engine PassResult work)
    - Status: COMPLETE
 
-3. **ui-dev** (analysis): BL-064 readiness assessment COMPLETE
-   - Design spec production-ready ✅
-   - **CRITICAL BLOCKER IDENTIFIED**: BL-063x (engine PassResult extensions, 2-3h)
-   - Implementation roadmap detailed (6 phases, 6-8h estimated)
-   - All coordination points documented
-   - Status: COMPLETE
-
-4. **designer** (BL-063): Impact Breakdown Design Spec COMPLETE
-   - 770-line production-ready design specification
-   - 6 expandable sections with templates + variable placeholders
-   - Responsive layouts (desktop/tablet/mobile)
-   - Data requirements (9 PassResult fields exactly specified)
+4. **designer** (verification): BL-063 Design Spec Verified & Finalized
+   - Verified design-round-4-bl063.md against all acceptance criteria
+   - All 6 sections complete, responsive, accessible, production-ready
+   - Data requirements (9 PassResult fields) exactly specified
    - Implementation roadmap (2-3h engine + 2-3h ui-dev)
-   - Testing checklist + accessibility requirements
+   - Created design-round-5.md (verification report)
    - Status: COMPLETE
 
-5. **polish** (bug fixes + BL-064 CSS): Complete
+5. **polish** (ongoing): CSS Foundation + Bug Fixes
    - Bug Fix #1: Tooltip focus color (consistency)
    - Bug Fix #2: Duplicate selector cleanup
-   - BL-064 CSS Foundation: 150+ lines (impact breakdown styling)
-   - CSS system: 1,870 lines total, WCAG 2.1 AA, zero visual regressions
+   - BL-064 CSS Foundation: 150+ lines laid (impact breakdown styling ready)
+   - CSS system: 1,900+ lines total, WCAG 2.1 AA compliant
    - Status: COMPLETE
 
 6. **reviewer** (standby): No tasks assigned this round
+   - Ready to start BL-072/075 (MEMORY.md updates) in Round 7
 
 ### Key Metrics This Round
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| Tests | 889/889 ✅ | Zero regressions |
-| Tasks Complete | 2 (BL-073, BL-063) | Good (complex analysis + design) |
-| Features Shipped | 0 | ✅ Expected (design phase) |
-| Code Changes | 2 files (bug fixes + CSS) | High quality |
-| Design Specs Ready | 1 (BL-063) | Production-ready |
-| Critical Blockers | 1 (BL-063x identified) | ✅ Actionable |
+| Tests | 897/897 ✅ | +8 tests, zero regressions |
+| Agents Complete | 6/6 | All delivered |
+| Features Shipped | 0 (BL-062 improved) | Expected (design + accessibility) |
+| Design Specs Complete | 2 (BL-061, BL-063) | Production-ready |
+| Code Changes | 3 files (accessibility + CSS) | High quality |
+| Critical Issues | 1 (no engine-dev scheduled) | ⚠️ Round 7 action needed |
 | Team Health | All 6 agents active | Excellent |
 
-### What Shipped: BL-063 Design Specification
+### What Shipped: BL-062 Accessibility Improvements + BL-063 Design Verification
 
-**Status**: Design complete, Ready for Round 6 implementation
+**Status**: BL-062 improved (Round 6), BL-063 verified & ready for Round 7 implementation
 
-**Deliverable**: `orchestrator/analysis/design-round-4-bl063.md` (770 lines)
+**BL-062 Deliverables** (Stat Tooltips Improvements):
+- Fixed `role="tooltip"` ARIA misuse (removed, compliance improved)
+- Changed `<span>` → `<abbr>` semantic HTML (accessibility improved)
+- Added `title` attribute (native fallback tooltip)
+- Removed CSS text-decoration on abbr (visual consistency)
+- Files: src/ui/helpers.tsx, src/index.css
+- Impact: Unblocks ~80% of setup screen confusion (shipped Round 4, improved Round 6)
 
-**Spec Contents**:
+**BL-063 Deliverables** (Impact Breakdown Design):
+- Design spec: `orchestrator/analysis/design-round-4-bl063.md` (770 lines)
 - 6 expandable sections (attack advantage, guard, fatigue, accuracy, Breaker penetration, result summary)
-- Responsive layouts (desktop/tablet/mobile)
+- Responsive layouts (desktop expanded, tablet/mobile collapsed)
 - Data requirements (9 PassResult fields exactly specified)
-- Bar graph design (colors, labels, accessibility)
-- Implementation roadmap (file locations, effort estimates, test checklist)
+- Implementation roadmap (2-3h engine + 2-3h ui-dev)
 - WCAG 2.1 AA accessibility specs
-- Content templates for all sections
-- Mobile interaction patterns
+- All content templates provided
+- Impact: Closes learning loop; shows pass result consequences to players
 
-**Impact**: Closes learning loop for new players. "Pass results unexplained" (BL-041) now has complete design solution. Ready for 2-phase implementation (engine + ui-dev).
-
-**Key Insight**: P1 learning loop now 67% complete:
+**Key Insight**: P1 Learning Loop Progress:
 - BL-061 (Stat tooltip design) ✅ Complete Round 4
 - BL-062 (Stat tooltips shipped) ✅ Complete Round 4
-- BL-063 (Impact breakdown design) ✅ Complete Round 5
-- **BL-063x (PassResult engine work) ⏳ Needed Round 6 Phase A**
-- **BL-064 (Impact breakdown UI) ⏳ Needed Round 6 Phase B**
+- BL-062 (Accessibility improvements) ✅ Complete Round 6
+- BL-063 (Impact breakdown design) ✅ Complete Round 5, verified Round 6
+- **⏳ BL-076 (PassResult engine work) NEEDED Round 7 Phase A** ← CRITICAL BLOCKER
+- **⏳ BL-064 (Impact breakdown UI) NEEDED Round 7 Phase B** ← Blocked on BL-076
 
-### Critical Blocker Identified: BL-063x
+### Critical Issue Identified: No Engine-Dev Scheduled
 
-**What**: Engine-dev PassResult extensions (9 optional fields)
+**What**: BL-076 (PassResult extensions) is P1 priority but engine-dev not assigned to Round 7
 
-**Why**: BL-064 ui-dev (6-8h learning loop implementation) blocked waiting for PassResult data
+**Why**: Blocks BL-064 (6-8h ui-dev critical learning loop implementation)
 
-**Scope**: 9 optional fields (counter detection, guard contribution, fatigue, stamina tracking)
+**Scope**: 9 optional fields (counter detection, guard reduction, fatigue, stamina tracking)
 
 **Effort**: 2-3 hours (types.ts interface + calculator.ts population)
 
@@ -108,85 +112,93 @@
 
 **Files**: src/engine/types.ts, src/engine/calculator.ts, src/engine/phase-joust.ts
 
-**Status**: Task created in backlog (BL-063x), ready for Round 6 Phase A assignment
+**Status**: Task created in backlog (BL-076), awaiting engine-dev assignment to Round 7 roster
 
-### Backlog Updates
+**Action Required**: Add engine-dev to Round 7 agent roster immediately
 
-**Marked Complete** (Round 5):
-- BL-073: Manual QA planning for BL-062 ✅
+### Backlog Updates (Round 6 State)
+
+**Marked Complete** (Round 6):
+- BL-062: Stat tooltips (shipped Round 4, improved Round 6) ✅
 - BL-063: Impact breakdown design spec ✅
+- QA stretch goal (+8 tests, 889→897) ✅
 
 **New Task Created**:
-- BL-063x: PassResult extensions (priority 1, critical blocker)
-
-**Updated for Clarity**:
-- BL-064: Added engine dependency, updated phase timing
+- BL-076: PassResult extensions (renamed from BL-063x, priority 1, critical blocker)
 
 **Status Distribution**:
-- Total: 27 tasks created
+- Total: 27+ tasks in backlog
 - Completed: 18 (67%)
-- In progress: 1
-- Pending: 6
-- Blocked: 2 (clear dependencies)
+- In progress: 1 (BL-073 manual QA, awaiting human tester)
+- Pending: 8 (ready to start)
+- Blocked: 2 (clear dependencies, waiting on engine work)
 
 ---
 
 ## What's Left
 
-**Primary Task**: ✅ COMPLETE. Backlog updated with BL-063x engine task. BL-063 marked done. Agent work tracked. Analysis written.
+**Primary Task**: ✅ COMPLETE. Backlog updated with BL-076 (PassResult extensions). All agent work tracked. Analysis written.
 
-**For Round 6 Immediate Action**:
-1. ✅ BL-063x task ready in backlog — ready to assign to engine-dev
-2. ✅ All Phase A tasks defined (BL-063x, BL-071, BL-072/075)
-3. ✅ All Phase B dependencies clear (BL-064 depends on BL-063x)
+**For Round 7 Immediate Action**:
+1. ⚠️ **CRITICAL**: Add engine-dev to Round 7 roster
+2. ✅ BL-076 task ready in backlog — assign to engine-dev immediately
+3. ✅ All Phase A tasks defined (BL-076, BL-067, BL-071, BL-072/075)
+4. ✅ All Phase B dependencies clear (BL-064 depends on BL-076)
 
-**Critical Success Factor**: Engine-dev completes BL-063x in Round 6 Phase A to unblock BL-064 (learning loop critical).
+**Critical Success Factor**: Engine-dev completes BL-076 in Round 7 Phase A to unblock BL-064 (learning loop critical for new player onboarding).
 
 ---
 
 ## Issues
 
-**None identified**.
+**CRITICAL**: No engine-dev scheduled for Round 7
+- **Cause**: Engine-dev role not assigned to Round 7 agent roster
+- **Impact**: BL-076 cannot start; BL-064 learning loop blocked indefinitely
+- **Status**: Identified Round 6, awaiting orchestrator action
+- **Mitigation**: Add engine-dev to Round 7 roster + assign BL-076 immediately
 
-All agent work clean, well-coordinated, tests passing (889/889). Single blocker identified (BL-063x) with clear spec and actionable path to resolution.
+**All other work clean**: Tests passing (897/897), zero regressions, excellent team coordination.
 
-### Accessibility Issues Flagged (QA Analysis)
+### Accessibility Work Completed (Round 6)
 
-BL-073 manual QA analysis identified 3 potential accessibility issues with BL-062 stat tooltips (require human testing):
-1. `role="tooltip"` vs ARIA best practice `aria-describedby` (low priority, post-MVP acceptable)
-2. `<span tabIndex={0}>` non-semantic HTML (low priority, code works functionally)
-3. Touch interaction untested — CSS `:focus` may not trigger on mobile tap (HIGH priority, blocks mobile users)
+UI-dev proactively addressed 2 of 3 QA findings from Round 5:
+1. ✅ **FIXED**: `role="tooltip"` ARIA misuse (removed)
+2. ✅ **FIXED**: `<span>` → `<abbr>` semantic HTML conversion
+3. ⏸️ **DEFERRED**: Touch interaction testing (requires manual QA, not yet tested)
 
-**Recommendation**: Complete BL-073 manual QA before shipping BL-062 to production. If touch interaction fails, may need JS handler or button refactor.
+**Recommendation**: Complete BL-073 manual QA for touch interaction validation before shipping BL-062 to production.
 
 ---
 
-## Session Velocity (Rounds 1-5)
+## Session Velocity (Rounds 1-6)
 
 | Metric | Status |
 |--------|--------|
-| Features Shipped | 3/5 (60%) |
-| Design Specs Complete | 2/5 (40%) — both P1 critical |
-| Tests Added | +67 tests (889 total) |
-| Test Regressions | 0 ✅ |
-| Blocker Resolution | 1 new → Identified ✅ |
-| Team Coordination | Excellent |
-| Code Quality | Production-ready |
+| Features Shipped | 3/5 (60%) — BL-047, BL-058, BL-062 |
+| Design Specs Complete | 2/5 (40%) — BL-061, BL-063 (both P1 critical) |
+| Tests Added | +67 tests (897 total, +8 this round) |
+| Test Regressions | 0 ✅ (complete clean slate) |
+| Blocker Resolution | 1 critical identified (engine-dev missing) |
+| Team Coordination | Excellent (6/6 agents executed cleanly) |
+| Code Quality | Production-ready (all accessibility/CSS work high quality) |
 
 ---
 
-## Your Mission Going Forward
+## Your Mission Going Forward (Round 7+)
 
 Each round:
 1. Read all agent handoffs (parse every META section)
-2. Update backlog.json: mark done tasks, assign new tasks, create blockers
-3. Generate 3-5 new tasks in backlog (balance > bugs > features > polish)
-4. Write analysis to `orchestrator/analysis/producer-round-{N}.md`
-5. Note bottlenecks/capacity issues in handoff notes-for-others
+2. Check for working directory corruption first (git diff engine files)
+3. Update backlog.json: mark done tasks, assign new tasks, identify blockers
+4. Generate 3-5 new tasks if backlog thin (balance > bugs > features > polish)
+5. Write analysis to `orchestrator/analysis/producer-round-{N}.md`
+6. Flag capacity issues + missing roles in handoff notes-for-others
 
-Focus on: **Unblocking critical path** (BL-063x → BL-064 learning loop). Keep engines running.
+**Critical Path Focus**: **Unblock engine-dev → BL-076 → BL-064 learning loop** (new player onboarding critical).
+
+**Key Insight**: Design specs are high-leverage (2-3h → 6-8h value unlocked). Engine is bottleneck. Once PassResult extended, UI + design work flows quickly.
 
 ---
 
-**Status**: COMPLETE (all primary work done, stretch goals identified, Round 6 ready). As continuous agent, awaiting Round 6 orchestration signal.
+**Status**: COMPLETE (Round 6 work done, critical issue escalated, Round 7 actions documented). As continuous agent, awaiting Round 7 orchestration with engine-dev roster addition.
 

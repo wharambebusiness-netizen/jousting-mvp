@@ -177,7 +177,7 @@
     "fileOwnership": [
       "orchestrator/analysis/design-round-4.md"
     ],
-    "status": "pending",
+    "status": "assigned",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:12:00Z"
   },
@@ -208,6 +208,21 @@
       "src/engine/gear-variants.test.ts"
     ],
     "createdAt": "2026-02-10T04:16:00Z"
+  },
+  {
+    "id": "BL-076",
+    "role": "engine-dev",
+    "priority": 1,
+    "title": "CRITICAL: Extend PassResult for Impact Breakdown (BL-064 blocker) — ROUND 7",
+    "description": "🔴 **CRITICAL BLOCKER**: BL-064 (ui-dev impact breakdown, 6-8h work) is blocked waiting on PassResult schema extension.\n\n**Scope**: Add 9 optional fields to PassResult interface to support impact breakdown UI.\n\n**Fields needed** (from design-round-4-bl063.md Section 5):\n1. counterWon: boolean (did player win counter?)\n2. counterBonus: number (+4 or -4 impact from counter win/loss)\n3. guardStrength: number (your guard stat before reduction)\n4. guardReduction: number (how much guard absorbed damage)\n5. fatiguePercent: number (current stamina % at end of pass)\n6. momPenalty: number (MOM reduced by fatigue)\n7. ctlPenalty: number (CTL reduced by fatigue)\n8. maxStaminaTracker: number (for fatigue calculation context)\n9. breakerPenetrationUsed: boolean (if opponent is Breaker)\n\n**Files to modify**:\n- src/engine/types.ts (PassResult interface — add optional fields with TSDoc comments)\n- src/engine/calculator.ts (resolveJoustPass — populate fields with actual values)\n- src/engine/phase-joust.ts (ensure fields exported correctly)\n\n**Test requirements**:\n- All existing tests still pass (897+)\n- New field values match impact breakdown design templates\n- Fields optional (backwards compatible with existing code)\n- No test assertions need updates (all fields optional)\n\n**Acceptance criteria**:\n1. PassResult fields added to types.ts with TSDoc comments\n2. calculator.ts resolveJoustPass populates all 9 fields\n3. All 897+ tests passing with zero regressions\n4. BL-064 unblocked (ui-dev can implement immediately)\n\n**Estimate**: 2-3 hours\n**Blocks**: BL-064 (6-8h ui-dev impact breakdown, critical learning loop)\n**Depends on**: BL-063 design spec (complete)\n\n**Detailed specs**: orchestrator/analysis/design-round-4-bl063.md (Section 5, lines 410-448)",
+    "fileOwnership": [
+      "src/engine/types.ts",
+      "src/engine/calculator.ts",
+      "src/engine/phase-joust.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T04:52:00Z"
   },
   {
     "id": "BL-070",
