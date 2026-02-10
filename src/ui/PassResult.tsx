@@ -1,4 +1,5 @@
-import type { PassResult as PassResultType, MatchState } from '../engine/types';
+import { useState } from 'react';
+import type { PassResult as PassResultType, MatchState, ImpactBreakdown } from '../engine/types';
 import { resolveCounters } from '../engine/calculator';
 import { Scoreboard, StanceTag } from './helpers';
 
@@ -120,6 +121,16 @@ export function PassResultScreen({ match, result, onContinue }: {
         <Row label="Accuracy" v1={p1.accuracy} v2={p2.accuracy} />
         <ImpactScoreRow v1={p1.impactScore} v2={p2.impactScore} />
 
+        {/* Impact Breakdown */}
+        {p1.breakdown && p2.breakdown && (
+          <ImpactBreakdownCard
+            p1Breakdown={p1.breakdown}
+            p2Breakdown={p2.breakdown}
+            p1Impact={p1.impactScore}
+            p2Impact={p2.impactScore}
+          />
+        )}
+
         <hr className="divider" />
 
         <div className="impact-row">
@@ -138,6 +149,119 @@ export function PassResultScreen({ match, result, onContinue }: {
            `Continue to Pass ${match.passNumber} of 5`}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Expandable impact breakdown card showing how impact was calculated */
+export function ImpactBreakdownCard({ p1Breakdown, p2Breakdown, p1Impact, p2Impact }: {
+  p1Breakdown: ImpactBreakdown;
+  p2Breakdown: ImpactBreakdown;
+  p1Impact: number;
+  p2Impact: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const maxImpact = Math.max(Math.abs(p1Impact), Math.abs(p2Impact), 1);
+  const p1Pct = Math.max(0, (p1Impact / maxImpact) * 100);
+  const p2Pct = Math.max(0, (p2Impact / maxImpact) * 100);
+
+  return (
+    <div className="impact-breakdown" role="region" aria-label="Impact breakdown">
+      <div
+        className="impact-breakdown__header"
+        onClick={() => setExpanded(!expanded)}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
+      >
+        <span className="impact-breakdown__title">Impact Breakdown</span>
+        <span className={`impact-breakdown__toggle${expanded ? ' impact-breakdown__toggle--expanded' : ''}`} aria-hidden="true">
+          ▼
+        </span>
+      </div>
+
+      {/* Bar comparison — always visible */}
+      <div className="impact-breakdown__bar-container" aria-hidden="true">
+        <div className="impact-breakdown__bar impact-breakdown__bar--player" style={{ height: `${Math.max(p1Pct, 8)}%` }}>
+          <span className="impact-breakdown__bar-label">{p1Impact.toFixed(1)}</span>
+        </div>
+        <div className="impact-breakdown__bar impact-breakdown__bar--opponent" style={{ height: `${Math.max(p2Pct, 8)}%` }}>
+          <span className="impact-breakdown__bar-label">{p2Impact.toFixed(1)}</span>
+        </div>
+      </div>
+      <div className="impact-breakdown__scores">
+        <div className="impact-breakdown__score">
+          <div className="impact-breakdown__score-label">You</div>
+        </div>
+        <div className="impact-breakdown__score">
+          <div className="impact-breakdown__score-label">Opponent</div>
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div>
+          <BreakdownDetail label="Your Impact" breakdown={p1Breakdown} impact={p1Impact} />
+          <BreakdownDetail label="Opponent's Impact" breakdown={p2Breakdown} impact={p2Impact} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BreakdownDetail({ label, breakdown, impact }: {
+  label: string;
+  breakdown: ImpactBreakdown;
+  impact: number;
+}) {
+  return (
+    <div className="impact-breakdown__section">
+      <div className="impact-breakdown__section-title">{label}</div>
+      <div className="impact-breakdown__section-content">
+        <DataRow label="Momentum" value={breakdown.momentumComponent} positive />
+        <DataRow label="Accuracy" value={breakdown.accuracyComponent} positive />
+        <DataRow label="Opp. Guard" value={-breakdown.guardPenalty} />
+        {breakdown.counterBonus !== 0 && (
+          <DataRow
+            label="Counter"
+            value={breakdown.counterBonus}
+            suffix=" (via accuracy)"
+          />
+        )}
+        {breakdown.opponentIsBreaker && (
+          <div className="impact-breakdown__tip">
+            Opponent's Breaker penetration reduced your guard effectiveness
+          </div>
+        )}
+        <div className="impact-breakdown__data-row">
+          <span className="impact-breakdown__data-label"><strong>= Impact Score</strong></span>
+          <span className="impact-breakdown__data-value">
+            <strong>{impact.toFixed(1)}</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataRow({ label, value, positive, suffix }: {
+  label: string;
+  value: number;
+  positive?: boolean;
+  suffix?: string;
+}) {
+  const colorClass = value > 0
+    ? 'impact-breakdown__data-value--positive'
+    : value < 0
+    ? 'impact-breakdown__data-value--negative'
+    : 'impact-breakdown__data-value--neutral';
+  return (
+    <div className="impact-breakdown__data-row">
+      <span className="impact-breakdown__data-label">{label}</span>
+      <span className={`impact-breakdown__data-value ${colorClass}`}>
+        {value > 0 ? '+' : ''}{value.toFixed(1)}{suffix ?? ''}
+      </span>
     </div>
   );
 }

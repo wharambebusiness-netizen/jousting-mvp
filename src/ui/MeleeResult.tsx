@@ -1,5 +1,7 @@
 import { MeleeOutcome, type MeleeRoundResult, type MatchState } from '../engine/types';
+import { ImpactBreakdownCard } from './PassResult';
 import { Scoreboard, StanceTag } from './helpers';
+import { resolveCounters } from '../engine/calculator';
 
 export function MeleeResultScreen({ match, result, onContinue }: {
   match: MatchState;
@@ -13,6 +15,9 @@ export function MeleeResultScreen({ match, result, onContinue }: {
   const winnerText = result.winner === 'player1' ? 'You win this round!'
     : result.winner === 'player2' ? 'Opponent wins this round!'
     : 'Draw — no winner';
+
+  const counters = resolveCounters(result.player1Attack, result.player2Attack);
+  const hasCounter = counters.player1Bonus !== 0 || counters.player2Bonus !== 0;
 
   return (
     <div className="screen">
@@ -59,22 +64,50 @@ export function MeleeResultScreen({ match, result, onContinue }: {
 
       <div className="pass-result__breakdown">
         <div className="reveal-sides mb-12">
-          <div className="text-center">
+          <div className={`text-center${counters.player1Bonus > 0 ? ' reveal-sides__cell--counter-win' : ''}`}>
             <div className="player-label player-label--p1">You</div>
             <div className="melee-result__attack-name">{result.player1Attack.name}</div>
             <StanceTag stance={result.player1Attack.stance} />
+            {counters.player1Bonus > 0 && (
+              <span className="counter-badge counter-badge--win">Counters!</span>
+            )}
+            {counters.player1Bonus < 0 && (
+              <span className="counter-badge counter-badge--lose">Countered!</span>
+            )}
           </div>
-          <div className="text-center">
+          <div className={`text-center${counters.player2Bonus > 0 ? ' reveal-sides__cell--counter-win' : ''}`}>
             <div className="player-label player-label--p2">Opponent</div>
             <div className="melee-result__attack-name">{result.player2Attack.name}</div>
             <StanceTag stance={result.player2Attack.stance} />
+            {counters.player2Bonus > 0 && (
+              <span className="counter-badge counter-badge--win">Counters!</span>
+            )}
+            {counters.player2Bonus < 0 && (
+              <span className="counter-badge counter-badge--lose">Countered!</span>
+            )}
           </div>
         </div>
+
+        {hasCounter && (
+          <div className="pass-counter-callout">
+            Counter triggered! Stance advantage shifts the balance.
+          </div>
+        )}
 
         <hr className="divider" />
 
         <Row label="Impact Score" v1={result.player1ImpactScore} v2={result.player2ImpactScore} bold />
         <Row label="Stamina After" v1={result.player1StaminaAfter} v2={result.player2StaminaAfter} fmt={0} />
+
+        {/* Impact Breakdown */}
+        {result.player1Breakdown && result.player2Breakdown && (
+          <ImpactBreakdownCard
+            p1Breakdown={result.player1Breakdown}
+            p2Breakdown={result.player2Breakdown}
+            p1Impact={result.player1ImpactScore}
+            p2Impact={result.player2ImpactScore}
+          />
+        )}
       </div>
 
       <div className="text-center">

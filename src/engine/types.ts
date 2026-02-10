@@ -116,6 +116,23 @@ export interface PassChoice {
   shiftAttack?: Attack; // If player shifts mid-run
 }
 
+// --- Impact Breakdown (shared by joust + melee) ---
+
+export interface ImpactBreakdown {
+  /** Momentum's contribution to impact: effMOM * 0.5 */
+  momentumComponent: number;
+  /** Accuracy's contribution to impact: accuracy * 0.4 */
+  accuracyComponent: number;
+  /** How much opponent's guard subtracted from impact (positive = damage absorbed) */
+  guardPenalty: number;
+  /** Counter bonus applied to this player's accuracy (+won, -lost, 0=none) */
+  counterBonus: number;
+  /** Whether opponent has breaker guard penetration against this player */
+  opponentIsBreaker: boolean;
+  /** Opponent's effective guard after breaker penetration */
+  opponentEffectiveGuard: number;
+}
+
 // --- Pass Result ---
 
 export interface PassResult {
@@ -137,6 +154,10 @@ export interface PassPlayerResult {
   impactScore: number;
   staminaAfter: number;
   fatigueFactor: number;
+  /** Impact formula breakdown for UI display */
+  breakdown?: ImpactBreakdown;
+  /** Max stamina (archetype base) for fatigue context */
+  maxStamina?: number;
 }
 
 // --- Melee Round Result ---
@@ -153,6 +174,10 @@ export interface MeleeRoundResult {
   player1StaminaAfter: number;
   player2StaminaAfter: number;
   log: string[];
+  /** Impact formula breakdown for player 1 */
+  player1Breakdown?: ImpactBreakdown;
+  /** Impact formula breakdown for player 2 */
+  player2Breakdown?: ImpactBreakdown;
 }
 
 // --- Match State ---

@@ -4,6 +4,7 @@
 import {
   type Archetype,
   type Attack,
+  type ImpactBreakdown,
   type PassResult,
   type PassPlayerResult,
   type PlayerState,
@@ -209,6 +210,26 @@ export function resolveJoustPass(
   const ffPost1 = fatigueFactor(sta1, p1State.archetype.stamina);
   const ffPost2 = fatigueFactor(sta2, p2State.archetype.stamina);
 
+  // Impact breakdowns
+  const effectiveGuard2 = stats2.guard * (1 - pen1);
+  const effectiveGuard1 = stats1.guard * (1 - pen2);
+  const breakdown1: ImpactBreakdown = {
+    momentumComponent: stats1.momentum * 0.5,
+    accuracyComponent: acc1 * 0.4,
+    guardPenalty: effectiveGuard2 * BALANCE.guardImpactCoeff,
+    counterBonus: counters.player1Bonus,
+    opponentIsBreaker: pen2 > 0,
+    opponentEffectiveGuard: effectiveGuard2,
+  };
+  const breakdown2: ImpactBreakdown = {
+    momentumComponent: stats2.momentum * 0.5,
+    accuracyComponent: acc2 * 0.4,
+    guardPenalty: effectiveGuard1 * BALANCE.guardImpactCoeff,
+    counterBonus: counters.player2Bonus,
+    opponentIsBreaker: pen1 > 0,
+    opponentEffectiveGuard: effectiveGuard1,
+  };
+
   return {
     passNumber,
     player1: {
@@ -221,6 +242,8 @@ export function resolveJoustPass(
       impactScore: impact1,
       staminaAfter: staAfter1,
       fatigueFactor: ffPost1,
+      breakdown: breakdown1,
+      maxStamina: p1State.archetype.stamina,
     },
     player2: {
       speed: p2Choice.speed,
@@ -232,6 +255,8 @@ export function resolveJoustPass(
       impactScore: impact2,
       staminaAfter: staAfter2,
       fatigueFactor: ffPost2,
+      breakdown: breakdown2,
+      maxStamina: p2State.archetype.stamina,
     },
     unseat,
     unseatMargin,

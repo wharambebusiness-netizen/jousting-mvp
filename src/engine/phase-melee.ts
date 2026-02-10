@@ -4,6 +4,7 @@
 import {
   type Archetype,
   type Attack,
+  type ImpactBreakdown,
   type MeleeRoundResult,
   type PlayerState,
 } from './types';
@@ -107,6 +108,29 @@ export function resolveMeleeRoundFn(
   const staAfter2 = applyAttackStaminaCost(p2State.currentStamina, p2Attack);
   log.push(`End STA: P1 ${p1State.currentStamina}→${staAfter1}, P2 ${p2State.currentStamina}→${staAfter2}`);
 
+  // Impact breakdowns
+  const effectiveGuard2 = stats2.guard * (1 - pen1);
+  const effectiveGuard1 = stats1.guard * (1 - pen2);
+
+  // For melee, accuracy includes counter bonus but no separate counter field needed —
+  // we track counterBonus on the breakdown for UI consistency
+  const player1Breakdown: ImpactBreakdown = {
+    momentumComponent: stats1.momentum * 0.5,
+    accuracyComponent: acc1 * 0.4,
+    guardPenalty: effectiveGuard2 * BALANCE.guardImpactCoeff,
+    counterBonus: counters.player1Bonus,
+    opponentIsBreaker: pen2 > 0,
+    opponentEffectiveGuard: effectiveGuard2,
+  };
+  const player2Breakdown: ImpactBreakdown = {
+    momentumComponent: stats2.momentum * 0.5,
+    accuracyComponent: acc2 * 0.4,
+    guardPenalty: effectiveGuard1 * BALANCE.guardImpactCoeff,
+    counterBonus: counters.player2Bonus,
+    opponentIsBreaker: pen1 > 0,
+    opponentEffectiveGuard: effectiveGuard1,
+  };
+
   return {
     roundNumber,
     player1Attack: p1Attack,
@@ -119,5 +143,7 @@ export function resolveMeleeRoundFn(
     player1StaminaAfter: staAfter1,
     player2StaminaAfter: staAfter2,
     log,
+    player1Breakdown,
+    player2Breakdown,
   };
 }

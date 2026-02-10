@@ -1002,3 +1002,156 @@ describe('Edge Cases — Breaker Penetration vs High-Guard in Melee', () => {
     expect(breakerEdgeVsBulwark).toBeGreaterThan(breakerEdgeVsCharger * 0.8);
   });
 });
+
+// ============================================================
+// Impact Breakdown (BL-076)
+// ============================================================
+describe('ImpactBreakdown — joust', () => {
+  it('breakdown is populated on PassPlayerResult', () => {
+    const p1 = makePlayerState('duelist');
+    const p2 = makePlayerState('duelist');
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, p1, p2, choice, choice);
+
+    expect(result.player1.breakdown).toBeDefined();
+    expect(result.player2.breakdown).toBeDefined();
+    expect(result.player1.maxStamina).toBe(p1.archetype.stamina);
+    expect(result.player2.maxStamina).toBe(p2.archetype.stamina);
+  });
+
+  it('breakdown components sum to impactScore', () => {
+    const p1 = makePlayerState('charger');
+    const p2 = makePlayerState('bulwark');
+    const choice1: PassChoice = { speed: SpeedType.Fast, attack: CF };
+    const choice2: PassChoice = { speed: SpeedType.Slow, attack: PDL };
+
+    const result = resolveJoustPass(1, p1, p2, choice1, choice2);
+    const bd1 = result.player1.breakdown!;
+    const bd2 = result.player2.breakdown!;
+
+    // momentumComponent + accuracyComponent - guardPenalty should equal impactScore
+    const computed1 = bd1.momentumComponent + bd1.accuracyComponent - bd1.guardPenalty;
+    expect(computed1).toBeCloseTo(result.player1.impactScore, 5);
+
+    const computed2 = bd2.momentumComponent + bd2.accuracyComponent - bd2.guardPenalty;
+    expect(computed2).toBeCloseTo(result.player2.impactScore, 5);
+  });
+
+  it('breakdown shows counter bonus when counter occurs', () => {
+    const p1 = makePlayerState('duelist');
+    const p2 = makePlayerState('duelist');
+
+    // CF beats PDL → P1 wins counter
+    const choice1: PassChoice = { speed: SpeedType.Standard, attack: CF };
+    const choice2: PassChoice = { speed: SpeedType.Standard, attack: PDL };
+
+    const result = resolveJoustPass(1, p1, p2, choice1, choice2);
+    const bd1 = result.player1.breakdown!;
+    const bd2 = result.player2.breakdown!;
+
+    expect(bd1.counterBonus).toBeGreaterThan(0);
+    expect(bd2.counterBonus).toBeLessThan(0);
+    expect(bd1.counterBonus).toBe(-bd2.counterBonus);
+  });
+
+  it('breakdown shows zero counter bonus when no counter', () => {
+    const p1 = makePlayerState('duelist');
+    const p2 = makePlayerState('duelist');
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, p1, p2, choice, choice);
+
+    expect(result.player1.breakdown!.counterBonus).toBe(0);
+    expect(result.player2.breakdown!.counterBonus).toBe(0);
+  });
+
+  it('breakdown flags breaker penetration correctly', () => {
+    const breaker = makePlayerState('breaker');
+    const bulwark = makePlayerState('bulwark');
+
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+    const result = resolveJoustPass(1, breaker, bulwark, choice, choice);
+
+    // P2 (bulwark) should see opponentIsBreaker = true (breaker is attacking them)
+    expect(result.player2.breakdown!.opponentIsBreaker).toBe(true);
+    // P1 (breaker) should NOT see opponentIsBreaker (bulwark is not a breaker)
+    expect(result.player1.breakdown!.opponentIsBreaker).toBe(false);
+  });
+
+  it('breakdown components are all positive for momentum/accuracy', () => {
+    const p1 = makePlayerState('charger');
+    const p2 = makePlayerState('duelist');
+    const choice: PassChoice = { speed: SpeedType.Standard, attack: CDL };
+
+    const result = resolveJoustPass(1, p1, p2, choice, choice);
+
+    expect(result.player1.breakdown!.momentumComponent).toBeGreaterThan(0);
+    expect(result.player1.breakdown!.accuracyComponent).toBeGreaterThan(0);
+    expect(result.player1.breakdown!.guardPenalty).toBeGreaterThan(0);
+  });
+});
+
+describe('ImpactBreakdown — melee', () => {
+  it('breakdown is populated on MeleeRoundResult', () => {
+    const p1 = makePlayerState('duelist');
+    const p2 = makePlayerState('duelist');
+
+    const result = resolveMeleeRoundFn(1, p1, p2, MC, MC);
+
+    expect(result.player1Breakdown).toBeDefined();
+    expect(result.player2Breakdown).toBeDefined();
+  });
+
+  it('melee breakdown components sum to impactScore', () => {
+    const p1 = makePlayerState('charger');
+    const p2 = makePlayerState('bulwark');
+
+    const result = resolveMeleeRoundFn(1, p1, p2, OC, GH);
+    const bd1 = result.player1Breakdown!;
+    const bd2 = result.player2Breakdown!;
+
+    // Note: melee can have unseated boost which is applied AFTER the base formula,
+    // so breakdown sums to the pre-boost impact. For non-unseated players, it matches exactly.
+    const computed1 = bd1.momentumComponent + bd1.accuracyComponent - bd1.guardPenalty;
+    expect(computed1).toBeCloseTo(result.player1ImpactScore, 5);
+
+    const computed2 = bd2.momentumComponent + bd2.accuracyComponent - bd2.guardPenalty;
+    expect(computed2).toBeCloseTo(result.player2ImpactScore, 5);
+  });
+
+  it('melee breakdown flags breaker correctly', () => {
+    const breaker = makePlayerState('breaker');
+    const duelist = makePlayerState('duelist');
+
+    const result = resolveMeleeRoundFn(1, breaker, duelist, MC, MC);
+
+    expect(result.player2Breakdown!.opponentIsBreaker).toBe(true);
+    expect(result.player1Breakdown!.opponentIsBreaker).toBe(false);
+  });
+
+  it('melee breakdown with counter', () => {
+    const p1 = makePlayerState('duelist');
+    const p2 = makePlayerState('duelist');
+
+    // OC (Agg) beats GH (Def)
+    const result = resolveMeleeRoundFn(1, p1, p2, OC, GH);
+
+    expect(result.player1Breakdown!.counterBonus).toBeGreaterThan(0);
+    expect(result.player2Breakdown!.counterBonus).toBeLessThan(0);
+  });
+
+  it('melee breakdown diverges from impactScore when unseated boost applied', () => {
+    const p1 = makePlayerState('charger');
+    p1.wasUnseated = true;
+    const p2 = makePlayerState('duelist');
+
+    const result = resolveMeleeRoundFn(1, p1, p2, OC, MC);
+    const bd1 = result.player1Breakdown!;
+
+    // Breakdown is pre-boost, impactScore includes 1.25x boost
+    const preBoost = bd1.momentumComponent + bd1.accuracyComponent - bd1.guardPenalty;
+    expect(result.player1ImpactScore).toBeGreaterThan(preBoost);
+    expect(result.player1ImpactScore).toBeCloseTo(preBoost * 1.25, 5);
+  });
+});
