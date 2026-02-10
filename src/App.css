@@ -25,6 +25,20 @@
   color: var(--ink);
   font-weight: normal;
   font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+.difficulty-btn:hover {
+  border-color: var(--gold);
+  background: var(--parchment-light);
+}
+.difficulty-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-color: var(--gold);
+}
+.difficulty-btn:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 4px var(--shadow);
 }
 .difficulty-btn--active {
   border: 2px solid var(--ink);

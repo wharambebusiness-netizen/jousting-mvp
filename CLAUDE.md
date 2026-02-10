@@ -6,7 +6,7 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (822 passing as of S35)
+npx vitest run                              # Run all tests (830 passing as of S35)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
@@ -109,7 +109,7 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (822 as of S35)
+- **Test count**: run `npx vitest run` (830 as of S35)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
@@ -157,7 +157,7 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 ## Test Suite
 
 8 test suites covering:
-- **calculator** (194 tests) — Core math + guard penetration + fatigue + counter table exhaustive
+- **calculator** (202 tests) — Core math + guard penetration + fatigue + counter table exhaustive + softCap boundaries
 - **phase-resolution** (55 tests) — Phase resolution + breaker edge cases + unseat timing + extreme fatigue
 - **gigling-gear** (48 tests) — 6-slot steed gear
 - **player-gear** (46 tests) — 6-slot player gear
@@ -166,4 +166,4 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - **gear-variants** (156 tests) — Gear variant system + archetype x variant matchups
 - **ai** (95 tests) — AI opponent validity, reasoning, patterns, edge cases
 
-**Total: 822 tests** (as of S35). Run `npx vitest run` for current test counts (per-file counts drift).
+**Total: 830 tests** (as of S35). Run `npx vitest run` for current test counts (per-file counts drift).

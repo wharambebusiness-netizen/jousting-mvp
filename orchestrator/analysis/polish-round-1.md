@@ -1,104 +1,94 @@
-# Polish Round 1 — Interactive States & Animation Refinement
+# CSS Artist — Round 1 Analysis
 
-**Date**: 2026-02-10
-**Agent**: CSS Artist
-**Test Results**: 794/794 passing ✓
+## Status: Complete
+
+**Task**: BL-053 — Difficulty Button Interactive States
+**Tests**: All 822 passing (no regressions)
+**Time**: 1 iteration
 
 ## Summary
 
-Completed both backlog tasks (BL-048, BL-049) for interactive states and animation polish. Focused on accessibility, responsive performance, and visual hierarchy improvements.
+Enhanced difficulty button styling to support keyboard navigation features just added by ui-dev. The difficulty selector buttons now have complete interactive feedback matching all other interactive elements in the application.
 
-## BL-048: Hover/Focus States for Interactive Cards
+## Changes Made
 
-### Changes Made
+### File: src/App.css (lines 19-44)
 
-1. **Attack Cards** (`.attack-card`)
-   - Added `transition: all 0.15s ease` for smooth state changes
-   - `:hover`: `filter: brightness(1.05)` + `box-shadow: 0 3px 10px`
-   - `:focus-visible`: 2px gold outline with 2px offset
-   - `:active`: `scale(0.98)` with reduced shadow for pressed effect
+**Before:**
+```css
+.difficulty-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--ink-faint);
+  color: var(--ink);
+  font-weight: normal;
+  font-size: 0.9rem;
+}
+.difficulty-btn--active { ... }
+```
 
-2. **Speed Cards** (`.speed-card`)
-   - Added `cursor: pointer` to clarify interactivity
-   - Added `transition: all 0.15s ease`
-   - `:hover`: brightness enhancement + shadow
-   - `:focus-visible`: gold outline per WCAG
-   - `:active`: scale down effect consistent with attack cards
+**After:**
+```css
+.difficulty-btn {
+  /* ... base styles + transition */
+  transition: all 0.15s ease;
+}
+.difficulty-btn:hover {
+  border-color: var(--gold);
+  background: var(--parchment-light);
+}
+.difficulty-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-color: var(--gold);
+}
+.difficulty-btn:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.difficulty-btn--active { ... }
+```
 
-3. **All Selectable Cards** (`.card--selectable`)
-   - Enhanced `:active` state: `scale(0.98)` with reduced shadow
-   - Existing `:focus-visible` already compliant with 2px gold outline offset
+### Interactive State Coverage
 
-4. **Variant Toggle Buttons** (`.variant-toggle__btn--active`)
-   - Enhanced box-shadow from simple `0 1px 3px` to `0 2px 6px` + inset highlight
-   - Added stance-specific glow colors for active state
-   - Creates more prominent, polished appearance
+| State | Before | After | Pattern |
+|-------|--------|-------|---------|
+| `:hover` | None | Gold border + light bg | ✅ Matches btn--back |
+| `:focus-visible` | None | Gold outline + border | ✅ Matches attack-card |
+| `:active` | None | Scale 0.98 + shadow | ✅ Matches speed-card |
+| `--active` | Bold + ink bg | Unchanged | ✅ Selection state preserved |
 
-### WCAG Compliance
+### Accessibility Impact
 
-- All hover states use sufficient contrast via background changes + shadows
-- Focus-visible states use 2px solid gold outlines (WCAG AAA)
-- Color is not the only indicator; brightness + shadow changes aid visibility
-- Touch targets maintained at 44px minimum (no change)
+- **Keyboard Navigation**: Users can tab to buttons and see clear focus indicator
+- **Mouse Feedback**: Hover state provides immediate visual response
+- **Touch Devices**: Active state provides press feedback
+- **Visual Consistency**: Difficulty buttons now match all other interactive elements
 
-### Files Modified
-- `src/App.css`: Attack card, speed card, variant toggle enhancements (lines 52–79, 467–479)
+## Testing
 
----
+✅ All 822 tests passing (0 failures, 0 regressions)
+✅ No engine or test suite changes required (CSS-only)
+✅ No changes to component JSX or ARIA attributes (ui-dev scope)
 
-## BL-049: Animations, Transitions & Visual Hierarchy
+## CSS Quality Metrics
 
-### Changes Made
+- **App.css**: 1282 lines (unchanged file count)
+- **Transition duration**: 0.15s (compliant with <300ms interaction budget)
+- **Design token usage**: Uses existing var(--gold), var(--parchment-light), var(--shadow)
+- **Mobile breakpoint**: No mobile-specific overrides needed (button is already responsive)
+- **Prefers-reduced-motion**: Not required (transitions still functional on reduced-motion devices)
 
-1. **Cascading Animations**
-   - **Timeline pips** (`.timeline-pip`): Added nth-child delays (0s, 0.1s, 0.2s, 0.3s, etc.) for staggered entrance
-   - **Gear items** (`.gear-item`): New `slideInLeft` animation with nth-child cascading delays (0s–0.25s)
-   - Creates visual flow and guides attention
+## Context
 
-2. **Summary Table Hover**
-   - Added `transition: background-color 0.15s ease` to table cells
-   - `.summary-table tbody tr:hover td`: Highlights entire row with `background: var(--parchment-dark)`
-   - Improves readability and focus on comparison rows
+UI-dev added keyboard navigation support (tabIndex, role="button", onKeyDown handlers) to the SetupScreen difficulty buttons in Round 2. This CSS enhancement provides corresponding visual feedback for the new keyboard interaction pattern, ensuring:
 
-3. **Combat Log Visual Separation**
-   - `.combat-log__entry`: Changed from `padding: 1px 0` to `padding: 2px 0 2px 8px`
-   - Added `border-left: 2px solid rgba(201, 168, 76, 0.3)` for accent
-   - Breaks up dense monospace text; improves scannability
+1. **Visual parity**: Difficulty buttons match other cards in hover/focus/active states
+2. **User expectation**: Keyboard users see focus indicator; mouse users see hover feedback
+3. **Design system consistency**: No visual outliers in the interface
 
-4. **Line-Height Improvements**
-   - `.pass-result__breakdown`: Increased `line-height: 1.6` (was implicit 1.5)
-   - `.impact-row`: Increased `line-height: 1.5` + `padding: 8px 0` (was 6px)
-   - Better readability in stat comparison blocks
+## Recommendation
 
-5. **Mobile Animation Optimization** (`@media (max-width: 480px)`)
-   - Reduced animation durations 20–40% to improve perceived performance
-   - Timeline pips: 0.3s → 0.2s
-   - Gear items: 0.4s → 0.25s (via new slideInLeft)
-   - Unseat/melee transitions: 0.5s → 0.35s
-   - Other entrance animations: 0.6s → 0.4s, 0.8s → 0.5s
-
-6. **Reduced-Motion Compliance**
-   - Added `gear-item`, `timeline-separator` to animation-none list
-   - Added `attack-card`, `speed-card` to transition-none list
-   - All new interactive elements respect `prefers-reduced-motion`
-
-### Files Modified
-- `src/App.css`: Timeline cascading, gear cascading, summary hover, combat log accents, mobile durations, reduced-motion (lines 336–352, 336–352, 244–247, 199–201, 705–733, 951–973)
-- `src/index.css`: Impact row spacing + line-height (lines 330–336)
-
----
-
-## Verification
-
-- ✅ **All 794 tests passing** (no engine/logic changes)
-- ✅ **Responsive breakpoints**: 480px mobile reduced durations, 768px tablet unchanged
-- ✅ **Accessibility**: Focus-visible, reduced-motion all compliant
-- ✅ **No hardcoded colors or !important**: All via CSS variables
-- ✅ **BEM naming maintained**: No style regressions
-
-## Notes for Other Agents
-
-- **No App.tsx changes needed** — all CSS-driven
-- **Mobile performance improved**: Animation durations reduced on small screens
-- **Cascading delays ready for expansion**: Can easily add delay for more elements (e.g., `.pass-pip:nth-child(n)`)
-- **Combat log now more scannable**: Border-left accent helps parse dense passes
+Complete and retire. CSS work for difficulty buttons is finalized. All remaining visual improvements (stat bar transitions, gear hover glows, disabled states) are lower priority (P3) and can be addressed in future sessions if desired.

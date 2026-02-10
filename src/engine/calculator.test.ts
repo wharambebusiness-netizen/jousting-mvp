@@ -2014,3 +2014,110 @@ describe('getMeleeAttacksByStance', () => {
     expect(ids.size).toBe(6);
   });
 });
+
+// ============================================================
+// SoftCap Combat Boundary Tests (QA Round 2)
+// ============================================================
+// Comprehensive tests for softCap behavior in real combat scenarios.
+// Focus: interactions with fatigue, attack deltas, and asymmetric gear.
+describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
+  const knee = BALANCE.softCapKnee; // 100
+  const K = BALANCE.softCapK;       // 50
+  const CdL = JOUST_ATTACKS.courseDeLance;
+  const Prec = MELEE_ATTACKS.precisionThrust;
+
+  it('stat at 99 stays below knee, 101 crosses knee', () => {
+    // Test the exact boundary
+    expect(softCap(99)).toBe(99);
+    expect(softCap(100)).toBe(100);
+    // 101: excess=1, result = 100 + 1*50/51 ≈ 100.98
+    expect(softCap(101)).toBeCloseTo(100.98, 2);
+    expect(softCap(101)).toBeLessThan(101);
+  });
+
+  it('multiple stats crossing knee: both MOM and GRD over 100', () => {
+    // Simulate giga gear pushing both MOM and GRD over knee
+    const highGear: Archetype = {
+      ...charger,
+      momentum: 110, // over knee
+      guard: 105,    // over knee
+    };
+    const stats = computeEffectiveStats(highGear, SPEEDS[SpeedType.Standard], CdL, 65);
+    // MOM: 110 + 0 + 5 = 115 → softCap(115) = 100 + 15*50/65 ≈ 111.54
+    expect(stats.momentum).toBeCloseTo(111.54, 1);
+    // GRD: 105 + 0 + 5 = 110 → softCap(110) = 100 + 10*50/60 = 108.33
+    const rawGuard = 105 + 0 + 5; // 110
+    expect(softCap(rawGuard)).toBeCloseTo(108.33, 1);
+  });
+
+  it('asymmetric softCap: one player over knee, one under', () => {
+    // P1 has giga gear (over knee), P2 has bare stats (under knee)
+    const p1: Archetype = { ...charger, momentum: 110 }; // over knee
+    const p2: Archetype = { ...technician, momentum: 70 }; // under knee
+
+    const p1Stats = computeEffectiveStats(p1, SPEEDS[SpeedType.Standard], CdL, 65);
+    const p2Stats = computeEffectiveStats(p2, SPEEDS[SpeedType.Standard], CdL, 55);
+
+    // P1: 110 + 5 = 115 → softCap(115) ≈ 111.54
+    expect(p1Stats.momentum).toBeCloseTo(111.54, 1);
+    // P2: 70 + 5 = 75 → softCap(75) = 75 (unchanged, below knee)
+    expect(p2Stats.momentum).toBe(75);
+
+    // Ratio compression: without softCap would be 115/75 = 1.53
+    // With softCap: 111.54/75 ≈ 1.49 (compressed slightly)
+    expect(p1Stats.momentum / p2Stats.momentum).toBeCloseTo(1.49, 2);
+  });
+
+  it('attack delta pushes stat over knee mid-combat', () => {
+    // Archetype at 97 MOM, attack adds +5, crosses knee to 102
+    const nearKnee: Archetype = { ...charger, momentum: 97 };
+    const stats = computeEffectiveStats(nearKnee, SPEEDS[SpeedType.Standard], CdL, 65);
+    // 97 + 0 + 5 = 102 → softCap(102) = 100 + 2*50/52 ≈ 101.92
+    expect(stats.momentum).toBeCloseTo(101.92, 1);
+  });
+
+  it('softCap + fatigue interaction: stat over knee fatigued below knee', () => {
+    // MOM at 110 (over knee), but low stamina brings effective stat below knee
+    const highMom: Archetype = { ...charger, momentum: 110 };
+    // At stamina=10, fatigue threshold = 65*0.8 = 52
+    // ff = 10/52 ≈ 0.192
+    const stats = computeEffectiveStats(highMom, SPEEDS[SpeedType.Standard], CdL, 10);
+    // Raw: 110 + 5 = 115 → softCap(115) ≈ 111.54
+    // After fatigue: 111.54 * 0.192 ≈ 21.4
+    expect(stats.momentum).toBeCloseTo(21.4, 1);
+    expect(stats.momentum).toBeLessThan(knee); // Fatigued below knee
+  });
+
+  it('softCap + fatigue: stat below knee stays below knee after fatigue', () => {
+    // MOM at 85 (below knee), fatigued to lower value
+    const lowMom: Archetype = { ...charger, momentum: 85 };
+    const stats = computeEffectiveStats(lowMom, SPEEDS[SpeedType.Standard], CdL, 20);
+    // ff = 20 / 52 ≈ 0.385
+    // Raw: 85 + 5 = 90 → softCap(90) = 90 (unchanged)
+    // After fatigue: 90 * 0.385 ≈ 34.6
+    expect(stats.momentum).toBeCloseTo(34.6, 1);
+    expect(stats.momentum).toBeLessThan(knee);
+  });
+
+  it('guard crossing knee with PdL attack in joust', () => {
+    // Test Port de Lance (+20 guard) pushing guard over knee
+    const PdL = JOUST_ATTACKS.portDeLance;
+    const bulwarkHigh: Archetype = { ...bulwark, guard: 85 };
+
+    const stats = computeEffectiveStats(bulwarkHigh, SPEEDS[SpeedType.Standard], PdL, 62);
+    // 85 + 0 + 20 = 105 → softCap(105) = 100 + 5*50/55 ≈ 104.55
+    const rawGuard = 85 + 0 + 20; // 105
+    expect(softCap(rawGuard)).toBeCloseTo(104.55, 1);
+  });
+
+  it('very high stats (150+) compress heavily but remain monotonic', () => {
+    // Test extreme giga gear values
+    // 150: 100 + 50*50/100 = 125
+    expect(softCap(150)).toBeCloseTo(125, 0);
+    // 200: 100 + 100*50/150 ≈ 133.33
+    expect(softCap(200)).toBeCloseTo(133.33, 0);
+    // Monotonic: higher input always yields higher output
+    expect(softCap(200)).toBeGreaterThan(softCap(150));
+    expect(softCap(150)).toBeGreaterThan(softCap(120));
+  });
+});

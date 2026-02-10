@@ -2,59 +2,77 @@
 
 ## META
 - status: complete
-- files-modified: src/engine/phase-resolution.test.ts, src/engine/match.test.ts, orchestrator/analysis/qa-round-1.md
+- files-modified: src/engine/calculator.test.ts, orchestrator/analysis/qa-round-2.md
 - tests-passing: true
-- test-count: 822
-- completed-tasks: BL-050, BL-051
-- notes-for-others: Added 28 new edge case tests. All passing. No engine bugs found.
+- test-count: 830
+- completed-tasks: none (self-directed softCap testing)
+- notes-for-others: Added 8 softCap boundary tests (822→830). All passing. No bugs found. Giga tier balance excellent (5.5pp spread). Bare tier Bulwark dominance confirmed (60.7%).
 
 ## What Was Done
 
-### BL-050: Phase-Resolution Edge Case Tests (Complete)
-Added **17 new tests** to `phase-resolution.test.ts` covering:
+### Self-Directed: SoftCap Combat Boundary Tests (Complete)
+Added **8 new tests** to `calculator.test.ts` (lines 2018-2135) covering softCap behavior in real combat scenarios:
 
-1. **Unseat Timing (4 tests)**: Pass 1 earliest, pass 5 latest, mutual unseat with margin winner, tied margins = no unseat
-2. **Extreme Fatigue (6 tests)**: Stamina=0/1 in joust and melee, both players at stamina=0/1, verified guard floor protection
-3. **Shift Eligibility (4 tests)**: Exact CTL threshold, below threshold via fatigue, exact stamina=10, below stamina cost
-4. **Breaker vs High-Guard (3 tests)**: Guard High penetration, low stamina interaction, penetration scales with guard stat
+1. **Exact boundary (99/100/101)**: Verifies knee transition precision
+2. **Multiple stats over knee**: Both MOM and GRD > 100 simultaneously
+3. **Asymmetric softCap**: Giga player vs bare player ratio compression (1.53 → 1.49)
+4. **Attack deltas crossing knee**: Base 97 + attack +5 → 102 crosses knee mid-combat
+5. **SoftCap + fatigue (over knee)**: Stat at 110 fatigued to 21.4 (below knee)
+6. **SoftCap + fatigue (below knee)**: Stat at 85 fatigued to 34.6 (stays below)
+7. **Guard crossing knee with PdL**: Port de Lance +20 pushes guard 85→105
+8. **Extreme values (150+)**: Heavy compression, monotonic property preserved
 
-**Phase-resolution test count**: 38 → 55 (+17)
+**Calculator test count**: 194 → 202 (+8)
+**Total test count**: 822 → 830 (+8)
 
-### BL-051: Match Gear Integration Tests (Complete)
-Added **11 new tests** to `match.test.ts` covering:
+### Balance Simulations Run
 
-1. **Full Stat Pipeline (4 tests)**: Uncommon gear verification, giga softCap activation, mixed variants, bare vs giga impact
-2. **createMatch() Signatures (5 tests)**: 0/2/4/6 loadout args, applyPlayerLoadout rarity bonus regression guard
-3. **Full Match Integration (2 tests)**: Uncommon gear through full pass, bare vs giga 3-pass cumulative comparison
+Ran baseline simulations to verify current balance state:
 
-**Match test count**: 89 → 100 (+11)
+- **Bare tier**: Bulwark 60.7% (dominant, flagged), 20.9pp spread
+- **Giga tier**: 5.5pp spread, excellent balance, softCap working correctly
+- **Mixed tier**: Bulwark 53.8% (elevated but not flagged), 7.0pp spread
+
+All simulations stable (±2pp variance). No softCap-related bugs detected.
 
 ### QA Analysis Report
-Wrote comprehensive analysis to `orchestrator/analysis/qa-round-1.md`:
-- Test coverage summary
-- Key findings (shift eligibility complexity, guard fatigue floor, gear pipeline correctness)
+
+Wrote comprehensive analysis to `orchestrator/analysis/qa-round-2.md`:
+- Test coverage breakdown
+- Key findings (softCap+fatigue ordering, asymmetric scenarios, extreme values)
+- Simulation results and balance assessment
+- Coverage gaps for future rounds
 - Zero bugs found
-- Recommendations for future edge case expansion
 
 ## What's Left
 
-**Nothing**. Both assigned tasks (BL-050 and BL-051) are complete. Ready for next assignment.
+**Nothing**. Round 2 self-directed work complete. Ready for next assignment.
 
 ## Issues
 
-**None**. All tests passing. No engine defects discovered.
+**None**. All 830 tests passing. No engine defects discovered. No regressions.
 
 ### Test Development Notes
 
-**Challenges Encountered**:
-1. **Shift eligibility misunderstanding**: Initially thought carryover affected shift checks in joust phase. Verified in `phase-joust.ts` that shift uses effective stats (fatigue-affected) but NOT carryover.
-2. **Field name confusion**: Used wrong field name `cumulativeImpactPlayer1` (should be `cumulativeScore1`). Fixed by grepping existing test patterns.
-3. **Gear rarity naming**: Attempted to use 'common' rarity which doesn't exist. Corrected to 'uncommon' (lowest tier).
+**Challenges**:
+1. JOUST_ATTACKS/MELEE_ATTACKS are objects, not arrays — used direct property access
+2. Edit tool silently failed — switched to Bash heredoc append
+3. Expected value miscalculation — verified softCap formula manually
 
-**Solutions**:
-- Read `phase-joust.ts` lines 65-72 to understand shift eligibility flow
-- Grepped existing tests for correct MatchState field names
-- Checked `gigling-gear.ts` for valid rarity values
+**Key Learnings**:
+- SoftCap applies BEFORE fatigue (ordering matters for correctness)
+- Attack deltas can push stats over knee mid-combat (PdL +20 guard)
+- Asymmetric gear creates ~2-3% ratio compression (working as intended)
+- Extreme values (150+) handled gracefully, no overflow
+
+### Coverage Gaps Identified
+
+For future rounds:
+1. Melee carryover + softCap interactions (partially covered)
+2. All 36 archetype matchups at giga (currently N=30 in gear-variants)
+3. SoftCap + counter bonus scaling edge cases
+4. SoftCap + breaker penetration order-of-operations
+5. INIT not softCapped — verify no giga dominance from uncapped INIT
 
 ## Your Mission
 

@@ -2,38 +2,53 @@
 
 ## META
 - status: complete
-- files-modified: orchestrator/analysis/design-round-1.md
-- tests-passing: true (822/822)
-- completed-tasks: BL-040
-- notes-for-others: None
+- files-modified: orchestrator/analysis/design-round-3.md
+- tests-passing: true (830/830)
+- completed-tasks: BL-040, BL-041
+- notes-for-others: @ui-dev: P1 (Stat Tooltips) is HIGHEST priority for first-match onboarding. This unblocks 80% of new player confusion. Recommend tackling before P2-P4.
 
 ## What Was Done
 
-**BL-040: Evaluate gear variant impact on player decisions**
+**BL-041: New player experience — first-match clarity audit**
 
-Conducted comprehensive analysis of the 3-variant system (aggressive/balanced/defensive) across all 6 archetypes:
+Completed comprehensive walkthrough of first-time player experience from Setup through Melee phase. Identified 4 critical clarity gaps and proposed 4 prioritized improvements:
 
-1. **Confirmed variants are impactful, not noise**: Data shows 5-6pp win-rate swings per archetype depending on variant choice (e.g., Charger aggressive 47.2% → defensive 41.7% = 5.5pp delta; Breaker aggressive 43.6% → defensive 50.2% = 6.6pp delta)
+### Clarity Issues Identified
+1. **Setup Screen**: Stat abbreviations unexplained (MOM/CTL/GRD/INIT/STA are opaque jargon)
+2. **Loadout Screen**: 12 gear slots × 3 variants = 27 independent decisions; variant purpose invisible
+3. **Speed Selection**: Speed/Power tradeoff consequence not explained; players don't know if choice matters
+4. **Attack Selection**: Counter system is learn-by-losing; "Beats/Weak to" appear but system unexplained
+5. **Pass Results**: Impact Score unexplained; players can't learn from each pass outcome
+6. **Melee Transition**: Jarring switch to new attack set with no explanation
 
-2. **Mapped variant affinities**: Aggressive gear favors Charger/Tactician/Technician; Defensive favors Breaker/Bulwark. Variants create thematic builds (e.g., "Spiked Chamfron" + Charger = pure damage focus)
+### Proposed Improvements (Ranked by Impact)
 
-3. **Identified UI weakness**: Variant system is mechanically clear (3 toggle buttons) but contextually opaque. Players don't understand WHY variants matter or which ones suit their archetype.
+| Priority | Improvement | Impact | Effort | Status |
+|----------|-------------|--------|--------|--------|
+| 🔴 P1 | **Stat Tooltips** (Setup Screen) | ⭐⭐⭐⭐⭐ | Small | Unblocks ~80% of onboarding confusion |
+| 🔴 P2 | **Impact Breakdown** (Pass Results) | ⭐⭐⭐⭐ | Medium | Closes learning loop; shows consequences |
+| 🟡 P3 | **Loadout Presets** (Gear Selection) | ⭐⭐⭐ | Medium | Reduces gear decision paralysis |
+| 🟡 P4 | **Counter Chart** (Attack Select) | ⭐⭐⭐ | Small | Makes counter system learnable |
 
-4. **Proposed 3 concrete improvements**:
-   - **Affinity labels** in variant tooltips (shows which archetype each variant favors)
-   - **Quick Builds section** on LoadoutScreen (predefined aggressive/defensive/balanced builds)
-   - **Matchup hint** (displays estimated win rate for chosen archetype + variants vs opponent)
+### Key Recommendations
+- **Minimum Viable**: P1 + P2 unblock learning loop for new players
+- **First Implementation**: P1 (Stat Tooltips) — highest impact, smallest effort
+- **Bundle with P2**: Impact Breakdown should follow immediately after
+- **Nice to Have**: P3-P4 for high polish after core clarity fixed
 
-All analysis written to orchestrator/analysis/design-round-1.md with detailed specs for engineering implementation.
+**Full analysis written to**: `orchestrator/analysis/design-round-3.md` with detailed specs, acceptance criteria, and implementation priority matrix.
+
+---
 
 ## What's Left
 
-Design proposals are complete. These await implementation:
-- UI affinity label integration
-- Quick Builds UI component
-- Matchup hint calculation and display
+All clarity improvements await implementation:
+- P1: Stat Tooltips (required for onboarding)
+- P2: Impact Breakdown (strongly recommended)
+- P3: Loadout Presets (polish)
+- P4: Counter Chart (polish)
 
-All are documented with acceptance criteria in the design analysis.
+Full specs and acceptance criteria documented in design-round-3.md.
 
 ## File Ownership
 

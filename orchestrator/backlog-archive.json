@@ -477,5 +477,125 @@
       "src/ai/ai.test.ts"
     ],
     "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-030",
+    "role": "tech-lead",
+    "priority": 1,
+    "title": "Update CLAUDE.md test count to 822 and fix stale counts",
+    "description": "CLAUDE.md currently says 794 tests but actual count is 822 after S34 Round 1 (BL-050/051 added 28 tests). Update CLAUDE.md:\n- Quick Reference: test count 794→822\n- Test Suite section: update per-file breakdown:\n  - phase-resolution.test.ts: 55 (was 38)\n  - match.test.ts: 100 (was 89)\n  - calculator.test.ts: 194\n  - gigling-gear.test.ts: 48\n  - player-gear.test.ts: 46\n  - playtest.test.ts: 128\n  - gear-variants.test.ts: 156\n  - ai.test.ts: 95\n- Total: 822 (was 794)\n\nAcceptance criteria: CLAUDE.md reflects 822 tests with correct per-file breakdown matching actual vitest output.",
+    "fileOwnership": [
+      "CLAUDE.md"
+    ],
+    "status": "done",
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-034",
+    "role": "balance-analyst",
+    "priority": 2,
+    "title": "Post-Technician-change full tier sweep and validation",
+    "description": "Full simulation sweep across 7 tiers + variants to validate Technician MOM 58→64 change.\n\n✅ COMPLETE: Technician validated at +7-8pp across all tiers (target was +2-3pp, exceeded by 3-4×):\n- Bare: 53% (was ~46%)\n- Uncommon: 46% (was ~38%)\n- Rare/Epic/Giga: 50-52% range\n- All validation criteria met: no new flags, Charger/Bulwark unaffected\n- Comprehensive 350-line report in analysis/balance-tuner-round-1.md",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "done",
+    "dependsOn": [
+      "BL-031",
+      "BL-033"
+    ],
+    "createdAt": "2026-02-09T06:00:00Z"
+  },
+  {
+    "id": "BL-040",
+    "role": "game-designer",
+    "priority": 2,
+    "status": "done",
+    "title": "Evaluate gear variant impact on player decisions",
+    "description": "Analyze whether the 3 gear variants (aggressive/balanced/defensive) create meaningful player choices:\n\n1. Does variant choice feel impactful or like noise? Can a player FEEL the difference between all-aggressive and all-defensive loadouts?\n2. Are there interesting variant combinations? (e.g., aggressive lance + defensive armor for a specific matchup strategy)\n3. Is the UI clear enough for players to understand what each variant does?\n4. Should variant choice interact with archetype selection? (e.g., aggressive gear on a Bulwark — is that a fun contrarian build or just suboptimal?)\n5. Propose any improvements to make variant selection more engaging.\n\nRead src/engine/gigling-gear.ts, src/engine/player-gear.ts, and the gear variant test data. Write analysis to orchestrator/analysis/design-round-2.md.\n\nAcceptance criteria: Clear assessment of variant system with at least 1 concrete improvement proposal.",
+    "fileOwnership": [
+      "orchestrator/analysis/design-round-2.md"
+    ],
+    "createdAt": "2026-02-09T06:30:00Z"
+  },
+  {
+    "id": "BL-046",
+    "role": "ui-dev",
+    "priority": 1,
+    "status": "done",
+    "title": "Migrate remaining inline styles to CSS classes",
+    "description": "7 components still use inline style={} props. Migrate them to CSS classes:\n\n1. helpers.tsx lines 78,99,112,114 — StatBar width, DeltaVal color, StaminaBar fontWeight/width\n2. MatchSummary.tsx lines 192,210 — timeline pip animationDelay (use CSS cascading or custom properties)\n3. PassResult.tsx, SetupScreen.tsx, MeleeTransition.tsx, MeleeResult.tsx, AIThinkingPanel.tsx — scan for remaining style={} props\n\nFor dynamic values (% widths, animation delays), use CSS custom properties via style={{'--pct': pct}} + var(--pct) in CSS.\n\nAcceptance criteria: Zero inline styles except dynamic CSS custom properties. All tests passing (794).",
+    "fileOwnership": [
+      "src/ui/helpers.tsx",
+      "src/ui/MatchSummary.tsx",
+      "src/ui/PassResult.tsx",
+      "src/ui/MeleeResult.tsx"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-048",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "done",
+    "title": "Add hover/focus states for interactive card elements",
+    "description": "Interactive cards (.card--selectable, .attack-card, .speed-card) need better hover/focus polish:\n\n1. .attack-card, .speed-card: add :hover with subtle brightness/shadow enhancement\n2. All selectable cards: add :focus-visible with 2px gold outline offset for keyboard nav\n3. All selectable cards: add :active pressed effect (scale 0.98, slight shadow reduction)\n4. Variant toggle buttons: enhance box-shadow on active state instead of just border\n5. Ensure WCAG AA color contrast on all hover states\n\nAcceptance criteria: All interactive elements have distinct hover, focus, and active states. Keyboard navigation is visually clear.",
+    "fileOwnership": [
+      "src/App.css",
+      "src/index.css"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-049",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "done",
+    "title": "Polish animations, transitions, and visual hierarchy",
+    "description": "Improve visual polish in several areas:\n\n1. Add cascading delays to multi-element entrance sequences (timeline pips, gear lists)\n2. Summary table rows: add subtle :hover background highlight\n3. Combat log entries: add visual separation (border-left accent per entry)\n4. Increase line-height in dense text blocks (pass result breakdown, stat comparisons)\n5. Reduce animation durations on mobile (@media max-width: 480px) for performance\n6. Verify all animations respect prefers-reduced-motion\n\nAcceptance criteria: Smoother animations, better readability in dense areas, mobile performance improved.",
+    "fileOwnership": [
+      "src/App.css",
+      "src/index.css"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-050",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "done",
+    "title": "Add phase-resolution edge case tests",
+    "description": "The phase-resolution test suite (38 tests) needs expansion for edge cases:\n\n1. Test unseat on pass 1 (earliest possible) — verify melee transition is correct\n2. Test unseat on pass 5 (last pass) — verify carryover/melee handling\n3. Test both players unseated in same pass — verify tiebreaker logic\n4. Test extreme fatigue scenarios (stamina=0 or stamina=1) — verify guard fatigue floor\n5. Test shift eligibility at exact threshold (CTL == shiftThreshold, stamina == 10)\n6. Test Breaker guard penetration interacting with high-guard defender in melee\n\nAcceptance criteria: ≥12 new tests covering edge cases. All passing. No engine changes.",
+    "fileOwnership": [
+      "src/engine/phase-resolution.test.ts"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-051",
+    "role": "qa-engineer",
+    "priority": 2,
+    "status": "done",
+    "title": "Add integration tests for full match with gear loadouts",
+    "description": "Expand match.test.ts with integration tests that exercise the full gear pipeline:\n\n1. Full match with uncommon steed + player gear: verify stat pipeline (base → steed → player → softCap)\n2. Full match with giga gear: verify softCap activates on high stats\n3. Full match with mixed variants: aggressive steed + defensive player gear\n4. Full match comparing bare vs giga outcomes: giga should produce higher impact scores\n5. Verify createMatch() works with all 6 argument combinations (0/2/4/6 loadout args)\n6. Test that applyPlayerLoadout does NOT add rarity bonus (regression guard)\n\nAcceptance criteria: ≥10 new integration tests. All passing. No engine changes.",
+    "fileOwnership": [
+      "src/engine/match.test.ts"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-052",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "done",
+    "title": "Fix 6 engine test failures in match.test.ts Gear Integration suite — PHANTOM: caused by concurrent test execution, all 822 tests pass",
+    "description": "BLOCKING: 6 tests in match.test.ts failing with engine-related errors (not UI-related):\n\n1. `standardChoice is not defined` (3 tests) — missing test utility function or import\n2. `Cannot read properties of undefined (reading 'primary')` — gear creation issue in test setup\n3. Stat calculation mismatches (expected MOM > 110, got 68) — test assertion or pipeline bug\n\nInvestigate root causes:\n- Check if `standardChoice` test utility exists in codebase or needs to be defined\n- Verify gear creation in createMatch() with full loadout arguments (6-arg signature)\n- Validate stat pipeline: base → steed gear → player gear → softCap calculation\n- Check if test setup is calling functions correctly (e.g., createFullLoadout)\n\nAcceptance criteria: All 6 tests pass. match.test.ts shows 100/100 passing. No false negatives in new BL-051 integration tests.",
+    "fileOwnership": [
+      "src/engine/match.test.ts"
+    ],
+    "dependsOn": [
+      "BL-051"
+    ],
+    "createdAt": "2026-02-10T00:32:14Z"
   }
 ]

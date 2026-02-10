@@ -1,140 +1,78 @@
 # UI Developer — Round 1 Analysis
 
-## Summary
-Successfully completed BL-046 (P1): Migrated remaining inline styles to CSS classes across 7 UI components. Eliminated ~90% of inline `style={}` props, keeping only dynamic values that use CSS custom properties.
+## BL-047: Accessibility Improvements (Verification + Stretch Goals)
 
-## Scope
-- **Task**: BL-046 — Migrate remaining inline styles to CSS classes
-- **Files Modified**: 7 UI components + App.css (8 files total)
-- **Lines Changed**: ~50 JSX changes, ~80 CSS additions
-- **Test Impact**: 0 (pre-existing 6 failures in match.test.ts are unrelated)
+### Primary Task Status: ✓ Already Complete
 
-## Implementation Details
+BL-047 was completed in a prior session (Round 2). Verification confirms all required accessibility attributes are present:
 
-### Strategy
-1. Identified all inline `style={}` usage in target files
-2. Categorized by type:
-   - **Static styles** → new CSS classes
-   - **Dynamic values** → CSS custom properties pattern
-   - **Utility patterns** → reusable utility classes
-3. Added CSS classes in logical sections (utilities, component-specific)
-4. Used CSS custom properties for runtime-calculated values (widths, animation delays)
+**SetupScreen.tsx**: Archetype cards have role="button", tabIndex={0}, aria-label, keyboard handlers
+**LoadoutScreen.tsx**: Rarity cards and variant toggles have role="button", tabIndex={0}, aria-label, aria-pressed
+**MatchSummary.tsx**: Table headers have scope="col", timeline pips have descriptive aria-label
+**CombatLog.tsx**: Toggle button has aria-expanded and aria-controls
+**AIEndScreenPanels.tsx**: Match replay items have aria-expanded and aria-controls
 
-### CSS Custom Properties Pattern
-For dynamic values, used the recommended React → CSS custom property bridge:
-```tsx
-// React: pass dynamic value as CSS custom property
-<div style={{ '--bar-width': `${pct}%` }} />
+### Stretch Goals Completed (Round 1)
 
-// CSS: consume custom property with fallback
-.bar { width: var(--bar-width, 0%); }
-```
+Identified and fixed additional accessibility gaps:
 
-This eliminates inline styles while preserving runtime reactivity.
+#### 1. SpeedSelect.tsx — Speed Cards
+**Lines 28-51**: Speed selection cards were clickable divs without accessibility
 
-### New Utility Classes Added
-- `.text-faint`, `.text-center` — text styling
-- `.mt-8`, `.mb-12` — spacing shortcuts
-- `.stamina-display__value` — stamina display component
+**Added**:
+- `role="button"` and `tabIndex={0}` for keyboard navigation
+- Descriptive `aria-label` including speed name and all stat deltas
+- `onKeyDown` handler for Enter/Space key activation
+- Space key preventDefault to avoid page scroll
 
-### Component-Specific Classes Added
-- **Pass result**: `.pass-winner--{p1|p2|tie}`, `.impact-row__label--bold`, `.impact-row__p{1|2}--large`
-- **Melee result**: `.melee-result__winner-text`, `.melee-result__attack-name`, `.melee-result__margin`
-- **Melee transition**: `.melee-transition__hint`
-- **Difficulty selector**: `.difficulty-btn`, `.difficulty-btn--active`
-- **Summary tables**: `.summary-table__result--{p1|p2|tie|unseat|crit}` (already existed, now utilized)
+**Screen reader experience**: "Select Fast speed: momentum +5, control -3, initiative +2, stamina -8"
 
-### Timeline Pip Animation Refactor
-**Before**: Used 6 `:nth-child()` selectors for animation delays
-```css
-.timeline-pip:nth-child(1) { animation-delay: 0s; }
-.timeline-pip:nth-child(2) { animation-delay: 0.1s; }
-/* ... etc */
-```
+#### 2. AttackSelect.tsx — Attack Cards
+**Lines 5-42**: Attack selection cards were clickable divs without accessibility
 
-**After**: Single CSS custom property pattern
-```css
-.timeline-pip {
-  animation-delay: var(--anim-delay, 0s);
-}
-```
-```tsx
-<span style={{ '--anim-delay': `${i * 0.1}s` }} />
-```
+**Added**:
+- `role="button"` and `tabIndex={0}` for keyboard navigation
+- Rich `aria-label` including attack name, stance, ratings, and counter information
+- `aria-pressed={selected}` to indicate current selection
+- `onKeyDown` handler for Enter/Space key activation
 
-Benefits: More maintainable, supports variable-length lists, smaller CSS footprint.
+**Screen reader experience**: "Select Couched Lance attack, Aggressive stance. Power 3, control 2, defense 1. Beats Measured Thrust. Weak to Precision Thrust."
 
-## Test Results
-- **Passing**: 816/822 (99.3%)
-- **Failing**: 6 (pre-existing, engine-related)
-- **Failures**: All in `match.test.ts` Gear Integration suite
-  - `standardChoice` undefined (3 tests) — missing test variable
-  - Gear creation bug (1 test) — `undefined.primary` access
-  - Stat calculation mismatches (2 tests) — expects 102 got 73, expects >110 got 68
+#### 3. AttackSelect.tsx — Melee Wins Tracker
+**Lines 97-114**: Visual win tracker dots lacked screen reader descriptions
 
-**Confidence**: 100% that failures are pre-existing. Evidence:
-1. Failures are in engine test file, not UI tests
-2. Error messages reference engine code (gigling-gear.ts, match.ts)
-3. No UI component tests failed
-4. My changes only touched UI JSX + CSS, zero engine code
+**Added**:
+- `aria-label` on dot container summarizing win count (e.g., "Player 1: 2 of 3 wins")
+- `aria-hidden="true"` on individual dots to prevent redundant announcements
 
-## Coverage Analysis
+**Screen reader experience**: Announces total wins instead of reading each dot separately
 
-### Files Scanned for Inline Styles
-✓ helpers.tsx — 4 instances (2 migrated, 2 kept as dynamic)
-✓ MatchSummary.tsx — 4 instances (all migrated to classes/custom props)
-✓ PassResult.tsx — 3 instances (all migrated)
-✓ MeleeResult.tsx — 6 instances (all migrated)
-✓ SetupScreen.tsx — 1 instance (migrated)
-✓ MeleeTransition.tsx — 2 instances (all migrated)
-✓ AIThinkingPanel.tsx — 3 instances (migrated to custom props)
+### Accessibility Coverage Summary
 
-### Remaining Inline Styles (Justified)
-4 instances remain, all using runtime-calculated percentages:
-- `helpers.tsx:78, 114` — StatBar and StaminaBar dynamic widths
-- `MatchSummary.tsx:192, 210` — Timeline pip animation delays (CSS custom property pattern)
-- `AIThinkingPanel.tsx:64, 74, 83` — AI bar widths (CSS custom property pattern)
+| Component | Interactive Elements | Status |
+|-----------|---------------------|--------|
+| SetupScreen.tsx | Archetype cards | ✓ Complete (prior) |
+| LoadoutScreen.tsx | Rarity/variant cards | ✓ Complete (prior) |
+| MatchSummary.tsx | Timeline pips, tables | ✓ Complete (prior) |
+| CombatLog.tsx | Toggle button | ✓ Complete (prior) |
+| AIEndScreenPanels.tsx | Replay toggles | ✓ Complete (prior) |
+| **SpeedSelect.tsx** | **Speed cards** | **✓ Round 1 (new)** |
+| **AttackSelect.tsx** | **Attack cards, win dots** | **✓ Round 1 (new)** |
 
-These cannot be static classes and use the recommended CSS custom property pattern.
+### Test Results
+All 822 tests passing. No UI test breakage. Changes are presentation-only (add ARIA attributes, keyboard handlers).
 
-## Impact Assessment
+### Remaining Gaps (Future Work)
 
-### Positive Impacts
-1. **Maintainability**: Centralized styling in CSS, easier to refactor
-2. **Consistency**: Enforces design system via reusable classes
-3. **Performance**: (Minimal) Reduces inline style recalculation
-4. **Readability**: JSX is cleaner, less style logic mixed with markup
-5. **Scalability**: New utility classes available for future components
+1. **RevealScreen.tsx, PassResult.tsx, MeleeResult.tsx**: Static content, no interactive elements to improve
+2. **AIThinkingPanel.tsx**: Already has toggle button accessibility from prior work
+3. **MeleeTransition.tsx**: Static transition screen, no interactive elements
 
-### Risk Assessment
-- **Risk**: Low
-- **Breaking Changes**: None (CSS additive, no deletions)
-- **Visual Regression**: None expected (classes match inline style behavior)
-- **Browser Compatibility**: CSS custom properties supported in all modern browsers (IE11 not supported, but neither is React 18)
+**Potential future enhancements** (not blockers):
+- aria-live regions for dynamic combat updates (would announce new pass results automatically)
+- Focus management (auto-focus first card on screen transitions)
+- Skip-to-main-content link for screen reader users
+- High contrast mode CSS variables
 
-## Recommendations
-
-### Next Steps (BL-047)
-1. Add `aria-expanded` + `aria-controls` to toggle buttons (CombatLog, AIThinkingPanel)
-2. Add `scope='col'` to all `<th>` elements in summary tables
-3. Convert clickable `<div>` elements to `<button>` or add `role='button'` + keyboard handlers
-4. Add `aria-label` to timeline pips describing pass/round outcomes
-5. Test with screen reader (NVDA/JAWS) to validate accessibility improvements
-
-### Polish Opportunities (Future)
-1. Consider consolidating utility classes into a utilities section at top of App.css
-2. Document CSS custom property patterns in CLAUDE.md for consistency
-3. Add CSS linting rule to discourage inline styles (e.g., stylelint)
-
-## Metrics
-- **Time**: ~25 minutes
-- **Files Modified**: 8
-- **LOC Added**: ~80 CSS lines, ~50 JSX changes
-- **LOC Removed**: ~120 inline style lines
-- **Net LOC**: +10 (more explicit, but less inline complexity)
-- **Inline Styles Eliminated**: ~90% (from ~30 instances to ~4 justified instances)
-
-## Coordination Notes
-- **QA**: Test failures are pre-existing, not caused by this PR
-- **Balance Tuner**: 6 match.test.ts failures need investigation (gear integration suite)
-- **Polish**: All new CSS classes follow existing naming conventions (BEM-ish)
+### Recommendation
+BL-047 is complete. All interactive UI elements now have proper accessibility attributes and keyboard navigation. No further action required unless new components are added.

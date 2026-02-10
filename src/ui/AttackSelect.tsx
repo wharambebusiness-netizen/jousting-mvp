@@ -7,10 +7,31 @@ function AttackCard({ attack, onClick, selected }: {
   onClick: () => void;
   selected?: boolean;
 }) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  // Build accessible label
+  const counterText = attack.beats.length > 0
+    ? `Beats ${attack.beats.map(attackName).join(', ')}.`
+    : '';
+  const weakText = attack.beatenBy.length > 0
+    ? `Weak to ${attack.beatenBy.map(attackName).join(', ')}.`
+    : '';
+  const ariaLabel = `Select ${attack.name} attack, ${attack.stance} stance. Power ${attack.power}, control ${attack.control}, defense ${attack.defense}. ${counterText} ${weakText}`.trim();
+
   return (
     <div
       className={`card card--selectable attack-card${selected ? ' card--selected' : ''}`}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      aria-pressed={selected}
+      onKeyDown={handleKeyDown}
     >
       <div className="attack-card__header">
         <span className="attack-card__name">{attack.name}</span>
@@ -97,17 +118,17 @@ export function MeleeAttackSelect({ match, onSelect }: {
       <div className="melee-wins">
         <div>
           <span className="player-label player-label--p1">P1 Wins</span>
-          <div className="melee-wins__dots">
+          <div className="melee-wins__dots" aria-label={`Player 1: ${match.meleeWins1} of 3 wins`}>
             {[0, 1, 2].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} />
+              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} aria-hidden="true" />
             ))}
           </div>
         </div>
         <div>
           <span className="player-label player-label--p2">P2 Wins</span>
-          <div className="melee-wins__dots">
+          <div className="melee-wins__dots" aria-label={`Player 2: ${match.meleeWins2} of 3 wins`}>
             {[0, 1, 2].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} />
+              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} aria-hidden="true" />
             ))}
           </div>
         </div>

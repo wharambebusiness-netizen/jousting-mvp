@@ -1,165 +1,93 @@
 [
   {
-    "id": "BL-030",
-    "role": "tech-lead",
-    "priority": 1,
-    "title": "Update CLAUDE.md test count to 822 and fix stale counts",
-    "description": "CLAUDE.md currently says 794 tests but actual count is 822 after S34 Round 1 (BL-050/051 added 28 tests). Update CLAUDE.md:\n- Quick Reference: test count 794→822\n- Test Suite section: update per-file breakdown:\n  - phase-resolution.test.ts: 55 (was 38)\n  - match.test.ts: 100 (was 89)\n  - calculator.test.ts: 194\n  - gigling-gear.test.ts: 48\n  - player-gear.test.ts: 46\n  - playtest.test.ts: 128\n  - gear-variants.test.ts: 156\n  - ai.test.ts: 95\n- Total: 822 (was 794)\n\nAcceptance criteria: CLAUDE.md reflects 822 tests with correct per-file breakdown matching actual vitest output.",
-    "fileOwnership": [
-      "CLAUDE.md"
-    ],
-    "status": "assigned",
-    "createdAt": "2026-02-09T06:00:00Z"
-  },
-  {
-    "id": "BL-034",
-    "role": "balance-analyst",
-    "priority": 2,
-    "title": "Post-Technician-change full tier sweep and validation",
-    "description": "Full simulation sweep across 7 tiers + variants to validate Technician MOM 58→64 change.\n\n✅ COMPLETE: Technician validated at +7-8pp across all tiers (target was +2-3pp, exceeded by 3-4×):\n- Bare: 53% (was ~46%)\n- Uncommon: 46% (was ~38%)\n- Rare/Epic/Giga: 50-52% range\n- All validation criteria met: no new flags, Charger/Bulwark unaffected\n- Comprehensive 350-line report in analysis/balance-tuner-round-1.md",
-    "fileOwnership": [
-      "src/tools/simulate.ts"
-    ],
-    "status": "done",
-    "dependsOn": [
-      "BL-031",
-      "BL-033"
-    ],
-    "createdAt": "2026-02-09T06:00:00Z"
-  },
-  {
     "id": "BL-035",
     "role": "tech-lead",
     "priority": 2,
     "title": "Review Technician MOM change + update CLAUDE.md with validation results",
-    "description": "After BL-034 (validation sweep complete) and BL-052 (match.test.ts fixes), review and document Technician MOM 58→64 change:\n\n1. Review archetypes.ts change (Technician MOM=64) from prior session\n2. Verify test assertions are correct across calculator.test.ts and match.test.ts\n3. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Live Data: Updated win rates from BL-034 sweep (53% bare, 46% uncommon, 51% epic, 50% giga)\n   - Test Suite: Update breakdown to 822 tests (requires BL-030 first)\n\nDEPENDS ON: BL-030 (test count update), BL-034 (validation complete), BL-052 (test fixes complete).\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, updated win rates, correct test count (822).",
+    "description": "After BL-030 (completed) and BL-034 (validation complete), document Technician MOM 58→64 change:\n\n1. Review archetypes.ts change (Technician MOM=64) from prior session\n2. Verify test assertions across calculator.test.ts and match.test.ts\n3. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Live Data: Updated win rates from BL-034 sweep (52-53% bare, 45-47% uncommon, 48-50% epic, 48-51% giga)\n   - Test Suite: Confirm 830 tests (8 added by QA Round 1)\n\nDEPENDS ON: BL-030 (COMPLETE), BL-034 (COMPLETE).\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, current test count (830), recent balance findings.",
     "fileOwnership": [
       "CLAUDE.md"
     ],
     "status": "assigned",
-    "dependsOn": [
-      "BL-030",
-      "BL-034",
-      "BL-052"
-    ],
+    "dependsOn": [],
     "createdAt": "2026-02-09T06:00:00Z"
   },
   {
-    "id": "BL-040",
+    "id": "BL-041",
     "role": "game-designer",
-    "priority": 2,
+    "priority": 3,
     "status": "assigned",
-    "title": "Evaluate gear variant impact on player decisions",
-    "description": "Analyze whether the 3 gear variants (aggressive/balanced/defensive) create meaningful player choices:\n\n1. Does variant choice feel impactful or like noise? Can a player FEEL the difference between all-aggressive and all-defensive loadouts?\n2. Are there interesting variant combinations? (e.g., aggressive lance + defensive armor for a specific matchup strategy)\n3. Is the UI clear enough for players to understand what each variant does?\n4. Should variant choice interact with archetype selection? (e.g., aggressive gear on a Bulwark — is that a fun contrarian build or just suboptimal?)\n5. Propose any improvements to make variant selection more engaging.\n\nRead src/engine/gigling-gear.ts, src/engine/player-gear.ts, and the gear variant test data. Write analysis to orchestrator/analysis/design-round-2.md.\n\nAcceptance criteria: Clear assessment of variant system with at least 1 concrete improvement proposal.",
+    "title": "New player experience — first-match clarity audit",
+    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. Write analysis to orchestrator/analysis/design-round-2.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
     "fileOwnership": [
       "orchestrator/analysis/design-round-2.md"
     ],
     "createdAt": "2026-02-09T06:30:00Z"
   },
   {
-    "id": "BL-041",
-    "role": "game-designer",
-    "priority": 3,
-    "status": "pending",
-    "title": "New player experience — first-match clarity audit",
-    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. Write analysis to orchestrator/analysis/design-round-3.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
-    "fileOwnership": [
-      "orchestrator/analysis/design-round-3.md"
-    ],
-    "createdAt": "2026-02-09T06:30:00Z"
-  },
-  {
-    "id": "BL-046",
-    "role": "ui-dev",
-    "priority": 1,
-    "status": "done",
-    "title": "Migrate remaining inline styles to CSS classes",
-    "description": "7 components still use inline style={} props. Migrate them to CSS classes:\n\n1. helpers.tsx lines 78,99,112,114 — StatBar width, DeltaVal color, StaminaBar fontWeight/width\n2. MatchSummary.tsx lines 192,210 — timeline pip animationDelay (use CSS cascading or custom properties)\n3. PassResult.tsx, SetupScreen.tsx, MeleeTransition.tsx, MeleeResult.tsx, AIThinkingPanel.tsx — scan for remaining style={} props\n\nFor dynamic values (% widths, animation delays), use CSS custom properties via style={{'--pct': pct}} + var(--pct) in CSS.\n\nAcceptance criteria: Zero inline styles except dynamic CSS custom properties. All tests passing (794).",
-    "fileOwnership": [
-      "src/ui/helpers.tsx",
-      "src/ui/MatchSummary.tsx",
-      "src/ui/PassResult.tsx",
-      "src/ui/MeleeResult.tsx"
-    ],
-    "createdAt": "2026-02-10T00:00:00Z"
-  },
-  {
     "id": "BL-047",
     "role": "ui-dev",
     "priority": 2,
-    "status": "assigned",
-    "title": "Add ARIA attributes and semantic markup for accessibility",
-    "description": "Multiple components lack proper accessibility attributes:\n\n1. Combat log toggles and AI thinking panel toggles: add aria-expanded, aria-controls\n2. Summary tables: add scope='col' to <th> elements\n3. Rarity grid cards: add role='button' or use <button> with aria-label\n4. Match timeline pips: add aria-label describing pass results\n5. Clickable elements that aren't <button>: add role='button' tabIndex={0} and keyboard event handlers\n\nFocus on SetupScreen.tsx, LoadoutScreen.tsx, MatchSummary.tsx.\n\nAcceptance criteria: All interactive elements are keyboard-navigable. Screen reader can describe game state. All tests passing.",
+    "status": "done",
+    "title": "ARIA attributes and semantic markup for accessibility — COMPLETE",
+    "description": "✅ COMPLETED Round 1: Extended accessibility to SpeedSelect.tsx and AttackSelect.tsx (attack cards + melee wins dots). All interactive elements now keyboard-navigable with proper aria-labels. 822→830 tests (no breakage). Ready for deployment.",
     "fileOwnership": [
-      "src/ui/SetupScreen.tsx",
+      "src/ui/SpeedSelect.tsx",
+      "src/ui/AttackSelect.tsx"
+    ],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-057",
+    "role": "balance-analyst",
+    "priority": 2,
+    "title": "Rare/epic tier balance sweep (fill tier gap)",
+    "description": "Round 1 baseline covered bare/uncommon/giga but skipped rare/epic. Run N=200 rare and epic tier simulations to:\n\n1. Fill tier gap in balance understanding\n2. Verify Charger progression (bare 41%→epic peak→giga 47%)\n3. Verify Technician buff doesn't spike at rare/epic\n4. Map Bulwark dominance fade pattern (bare 61.4%→uncommon 58%→?rare?→?epic?→giga 50%)\n\nWrite findings to orchestrator/analysis/balance-tuner-round-2.md.\n\nAcceptance criteria: Rare and epic tier win rates documented, no new balance flags, confidence in tier progression.",
+    "fileOwnership": [
+      "orchestrator/analysis/balance-tuner-round-2.md"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T03:50:00Z"
+  },
+  {
+    "id": "BL-058",
+    "role": "ui-dev",
+    "priority": 3,
+    "title": "Gear variant affinity hints + quick build presets (design follow-up)",
+    "description": "Follow-up to BL-040 (design analysis complete). Implement designer's 3 proposals:\n\n1. **Affinity labels in variant tooltips**: Show which archetype each variant favors (aggressive→Charger, defensive→Breaker, balanced→neutral)\n2. **Quick Builds section** on LoadoutScreen: 3 pre-configured buttons (Aggressive Charger, Defensive Breaker, Balanced Duelist) that auto-select steed/player gear variants\n3. **Matchup hint**: Display estimated win rate for current archetype+variant combo vs opponent (requires integration with simulate.ts)\n\nUpdate LoadoutScreen.tsx with new UI sections + App.css styling.\n\nAcceptance criteria: All 3 proposals UI-complete, 830+ tests passing, tooltips informative, quick builds auto-populate correctly.",
+    "fileOwnership": [
       "src/ui/LoadoutScreen.tsx",
-      "src/ui/MatchSummary.tsx"
+      "src/App.css"
     ],
-    "createdAt": "2026-02-10T00:00:00Z"
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T03:52:00Z"
   },
   {
-    "id": "BL-048",
-    "role": "css-artist",
-    "priority": 1,
-    "status": "done",
-    "title": "Add hover/focus states for interactive card elements",
-    "description": "Interactive cards (.card--selectable, .attack-card, .speed-card) need better hover/focus polish:\n\n1. .attack-card, .speed-card: add :hover with subtle brightness/shadow enhancement\n2. All selectable cards: add :focus-visible with 2px gold outline offset for keyboard nav\n3. All selectable cards: add :active pressed effect (scale 0.98, slight shadow reduction)\n4. Variant toggle buttons: enhance box-shadow on active state instead of just border\n5. Ensure WCAG AA color contrast on all hover states\n\nAcceptance criteria: All interactive elements have distinct hover, focus, and active states. Keyboard navigation is visually clear.",
-    "fileOwnership": [
-      "src/App.css",
-      "src/index.css"
-    ],
-    "createdAt": "2026-02-10T00:00:00Z"
-  },
-  {
-    "id": "BL-049",
-    "role": "css-artist",
-    "priority": 2,
-    "status": "done",
-    "title": "Polish animations, transitions, and visual hierarchy",
-    "description": "Improve visual polish in several areas:\n\n1. Add cascading delays to multi-element entrance sequences (timeline pips, gear lists)\n2. Summary table rows: add subtle :hover background highlight\n3. Combat log entries: add visual separation (border-left accent per entry)\n4. Increase line-height in dense text blocks (pass result breakdown, stat comparisons)\n5. Reduce animation durations on mobile (@media max-width: 480px) for performance\n6. Verify all animations respect prefers-reduced-motion\n\nAcceptance criteria: Smoother animations, better readability in dense areas, mobile performance improved.",
-    "fileOwnership": [
-      "src/App.css",
-      "src/index.css"
-    ],
-    "createdAt": "2026-02-10T00:00:00Z"
-  },
-  {
-    "id": "BL-050",
-    "role": "qa-engineer",
-    "priority": 1,
-    "status": "done",
-    "title": "Add phase-resolution edge case tests",
-    "description": "The phase-resolution test suite (38 tests) needs expansion for edge cases:\n\n1. Test unseat on pass 1 (earliest possible) — verify melee transition is correct\n2. Test unseat on pass 5 (last pass) — verify carryover/melee handling\n3. Test both players unseated in same pass — verify tiebreaker logic\n4. Test extreme fatigue scenarios (stamina=0 or stamina=1) — verify guard fatigue floor\n5. Test shift eligibility at exact threshold (CTL == shiftThreshold, stamina == 10)\n6. Test Breaker guard penetration interacting with high-guard defender in melee\n\nAcceptance criteria: ≥12 new tests covering edge cases. All passing. No engine changes.",
-    "fileOwnership": [
-      "src/engine/phase-resolution.test.ts"
-    ],
-    "createdAt": "2026-02-10T00:00:00Z"
-  },
-  {
-    "id": "BL-051",
+    "id": "BL-059",
     "role": "qa-engineer",
     "priority": 2,
-    "status": "done",
-    "title": "Add integration tests for full match with gear loadouts",
-    "description": "Expand match.test.ts with integration tests that exercise the full gear pipeline:\n\n1. Full match with uncommon steed + player gear: verify stat pipeline (base → steed → player → softCap)\n2. Full match with giga gear: verify softCap activates on high stats\n3. Full match with mixed variants: aggressive steed + defensive player gear\n4. Full match comparing bare vs giga outcomes: giga should produce higher impact scores\n5. Verify createMatch() works with all 6 argument combinations (0/2/4/6 loadout args)\n6. Test that applyPlayerLoadout does NOT add rarity bonus (regression guard)\n\nAcceptance criteria: ≥10 new integration tests. All passing. No engine changes.",
+    "title": "Melee carryover + softCap interaction tests",
+    "description": "QA coverage gap: Melee carryover + softCap interactions are only partially tested. Add 10-15 new tests to gear-variants.test.ts:\n\n1. Melee round winner carries stamina over to next round with softCap applied\n2. Stats crossing knee between rounds (e.g., fatigued below knee, then recovered above knee)\n3. SoftCap + counter bonus scaling (e.g., 150 MOM → 133 after softCap → 136.3 after 0.1 counter bonus)\n4. Breaker guard penetration + softCap interaction (penetration applied pre-softCap or post?)\n5. Extreme giga cases (all stats >110, both softCapped to 133)\n\nWrite tests to src/engine/gear-variants.test.ts, update test-count in handoff.\n\nAcceptance criteria: 10-15 new tests added, all passing, zero regressions, coverage report included in handoff.",
     "fileOwnership": [
-      "src/engine/match.test.ts"
+      "src/engine/gear-variants.test.ts"
     ],
-    "createdAt": "2026-02-10T00:00:00Z"
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T03:54:00Z"
   },
   {
-    "id": "BL-052",
-    "role": "qa-engineer",
-    "priority": 1,
-    "status": "assigned",
-    "title": "Fix 6 engine test failures in match.test.ts Gear Integration suite",
-    "description": "BLOCKING: 6 tests in match.test.ts failing with engine-related errors (not UI-related):\n\n1. `standardChoice is not defined` (3 tests) — missing test utility function or import\n2. `Cannot read properties of undefined (reading 'primary')` — gear creation issue in test setup\n3. Stat calculation mismatches (expected MOM > 110, got 68) — test assertion or pipeline bug\n\nInvestigate root causes:\n- Check if `standardChoice` test utility exists in codebase or needs to be defined\n- Verify gear creation in createMatch() with full loadout arguments (6-arg signature)\n- Validate stat pipeline: base → steed gear → player gear → softCap calculation\n- Check if test setup is calling functions correctly (e.g., createFullLoadout)\n\nAcceptance criteria: All 6 tests pass. match.test.ts shows 100/100 passing. No false negatives in new BL-051 integration tests.",
+    "id": "BL-060",
+    "role": "css-artist",
+    "priority": 3,
+    "title": "Stat bar animations + rarity glow stacking (polish stretch)",
+    "description": "Optional polish enhancements (not blocking):\n\n1. **Stat bar smooth fill**: Add 0.4s ease-in-out transition to stat bars (MOM/CTL/GRD/INIT/STA) when values change during match\n2. **Rarity glow stacking**: Epic gear gets 1x glow, Legendary 2x overlapping glows, Relic 3x (additive shadows for depth)\n3. **Disabled state styling**: When player can't take action (out of stamina, phase locked), add opacity 0.5 + cursor: not-allowed to disabled buttons\n\nUpdate src/App.css with new animation keyframes + modifier classes.\n\nAcceptance criteria: All animations smooth at 60fps on mobile, prefers-reduced-motion still honored, no visual regressions, 830+ tests passing.",
     "fileOwnership": [
-      "src/engine/match.test.ts"
+      "src/App.css"
     ],
-    "dependsOn": [
-      "BL-051"
-    ],
-    "createdAt": "2026-02-10T00:32:14Z"
+    "status": "pending",
+    "dependsOn": [],
+    "createdAt": "2026-02-10T03:56:00Z"
   }
 ]

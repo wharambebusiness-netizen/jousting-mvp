@@ -28,11 +28,21 @@ export function SpeedSelect({ match, onSelect }: {
       <div className="speed-grid">
         {SPEED_ORDER.map(type => {
           const s = SPEEDS[type];
+          const handleKeyDown = (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect(type);
+            }
+          };
           return (
             <div
               key={type}
               className="card card--selectable speed-card"
               onClick={() => onSelect(type)}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select ${type} speed: momentum ${s.deltaMomentum > 0 ? '+' : ''}${s.deltaMomentum}, control ${s.deltaControl > 0 ? '+' : ''}${s.deltaControl}, initiative ${s.deltaInitiative > 0 ? '+' : ''}${s.deltaInitiative}, stamina ${s.deltaStamina}`}
+              onKeyDown={handleKeyDown}
             >
               <div className="speed-card__name">{type}</div>
               <div className="speed-card__deltas">
