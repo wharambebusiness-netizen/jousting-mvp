@@ -1591,7 +1591,7 @@ describe('BL-059: Melee carryover + softCap interactions', () => {
           match = submitMeleeRound(match, FB, MC);
           expect(match.meleeRoundResults.length).toBe(3);
           // Verify match terminates (either MeleeSelect or MatchOver)
-          expect([Phase.MeleeSelect, Phase.MatchOver]).toContain(match.phase);
+          expect([Phase.MeleeSelect, Phase.MatchEnd]).toContain(match.phase);
         }
       });
     });
