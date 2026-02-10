@@ -1,0 +1,124 @@
+{
+  "name": "Validation Run (5 rounds)",
+  "description": "Quick 5-round validation to confirm orchestrator bug fix and escalation path. Same agents as overnight but capped at 5 rounds.",
+  "config": {
+    "maxRounds": 5,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 7200000,
+    "maxConcurrency": 4
+  },
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs, the project TODO list (MEMORY.md), and current backlog.json. Identify what work needs doing next. Generate 3-5 new tasks in backlog.json for other agents. Prioritize: balance fixes > bug fixes > test coverage > UI polish > features > CSS polish. Write a status summary to orchestrator/analysis/producer-status.md."
+      }
+    },
+    {
+      "id": "balance-tuner",
+      "name": "Balance Analyst",
+      "type": "continuous",
+      "role": "balance-analyst",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/balance-config.ts", "src/engine/archetypes.ts"],
+      "tasks": {
+        "primary": "Run simulations at all tiers (bare, uncommon, epic, giga). Identify the weakest archetype at each tier. Make ONE small tuning change per round (max +/-3 stat points or one constant tweak). Verify tests pass. Track win rate trajectory across rounds. Target: no archetype below 44% or above 58% at any tier."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/match.test.ts", "src/engine/playtest.test.ts", "src/engine/gear-variants.test.ts", "src/engine/phase-resolution.test.ts"],
+      "tasks": {
+        "primary": "Each round: pick ONE untested area and write 5-10 new tests for it. Focus areas in order: 1) gear variant interactions, 2) archetype matchup edge cases, 3) stamina/fatigue boundary conditions, 4) softCap behavior near knee=100, 5) melee phase resolution edge cases. Run full suite to verify no regressions. Also fix any test assertions broken by balance changes from other agents."
+      }
+    },
+    {
+      "id": "polish",
+      "name": "CSS Artist",
+      "type": "continuous",
+      "role": "css-artist",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["src/App.css", "src/index.css"],
+      "tasks": {
+        "primary": "Each round: pick ONE UI element and improve its visual design. Focus areas in order: 1) combat result screens (damage numbers, animations), 2) responsive breakpoints, 3) melee transition polish, 4) winner banner refinement, 5) accessibility improvements. Make small, incremental improvements. Coordinate with ui-dev agent for JSX-side changes."
+      }
+    },
+    {
+      "id": "reviewer",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md", "MEMORY.md"],
+      "tasks": {
+        "primary": "Each round: review changes made by other agents this session. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling, UI/engine coupling violations. Write review report to orchestrator/analysis/review-round-N.md. Keep CLAUDE.md updated with correct test counts and balance state. If you find issues, note them in your handoff notes-for-others so the relevant agent can fix them next round."
+      }
+    },
+    {
+      "id": "ui-dev",
+      "name": "UI Developer",
+      "type": "continuous",
+      "role": "ui-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx", "src/ui/PassResult.tsx", "src/ui/MeleeResult.tsx", "src/ui/MatchSummary.tsx", "src/ui/MeleeTransition.tsx", "src/ui/SpeedSelect.tsx", "src/ui/AttackSelect.tsx", "src/ui/RevealScreen.tsx", "src/ui/helpers.tsx", "src/ui/AIThinkingPanel.tsx", "src/ui/AIEndScreenPanels.tsx", "src/ui/CombatLog.tsx", "src/App.tsx", "src/App.css", "src/index.css"],
+      "tasks": {
+        "primary": "Each round: pick ONE UI improvement task. Priority order: 1) Migrate inline styles to CSS classes created by the polish agent (59 inline styles identified, class replacements ready in App.css), 2) Add rarity class to gear-item divs in LoadoutScreen for rarity-colored borders, 3) Improve combat result readability (who won, by how much, why), 4) Polish state transitions between screens, 5) Improve archetype/stat display clarity for new players. Run tests before handoff. Coordinate with polish agent on CSS class names."
+      }
+    },
+    {
+      "id": "designer",
+      "name": "Game Designer",
+      "type": "continuous",
+      "role": "game-designer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 5,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/design-round-*.md", "design/*.md"],
+      "tasks": {
+        "primary": "Each round: analyze the current game experience and write a design report. Focus areas in order: 1) Is every archetype interesting to play (not just balanced, but FUN)? 2) Are choices meaningful in each phase (speed, attack, gear variant)? 3) Does the AI provide a satisfying opponent at each difficulty? 4) Is combat feedback clear enough for new players? 5) What one change would most improve the player experience? Write proposals to orchestrator/analysis/design-round-N.md with clear specs the other agents can implement. Do NOT edit source files — you propose, others implement."
+      }
+    }
+  ]
+}

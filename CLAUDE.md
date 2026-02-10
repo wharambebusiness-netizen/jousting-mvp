@@ -115,6 +115,53 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
 - **Test breakdown**: run `npx vitest run` — 8 suites (calculator, phase-resolution, gigling-gear, player-gear, match, playtest, gear-variants, ai)
 
+### Current Archetype Stats (Post-S35 Technician Buff)
+
+```
+             MOM  CTL  GRD  INIT  STA  Total  Notes
+charger:      75   55   50    55   65  = 300   Raw impact specialist
+technician:   64   70   55    59   55  = 303   MOM+6, INIT-1 (S35)
+bulwark:      58   52   65    53   62  = 290   MOM+3, CTL-3 (S35 R6)
+tactician:    55   65   50    75   55  = 300   Tempo control
+breaker:      62   60   55    55   60  = 292   Guard penetration 0.25
+duelist:      60   60   60    60   60  = 300   Balanced generalist
+```
+
+**Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.18`
+
+### Win Rate Validation (S35 Balance Analysis)
+
+**Bare Tier** (N=200, balanced variant):
+- Bulwark: 61.4% | Technician: 52.4% | Duelist: 51.1% | Tactician: 49.6% | Breaker: 46.5% | Charger: 39.0%
+- Spread: 22.4pp (expected for bare stats, no gear)
+
+**Giga Tier** (N=200, balanced variant):
+- Breaker: 53.9% | Bulwark: 50.4% | Technician: 48.9% | Tactician: 48.0% | Charger: 46.7% | Duelist: 46.7%
+- Spread: 7.2pp (excellent compression, zero flags)
+
+**Epic Tier** (N=200, balanced variant) — BEST COMPRESSION:
+- Charger: 51.0% | Bulwark: 53.1% | Technician: 49.2% | Duelist: 47.7% | Tactician: 47.4% | Breaker: 47.3%
+- Spread: 5.7pp (tightest balance, zero flags)
+
+**Tier Progression**: 22.4pp (bare) → 12.0pp (rare) → 5.7pp (epic) → 7.2pp (giga)
+- Balance improves monotonically with tier
+- Epic tier shows tightest compression (validates gear system design)
+- Charger reversal: weakest at bare (39.0%), STRONGEST at epic (51.0%)
+
+### Variant Impact (Giga Tier, N=200 per config)
+
+**Aggressive variant** (favors high-MOM/low-GRD):
+- Amplifies Bulwark dominance: 50.4% → 56.8% (+6.2pp)
+- Minimal Charger boost: 46.0% → 46.3% (+0.3pp)
+- Spread: 11.0pp (1 flag: Bulwark 56.8%)
+
+**Defensive variant** (favors high-GRD/low-MOM) — BEST BALANCE:
+- Compresses Bulwark: 50.4% → 49.3% (-1.3pp)
+- Boosts Charger: 46.0% → 48.9% (+2.9pp)
+- Spread: 6.6pp (zero flags, all archetypes 47.6-54.2%)
+
+**Variant choice = 3+ rarity tiers of impact** (NOT cosmetic). Matchup-level swings: ±10-15pp.
+
 ## Orchestrator v5
 
 ### Backlog System
