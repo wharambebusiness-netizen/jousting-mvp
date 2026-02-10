@@ -10,6 +10,10 @@ const SLOT_LABELS: Record<string, string> = {
   armor: 'Armor', gauntlets: 'Gauntlets', melee_weapon: 'Melee Wpn',
 };
 
+const STAT_ABBR: Record<string, string> = {
+  momentum: 'MOM', control: 'CTL', guard: 'GRD', initiative: 'INIT', stamina: 'STA',
+};
+
 export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2PlayerLoadout, onRematch }: {
   match: MatchState;
   p1Loadout?: GiglingLoadout | null;
@@ -18,8 +22,10 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
   p2PlayerLoadout?: PlayerLoadout | null;
   onRematch: () => void;
 }) {
-  const winnerName = match.winner === 'player1' ? match.player1.archetype.name
-    : match.winner === 'player2' ? match.player2.archetype.name
+  const p1Name = match.player1.archetype.name;
+  const p2Name = match.player2.archetype.name;
+  const winnerName = match.winner === 'player1' ? p1Name
+    : match.winner === 'player2' ? p2Name
     : null;
 
   return (
@@ -67,10 +73,10 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
             <thead>
               <tr>
                 <th scope="col">Pass</th>
-                <th scope="col">P1 Attack</th>
-                <th scope="col">P1 Impact</th>
-                <th scope="col">P2 Attack</th>
-                <th scope="col">P2 Impact</th>
+                <th scope="col">You ({p1Name})</th>
+                <th scope="col">Impact</th>
+                <th scope="col">Opp ({p2Name})</th>
+                <th scope="col">Impact</th>
                 <th scope="col">Result</th>
               </tr>
             </thead>
@@ -98,7 +104,7 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                     }>
                       {pr.unseat !== 'none'
                         ? `Unseat!`
-                        : diff > 0 ? 'P1' : diff < 0 ? 'P2' : 'Tie'}
+                        : diff > 0 ? 'You' : diff < 0 ? 'Opp' : 'Tie'}
                     </td>
                   </tr>
                 );
@@ -116,10 +122,10 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
             <thead>
               <tr>
                 <th scope="col">Rnd</th>
-                <th scope="col">P1 Attack</th>
-                <th scope="col">P1 Impact</th>
-                <th scope="col">P2 Attack</th>
-                <th scope="col">P2 Impact</th>
+                <th scope="col">You ({p1Name})</th>
+                <th scope="col">Impact</th>
+                <th scope="col">Opp ({p2Name})</th>
+                <th scope="col">Impact</th>
                 <th scope="col">Result</th>
               </tr>
             </thead>
@@ -138,7 +144,7 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
                       : 'summary-table__result--tie'
                   }>
                     {mr.outcome === 'Critical' ? 'CRIT!' : mr.outcome === 'Hit'
-                      ? (mr.winner === 'player1' ? 'P1' : 'P2')
+                      ? (mr.winner === 'player1' ? 'You' : 'Opp')
                       : 'Draw'}
                   </td>
                 </tr>
@@ -146,7 +152,7 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
             </tbody>
           </table>
           <p className="melee-legend mb-16">
-            Melee wins — P1: {match.meleeWins1}, P2: {match.meleeWins2} (first to 4, criticals count as 2)
+            Melee wins — You ({p1Name}): {match.meleeWins1}, Opp ({p2Name}): {match.meleeWins2} (first to 4, criticals count as 2)
           </p>
         </>
       )}
@@ -173,6 +179,8 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
 
 function MatchTimeline({ match }: { match: MatchState }) {
   const hasMelee = match.meleeRoundResults.length > 0;
+  const p1Name = match.player1.archetype.name;
+  const p2Name = match.player2.archetype.name;
   return (
     <div className="match-timeline">
       {match.passResults.map((pr, i) => {
@@ -186,8 +194,8 @@ function MatchTimeline({ match }: { match: MatchState }) {
           <span
             key={`p${i}`}
             className={`timeline-pip ${cls}`}
-            title={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'P1 wins' : diff < 0 ? 'P2 wins' : 'Tie'}`}
-            aria-label={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'Player 1 wins' : diff < 0 ? 'Player 2 wins' : 'Tie'}`}
+            title={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? `You (${p1Name})` : diff < 0 ? `Opp (${p2Name})` : 'Tie'}`}
+            aria-label={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? `You win (${p1Name})` : diff < 0 ? `Opponent wins (${p2Name})` : 'Tie'}`}
             style={{ '--anim-delay': `${i * 0.1}s` } as React.CSSProperties}
           >
             {isUnseat ? '\u2694' : `P${pr.passNumber}`}
@@ -205,8 +213,8 @@ function MatchTimeline({ match }: { match: MatchState }) {
           <span
             key={`m${i}`}
             className={`timeline-pip ${cls}`}
-            title={`Melee R${mr.roundNumber}: ${isCrit ? 'Critical!' : mr.winner === 'player1' ? 'P1' : mr.winner === 'player2' ? 'P2' : 'Draw'}`}
-            aria-label={`Melee Round ${mr.roundNumber}: ${isCrit ? 'Critical hit!' : mr.winner === 'player1' ? 'Player 1 wins' : mr.winner === 'player2' ? 'Player 2 wins' : 'Draw'}`}
+            title={`Melee R${mr.roundNumber}: ${isCrit ? 'Critical!' : mr.winner === 'player1' ? `You (${p1Name})` : mr.winner === 'player2' ? `Opp (${p2Name})` : 'Draw'}`}
+            aria-label={`Melee Round ${mr.roundNumber}: ${isCrit ? 'Critical hit!' : mr.winner === 'player1' ? `You win (${p1Name})` : mr.winner === 'player2' ? `Opponent wins (${p2Name})` : 'Draw'}`}
             style={{ '--anim-delay': `${(match.passResults.length + i) * 0.1}s` } as React.CSSProperties}
           >
             {isCrit ? '!!' : `M${mr.roundNumber}`}
@@ -239,8 +247,8 @@ function LoadoutMini({ label, steedLoadout, playerLoadout }: {
             if (!gear) return null;
             return (
               <div key={slot} className="loadout-mini__gear-line">
-                {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${gear.primaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
-                {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${gear.secondaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
+                {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${STAT_ABBR[gear.primaryStat.stat] ?? gear.primaryStat.stat}` : ''}
+                {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${STAT_ABBR[gear.secondaryStat.stat] ?? gear.secondaryStat.stat}` : ''}
               </div>
             );
           })}
@@ -254,8 +262,8 @@ function LoadoutMini({ label, steedLoadout, playerLoadout }: {
             if (!gear) return null;
             return (
               <div key={slot} className="loadout-mini__gear-line">
-                {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${gear.primaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
-                {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${gear.secondaryStat.stat.slice(0, 3).toUpperCase()}` : ''}
+                {SLOT_LABELS[slot]}: {gear.primaryStat ? `+${gear.primaryStat.value} ${STAT_ABBR[gear.primaryStat.stat] ?? gear.primaryStat.stat}` : ''}
+                {gear.secondaryStat ? ` +${gear.secondaryStat.value} ${STAT_ABBR[gear.secondaryStat.stat] ?? gear.secondaryStat.stat}` : ''}
               </div>
             );
           })}

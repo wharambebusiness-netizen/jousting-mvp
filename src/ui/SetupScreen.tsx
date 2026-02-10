@@ -9,6 +9,15 @@ const DIFFICULTIES: { value: AIDifficulty; label: string; desc: string }[] = [
   { value: 'hard',   label: 'Hard',   desc: '90% optimal' },
 ];
 
+const ARCHETYPE_HINTS: Record<string, { strengths: string; tip: string }> = {
+  charger:    { strengths: 'Highest Momentum. Devastating early passes.', tip: 'Win fast — your power fades with fatigue.' },
+  technician: { strengths: 'Top Control. Best at shifting attacks.', tip: 'React to your opponent and shift for counters.' },
+  bulwark:    { strengths: 'Best Guard. Hard to unseat or damage.', tip: 'Outlast opponents — your armor never fatigues.' },
+  tactician:  { strengths: 'Highest Initiative. Acts first every pass.', tip: 'Use speed advantage to set the tempo.' },
+  breaker:    { strengths: 'Guard penetration. Ignores 25% of armor.', tip: 'Target defensive opponents — their guard is weaker against you.' },
+  duelist:    { strengths: 'Even stats. No weaknesses.', tip: 'Adapt your strategy to each opponent.' },
+};
+
 export function SetupScreen({ onStart }: {
   onStart: (p1: Archetype, p2: Archetype, difficulty: AIDifficulty) => void;
 }) {
@@ -76,6 +85,12 @@ export function SetupScreen({ onStart }: {
                   <StatBar label="INIT" value={arch.initiative} max={100} type="init" />
                   <StatBar label="STA" value={arch.stamina} max={100} type="sta" />
                 </div>
+                {ARCHETYPE_HINTS[arch.id] && (
+                  <div className="archetype-card__hints">
+                    <div className="archetype-card__strength">{ARCHETYPE_HINTS[arch.id].strengths}</div>
+                    <div className="archetype-card__tip">{ARCHETYPE_HINTS[arch.id].tip}</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -138,6 +153,12 @@ export function SetupScreen({ onStart }: {
                   <StatBar label="INIT" value={arch.initiative} max={100} type="init" />
                   <StatBar label="STA" value={arch.stamina} max={100} type="sta" />
                 </div>
+                {ARCHETYPE_HINTS[arch.id] && (
+                  <div className="archetype-card__hints">
+                    <div className="archetype-card__strength">{ARCHETYPE_HINTS[arch.id].strengths}</div>
+                    <div className="archetype-card__tip">{ARCHETYPE_HINTS[arch.id].tip}</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -35,7 +35,7 @@ export function MeleeResultScreen({ match, result, onContinue }: {
 
       <div className="melee-wins">
         <div>
-          <span className="player-label player-label--p1">P1 Wins</span>
+          <span className="player-label player-label--p1">You ({match.player1.archetype.name})</span>
           <div className="melee-wins__dots">
             {[0, 1, 2].map(i => (
               <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} />
@@ -43,7 +43,7 @@ export function MeleeResultScreen({ match, result, onContinue }: {
           </div>
         </div>
         <div>
-          <span className="player-label player-label--p2">P2 Wins</span>
+          <span className="player-label player-label--p2">Opp ({match.player2.archetype.name})</span>
           <div className="melee-wins__dots">
             {[0, 1, 2].map(i => (
               <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} />

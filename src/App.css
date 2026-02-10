@@ -101,6 +101,9 @@
 .archetype-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
 .archetype-card__identity { font-size: 0.8rem; font-style: italic; color: var(--ink-light); margin-bottom: 8px; }
 .archetype-card__stats { margin-top: 4px; }
+.archetype-card__hints { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.archetype-card__strength { font-size: 0.78rem; color: var(--gold); font-weight: 600; margin-bottom: 2px; }
+.archetype-card__tip { font-size: 0.72rem; color: var(--ink-light); font-style: italic; }
 
 /* Stat bar tooltips (BL-061 support) */
 .stat-bar__label {

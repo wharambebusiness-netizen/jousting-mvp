@@ -1,0 +1,71 @@
+{
+  "name": "Balance Tuning",
+  "description": "Automated balance tuning with sim-driven feedback loops. Runs balance sims before/after each round to track changes.",
+  "config": {
+    "maxRounds": 20,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 14400000,
+    "maxConcurrency": 3
+  },
+  "balanceConfig": {
+    "sims": [
+      { "tier": "bare", "variant": "balanced" },
+      { "tier": "epic", "variant": "balanced" },
+      { "tier": "giga", "variant": "balanced" }
+    ],
+    "matchesPerMatchup": 200,
+    "simTimeoutMs": 60000,
+    "runPreSim": true,
+    "runPostSim": true
+  },
+  "agents": [
+    {
+      "id": "balance-tuner",
+      "name": "Balance Analyst",
+      "type": "continuous",
+      "role": "balance-analyst",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/balance-config.ts", "src/engine/archetypes.ts", "src/tools/simulate.ts", "orchestrator/analysis/balance-sim-round-*.md"],
+      "tasks": {
+        "primary": "Read orchestrator/balance-data/ for the latest pre-sim results (structured JSON). Identify the weakest archetype at the tier with the worst spread. Make ONE small tuning change per round (max +/-3 stat points or one constant tweak in balance-config.ts). Verify tests pass. Write analysis to orchestrator/analysis/balance-sim-round-{N}.md."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/calculator.test.ts", "src/engine/match.test.ts", "src/engine/playtest.test.ts", "src/engine/gear-variants.test.ts", "src/engine/phase-resolution.test.ts"],
+      "tasks": {
+        "primary": "Write tests that validate balance changes from prior rounds. Focus on edge cases near changed parameters. Run full suite to verify no regressions."
+      }
+    },
+    {
+      "id": "reviewer",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md"],
+      "tasks": {
+        "primary": "Review balance changes from other agents. Read orchestrator/balance-data/ to compare pre/post sim results. Check that changes are incremental and well-justified. Update CLAUDE.md with current balance state."
+      }
+    }
+  ]
+}
