@@ -66,12 +66,12 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
           <table className="summary-table mb-16">
             <thead>
               <tr>
-                <th>Pass</th>
-                <th>P1 Attack</th>
-                <th>P1 Impact</th>
-                <th>P2 Attack</th>
-                <th>P2 Impact</th>
-                <th>Result</th>
+                <th scope="col">Pass</th>
+                <th scope="col">P1 Attack</th>
+                <th scope="col">P1 Impact</th>
+                <th scope="col">P2 Attack</th>
+                <th scope="col">P2 Impact</th>
+                <th scope="col">Result</th>
               </tr>
             </thead>
             <tbody>
@@ -115,12 +115,12 @@ export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2P
           <table className="summary-table mb-16">
             <thead>
               <tr>
-                <th>Rnd</th>
-                <th>P1 Attack</th>
-                <th>P1 Impact</th>
-                <th>P2 Attack</th>
-                <th>P2 Impact</th>
-                <th>Result</th>
+                <th scope="col">Rnd</th>
+                <th scope="col">P1 Attack</th>
+                <th scope="col">P1 Impact</th>
+                <th scope="col">P2 Attack</th>
+                <th scope="col">P2 Impact</th>
+                <th scope="col">Result</th>
               </tr>
             </thead>
             <tbody>
@@ -187,6 +187,7 @@ function MatchTimeline({ match }: { match: MatchState }) {
             key={`p${i}`}
             className={`timeline-pip ${cls}`}
             title={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'P1 wins' : diff < 0 ? 'P2 wins' : 'Tie'}`}
+            aria-label={`Pass ${pr.passNumber}: ${isUnseat ? 'Unseat!' : diff > 0 ? 'Player 1 wins' : diff < 0 ? 'Player 2 wins' : 'Tie'}`}
             style={{ '--anim-delay': `${i * 0.1}s` } as React.CSSProperties}
           >
             {isUnseat ? '\u2694' : `P${pr.passNumber}`}
@@ -205,6 +206,7 @@ function MatchTimeline({ match }: { match: MatchState }) {
             key={`m${i}`}
             className={`timeline-pip ${cls}`}
             title={`Melee R${mr.roundNumber}: ${isCrit ? 'Critical!' : mr.winner === 'player1' ? 'P1' : mr.winner === 'player2' ? 'P2' : 'Draw'}`}
+            aria-label={`Melee Round ${mr.roundNumber}: ${isCrit ? 'Critical hit!' : mr.winner === 'player1' ? 'Player 1 wins' : mr.winner === 'player2' ? 'Player 2 wins' : 'Draw'}`}
             style={{ '--anim-delay': `${(match.passResults.length + i) * 0.1}s` } as React.CSSProperties}
           >
             {isCrit ? '!!' : `M${mr.roundNumber}`}

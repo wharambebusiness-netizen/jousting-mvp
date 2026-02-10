@@ -62,6 +62,10 @@ export function SetupScreen({ onStart }: {
                 key={arch.id}
                 className="card card--selectable archetype-card"
                 onClick={() => handlePickP1(arch)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePickP1(arch); }}}
+                role="button"
+                tabIndex={0}
+                aria-label={`Select ${arch.name} archetype`}
               >
                 <div className="archetype-card__name">{arch.name}</div>
                 <div className="archetype-card__identity">{arch.identity}</div>
@@ -101,6 +105,10 @@ export function SetupScreen({ onStart }: {
             <div
               className="card card--selectable archetype-card archetype-card--random"
               onClick={handleRandomP2}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRandomP2(); }}}
+              role="button"
+              tabIndex={0}
+              aria-label="Select random opponent archetype"
             >
               <div className="archetype-card__name">Random</div>
               <div className="archetype-card__identity">A mystery opponent</div>
@@ -116,6 +124,10 @@ export function SetupScreen({ onStart }: {
                 key={arch.id}
                 className="card card--selectable archetype-card"
                 onClick={() => handlePickP2(arch)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePickP2(arch); }}}
+                role="button"
+                tabIndex={0}
+                aria-label={`Select ${arch.name} as opponent`}
               >
                 <div className="archetype-card__name">{arch.name}</div>
                 <div className="archetype-card__identity">{arch.identity}</div>

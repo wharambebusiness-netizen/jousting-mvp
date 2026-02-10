@@ -169,6 +169,8 @@ export function MatchReplay({ match, reasoningHistory }: {
               <button
                 className="match-replay__header"
                 onClick={() => toggle(idx)}
+                aria-expanded={isOpen}
+                aria-controls={`match-replay-details-${idx}`}
               >
                 <span className="match-replay__label">{label}</span>
                 <span className="match-replay__summary">
@@ -179,7 +181,7 @@ export function MatchReplay({ match, reasoningHistory }: {
                 <span>{isOpen ? '\u25B2' : '\u25BC'}</span>
               </button>
               {isOpen && (
-                <div className="match-replay__details">
+                <div className="match-replay__details" id={`match-replay-details-${idx}`}>
                   {reasoning.commentary && (
                     <div className="ai-thinking__commentary">
                       &ldquo;{reasoning.commentary}&rdquo;

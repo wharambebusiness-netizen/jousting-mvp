@@ -170,6 +170,11 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
             key={r.id}
             className={`card card--selectable rarity-card rarity-card--${r.id} rarity-card--compact ${value === r.id ? 'card--selected' : ''}`}
             onClick={() => onChange(r.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(r.id); }}}
+            role="button"
+            tabIndex={0}
+            aria-label={`Select ${r.label} rarity`}
+            aria-pressed={value === r.id}
           >
             <div className="rarity-card__name">{r.label}</div>
           </div>
@@ -190,6 +195,8 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
           className={`variant-toggle__btn variant-toggle__btn--${v} ${current === v ? 'variant-toggle__btn--active' : ''}`}
           onClick={() => onSelect(v)}
           title={VARIANT_LABELS[v].full}
+          aria-label={`Select ${VARIANT_LABELS[v].full} variant`}
+          aria-pressed={current === v}
         >
           {VARIANT_LABELS[v].short}
         </button>
@@ -206,6 +213,7 @@ export function LoadoutScreen({ archetype, opponentName, onConfirm }: Props) {
           className="btn btn--small btn--outline"
           onClick={() => onSet(v)}
           title={`Set all slots to ${VARIANT_LABELS[v].full}`}
+          aria-label={`Set all gear slots to ${VARIANT_LABELS[v].full} variant`}
         >
           All {VARIANT_LABELS[v].full}
         </button>
