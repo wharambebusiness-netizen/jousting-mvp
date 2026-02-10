@@ -6,7 +6,7 @@ Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Giga
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (699 passing as of S33)
+npx vitest run                              # Run all tests (794 passing as of S34)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
@@ -109,11 +109,11 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (699 as of S33)
+- **Test count**: run `npx vitest run` (794 as of S34)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
-- **Test breakdown**: run `npx vitest run` — 7 suites (calculator, phase-resolution, gigling-gear, player-gear, match, playtest, gear-variants)
+- **Test breakdown**: run `npx vitest run` — 8 suites (calculator, phase-resolution, gigling-gear, player-gear, match, playtest, gear-variants, ai)
 
 ## Orchestrator v5
 
@@ -156,7 +156,7 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 
 ## Test Suite
 
-7 test suites covering:
+8 test suites covering:
 - **calculator** — Core math + guard penetration + fatigue + counter table exhaustive
 - **phase-resolution** — Phase resolution + breaker edge cases
 - **gigling-gear** — 6-slot steed gear
@@ -164,5 +164,6 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - **match** — State machine + integration + joust/melee worked examples + carryover/unseated
 - **playtest** — Property-based + stress + balance config + gear boundaries
 - **gear-variants** — Gear variant system + archetype x variant matchups
+- **ai** — AI opponent validity, reasoning, patterns, edge cases
 
 Run `npx vitest run` for current test counts (per-file counts drift).

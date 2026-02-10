@@ -2,7 +2,7 @@
 
 > Generated: 2026-02-09 (S32)
 > Primary goal: **Perfect the multi-agent orchestrator**
-> The jousting game is the testbed — a feature-complete codebase with 699 tests,
+> The jousting game is the testbed — a feature-complete codebase with 794 tests,
 > 6 archetypes, 12-slot gear, 3 AI difficulties, and known balance issues that
 > give agents real work to do.
 
@@ -384,13 +384,13 @@ but tracking it ensures the testbed stays healthy.
 
 | File | Purpose |
 |------|---------|
-| `orchestrator/orchestrator.mjs` | Main orchestrator (1285 lines) — THE file |
+| `orchestrator/orchestrator.mjs` | Main orchestrator (1753 lines) — THE file |
 | `orchestrator/missions/overnight.json` | 7-agent mission config (model/timeout/budget per agent) |
 | `orchestrator/run-overnight.ps1` | Overnight restart loop (crash recovery) |
 | `orchestrator/consistency-check.mjs` | Pre-round validation |
 | `orchestrator/roles/_common-rules.md` | Shared agent rules (37 lines) |
-| `orchestrator/roles/*.md` | 9 role templates (490 lines total) |
-| `orchestrator/backlog.json` | 11 active tasks with dependency chains |
+| `orchestrator/roles/*.md` | 9 role templates (231 lines total) |
+| `orchestrator/backlog.json` | 16 tasks (10 completed, 5 pending + 1 active chain) |
 | `orchestrator/backlog-archive.json` | 28 completed tasks (reference) |
 | `orchestrator/PLAN-model-switching-and-skills.md` | S32 model switching plan |
 | `orchestrator/handoffs/*.md` | Agent state files (META sections) |

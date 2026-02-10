@@ -3,8 +3,8 @@
     "id": "BL-030",
     "role": "tech-lead",
     "priority": 1,
-    "title": "Update CLAUDE.md test count to ~699 and fix stale counts",
-    "description": "CLAUDE.md currently says ~699 tests but verify actual count matches. The discrepancy was in match.test.ts (83→88 from carryover/unseated tests in Round 8).\n\nUpdate CLAUDE.md:\n- Quick Reference: verify test count matches vitest output\n- Test Suite section: update any stale per-file counts\n- match.test.ts: add 'carryover/unseated worked example' to description\n\nAcceptance criteria: CLAUDE.md reflects ~699 tests with correct per-file breakdown matching actual vitest output.",
+    "title": "Update CLAUDE.md test count to 794 and fix stale counts",
+    "description": "CLAUDE.md currently says ~699 tests but actual count is 794 (8 suites). S33 added 95 AI tests (ai.test.ts). Update CLAUDE.md:\n- Quick Reference: test count 699→794\n- Test Suite section: add ai (95) to suite list, total 794\n- match.test.ts count: 89\n- calculator.test.ts: 194\n- Note 8 suites (was 7)\n\nAcceptance criteria: CLAUDE.md reflects 794 tests with correct per-file breakdown matching actual vitest output.",
     "fileOwnership": [
       "CLAUDE.md"
     ],
@@ -16,7 +16,7 @@
     "role": "balance-analyst",
     "priority": 1,
     "title": "Apply Technician MOM 61→64 to fix persistent weakness",
-    "description": "Technician remains the weakest archetype. Previous change (58→61 in Run #1) helped but not enough. Applying MOM 61→64 (+3). Projected +2-3pp across tiers.\n\nChange: In src/engine/archetypes.ts, update technician momentum from 61 to 64.\n\nAfter applying, run `npx tsx src/tools/simulate.ts bare` and `npx tsx src/tools/simulate.ts giga` to verify win rate improvement.\n\nTest cascade estimate: calculator.test.ts worked examples referencing Technician MOM, match.test.ts worked example impact values. ~5-8 assertions will need updating by QA.\n\nAcceptance criteria: Technician MOM=64 in archetypes.ts. Sim shows improvement. Failing test count documented for QA.",
+    "description": "COMPLETED S33: Technician MOM changed from 61 to 64 in archetypes.ts. 6 test assertions updated. 794 tests passing.",
     "fileOwnership": [
       "src/engine/archetypes.ts"
     ],
@@ -29,14 +29,15 @@
     "role": "qa-engineer",
     "priority": 1,
     "title": "Fix test assertions broken by Technician MOM 61→64",
-    "description": "After BL-031 applies Technician MOM 61→64, multiple test assertions will break.\n\nExpected breakage areas:\n1. calculator.test.ts: Technician MOM in worked examples. Impact score calculations will change.\n2. match.test.ts: Worked example Charger vs Technician — Technician effective stats change, impact values change.\n3. Possibly gear-variants.test.ts deterministic cycling tests (fragile to ANY stat change).\n\nProcess:\n1. Run `npx vitest run` to identify ALL failing assertions\n2. Recalculate correct values for each broken assertion\n3. Update test assertions to match new correct values\n4. Verify ~699+ tests passing after fixes\n\nDEPENDS ON: BL-031 (must be applied first).\n\nAcceptance criteria: All tests passing. Test count ≥~699. No regressions.",
+    "description": "COMPLETED S33 Phase 2: All test assertions fixed after Technician MOM change. 794 tests passing (was 699 before AI test suite added).",
     "fileOwnership": [
       "src/engine/calculator.test.ts",
       "src/engine/match.test.ts",
       "src/engine/playtest.test.ts",
       "src/engine/gear-variants.test.ts"
     ],
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:00:00Z",
     "dependsOn": ["BL-031"],
     "createdAt": "2026-02-09T06:00:00Z"
   },
@@ -58,7 +59,7 @@
     "role": "tech-lead",
     "priority": 2,
     "title": "Review Technician MOM change + update CLAUDE.md",
-    "description": "After BL-031 (Technician MOM 61→64), BL-033 (test fixes), and BL-034 (validation sweep) are complete, review all changes:\n\n1. Review archetypes.ts change (Technician MOM 61→64)\n2. Review test assertion updates in calculator.test.ts and match.test.ts\n3. Verify test count stable at ≥~699\n4. Update CLAUDE.md:\n   - Archetype stats: Technician MOM 61→64\n   - Balance State: Updated win rates from BL-034 sweep\n   - Archetype changes: Add 'Technician MOM 61→64'\n\nDEPENDS ON: BL-031, BL-033, BL-034.\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=61, updated win rates, correct test count.",
+    "description": "After BL-031 (Technician MOM 61→64), BL-033 (test fixes), and BL-034 (validation sweep) are complete, review all changes:\n\n1. Review archetypes.ts change (Technician MOM=64)\n2. Review test assertion updates in calculator.test.ts and match.test.ts\n3. Verify test count at 794\n4. Update CLAUDE.md:\n   - Archetype stats: Technician MOM=64\n   - Balance State: Updated win rates from BL-034 sweep\n\nDEPENDS ON: BL-031, BL-033, BL-034.\n\nAcceptance criteria: CLAUDE.md reflects Technician MOM=64, updated win rates, correct test count.",
     "fileOwnership": [
       "CLAUDE.md"
     ],
@@ -70,9 +71,10 @@
     "id": "BL-036",
     "role": "ui-dev",
     "priority": 1,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Migrate top-priority inline styles to CSS classes",
-    "description": "The CSS artist has created class replacements for ~50 inline style occurrences across 10 components. Start with the highest-impact migrations:\n\n1. MatchSummary.tsx:87,92,132,134 — replace color inline styles with .text-p1/.text-p2 classes\n2. PassResult.tsx:51,54,65,68 — replace marginTop inline styles with .mt-4 class\n3. SetupScreen.tsx:42 — replace inline style with .difficulty-selector class\n4. MatchSummary.tsx:229-256 — replace 6 inline styles with .loadout-mini* classes\n5. LoadoutScreen.tsx:374 — replace fontSize/color inline with .text-small class\n\nThe CSS classes already exist in App.css. Just swap the JSX from style={{...}} to className='...'. Run tests after each file to catch regressions.\n\nAcceptance criteria: At least 15 inline styles migrated. All tests passing (~699).",
+    "description": "COMPLETED S33: 35 inline styles migrated to CSS classes across 5 components (commit dcd0dd0).",
     "fileOwnership": ["src/ui/MatchSummary.tsx", "src/ui/PassResult.tsx", "src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx"],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -80,9 +82,10 @@
     "id": "BL-037",
     "role": "ui-dev",
     "priority": 2,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Improve combat result readability in PassResult",
-    "description": "PassResult.tsx shows joust pass outcomes but could communicate 'who won and why' more clearly. Improvements:\n\n1. Add a clear winner indicator at the top of each pass result (e.g., 'Player 1 wins this pass!' or 'Draw!')\n2. Highlight the winning score in bold or with a color accent\n3. Show the impact score difference prominently (not buried in stats)\n4. Make counter results more visible when they occur (counters are a key mechanic players need to learn)\n\nDo NOT change engine logic — only presentation. Use existing CSS classes from App.css where available.\n\nAcceptance criteria: Pass results clearly communicate winner at a glance. Tests passing.",
+    "description": "COMPLETED S33: Winner banner, impact advantage display, counter visibility improvements (commit 6d7676d).",
     "fileOwnership": ["src/ui/PassResult.tsx"],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -90,9 +93,10 @@
     "id": "BL-038",
     "role": "ui-dev",
     "priority": 2,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Add rarity-colored borders to gear items in LoadoutScreen",
-    "description": "CSS artist (BL-024) added .gear-item--uncommon through .gear-item--giga CSS rules to App.css. These are dormant until the JSX adds the rarity class.\n\nIn LoadoutScreen.tsx, find all .gear-item elements and add the rarity-specific class:\n- className should include `gear-item--${rarity}` where rarity comes from the gear piece or the loadout's rarity setting\n- The CSS rules handle the border colors per tier\n\nAcceptance criteria: Gear items display rarity-colored borders. Tests passing (~699).",
+    "description": "COMPLETED S33: Rarity-colored gear borders activated from dormant CSS (commit b98a7e0).",
     "fileOwnership": ["src/ui/LoadoutScreen.tsx"],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -100,9 +104,10 @@
     "id": "BL-039",
     "role": "game-designer",
     "priority": 1,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Player experience audit — archetype identity and fun factor",
-    "description": "Play through (mentally simulate) several matches as each of the 6 archetypes. For each, assess:\n\n1. Does this archetype have a clear IDENTITY that a player can feel? (Charger = momentum/aggression, Bulwark = defense/endurance, etc.)\n2. Does their playstyle create interesting DECISIONS? Or do you just pick the same attack every time?\n3. Is there a 'power fantasy' moment? (Charger landing a devastating lance charge, Technician outmaneuvering with precision)\n4. Which archetype is the LEAST fun to play, even if balanced? Why?\n5. What ONE mechanic change would make the weakest archetype more enjoyable?\n\nRead src/engine/archetypes.ts, src/engine/attacks.ts, and recent balance data. Write your analysis to orchestrator/analysis/design-round-1.md.\n\nAcceptance criteria: Detailed fun-factor assessment for all 6 archetypes with at least 2 actionable proposals.",
+    "description": "COMPLETED S33: 485-line design analysis with fun tier list and 5 mechanic proposals (commit 264f327). Output: orchestrator/analysis/design-round-1.md.",
     "fileOwnership": ["orchestrator/analysis/design-round-1.md"],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -122,7 +127,7 @@
     "priority": 3,
     "status": "pending",
     "title": "New player experience — first-match clarity audit",
-    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. The depth should be there for experienced players but the surface should be approachable.\n\nWrite analysis to orchestrator/analysis/design-round-3.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
+    "description": "Imagine a player who has NEVER played this game opening it for the first time. Walk through their experience:\n\n1. Setup screen: Do they understand what archetypes mean? Are stat labels (MOM/CTL/GRD/INIT/STA) clear?\n2. Loadout screen: Is gear/rarity/variant selection overwhelming? What could be simplified for first-timers?\n3. Speed selection: Do they understand the speed/power tradeoff?\n4. Attack selection: Can they learn the counter system? Are hints sufficient?\n5. Pass results: Can they understand what happened and WHY they won/lost?\n6. Melee phase: Is the transition clear? Do they understand the new attack set?\n\nPropose improvements focused on CLARITY, not dumbing down. Write analysis to orchestrator/analysis/design-round-3.md.\n\nAcceptance criteria: Walkthrough of first-match experience with at least 3 clarity improvement proposals ranked by impact.",
     "fileOwnership": ["orchestrator/analysis/design-round-3.md"],
     "createdAt": "2026-02-09T06:30:00Z"
   },
@@ -130,9 +135,10 @@
     "id": "BL-042",
     "role": "css-artist",
     "priority": 1,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Consolidate and clean up App.css color variables",
-    "description": "Review App.css for duplicated color values and inconsistent naming. Create CSS custom properties (variables) for the core color palette:\n\n1. Identify all unique colors used across App.css and index.css\n2. Create a :root block with named variables (--color-p1, --color-p2, --color-accent, --color-bg-*, --color-text-*, --color-rarity-*)\n3. Replace hardcoded color values with variable references\n4. Ensure rarity tier colors (common through giga) are consistent\n\nAcceptance criteria: All colors use CSS variables. No duplicate hex values. Visual appearance unchanged.",
+    "description": "COMPLETED S33: 40+ CSS custom properties created, colors consolidated (commit 9f43489).",
     "fileOwnership": ["src/App.css", "src/index.css"],
     "createdAt": "2026-02-09T23:00:00Z"
   },
@@ -140,9 +146,10 @@
     "id": "BL-043",
     "role": "css-artist",
     "priority": 2,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Add responsive breakpoints for mobile layout",
-    "description": "The game currently has no responsive design. Add media queries for common breakpoints:\n\n1. Desktop (default): current layout\n2. Tablet (≤768px): reduce padding, smaller fonts, stack horizontal layouts vertically\n3. Mobile (≤480px): single-column layout, larger touch targets for buttons\n\nFocus on the most-used screens first: SetupScreen, LoadoutScreen, and combat result screens. Use existing CSS classes — just add @media rules.\n\nAcceptance criteria: Game is usable on tablet and mobile viewports. No horizontal scrolling.",
+    "description": "COMPLETED S33: Responsive breakpoints added (tablet ≤768px, mobile ≤480px) (commit a66c30f).",
     "fileOwnership": ["src/App.css", "src/index.css"],
     "createdAt": "2026-02-09T23:00:00Z"
   },
@@ -150,9 +157,10 @@
     "id": "BL-044",
     "role": "balance-analyst",
     "priority": 2,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Analyze gear variant win rate impact per archetype",
-    "description": "Run simulations at uncommon and epic tiers for all 3 gear variants (aggressive, balanced, defensive) for every archetype pairing. Determine:\n\n1. Which archetypes benefit most from aggressive vs defensive gear?\n2. Are any archetype+variant combos dominant (>60% win rate)?\n3. Are any archetype+variant combos unviable (<35% win rate)?\n4. Is the variant system creating meaningful choices or is one variant always optimal?\n\nRun: `npx tsx src/tools/simulate.ts uncommon aggressive`, `npx tsx src/tools/simulate.ts uncommon defensive`, `npx tsx src/tools/simulate.ts epic aggressive`, `npx tsx src/tools/simulate.ts epic defensive`\n\nWrite analysis to orchestrator/analysis/balance-tuner-variant-analysis.md.\n\nAcceptance criteria: Full variant x archetype matrix with win rates at 2+ tiers. Clear recommendation on whether variant system is healthy.",
+    "description": "COMPLETED S33: 57,600 matches simulated, 375-line report. Variant system graded B-. Output: orchestrator/analysis/balance-tuner-variant-analysis.md (commit f5e97c2).",
     "fileOwnership": ["orchestrator/analysis/balance-tuner-variant-analysis.md"],
     "createdAt": "2026-02-09T23:00:00Z"
   },
@@ -160,10 +168,71 @@
     "id": "BL-045",
     "role": "qa-engineer",
     "priority": 2,
-    "status": "pending",
+    "status": "completed",
+    "completedAt": "2026-02-09T23:30:00Z",
     "title": "Add AI opponent test coverage",
-    "description": "The AI system (src/ai/) has no dedicated test suite. Create basic test coverage:\n\n1. Create src/ai/ai.test.ts\n2. Test aiPickJoustChoice returns valid JoustChoice for all archetypes at all difficulties\n3. Test aiPickMeleeAttack returns valid MeleeAttack for all archetypes at all difficulties\n4. Test that WithReasoning variants return both choice and reasoning string\n5. Test pattern tracking: after repeated opponent moves, AI should adjust (at medium+ difficulty)\n6. Test personality consistency: same archetype at same difficulty should have consistent tendencies\n\nAcceptance criteria: ≥15 new tests. All passing. No changes to AI source code.",
+    "description": "COMPLETED S33: 95 AI tests created in src/ai/ai.test.ts covering validity, reasoning, patterns, edge cases (commit bfd9f17).",
     "fileOwnership": ["src/ai/ai.test.ts"],
     "createdAt": "2026-02-09T23:00:00Z"
+  },
+  {
+    "id": "BL-046",
+    "role": "ui-dev",
+    "priority": 1,
+    "status": "pending",
+    "title": "Migrate remaining inline styles to CSS classes",
+    "description": "7 components still use inline style={} props. Migrate them to CSS classes:\n\n1. helpers.tsx lines 78,99,112,114 — StatBar width, DeltaVal color, StaminaBar fontWeight/width\n2. MatchSummary.tsx lines 192,210 — timeline pip animationDelay (use CSS cascading or custom properties)\n3. PassResult.tsx, SetupScreen.tsx, MeleeTransition.tsx, MeleeResult.tsx, AIThinkingPanel.tsx — scan for remaining style={} props\n\nFor dynamic values (% widths, animation delays), use CSS custom properties via style={{'--pct': pct}} + var(--pct) in CSS.\n\nAcceptance criteria: Zero inline styles except dynamic CSS custom properties. All tests passing (794).",
+    "fileOwnership": ["src/ui/helpers.tsx", "src/ui/MatchSummary.tsx", "src/ui/PassResult.tsx", "src/ui/MeleeResult.tsx"],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-047",
+    "role": "ui-dev",
+    "priority": 2,
+    "status": "pending",
+    "title": "Add ARIA attributes and semantic markup for accessibility",
+    "description": "Multiple components lack proper accessibility attributes:\n\n1. Combat log toggles and AI thinking panel toggles: add aria-expanded, aria-controls\n2. Summary tables: add scope='col' to <th> elements\n3. Rarity grid cards: add role='button' or use <button> with aria-label\n4. Match timeline pips: add aria-label describing pass results\n5. Clickable elements that aren't <button>: add role='button' tabIndex={0} and keyboard event handlers\n\nFocus on SetupScreen.tsx, LoadoutScreen.tsx, MatchSummary.tsx.\n\nAcceptance criteria: All interactive elements are keyboard-navigable. Screen reader can describe game state. All tests passing.",
+    "fileOwnership": ["src/ui/SetupScreen.tsx", "src/ui/LoadoutScreen.tsx", "src/ui/MatchSummary.tsx"],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-048",
+    "role": "css-artist",
+    "priority": 1,
+    "status": "pending",
+    "title": "Add hover/focus states for interactive card elements",
+    "description": "Interactive cards (.card--selectable, .attack-card, .speed-card) need better hover/focus polish:\n\n1. .attack-card, .speed-card: add :hover with subtle brightness/shadow enhancement\n2. All selectable cards: add :focus-visible with 2px gold outline offset for keyboard nav\n3. All selectable cards: add :active pressed effect (scale 0.98, slight shadow reduction)\n4. Variant toggle buttons: enhance box-shadow on active state instead of just border\n5. Ensure WCAG AA color contrast on all hover states\n\nAcceptance criteria: All interactive elements have distinct hover, focus, and active states. Keyboard navigation is visually clear.",
+    "fileOwnership": ["src/App.css", "src/index.css"],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-049",
+    "role": "css-artist",
+    "priority": 2,
+    "status": "pending",
+    "title": "Polish animations, transitions, and visual hierarchy",
+    "description": "Improve visual polish in several areas:\n\n1. Add cascading delays to multi-element entrance sequences (timeline pips, gear lists)\n2. Summary table rows: add subtle :hover background highlight\n3. Combat log entries: add visual separation (border-left accent per entry)\n4. Increase line-height in dense text blocks (pass result breakdown, stat comparisons)\n5. Reduce animation durations on mobile (@media max-width: 480px) for performance\n6. Verify all animations respect prefers-reduced-motion\n\nAcceptance criteria: Smoother animations, better readability in dense areas, mobile performance improved.",
+    "fileOwnership": ["src/App.css", "src/index.css"],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-050",
+    "role": "qa-engineer",
+    "priority": 1,
+    "status": "pending",
+    "title": "Add phase-resolution edge case tests",
+    "description": "The phase-resolution test suite (38 tests) needs expansion for edge cases:\n\n1. Test unseat on pass 1 (earliest possible) — verify melee transition is correct\n2. Test unseat on pass 5 (last pass) — verify carryover/melee handling\n3. Test both players unseated in same pass — verify tiebreaker logic\n4. Test extreme fatigue scenarios (stamina=0 or stamina=1) — verify guard fatigue floor\n5. Test shift eligibility at exact threshold (CTL == shiftThreshold, stamina == 10)\n6. Test Breaker guard penetration interacting with high-guard defender in melee\n\nAcceptance criteria: ≥12 new tests covering edge cases. All passing. No engine changes.",
+    "fileOwnership": ["src/engine/phase-resolution.test.ts"],
+    "createdAt": "2026-02-10T00:00:00Z"
+  },
+  {
+    "id": "BL-051",
+    "role": "qa-engineer",
+    "priority": 2,
+    "status": "pending",
+    "title": "Add integration tests for full match with gear loadouts",
+    "description": "Expand match.test.ts with integration tests that exercise the full gear pipeline:\n\n1. Full match with uncommon steed + player gear: verify stat pipeline (base → steed → player → softCap)\n2. Full match with giga gear: verify softCap activates on high stats\n3. Full match with mixed variants: aggressive steed + defensive player gear\n4. Full match comparing bare vs giga outcomes: giga should produce higher impact scores\n5. Verify createMatch() works with all 6 argument combinations (0/2/4/6 loadout args)\n6. Test that applyPlayerLoadout does NOT add rarity bonus (regression guard)\n\nAcceptance criteria: ≥10 new integration tests. All passing. No engine changes.",
+    "fileOwnership": ["src/engine/match.test.ts"],
+    "createdAt": "2026-02-10T00:00:00Z"
   }
 ]
