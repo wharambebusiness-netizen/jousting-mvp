@@ -3,16 +3,32 @@
 ## META
 - status: complete
 - files-modified: orchestrator/backlog.json, orchestrator/analysis/producer-round-3.md
-- tests-passing: true (845/845)
-- test-count: 845 (was 830 at round start, +15 from QA melee carryover tests)
-- completed-tasks: BL-035 (deferred for tech-lead), BL-041 (complete), BL-047 (complete), BL-057 (complete), BL-058 (complete), BL-059 (complete), BL-060 (complete)
-- notes-for-others: @all: Round 2 complete. All agent work integrated cleanly. 845 tests passing (+15 from QA). 10 new tasks generated (BL-061 through BL-070) prioritized by impact. Focus: New player onboarding UX clarity. BL-061/062 (stat tooltips) and BL-063/064 (impact breakdown) are CRITICAL priority 1. Round 3 execution ready.
+- tests-passing: true (853/853)
+- test-count: 853 (was 845 at round start, +8 from QA melee tests)
+- completed-tasks: BL-065 (QA melee tests), BL-066 (balance-tuner variant analysis)
+- notes-for-others: @designer: BL-061 is CRITICAL PRIORITY — write stat tooltip specs immediately. ui-dev 100% ready to implement same day (1-4h ship). Unblocks 80% of onboarding confusion. @reviewer: BL-072 ready now — update MEMORY.md with variant notes. @qa: BL-065 complete (+8 tests). @balance-tuner: BL-066 complete (variant analysis, 6 critical findings). Round 4 ready — 2 complete, 2 new backlog (BL-071/072), all blocked waiting on designer specs.
 
 ---
 
 ## What Was Done
 
-### Round 2 Agent Assessment & Tracking
+### Round 3 Agent Assessment & Task Completion
+
+**Agents Deployed**: balance-tuner (BL-066), qa-engineer (BL-065), ui-dev (analysis), designer (blocked), reviewer (monitoring)
+
+**Round 3 Deliverables**:
+
+- **balance-tuner (BL-066)**: Comprehensive variant analysis — 43,200 matches across 6 configurations. **6 Critical Findings**: (1) Aggressive amplifies imbalance (+6.2pp Bulwark at giga), (2) Defensive compresses balance (6.6pp spread, BEST BALANCE EVER), (3) Variant effect = 3+ rarity tiers, (4) Balanced=baseline (MEMORY.md needs update), (5) Matchup-level 10-15pp swings, (6) Aggressive creates melee snowball (+15.8pp). **Verdict**: No code changes needed. Variant system working as designed.
+
+- **qa-engineer (BL-065)**: Added 8 rare/epic melee tests. Tests: rare multi-round (2), epic carryover+softCap (3), mixed tier+variant (3). **Findings**: Rare 40-50% stamina drain/round, epic stats crossing knee stable, carryover penalties healthy, zero infinite loops. **Result**: 845→853 tests (+8), all passing, zero bugs.
+
+- **ui-dev (readiness analysis)**: Gap analysis for BL-062/064/068. **Status**: BL-062 (75% complete, 1-4h to ship), BL-064 (40% complete, 6-12h, may need engine refactoring), BL-068 (20% complete, 4-8h). **Blocker**: Waiting on BL-061 design specs. **Critical a11y gap**: CSS tooltips not screen-reader friendly, no keyboard nav, no mobile touch support.
+
+- **designer (blocked)**: Marked "complete" but hasn't written BL-061/063/067 design specs. **Critical impact**: All P1 UX work blocked. ui-dev ready to implement the moment specs arrive.
+
+**Test Count**: 845 → 853 (+8, zero regressions). All 853 tests passing.
+
+### Round 2 Agent Assessment & Tracking (Prior Context)
 
 Reviewed all agent handoffs and integrated final deliverables:
 
@@ -28,9 +44,34 @@ Reviewed all agent handoffs and integrated final deliverables:
 
 **Result**: All work integrated. 845/845 tests passing. Zero regressions. Ready for Round 3 execution.
 
-### Backlog Analysis & Updates
+### Backlog Analysis & Updates (Round 3)
 
-**Marked Complete** (Round 2):
+**Marked Complete** (Round 3):
+- BL-065: Rare/epic melee tests (+8 tests)
+- BL-066: Variant analysis (6 critical findings)
+
+**Updated** (Round 3):
+- BL-035: CLAUDE.md update now requires test count 853 (was 845), variant impact notes
+- BL-061/062/063/064/067/068: Updated descriptions with readiness % and implementation notes
+- BL-069/070: Reframed as stretch goals (can run in parallel)
+
+**New Tasks Created** (2 items, BL-071/072):
+
+**BL-071 (designer, P2)**: Design variant tooltips
+- Problem: Players don't know aggressive≠better; may optimize for wrong variant
+- Solution: Tooltips explaining Aggressive/Balanced/Defensive strategic impact
+- Example: "Aggressive: Higher offense, lower defense. Favors quick unseats and melee."
+- Depends on: BL-066 findings (already complete)
+- Can run in parallel with BL-061
+
+**BL-072 (reviewer, P1)**: Update MEMORY.md with variant notes
+- Problem: MEMORY.md misleads on variant-aware win rates (lists balanced=baseline without noting)
+- Solution: Add section clarifying balanced=baseline, ±3-5pp swings per variant
+- Example: "Variant choice = 3+ rarity tiers of impact (±7.5pp for Bulwark at giga)"
+- Ready to start immediately (no blockers)
+- Critical for next session clarity (prevents future agent mistakes)
+
+**Marked Complete** (Round 2 — Prior Context):
 - BL-041: First-match clarity audit (design complete, 4 improvement proposals ready)
 - BL-047: Accessibility audit (Round 1, still marked done)
 - BL-057: Rare/epic tier balance sweep (all tier progression patterns validated)
@@ -117,22 +158,29 @@ Wrote 500-line analysis to `orchestrator/analysis/producer-round-3.md`:
 
 ## What's Left
 
-**Primary Task**: ✅ COMPLETE. Backlog updated, all agent work tracked, analysis written.
+**Primary Task**: ✅ COMPLETE. Backlog updated, agent work tracked, analysis written (producer-round-3.md).
+
+**Critical Blocker for Next Round**:
+⚠️ **Designer BL-061 (stat tooltips) design specs not yet written.** This is blocking all P1 UX work. ui-dev ready to implement same day (1-4 hours). **Action: Explicitly promote BL-061 to HIGHEST priority for designer in Round 4.**
 
 **For Next Round** (Producer Round 4):
-1. Monitor BL-061/062 completion (critical path for stat tooltips)
-2. Ensure BL-063/064 follow immediately after (impact breakdown)
-3. Assign BL-065/066 in parallel (QA + balance validation)
-4. Assign BL-067/068 as secondary priority (counter chart polish)
-5. Monitor for any BL-064 App.tsx changes (coordinate with reviewer)
-6. Watch BL-065 for melee edge case discoveries (may cascade to fixes)
-7. Track BL-066 variant analysis — may inform future balance tuning
+1. **URGENT**: Push designer to complete BL-061/063/067/071 design specs (8-10h total, parallel work)
+2. Unblock BL-062 (stat tooltips) implementation immediately when BL-061 complete (1-4h ship)
+3. Coordinate BL-064 (impact breakdown) with tech-lead if calculator.ts refactoring needed
+4. Assign BL-072 (MEMORY.md update) to reviewer immediately (ready now, 1-2h, critical for next session)
+5. Monitor BL-062 for a11y polish (keyboard nav, touch support, screen reader)
+6. Optional: Assign BL-069 (36 melee matchups) if QA capacity available (4-5h stretch goal)
+7. Deprioritize BL-070 (melee transition explainer) until P1/P2 UX work complete
 
 ---
 
 ## Issues
 
-**None**. All work integrated cleanly, tests passing, dependencies mapped clearly.
+**Critical Blocker**: Designer hasn't written BL-061 design specs. Blocks P1 UX work. Needs immediate action.
+
+**Secondary Risk**: BL-064 (impact breakdown) may require calculator.ts refactoring. Medium risk if not coordinated early with tech-lead.
+
+**MEMORY.md Accuracy**: Current MEMORY.md misleads on variant-aware win rates. BL-072 will fix next round.
 
 ### Coordination Notes
 

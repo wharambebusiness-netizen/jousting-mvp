@@ -2,127 +2,184 @@
 
 ## META
 - status: complete
-- files-modified: src/ui/LoadoutScreen.tsx, src/App.css, orchestrator/analysis/ui-dev-round-2.md
+- files-modified: orchestrator/analysis/ui-dev-round-3.md
 - tests-passing: true
-- test-count: 830/830 passing
-- completed-tasks: BL-058
-- notes-for-others: None
+- test-count: 845/845 passing
+- completed-tasks: None (all blocked on design specs)
+- notes-for-others: @designer: Ready to implement BL-062/064/068 immediately when BL-061/063/067 design specs complete. Analysis reveals BL-062 (stat tooltips) is 75% complete — infrastructure exists, just needs a11y polish + design validation. See orchestrator/analysis/ui-dev-round-3.md for detailed gap analysis and implementation roadmap.
 
 ## What Was Done
 
-### BL-058: Gear Variant Affinity Hints + Quick Build Presets ✓
+### Round 3 (This Round)
 
-Implemented all 3 proposals from design analysis (BL-041, P3) to improve LoadoutScreen UX:
+**Analysis Complete: Onboarding UX Implementation Readiness**
 
-#### 1. Affinity Labels in Variant Tooltips (src/ui/LoadoutScreen.tsx:186-206)
-**Before**: Variant buttons showed only "Aggressive", "Balanced", "Defensive" with no archetype guidance
-**After**:
-- Enhanced VariantToggle component to accept `slot` and `isSteed` props
-- Retrieves variant definition via `getSteedVariantDef` / `getPlayerVariantDef`
-- Appends affinity label to tooltip: "Aggressive — Favors: Charger"
-- Updated both steed and player gear VariantToggle call sites (lines 277, 321)
+All Round 3 priority tasks (BL-062, BL-064, BL-068) are blocked waiting for design specifications (BL-061, BL-063, BL-067). Conducted comprehensive readiness analysis to prepare for immediate implementation when design specs arrive.
 
-**Example tooltips**:
-- Aggressive → "Aggressive — Favors: Charger"
-- Balanced → "Balanced — Favors: Duelist"
-- Defensive → "Defensive — Favors: Bulwark"
+#### Key Findings
 
-#### 2. Quick Builds Section (src/ui/LoadoutScreen.tsx:228-271)
-**Before**: Players manually configured 12 gear slots (6 steed + 6 player) × 3 variants = 27 decisions
-**After**:
-- Added `setAllGearToVariant` handler that sets both steed AND player gear to same variant
-- Created new Quick Builds section with 3 prominent preset buttons
-- Positioned above rarity selectors for high visibility
-- Each button includes icon, name, archetype guidance
+1. **BL-062 (Stat Tooltips) — 75% COMPLETE** ✓
+   - Infrastructure already exists in `src/ui/helpers.tsx` (STAT_TIPS + StatBar component)
+   - SetupScreen.tsx already displays stat tooltips on all archetype cards (lines 73-78, 135-139)
+   - CSS tooltip system production-ready (`src/index.css` lines 359-385)
+   - **Gaps**: Keyboard accessibility (hover-only), mobile touch support, screen reader compatibility
+   - **Estimate**: 1-4 hours to close gaps (depending on design scope)
+   - **Risk**: LOW — just needs a11y polish
 
-**Button specifications**:
-| Build | Icon | Description | Archetypes |
-|-------|------|-------------|------------|
-| Aggressive | ⚔️ | High damage, fast strikes | Charger, Tactician |
-| Balanced | ⚖️ | Versatile, adaptable | Duelist |
-| Defensive | 🛡️ | Tank damage, outlast opponents | Bulwark, Breaker |
+2. **BL-064 (Impact Breakdown) — 40% COMPLETE** ⚠️
+   - PassResult.tsx exists with partial breakdown (effective stats, fatigue, counter bonus, accuracy, impact)
+   - **Gaps**: Bar graph, guard contribution calculation, attack advantage text, fatigue effect text, expandable card (mobile)
+   - **Estimate**: 6-12 hours (depends on calculator.ts refactoring needs)
+   - **Risk**: MEDIUM — may require engine changes to expose impact breakdown API
+   - **Coordination needed**: Tech-lead or engine-dev may need to refactor `calcImpactScore` to return components
 
-**Impact**: Reduces gear decision paralysis from 27 choices to 1 click. Players can start with preset and tweak individual slots.
+3. **BL-068 (Counter Chart) — 20% COMPLETE**
+   - StanceTag tooltips explain Agg>Def>Bal>Agg (helpers.tsx lines 85-94)
+   - AttackCard shows "Beats" / "Weak to" text (AttackSelect.tsx lines 50-59)
+   - **Gaps**: Visual chart component, modal/popup system, centralized counter reference
+   - **Estimate**: 4-8 hours
+   - **Risk**: LOW — pure UI work, no engine dependencies
 
-#### 3. Matchup Hint with Estimated Win Rate (src/ui/LoadoutScreen.tsx:163-220, 277-293)
-**Before**: No feedback on loadout strength until match starts
-**After**:
-- Implemented heuristic-based win rate estimator using memory data
-- Uses base win rates (bare tier), applies variant/rarity modifiers
-- Returns estimate, confidence level, contextual notes
-- Displays in prominent card between Quick Builds and rarity selectors
+#### Analysis Deliverable
 
-**Heuristic logic**:
-```
-Base win rate (from memory): charger=39%, bulwark=61.4%, etc.
-+ Variant modifier: aggressive +3% for Charger, -5% for Bulwark
-+ Rarity modifier: giga tier pulls toward 50% (compression)
-= Final estimate
-```
+**File**: `orchestrator/analysis/ui-dev-round-3.md` (comprehensive 300+ line analysis)
 
-**Example outputs**:
-- Charger + aggressive gear + uncommon → "~42%" (Medium confidence)
-- Bulwark + uncommon → "~63%" with note "Bulwark dominates at uncommon tier"
-- Charger + epic → "~56%" with note "Charger peaks at epic tier"
+**Contents**:
+- Task status overview with completion percentages
+- Feature-by-feature gap analysis (current vs design proposals)
+- Implementation roadmap (Phase 1 → 2 → 3)
+- Risk assessment for each feature
+- Accessibility audit (WCAG 2.1 AA compliance gaps)
+- Mobile responsiveness review
+- Questions for designer (design decision points)
+- Recommended action plan
 
-**Why heuristic instead of simulate.ts?**
-- simulate.ts is CLI batch tool (200 matches, ~30s runtime)
-- Real-time UI needs instant feedback (<100ms)
-- Heuristic uses known balance patterns from memory
-- Confidence rating acknowledges uncertainty
+**Impact**: Enables immediate implementation when design specs arrive. No discovery phase needed — gap analysis complete.
 
-**UI display**:
-- Large gold percentage (2rem font desktop, 1.4rem mobile)
-- Confidence rating (Low/Medium/Medium-High)
-- Contextual notes when applicable (e.g., tier imbalances)
-- Disclaimer: "Based on archetype stats, gear variant, and rarity. Actual results may vary."
+#### Accessibility Concerns (Shared Across All Features)
 
-#### 4. CSS Styling (src/App.css:370-514, 1289-1302, 1427-1443)
-**Added styles**:
-- Quick Builds section: gradient backgrounds, variant-specific colors, hover lift
-- Matchup hint: large gold estimate, callout notes, stacking layout
-- Responsive: 3-col desktop → 3-col tablet → 1-col mobile for Quick Builds
-- Matchup hint: horizontal desktop → vertical mobile
+**Critical Gaps Identified**:
+1. **CSS tooltips not screen-reader friendly** — pseudo-elements (`::after`) invisible to assistive tech
+2. **No keyboard navigation** — hover-only interaction excludes keyboard users
+3. **No mobile touch support** — CSS `:hover` doesn't work on touch devices
 
-**Accessibility**:
-- Quick Build cards are `<button>` elements (keyboard navigable)
-- Descriptive aria-labels for screen readers
-- Focus states on all interactive elements
+**Recommended Fix**: Refactor to React tooltip component with proper ARIA attributes (`aria-describedby`, focus states, touch handlers). Effort: 2-4 hours.
 
-### Test Results
-All 830 tests passing. Zero breakage. Changes are UI-layer only (no engine modifications).
+---
 
-### Analysis
-Wrote comprehensive implementation analysis to `orchestrator/analysis/ui-dev-round-2.md` including:
-- Technical decisions (heuristic vs simulation)
-- Known limitations (heuristic approximations)
-- Future enhancements (pre-computed lookup tables)
-- Manual QA recommendations
+### Round 2 (Prior)
+
+**BL-058: Gear Variant Affinity Hints + Quick Build Presets** ✓
+
+Implemented all 3 proposals from design analysis (BL-041, P3):
+1. Affinity labels in variant tooltips (LoadoutScreen.tsx lines 186-206)
+2. Quick Builds section (3 preset buttons reducing 27 gear choices to 1 click)
+3. Matchup hint with heuristic-based win rate estimate + confidence level
+
+All 830 tests passing. Zero breakage. Full details in prior handoff.
+
+---
+
+### Round 1 (Prior)
+
+**BL-047: ARIA Attributes and Semantic Markup for Accessibility** ✓
+
+Extended accessibility to SpeedSelect.tsx and AttackSelect.tsx. All interactive elements keyboard-navigable with proper aria-labels. 830+ tests passing.
+
+---
 
 ## What's Left
 
-None. BL-058 complete. All acceptance criteria met:
-- ✅ Affinity labels in variant tooltips
-- ✅ Quick Builds section (3 preset buttons)
-- ✅ Matchup hint (estimated win rate)
-- ✅ 830+ tests passing
-- ✅ Tooltips informative
-- ✅ Quick builds auto-populate correctly
+### Immediate (Blocked)
 
-**Recommended manual QA**:
-1. Load LoadoutScreen in dev server (`npm run dev`)
-2. Verify Quick Builds buttons set all 12 gear slots
-3. Verify variant tooltips show affinity on hover
-4. Verify matchup hint updates with archetype/rarity/variant changes
-5. Test responsive layout on mobile viewport
+**All Round 3 tasks blocked on design specs**:
+
+| Task | Priority | Blocker | Ready to Start When... |
+|------|----------|---------|------------------------|
+| BL-062 | P1 (CRITICAL) | BL-061 design pending | Designer completes stat tooltip specs |
+| BL-064 | P1 (CRITICAL) | BL-063 design pending | Designer completes impact breakdown specs |
+| BL-068 | P3 (POLISH) | BL-067 design pending | Designer completes counter chart specs |
+
+**Readiness**: 100% — gap analysis complete, implementation roadmap documented, questions for designer prepared.
+
+### Recommended Execution Order (When Unblocked)
+
+1. **Phase 1: BL-062 (Stat Tooltips)** — 1-4 hours
+   - Quick win, unblocks 80% of setup confusion
+   - 75% complete, just needs a11y polish
+   - Zero risk, no engine dependencies
+
+2. **Phase 2: BL-064 (Impact Breakdown)** — 6-12 hours
+   - Closes learning loop
+   - May require calculator.ts refactoring (coordinate with tech-lead)
+   - Medium risk due to engine dependencies
+
+3. **Phase 3: BL-068 (Counter Chart)** — 4-8 hours
+   - Optional polish
+   - Pure UI work, low risk
+   - Opportunity to build reusable modal component
+
+### Stretch Goals (If Capacity)
+
+- **Reusable Tooltip Component**: Replace CSS tooltips with React component (ARIA-compliant, mobile-friendly)
+- **Reusable Modal Component**: For counter chart + future features
+- **Bar Graph Component**: For impact breakdown + future stat visualizations
+
+---
 
 ## Issues
 
-None. All features implemented as specified. Zero test breakage.
+**None** — all tasks blocked as expected. No test breakage, no dirty state detected.
 
-**Known Limitations** (by design, not bugs):
-1. Matchup hint uses heuristic (not full simulation) — acceptable for real-time UI
-2. No opponent archetype selector — estimates assume average opponent
-3. Rare/epic tier modifiers interpolated (not directly simulated) — confidence rating reflects this
+**Coordination Points**:
 
-All limitations documented in analysis file.
+1. **@designer**: BL-061/063/067 design specs are blocking all P1 work. See `orchestrator/analysis/ui-dev-round-3.md` for detailed questions on design decisions (mobile interaction, tooltip wording, chart format, etc.).
+
+2. **@tech-lead or @engine-dev**: BL-064 (impact breakdown) may require `calcImpactScore` refactoring to expose:
+   - Guard contribution calculation (how much impact guard absorbed)
+   - Fatigue effect breakdown (pre/post-fatigue stat values)
+   - Attack advantage explanation (why counter triggered)
+
+   If this requires engine changes, let's coordinate via handoff. I can implement UI with mock data first, then integrate real API when ready.
+
+3. **@qa**: All Round 3 UI features will need manual QA on:
+   - Keyboard navigation (Tab through tooltips, focus states work)
+   - Mobile touch (tap tooltips, responsive layout <768px)
+   - Screen readers (JAWS/NVDA can read tooltip content)
+
+   I'll flag when features are ready for a11y testing.
+
+---
+
+## File Ownership
+
+**Primary**:
+- `src/ui/*.tsx` (all UI components)
+- `src/App.css` (component styling)
+- `src/ui/helpers.tsx` (shared UI utilities)
+
+**Shared**:
+- `src/App.tsx` (coordinate via handoff)
+
+---
+
+## Deferred App.tsx Changes
+
+None this round (no implementation work done).
+
+---
+
+## Next Round Preview
+
+**If design specs complete by Round 4**:
+- Implement BL-062 (stat tooltips a11y polish) — 1-4 hours
+- Implement BL-064 (impact breakdown) — 6-12 hours
+- Stretch: Implement BL-068 (counter chart) — 4-8 hours
+
+**If design specs still pending**:
+- Continue monitoring backlog for new ui-dev tasks
+- Consider stretch work (refactor CSS tooltips to React component for reusability)
+
+---
+
+**End of Handoff**

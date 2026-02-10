@@ -2,137 +2,167 @@
 
 ## META
 - status: complete
-- files-modified: CLAUDE.md, MEMORY.md, orchestrator/analysis/reviewer-round-2.md
+- files-modified: CLAUDE.md, MEMORY.md, orchestrator/analysis/reviewer-round-3.md
 - tests-passing: true
-- test-count: 845
+- test-count: 853
 - completed-tasks: none (continuous monitoring)
-- notes-for-others: @all: Round 2 review complete. All 4 agents approved (balance-tuner, qa, polish, ui-dev). 845 tests passing (+15 melee carryover tests). Zero blocking issues. Epic tier is MOST compressed (5.7pp spread). Charger peaks at epic (51.0%). Balance is healthy across all tiers. See orchestrator/analysis/reviewer-round-2.md for comprehensive review.
+- notes-for-others: @all: Round 3 review complete. All 4 agents approved (balance-tuner, qa, polish, ui-dev). 853 tests passing (+8 rare/epic tier melee tests). Zero blocking issues. Variant analysis complete — defensive giga is BEST BALANCE EVER (6.6pp spread, zero flags). MEMORY.md updated with variant-aware win rate notes. See orchestrator/analysis/reviewer-round-3.md for comprehensive review.
 
 ## What Was Done
 
-### Round 2 Code Review — All Agents
+### Round 3 Code Review — All Agents
 
 Reviewed 4 agents' work for structural integrity, quality, and compliance:
 
-**1. Balance Tuner — Rare/Epic Tier Analysis (BL-057)** ✅ APPROVED
-- File: orchestrator/analysis/balance-tuner-round-2.md
-- Type: Pure analysis (no code changes)
-- **KEY FINDING**: Epic tier is MOST compressed (5.7pp spread, better than giga 7.2pp)
-- Validated: Charger epic peak (51.0%), Technician rare spike (55.1%), Bulwark dominance fade (61.4%→50.4%)
-- Tier compression: 22.4pp bare → 5.7pp epic → 7.2pp giga
-- Verdict: No balance changes needed, all tier progressions healthy
-- Risk: None
+**1. Balance Tuner — Variant Impact Quantification (BL-066)** ✅ APPROVED
+- File: orchestrator/analysis/balance-tuner-round-3.md (485 lines)
+- Type: Pure analysis (43,200 matches across 6 configurations)
+- **CRITICAL FINDING**: Variant system creates MASSIVE balance divergence
+  - Aggressive gear AMPLIFIES imbalance: Bulwark +6.2pp at giga (50.6%→56.8%), Charger only +0.3pp (softCap compression)
+  - Defensive gear COMPRESSES balance: **BEST GIGA BALANCE EVER** (6.6pp spread, zero flags, Bulwark 49.3%, Charger 48.9%)
+  - Variant effect > rarity effect: variant choice = 3+ rarity tiers of impact
+  - Balanced variant = legacy baseline: **MEMORY.md win rates need variant disclaimer**
+- **ACTION TAKEN**: Updated MEMORY.md with variant-aware notes (see below)
+- Verdict: Variant system working AS DESIGNED, no balance changes needed
+- Risk: None (analysis-only)
 
-**2. QA Engineer — Melee Carryover + SoftCap Tests (BL-059)** ✅ APPROVED
-- Files: src/engine/gear-variants.test.ts (+15 tests, lines 884-1230), orchestrator/analysis/qa-round-2.md
-- Type: Test-only changes (+15 tests)
-- Coverage: 6 categories (stamina carryover, counter+softCap, breaker penetration, carryover penalties, extreme cases, asymmetric scenarios)
-- **KEY VALIDATION**: Stat pipeline confirmed — carryover → softCap → fatigue (order matters!)
-- Test quality: Deterministic RNG, boundary testing, multi-system interactions, zero magic numbers
-- Zero bugs found: All engine behavior matches specification exactly
-- Test count: 830 → 845 (+15 tests, gear-variants 156→171)
+**2. QA Engineer — Rare/Epic Tier Melee Tests (BL-065)** ✅ APPROVED
+- Files: src/engine/gear-variants.test.ts (+272 lines, +8 tests), orchestrator/analysis/qa-round-3.md
+- Type: Test-only changes (845→853 tests)
+- Coverage: Rare/epic tier melee exhaustion, carryover stacking, softCap interactions, mixed tier stress
+- **KEY VALIDATIONS**:
+  - Rare tier sustains 2-3 rounds (stamina drains 40-50% per round)
+  - Epic tier stats crossing knee=100 don't cause wild swings (<1.0 impact ratio delta)
+  - Unseated +10 boost offsets -10 carryover (correct compensation)
+  - Carryover penalties persist but don't multiply (<0.5 delta round-to-round)
+  - Breaker penetration scales correctly at rare tier (70%+ advantage)
+- **Zero bugs found**: All engine behavior matches specification
+- Test quality: Excellent (deterministic RNG, boundary testing, clear comments, realistic scenarios)
 - Risk: LOW (test-only)
 
-**3. Polish — CSS Stretch Goals (BL-060)** ✅ APPROVED
-- Files: src/App.css (lines 365-368), src/index.css (lines 217-220, 265, 312)
-- Type: CSS-only changes
-- Changes: Stat bar smooth fills (ease-in-out), rarity glow stacking (1x/2x/3x), disabled state styling
-- Quality: Zero !important flags, uses CSS variables, consistent design system
-- Risk: NONE (CSS-only, zero JS)
+**3. Polish — Counter Chart CSS Foundation** ✅ APPROVED
+- Files: src/App.css (+222 lines, lines 459-680), orchestrator/analysis/polish-round-3.md
+- Type: CSS-only proactive foundation (BL-067/068 prep)
+- Features: 3 counter chart layout variants (triangle, matrix, text list)
+- Quality: Zero !important flags, design token usage, BEM naming, responsive, accessible
+- Impact: When BL-067 design specs arrive, ui-dev can implement immediately
+- Shared file coordination: App.css modified by polish (459-680), no conflicts with ui-dev's prior work (370-514)
+- Risk: NONE (CSS-only, zero JavaScript)
 
-**4. UI Dev — Loadout Screen UX Improvements (BL-058)** ✅ APPROVED
-- Files: src/ui/LoadoutScreen.tsx (lines 163-309), src/App.css (lines 370-514, 1289-1302, 1427-1443)
-- Type: UI feature implementation
-- Features: Affinity labels in variant tooltips, Quick Builds (3 preset buttons), matchup hint (heuristic win rate estimator)
-- Quality: Clean React patterns, proper TypeScript types, accessibility (ARIA labels, keyboard navigation)
-- **NOTE**: Matchup hint uses heuristic (not exact simulation) — reasonable tradeoff for UI responsiveness
-- Shared file coordination: App.css modified by 2 agents (polish 365-368, ui-dev 370-514) — zero conflicts
-- Risk: LOW (UI-only, zero engine changes)
+**4. UI Dev — Onboarding UX Readiness Analysis** ✅ APPROVED
+- Files: orchestrator/analysis/ui-dev-round-3.md (300+ lines)
+- Type: Analysis-only (all implementation blocked on design specs BL-061/063/067)
+- **KEY FINDING**: BL-062 (Stat Tooltips) is 75% COMPLETE
+  - Infrastructure exists: STAT_TIPS in helpers.tsx, StatBar component, CSS tooltips
+  - Already displayed: SetupScreen.tsx shows tooltips on all archetype cards
+  - Gaps: Keyboard accessibility (hover-only), mobile touch (CSS :hover doesn't work), screen reader support
+  - Estimate: 1-4 hours to close gaps
+- BL-064 (Impact Breakdown) is 40% complete, may require engine changes
+- BL-064 coordination needed: Tech-lead may need to refactor calcImpactScore to expose guard contribution, fatigue components
+- Risk: LOW (analysis-only, implementation roadmap documented)
 
 ### Structural Integrity Verification
 
 **All Hard Constraints Passed** ✅:
-- ✅ Zero UI/AI imports in src/engine/ (verified via grep)
+- ✅ Zero UI/AI imports in src/engine/ (verified via git diff)
 - ✅ All tuning constants in balance-config.ts (no new hardcoded constants)
 - ✅ Stat pipeline order preserved (carryover → softCap → fatigue validated by QA tests)
 - ✅ Public API signatures stable (zero breaking changes)
-- ✅ resolvePass() still deprecated (no usage in new code)
+- ✅ resolvePass() still deprecated (no new usage)
 
 **Soft Quality Checks** ✅:
 - Type safety: Good (no `any` casts, proper TypeScript types)
-- Named constants: Good (no new magic numbers)
-- Function complexity: Good (all under 60 lines except getMatchupHint at 70 — acceptable for heuristic logic)
+- Named constants: Good (tests use MC, OC, FB, GH from imports)
+- Function complexity: Good (all test functions <60 lines)
 - Code duplication: Good (zero duplicated formulas)
 - Balanced variant = legacy mappings: Good (no gear changes)
+
+**Working Directory Check** ✅:
+- Verified no unauthorized balance changes: `git diff src/engine/archetypes.ts` EMPTY, `git diff src/engine/balance-config.ts` EMPTY
+- Known corruption pattern from MEMORY.md: Round 5 guardImpactCoeff, Session 2 Round 1 Technician MOM
+- **Round 3 Status**: CLEAN — zero unauthorized changes detected
 
 ### Documentation Updates
 
 **CLAUDE.md** (3 locations):
-- Line 9: Test count 830→845 ("as of S35 R2")
-- Line 112: Test count 830→845 in Live Data section
-- Line 167: gear-variants 156→171 tests, added "melee carryover + softCap interactions"
-- Line 169: Total 830→845 tests
+- Line 9: Test count 845→853 ("as of S35 R3")
+- Line 112: Test count 845→853 in Live Data section
+- Line 166: gear-variants 171→179 tests, added "rare/epic tier melee exhaustion"
+- Line 169: Total 845→853 tests
 
 **MEMORY.md** (2 sections):
-- Added rare/epic tier findings: Epic 5.7pp spread (best compression), Charger epic peak (51.0%), Technician rare spike (55.1%), tier compression progression (22.4pp→5.7pp→7.2pp), Bulwark dominance fade (-2.8pp/tier)
-- Updated test count 830→845 (+15 melee carryover tests)
-- Added stat pipeline validation: carryover → softCap → fatigue order confirmed
+- **Added variant-aware win rate notes** (per balance-tuner request):
+  - Disclaimer after archetype stats table: "Win rates shown above are for **balanced variant** (legacy default)"
+  - Aggressive variant: Bulwark +6.2pp at giga, Charger +0.3pp
+  - Defensive variant: Bulwark -1.3pp at giga, Charger +2.9pp
+  - Variant swings at uncommon: ±3-4pp typical
+  - Matchup-level impact: 10-15pp swings
+  - Defensive giga is best balance: 6.6pp spread, zero flags
+- Updated test count 845→853 (+8 rare/epic tier melee tests in R3)
 
 ### Review Analysis Report
 
-Wrote comprehensive 12-section review to `orchestrator/analysis/reviewer-round-2.md`:
-1. Executive Summary (Grade A, 4/4 agents approved, 845 tests passing, LOW risk)
-2. Round 2 Changes Overview (4 agents, 5 files, +15 tests)
-3. Detailed Agent Reviews (architecture, quality, compliance for each agent)
-4. Hard Constraint Compliance (5 constraints verified)
-5. Soft Quality Assessment (type safety, constants, complexity, duplication)
-6. Cross-Agent Coordination (shared App.css handled cleanly, zero conflicts)
-7. Test Suite Health (830→845, 100% pass rate, +1.8% growth)
-8. Risk Assessment (LOW overall, deployment ready YES)
-9. Tech Debt Identified (none this round)
-10. Recommendations for Round 3 (per-agent guidance)
-11. CLAUDE.md / MEMORY.md Updates Required (completed)
-12. Summary (Grade A, strengths/weaknesses, action items)
+Wrote comprehensive 485-line review to `orchestrator/analysis/reviewer-round-3.md`:
+1. Executive Summary (Grade A, 4/4 agents approved, 853 tests passing, LOW risk)
+2. Round 3 Agent Reviews (architecture, quality, compliance for each agent)
+3. Structural Integrity Verification (5 hard constraints, 5 soft quality checks)
+4. Cross-Agent Coordination (App.css shared file, inter-agent requests)
+5. Test Suite Health (test count evolution, distribution, quality metrics, coverage gaps)
+6. Risk Assessment (LOW overall, deployment ready YES)
+7. Documentation Updates Required (CLAUDE.md + MEMORY.md — completed)
+8. Recommendations for Round 4 (per-agent guidance)
+9. Tech Debt (none identified)
+10. Summary (Grade A, strengths/weaknesses, action items)
 
 ## What's Left
 
-**Nothing**. Round 2 review complete. All agents approved. Documentation updated. Status: complete.
+**Nothing**. Round 3 review complete. All agents approved. Documentation updated. Status: complete.
 
-**Available for Round 3 stretch goals** (continuous agent):
-1. Monitor balance state at next tier sweep (rare/epic now documented, all 5 tiers complete)
-2. Monitor UI heuristic accuracy vs actual simulation results (future validation)
-3. Track per-file test counts as they evolve (845 tests as of S35 R2)
+**Available for Round 4 stretch goals** (continuous agent):
+1. Monitor BL-064 engine dependency if/when implementation begins (may need calcImpactScore refactoring)
+2. Track App.css shared file coordination (no conflicts yet, continue monitoring)
+3. Monitor balance state at next session (variant analysis fully comprehensive)
 
 ## Issues
 
-**None**. All tests passing (845/845). Zero blocking issues found in code review.
+**None**. All tests passing (853/853). Zero blocking issues found in code review.
 
-### Minor Notes
+### Inter-Agent Requests Handled
 
-1. **Matchup Hint Heuristic**: UI dev chose heuristic over real-time simulation for instant UI feedback (<100ms). Reasonable tradeoff, but future enhancement could pre-compute lookup tables for exact values. Not blocking.
+1. **balance-tuner → reviewer**: Update MEMORY.md with variant-aware win rate notes
+   - **STATUS**: ✅ COMPLETE — Added disclaimer + 5 bullet points after archetype stats table
 
-2. **getMatchupHint Complexity**: 70 lines (slightly above 60-line guideline) but acceptable because:
-   - Pure calculation function (no side effects)
-   - Clear sections (variant detection, base rates, modifiers, notes)
-   - High complexity is inherent to heuristic logic
-   - Not a candidate for further decomposition (would reduce readability)
+2. **balance-tuner → designer**: Create new task for variant tooltips (BL-0XX)
+   - **STATUS**: Forwarded to producer (will handle in Round 4 backlog generation)
+   - **Rationale**: Players need to understand aggressive ≠ "better", defensive ≠ "weaker"
 
-3. **Shared App.css**: Two agents modified (polish lines 365-368, ui-dev lines 370-514). Zero conflicts this round. Continue monitoring for future rounds.
+3. **ui-dev → tech-lead**: BL-064 may require calcImpactScore refactoring
+   - **STATUS**: NOTED — will address if/when BL-064 implementation begins
+   - **Scope**: Expose guard contribution, fatigue components from calculator.ts
+   - **Coordination**: UI-dev should implement with mock data first, then integrate real API when ready
+
+### Shared File Coordination
+
+**App.css**:
+- **This round**: polish added lines 459-680 (counter chart CSS foundation)
+- **Previous rounds**: ui-dev modified lines 370-514 (loadout), polish modified lines 365-368 (stat bars)
+- **Conflict Status**: ✅ NONE — different sections, no overlap
+- **Monitoring**: Continue tracking for future rounds (3rd most modified file this session)
 
 ---
 
 ## Review Summary
 
-**Round 2 Grade**: A
+**Round 3 Grade**: A
 **Risk Level**: LOW
 **Approved Changes**: 4/4 agents (100%)
-**Test Coverage**: +15 tests (+1.8%)
+**Test Coverage**: +8 tests (+0.94%)
 **Structural Violations**: 0
 **Deployment Ready**: YES
 
-All agents operating within file ownership boundaries. High-quality work across the board. Balance is healthy (epic tier is best compressed at 5.7pp spread). Test suite is growing (845 tests). UX is improving (Quick Builds, matchup hint, affinity labels). CSS system is polished. Ready for Round 3 or deployment.
+All agents operating within file ownership boundaries. High-quality work across the board. Balance analysis complete — variant system creates MASSIVE swings (±7pp) but working AS DESIGNED. Defensive giga is BEST BALANCE EVER (6.6pp spread, zero flags). Test suite growing (853 tests). UX analysis complete, waiting for design specs to unblock P1 work. Zero structural violations. Ready for Round 4 or deployment.
 
-See `orchestrator/analysis/reviewer-round-2.md` for full review report with severity classifications, cross-agent coordination analysis, and per-agent recommendations.
+See `orchestrator/analysis/reviewer-round-3.md` for full review report with detailed agent reviews, cross-agent coordination analysis, and per-agent recommendations.
 
 ## Your Mission
 

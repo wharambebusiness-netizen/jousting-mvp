@@ -2,15 +2,83 @@
 
 ## META
 - status: complete
-- files-modified: orchestrator/analysis/design-round-3.md, orchestrator/analysis/designer-round-2.md
-- tests-passing: true (845/845)
-- test-count: 845
-- completed-tasks: BL-040, BL-041 (Round 1); BL-057/058/059 monitored (Round 2)
-- notes-for-others: @ui-dev: PROMOTE P1 (Stat Tooltips) to highest priority — blocks 80% of setup screen confusion. BL-058 (P3 Quick Builds) shipped successfully; recommend P1 BEFORE additional polish. @producer: Consider BL-061 (P1 implementation) for Round 3 as critical onboarding blocker.
+- files-modified: orchestrator/analysis/design-round-4.md
+- tests-passing: true (853/853)
+- test-count: 853
+- completed-tasks: BL-040, BL-041 (Round 1); BL-057/058/059 monitored (Round 2); BL-061 spec complete (Round 4)
+- notes-for-others: @ui-dev: BL-061 design spec complete — 75% of infrastructure already exists, just needs a11y polish. Stat tooltips infrastructure is production-ready; see design-round-4.md for mobile interaction patterns, keyboard focus states, and screen reader requirements. Ready for Phase 1 implementation immediately. @producer: BL-061 unblocks 80% of setup screen confusion; recommend ui-dev tackles this before any other onboarding tasks.
 
 ## What Was Done
 
-### Round 2 (This Round)
+### Round 4 (This Round) — BL-061 Design Specification
+
+**Completed**: BL-061 — Design stat tooltips for Setup Screen (P1, CRITICAL)
+
+**Deliverable**: `orchestrator/analysis/design-round-4.md` — Comprehensive design specification covering:
+
+1. **Tooltip Content** (5 stats with refined wording):
+   - MOM: "Attack speed and power" (emphasis on vulnerability to counters)
+   - CTL: "Defense and precision" (emphasis on resilience)
+   - GRD: "Armor strength" (highlight: only stat unaffected by fatigue)
+   - INIT: "Speed and reflexes" (highlight: react first in speed phase)
+   - STA: "Endurance" (emphasis: fatigue impacts late-game decisions)
+
+2. **Desktop Interaction** (≥1024px):
+   - Hover over stat bar → tooltip appears
+   - Hover away → tooltip disappears
+   - Smooth 0.2s opacity transition
+   - Tooltip positioned 6px above element
+
+3. **Tablet Interaction** (768–1023px):
+   - Hover still works (mouse users)
+   - Tab through stats → keyboard focus shows tooltip
+   - Tap stat bar → tooltip toggles on/off
+   - Mobile positioning if screen is small
+
+4. **Mobile Interaction** (<768px):
+   - Tap ⓘ info icon → tooltip toggles visibility
+   - Tap outside → tooltip closes
+   - Overlay (20% dark) focuses attention
+   - Tooltip width: 90vw (fits small screens)
+   - Dismissal: clear "Tap outside to close" hint
+
+5. **Accessibility (WCAG 2.1 AA)**:
+   - Keyboard: Add `:focus::after` CSS rule + `tabindex="0"` + `role="tooltip"`
+   - Screen readers: Add `aria-label` with full tooltip text + `aria-describedby` (optional enhancement)
+   - Mobile: Add visible ⓘ icon with ≥44px tap target
+   - Color contrast: 17:1 (dark bg + light text) ✅ exceeds 4.5:1 requirement
+
+6. **Visual Mockups**: Desktop hover, mobile tap, keyboard focus states, overlay pattern
+
+7. **Testing Checklist**: 10+ test cases covering desktop/tablet/mobile + keyboard + screen reader + all browsers
+
+8. **Implementation Guide for UI-Dev**:
+   - Files to modify: `src/ui/helpers.tsx`, `src/App.css`, `src/ui/SetupScreen.tsx`
+   - Step-by-step accessibility enhancements (keyboard focus, ARIA, mobile tap handlers)
+   - Risk assessment: LOW (infrastructure exists, only a11y polish needed)
+
+9. **Answered 4 Key Questions from UI-Dev Round 3 Analysis**:
+   - Tooltip content: Mostly match current STAT_TIPS, with refined wording ✓
+   - Playstyle guidance: Optional for MVP (post-MVP acceptable) ✓
+   - Mobile interaction: Tap-to-toggle ⓘ icon ✓
+   - Dismissal: Tap outside to close ✓
+
+10. **Definition of Done**: Spec complete when all 5 stat names/descriptions approved + all interaction patterns specified + accessibility requirements documented + testing checklist comprehensive + ui-dev ready to implement
+
+**Key Insight**: UI-dev's Round 3 analysis revealed 75% of tooltip infrastructure already exists (STAT_TIPS content in helpers.tsx, CSS tooltip system in index.css). Spec fills in the critical gaps:
+- **Keyboard accessibility** (`:focus` states missing)
+- **Mobile tap handlers** (hover doesn't work on touch)
+- **Screen reader support** (CSS `::after` invisible to AT)
+- **Refined content** (improve clarity with strategic emphasis)
+- **Detailed mockups** (show interaction patterns)
+
+**Test Status**: All 853 tests passing (QA Round 3 work intact). No code changes needed; spec is pure design documentation.
+
+**Ready for Implementation**: Yes. UI-dev can implement Phase 1 immediately when producer converts spec to BL-062 task.
+
+---
+
+### Round 2 (Prior Round)
 
 **Monitored BL-057, BL-058, BL-059 execution and documented design findings**:
 
@@ -72,17 +140,34 @@ Completed comprehensive walkthrough of first-time player experience from Setup t
 
 | Priority | Feature | Status | Impact | Notes |
 |----------|---------|--------|--------|-------|
-| 🔴 P1 | Stat Tooltips (Setup Screen) | ⏳ Pending ui-dev | ⭐⭐⭐⭐⭐ | **CRITICAL** — blocks 80% of stat confusion. Should be PROMOTED for next round. |
-| 🔴 P2 | Impact Breakdown (Pass Results) | ⏳ Pending ui-dev | ⭐⭐⭐⭐ | Closes learning loop. Recommend after P1. |
-| ✅ P3 | Quick Builds + Affinity Labels (Loadout) | **COMPLETE (BL-058)** | ⭐⭐⭐ | Shipped this round; reduces 27 decisions to 1 click. |
-| 🟡 P4 | Counter Chart (Attack Select) | ⏳ Pending ui-dev | ⭐⭐⭐ | Optional polish; makes counter system learnable instead of learn-by-losing. |
+| 🔴 P1 | Stat Tooltips (Setup Screen) | ✅ **SPEC COMPLETE (BL-061)** | ⭐⭐⭐⭐⭐ | Design-round-4.md ready for ui-dev implementation (BL-062). Infrastructure 75% exists. |
+| 🔴 P2 | Impact Breakdown (Pass Results) | ⏳ Pending design | ⭐⭐⭐⭐ | Next priority after P1 ships. Design spec (BL-063) needed before ui-dev starts BL-064. |
+| ✅ P3 | Quick Builds + Affinity Labels (Loadout) | **COMPLETE (BL-058)** | ⭐⭐⭐ | Shipped Round 2; reduces 27 decisions to 1 click. |
+| 🟡 P4 | Counter Chart (Attack Select) | ⏳ Pending design | ⭐⭐⭐ | Optional polish; needed after P1 ships. Design spec (BL-067) needed before ui-dev starts BL-068. |
+
+**Immediate Next Steps** (Round 5 priorities):
+
+1. **BL-063 — Design Impact Breakdown** (P2, CRITICAL)
+   - Producer will create BL-063 task once BL-061 approved
+   - Designer should spec all pass result breakdown text, layout, bar graph style, guard/fatigue calculations
+   - Coordinate with ui-dev Round 3 analysis (PassResult.tsx already 40% implemented)
+   - Will likely require engine-dev coordination for calculator.ts refactoring
+
+2. **BL-067 — Design Counter Chart** (P4, POLISH)
+   - Can start after P1 ships (lower priority)
+   - Spec counter chart format (triangle diagram vs 6×6 matrix vs text list)
+   - Mobile responsive design
+   - Modal/popup interaction pattern
 
 **Additional Design Opportunities** (identified Round 2):
 - Tier Preview Card: Educate players on tier dynamics (Charger epic peak, etc.) — optional polish
 - Melee Phase Tutorial: Explain unseat→melee transition, win conditions — post-MVP
 - Run Full Simulation button: Pre-compute accurate win rates for loadout planning — future enhancement
 
-Full specs in `orchestrator/analysis/design-round-3.md` (P1-P4) and `orchestrator/analysis/designer-round-2.md` (Round 2 findings).
+Full specs in:
+- `orchestrator/analysis/design-round-4.md` (BL-061 P1 stat tooltips) — ✅ Complete
+- `orchestrator/analysis/design-round-3.md` (Original P1-P4 proposals)
+- `orchestrator/analysis/designer-round-2.md` (Round 2 tier findings)
 
 ## File Ownership
 

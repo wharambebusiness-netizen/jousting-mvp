@@ -456,6 +456,228 @@
   color: var(--ink-light);
 }
 
+/* Counter Chart System (BL-067/068 — proactive foundation) */
+.counter-chart {
+  background: linear-gradient(135deg, var(--parchment-light) 0%, var(--parchment) 100%);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.counter-chart__title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.counter-chart__subtitle {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  text-align: center;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+/* Triangle counter chart (center layout for 6 attacks in rock-paper-scissors) */
+.counter-chart__triangle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.counter-chart__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.counter-chart__attack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+}
+
+.counter-chart__attack-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.counter-chart__attack-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+}
+
+.counter-chart__beats {
+  font-size: 0.7rem;
+  color: var(--green);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.counter-chart__weak-to {
+  font-size: 0.7rem;
+  color: var(--red);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Matrix counter chart (grid layout showing all 6x6 matchups) */
+.counter-chart__matrix {
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+
+.counter-chart__grid {
+  display: grid;
+  grid-template-columns: 80px repeat(6, 70px);
+  gap: 1px;
+  background: var(--border-light);
+  padding: 1px;
+  min-width: 500px;
+}
+
+.counter-chart__header {
+  background: var(--parchment-dark);
+  padding: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.counter-chart__cell {
+  background: var(--parchment);
+  padding: 8px;
+  font-size: 0.7rem;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter-chart__cell--win {
+  background: rgba(45, 80, 22, 0.1);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.counter-chart__cell--lose {
+  background: rgba(139, 37, 0, 0.1);
+  color: var(--red);
+  font-weight: 700;
+}
+
+.counter-chart__cell--draw {
+  background: var(--parchment-dark);
+  color: var(--ink-light);
+}
+
+/* Text counter chart (simple beats/weak-to list) */
+.counter-chart__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.counter-chart__list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+  background: var(--parchment-light);
+  border-radius: var(--radius);
+  border-left: 3px solid var(--gold);
+}
+
+.counter-chart__list-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.counter-chart__list-content {
+  flex: 1;
+}
+
+.counter-chart__list-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.counter-chart__list-relation {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  margin-bottom: 3px;
+}
+
+.counter-chart__list-beats {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.counter-chart__list-weak-to {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* Responsive counter chart */
+@media (max-width: 768px) {
+  .counter-chart { padding: 12px; }
+  .counter-chart__row { gap: 12px; }
+  .counter-chart__attack { min-width: 85px; }
+  .counter-chart__attack-icon { font-size: 1.2rem; }
+  .counter-chart__attack-name { font-size: 0.8rem; }
+  .counter-chart__beats, .counter-chart__weak-to { font-size: 0.65rem; }
+
+  /* Matrix: reduce cell size on tablet */
+  .counter-chart__grid { grid-template-columns: 60px repeat(6, 50px); min-width: 360px; }
+  .counter-chart__cell { padding: 6px; font-size: 0.65rem; }
+  .counter-chart__header { padding: 6px; font-size: 0.65rem; }
+}
+
+@media (max-width: 480px) {
+  .counter-chart { padding: 10px; }
+  .counter-chart__title { font-size: 0.95rem; }
+  .counter-chart__subtitle { font-size: 0.75rem; }
+  .counter-chart__row { gap: 8px; margin-bottom: 4px; }
+  .counter-chart__attack { min-width: 70px; gap: 4px; }
+  .counter-chart__attack-icon { font-size: 1rem; }
+  .counter-chart__attack-name { font-size: 0.75rem; }
+  .counter-chart__beats, .counter-chart__weak-to { font-size: 0.6rem; }
+
+  /* Matrix: stack on mobile */
+  .counter-chart__grid { grid-template-columns: 50px repeat(3, 45px); min-width: 100%; margin-top: 8px; }
+  .counter-chart__cell { padding: 4px; font-size: 0.6rem; }
+  .counter-chart__header { padding: 4px; font-size: 0.6rem; }
+
+  /* Text list: more compact on mobile */
+  .counter-chart__list-item { padding: 8px; gap: 8px; }
+  .counter-chart__list-icon { font-size: 1rem; }
+  .counter-chart__list-name { font-size: 0.8rem; }
+  .counter-chart__list-relation { font-size: 0.7rem; }
+}
+
 /* Matchup Hint */
 .matchup-hint {
   background: linear-gradient(135deg, var(--parchment-light) 0%, var(--parchment) 100%);

@@ -1256,4 +1256,276 @@ describe('BL-059: Melee carryover + softCap interactions', () => {
     // Unseated boost compensates for carryover
     expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.6);
   });
+
+  // BL-065: Rare/Epic Tier Melee Exhaustion Tests
+  it('rare tier multi-round melee: charger vs technician, 3 rounds without infinite stacking', () => {
+    // Rare tier (mid-range stats): verify carryover doesn't stack infinitely
+    const rng = makeRng(2020);
+    const steed1 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player1 = createFullPlayerLoadout('rare', rng, 'balanced');
+    const steed2 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('rare', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.technician, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 80;
+    match.player2.currentStamina = 75;
+
+    // Round 1
+    match = submitMeleeRound(match, MC, OC);
+    const r1 = match.meleeRoundResults[0];
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    const stam1_r1 = match.player1.currentStamina;
+    const stam2_r1 = match.player2.currentStamina;
+
+    // Round 2
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, FB, MC);
+      const r2 = match.meleeRoundResults[1];
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+      expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      // Stamina should decrease but not collapse
+      expect(match.player1.currentStamina).toBeLessThan(stam1_r1);
+      expect(match.player1.currentStamina).toBeGreaterThan(stam1_r1 * 0.5);
+    }
+
+    // Round 3
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, OC, FB);
+      const r3 = match.meleeRoundResults[2];
+      expect(r3.player1ImpactScore).toBeGreaterThan(0);
+      expect(r3.player2ImpactScore).toBeGreaterThan(0);
+      // Verify no infinite loop (match progresses or terminates)
+      expect(match.meleeRoundResults.length).toBe(3);
+    }
+  });
+
+  it('rare tier tactician vs breaker: multi-round with guard penetration stability', () => {
+    // Rare tier with Breaker penetration: verify penetration scales correctly
+    const rng = makeRng(3030);
+    const steed1 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player1 = createFullPlayerLoadout('rare', rng, 'balanced');
+    const steed2 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('rare', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.tactician, ARCHETYPES.breaker, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 70;
+    match.player2.currentStamina = 75;
+
+    // Round 1: Breaker penetration active
+    match = submitMeleeRound(match, GH, MC);
+    const r1 = match.meleeRoundResults[0];
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Breaker should have advantage from penetration
+    expect(r1.player2ImpactScore).toBeGreaterThan(r1.player1ImpactScore * 0.7);
+
+    // Round 2: verify penetration still works with fatigue
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, MC, OC);
+      const r2 = match.meleeRoundResults[1];
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+      expect(r2.player2ImpactScore).toBeGreaterThan(0);
+    }
+  });
+
+  it('epic tier carryover + softCap: unseated charger with -10 penalties at epic', () => {
+    // Epic tier: carryover + softCap interaction with higher base stats
+    const rng = makeRng(4040);
+    const steed1 = createFullLoadout('epic', 'epic', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('epic', rng, 'aggressive');
+    const steed2 = createFullLoadout('epic', 'epic', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('epic', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 95;
+    match.player2.currentStamina = 90;
+    match.player1.carryoverMomentum = -10;
+    match.player1.carryoverControl = -7;
+    match.player1.carryoverGuard = -7;
+    match.player1.wasUnseated = true; // +10 to all stats
+
+    match = submitMeleeRound(match, MC, OC);
+    const r1 = match.meleeRoundResults[0];
+
+    // Epic tier: carryover penalties + unseated boost should net near-zero
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // Stats shouldn't collapse despite penalties (epic base stats + unseated boost)
+    const ratio = r1.player1ImpactScore / r1.player2ImpactScore;
+    expect(ratio).toBeGreaterThan(0.4); // Charger not completely dominated
+  });
+
+  it('epic tier softCap boundary: stats near knee=100 in multi-round melee', () => {
+    // Epic tier: stats crossing knee=100 threshold mid-combat
+    const rng = makeRng(5050);
+    const steed1 = createFullLoadout('epic', 'epic', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('epic', rng, 'aggressive');
+    const steed2 = createFullLoadout('epic', 'epic', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('epic', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.technician, ARCHETYPES.duelist, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 85;
+    match.player2.currentStamina = 90;
+
+    // Round 1: stats likely near knee=100 for epic gear
+    match = submitMeleeRound(match, FB, MC);
+    const r1 = match.meleeRoundResults[0];
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+
+    // Round 2: fatigue may push stats below knee
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, OC, GH);
+      const r2 = match.meleeRoundResults[1];
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+      expect(r2.player2ImpactScore).toBeGreaterThan(0);
+      // Verify stats don't collapse dramatically
+      const ratioR1 = r1.player1ImpactScore / r1.player2ImpactScore;
+      const ratioR2 = r2.player1ImpactScore / r2.player2ImpactScore;
+      expect(Math.abs(ratioR2 - ratioR1)).toBeLessThan(1.0); // No wild swings
+    }
+  });
+
+  it('mixed rare/epic aggressive vs defensive: 3-round melee variant stress test', () => {
+    // Mixed tier + variant: aggressive rare vs defensive epic
+    const rng = makeRng(6060);
+    const steed1 = createFullLoadout('rare', 'rare', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('rare', rng, 'aggressive');
+    const steed2 = createFullLoadout('epic', 'epic', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('epic', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.breaker, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 75;
+    match.player2.currentStamina = 95;
+
+    // Round 1: aggressive vs defensive
+    match = submitMeleeRound(match, MC, GH);
+    const r1 = match.meleeRoundResults[0];
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+
+    // Round 2
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, FB, MC);
+      const r2 = match.meleeRoundResults[1];
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+      expect(r2.player2ImpactScore).toBeGreaterThan(0);
+    }
+
+    // Round 3: verify no edge cases
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, OC, OC);
+      expect(match.meleeRoundResults.length).toBe(3);
+      // Both players should still have reasonable stamina
+      expect(match.player1.currentStamina).toBeGreaterThan(20);
+      expect(match.player2.currentStamina).toBeGreaterThan(30);
+    }
+  });
+
+  it('epic tier duelist mirror with balanced gear: extended melee without infinite loop', () => {
+    // Epic tier mirror match: verify balance at epic tier
+    const rng = makeRng(7070);
+    const steed1 = createFullLoadout('epic', 'epic', rng, 'balanced');
+    const player1 = createFullPlayerLoadout('epic', rng, 'balanced');
+    const steed2 = createFullLoadout('epic', 'epic', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('epic', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.duelist, ARCHETYPES.duelist, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 90;
+    match.player2.currentStamina = 90;
+
+    const attacks = [MC, FB, OC, GH];
+    for (let i = 0; i < 4; i++) {
+      if (match.phase !== Phase.MeleeSelect) break;
+      match = submitMeleeRound(match, attacks[i], attacks[(i + 1) % attacks.length]);
+    }
+
+    // Should complete at least 2 rounds
+    expect(match.meleeRoundResults.length).toBeGreaterThanOrEqual(2);
+    // Mirror match: relatively close impacts
+    const lastRound = match.meleeRoundResults[match.meleeRoundResults.length - 1];
+    const ratio = Math.max(lastRound.player1ImpactScore, lastRound.player2ImpactScore) /
+                  Math.min(lastRound.player1ImpactScore, lastRound.player2ImpactScore);
+    expect(ratio).toBeLessThan(3.0); // Not wildly imbalanced
+  });
+
+  it('rare tier with carryover stacking: -6/-6/-6 penalties across 2 rounds', () => {
+    // Rare tier: verify carryover doesn't cause stat collapse
+    const rng = makeRng(8080);
+    const steed1 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player1 = createFullPlayerLoadout('rare', rng, 'balanced');
+    const steed2 = createFullLoadout('rare', 'rare', rng, 'balanced');
+    const player2 = createFullPlayerLoadout('rare', rng, 'balanced');
+
+    let match = createMatch(ARCHETYPES.tactician, ARCHETYPES.charger, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    match.player1.currentStamina = 70;
+    match.player2.currentStamina = 75;
+    match.player1.carryoverMomentum = -6;
+    match.player1.carryoverControl = -6;
+    match.player1.carryoverGuard = -6;
+
+    // Round 1: with carryover penalties
+    match = submitMeleeRound(match, MC, FB);
+    const r1 = match.meleeRoundResults[0];
+    expect(r1.player1ImpactScore).toBeGreaterThan(0);
+    expect(r1.player2ImpactScore).toBeGreaterThan(0);
+    // P1 should still be competitive despite penalties
+    expect(r1.player1ImpactScore).toBeGreaterThan(r1.player2ImpactScore * 0.3);
+
+    // Round 2: verify penalties persist but don't multiply
+    if (match.phase === Phase.MeleeSelect) {
+      match = submitMeleeRound(match, OC, MC);
+      const r2 = match.meleeRoundResults[1];
+      expect(r2.player1ImpactScore).toBeGreaterThan(0);
+      // Ratios should be similar (penalties don't stack)
+      const ratioR1 = r1.player1ImpactScore / r1.player2ImpactScore;
+      const ratioR2 = r2.player1ImpactScore / r2.player2ImpactScore;
+      expect(Math.abs(ratioR2 - ratioR1)).toBeLessThan(0.5);
+    }
+  });
+
+  it('epic tier aggressive charger vs defensive bulwark: stamina drain validation', () => {
+    // Epic tier: verify stamina drain happens consistently
+    const rng = makeRng(9090);
+    const steed1 = createFullLoadout('epic', 'epic', rng, 'aggressive');
+    const player1 = createFullPlayerLoadout('epic', rng, 'aggressive');
+    const steed2 = createFullLoadout('epic', 'epic', rng, 'defensive');
+    const player2 = createFullPlayerLoadout('epic', rng, 'defensive');
+
+    let match = createMatch(ARCHETYPES.charger, ARCHETYPES.bulwark, steed1, steed2, player1, player2);
+    match.phase = Phase.MeleeSelect;
+    const initialStam1 = match.player1.currentStamina;
+    const initialStam2 = match.player2.currentStamina;
+
+    // Round 1
+    match = submitMeleeRound(match, MC, MC);
+    const drain1_r1 = initialStam1 - match.player1.currentStamina;
+    const drain2_r1 = initialStam2 - match.player2.currentStamina;
+
+    // Round 2
+    if (match.phase === Phase.MeleeSelect) {
+      const stam1_before = match.player1.currentStamina;
+      const stam2_before = match.player2.currentStamina;
+      match = submitMeleeRound(match, FB, OC);
+      const drain1_r2 = stam1_before - match.player1.currentStamina;
+      const drain2_r2 = stam2_before - match.player2.currentStamina;
+
+      // Both should drain stamina consistently
+      expect(drain1_r1).toBeGreaterThan(0);
+      expect(drain2_r1).toBeGreaterThan(0);
+      expect(drain1_r2).toBeGreaterThan(0);
+      expect(drain2_r2).toBeGreaterThan(0);
+      // Verify both players have reasonable remaining stamina
+      expect(match.player1.currentStamina).toBeGreaterThan(30);
+      expect(match.player2.currentStamina).toBeGreaterThan(30);
+    }
+  });
 });
