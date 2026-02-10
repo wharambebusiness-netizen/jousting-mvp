@@ -1005,6 +1005,99 @@ async function runBalanceSims(round, phase) {
 }
 
 // ============================================================
+// Balance State Tracker (v7 — Phase 1)
+// ============================================================
+// Persists balance metrics across rounds in balance-state.json.
+// Each entry is a round snapshot with per-tier balance data.
+// Used for: trend analysis, regression detection, convergence.
+
+const BALANCE_STATE_FILE = join(ORCH_DIR, 'balance-state.json');
+
+function loadBalanceState() {
+  if (!existsSync(BALANCE_STATE_FILE)) return { rounds: [] };
+  try { return JSON.parse(readFileSync(BALANCE_STATE_FILE, 'utf-8')); }
+  catch (_) { return { rounds: [] }; }
+}
+
+function saveBalanceState(state) {
+  writeFileSync(BALANCE_STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Update balance state with sim results from a completed round.
+ * @param {number} round
+ * @param {Array} preResults - Pre-sim results array (from runBalanceSims)
+ * @param {Array} postResults - Post-sim results array (from runBalanceSims)
+ */
+function updateBalanceState(round, preResults, postResults) {
+  const state = loadBalanceState();
+
+  // Build tier snapshots from post-sim results (or pre if no post)
+  const simResults = postResults?.length ? postResults : preResults || [];
+  if (!simResults.length) return;
+
+  const tiers = {};
+  for (const r of simResults) {
+    if (!r.success || !r.data) continue;
+    const key = `${r.tier}${r.variant ? '/' + r.variant : ''}`;
+    const bm = r.data.balanceMetrics;
+    const stats = r.data.archetypeStats;
+
+    tiers[key] = {
+      tier: r.tier,
+      variant: r.variant || null,
+      spreadPp: bm.overallSpreadPp,
+      topArchetype: bm.topArchetype,
+      bottomArchetype: bm.bottomArchetype,
+      archetypeWinRates: Object.fromEntries(stats.map(s => [s.archetype, Math.round(s.overallWinRate * 1000) / 10])),
+      flagCount: (r.data.balanceFlags.dominant?.length || 0) + (r.data.balanceFlags.weak?.length || 0) + (r.data.balanceFlags.matchupSkews?.length || 0),
+    };
+  }
+
+  // Compute deltas if we have both pre and post
+  const deltas = {};
+  if (preResults?.length && postResults?.length) {
+    for (const post of postResults) {
+      if (!post.success || !post.data) continue;
+      const key = `${post.tier}${post.variant ? '/' + post.variant : ''}`;
+      const pre = preResults.find(p => p.tier === post.tier && p.variant === post.variant);
+      if (!pre?.success || !pre?.data) continue;
+
+      const preSpread = pre.data.balanceMetrics.overallSpreadPp;
+      const postSpread = post.data.balanceMetrics.overallSpreadPp;
+      const spreadDelta = Math.round((postSpread - preSpread) * 10) / 10;
+
+      // Per-archetype deltas
+      const archDeltas = {};
+      for (const postStat of post.data.archetypeStats) {
+        const preStat = pre.data.archetypeStats.find(s => s.archetype === postStat.archetype);
+        if (preStat) {
+          archDeltas[postStat.archetype] = Math.round((postStat.overallWinRate - preStat.overallWinRate) * 1000) / 10;
+        }
+      }
+
+      deltas[key] = { spreadDelta, archetypeDeltas: archDeltas };
+    }
+  }
+
+  state.rounds.push({
+    round,
+    timestamp: new Date().toISOString(),
+    tiers,
+    deltas: Object.keys(deltas).length ? deltas : null,
+  });
+
+  saveBalanceState(state);
+
+  // Log summary
+  for (const [key, t] of Object.entries(tiers)) {
+    const delta = deltas[key];
+    const deltaStr = delta ? ` (Δ spread: ${delta.spreadDelta > 0 ? '+' : ''}${delta.spreadDelta}pp)` : '';
+    log(`  Balance state [${key}]: spread=${t.spreadPp}pp, ${t.topArchetype.archetype} ${t.topArchetype.winRate}% → ${t.bottomArchetype.archetype} ${t.bottomArchetype.winRate}%${deltaStr}`);
+  }
+}
+
+// ============================================================
 // Cost Tracking (v6 — Action 1.3)
 // ============================================================
 // Approximate pricing per 1M tokens (USD)
@@ -1471,6 +1564,11 @@ async function main() {
       if (CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length && testResult.passed && !didRevert) {
         log(`\nBalance Post-Sim (after changes):`);
         postSimResults = await runBalanceSims(round, 'post');
+      }
+
+      // v7: Update balance state tracker with pre/post sim results
+      if (preSimResults?.results?.length || postSimResults?.results?.length) {
+        updateBalanceState(round, preSimResults?.results, postSimResults?.results);
       }
     }
 
