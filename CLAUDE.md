@@ -1,7 +1,10 @@
 # Jousting MVP
 
 Jousting minigame web demo. Vite + React + TypeScript.
-Engine is pure TS, zero UI imports (portable to Unity C#). Integrating with Gigaverse ecosystem.
+Engine is pure TS, zero UI imports (portable to Unity C#).
+
+**Current focus: Orchestrator improvement for automated balance tuning.**
+Gigaverse integration is tabled — do not work on it unless explicitly asked.
 
 ## Quick Reference
 
@@ -109,7 +112,7 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (897 as of S35 R6)
+- **Test count**: run `npx vitest run` (908 as of S38)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
@@ -162,7 +165,10 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **Variant choice = 3+ rarity tiers of impact** (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v5
+## Orchestrator v6.2
+
+**Primary project focus**: Improving the orchestrator as a balance-tuning tool for jousting.
+Key goals: automated sim pipelines, balance-specific missions, structured metrics, parameter search, regression detection, convergence criteria.
 
 ### Backlog System
 - `orchestrator/backlog.json` — dynamic task queue with `{id, role, priority, status, title, description}`
@@ -205,7 +211,7 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 
 8 test suites covering:
 - **calculator** (202 tests) — Core math + guard penetration + fatigue + counter table exhaustive + softCap boundaries
-- **phase-resolution** (55 tests) — Phase resolution + breaker edge cases + unseat timing + extreme fatigue
+- **phase-resolution** (66 tests) — Phase resolution + breaker edge cases + unseat timing + extreme fatigue
 - **gigling-gear** (48 tests) — 6-slot steed gear
 - **player-gear** (46 tests) — 6-slot player gear
 - **match** (100 tests) — State machine + integration + joust/melee worked examples + carryover/unseated + gear pipeline
@@ -213,4 +219,4 @@ game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance
 - **gear-variants** (215 tests) — Gear variant system + archetype x variant matchups + melee carryover + softCap interactions + rare/epic tier melee exhaustion + all 36 archetype melee matchups
 - **ai** (95 tests) — AI opponent validity, reasoning, patterns, edge cases
 
-**Total: 897 tests** (as of S35 R6). Run `npx vitest run` for current test counts (per-file counts drift).
+**Total: 908 tests** (as of S35 R6). Run `npx vitest run` for current test counts (per-file counts drift).

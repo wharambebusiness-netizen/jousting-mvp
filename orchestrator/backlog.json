@@ -17,12 +17,12 @@
     "role": "ui-dev",
     "priority": 1,
     "title": "Implement impact breakdown UI for pass results (learning loop critical)",
-    "description": "Follow-up to BL-063 design specs. Implement expandable impact breakdown card on pass result screen.\n\n**BLOCKER: BL-076 (engine-dev PassResult extensions) must complete FIRST**\n- BL-076 adds 9 optional fields to PassResult interface\n- BL-064 depends on these fields to populate breakdown data\n- Estimated: BL-076 2-3h → BL-064 6-8h\n\n**Readiness**: UI infrastructure 40% complete (PassResult.tsx exists with partial breakdown). CSS foundation 100% complete (150+ lines added by polish agent).\n\n**Acceptance criteria**:\n1. Expandable card showing impact breakdown (collapsed by default on mobile)\n2. Displays: Your Impact, Opponent Impact, Margin, Attack Advantage, Guard Contribution, Fatigue Effect\n3. Bar graph comparing your impact vs opponent impact (visual comparison)\n4. Icons + clear labels for each stat\n5. Responsive layout (fits within viewport on 320px mobile)\n6. Keyboard accessible (Tab through components, arrow keys expand/collapse)\n7. Screen reader friendly (aria-expanded, descriptive labels)\n8. 897+ tests passing (no regressions)\n\n**Implementation phases**:\n1. Component scaffolding (2h) — 6 subcomponents + wrapper\n2. Bar graph visualization (1h) — SVG or CSS-based\n3. Expandable animation (1h) — 0.3s smooth height transition\n4. Conditional rendering (1h) — show/hide based on data availability\n5. Accessibility & responsive (2h) — keyboard nav, screen reader, mobile\n6. Integration & testing (1-2h) — App.tsx integration, 897+ tests pass\n\n**Files to modify**:\n- src/App.tsx (integrate PassResultBreakdown component in MatchScreen)\n- src/App.css (already has 150+ lines prepared by polish agent)\n- May create new PassResultBreakdown.tsx component\n\nEstimate: 6-8 hours (after BL-076 complete). Medium risk due to PassResult dependency.\n\nDepends on: BL-063 (design ✅ complete), BL-076 (engine PassResult extensions ⏳ pending)",
+    "description": "Completed in S38. ImpactBreakdownCard component in PassResult.tsx + MeleeResult.tsx. Expandable, ARIA, bar graph, counter badges.",
     "fileOwnership": [
       "src/App.tsx",
       "src/App.css"
     ],
-    "status": "pending",
+    "status": "completed",
     "dependsOn": [
       "BL-063",
       "BL-076"
@@ -34,13 +34,13 @@
     "role": "engine-dev",
     "priority": 1,
     "title": "CRITICAL: Extend PassResult for Impact Breakdown (BL-064 blocker)",
-    "description": "🔴 **CRITICAL BLOCKER**: BL-064 (ui-dev impact breakdown, 6-8h work) is blocked waiting on PassResult schema extension.\n\n**Scope**: Add 9 optional fields to PassResult interface to support impact breakdown UI.\n\n**Fields needed** (from design-round-4-bl063.md Section 5):\n1. counterWon: boolean (did player win counter?)\n2. counterBonus: number (+4 or -4 impact from counter win/loss)\n3. guardStrength: number (your guard stat before reduction)\n4. guardReduction: number (how much guard absorbed damage)\n5. fatiguePercent: number (current stamina % at end of pass)\n6. momPenalty: number (MOM reduced by fatigue)\n7. ctlPenalty: number (CTL reduced by fatigue)\n8. maxStaminaTracker: number (for fatigue calculation context)\n9. breakerPenetrationUsed: boolean (if opponent is Breaker)\n\n**Files to modify**:\n- src/engine/types.ts (PassResult interface — add optional fields with TSDoc comments)\n- src/engine/calculator.ts (resolveJoustPass — populate fields with actual values)\n- src/engine/phase-joust.ts (ensure fields exported correctly)\n\n**Test requirements**:\n- All existing tests still pass (897+)\n- New field values match impact breakdown design templates\n- Fields optional (backwards compatible with existing code)\n- No test assertions need updates (all fields optional)\n\n**Acceptance criteria**:\n1. PassResult fields added to types.ts with TSDoc comments\n2. calculator.ts resolveJoustPass populates all 9 fields\n3. All 897+ tests passing with zero regressions\n4. BL-064 unblocked (ui-dev can implement immediately)\n\n**Estimate**: 2-3 hours\n**Blocks**: BL-064 (6-8h ui-dev impact breakdown, critical learning loop)\n**Depends on**: BL-063 design spec (complete)\n\n**Detailed specs**: orchestrator/analysis/design-round-4-bl063.md (Section 5, lines 410-448)",
+    "description": "Completed in S38. ImpactBreakdown interface added to types.ts with momentumComponent, accuracyComponent, guardPenalty, counterBonus, opponentIsBreaker, opponentEffectiveGuard. Populated in phase-joust.ts resolveJoustPass() and phase-melee.ts resolveMeleeRoundFn(). +11 tests.",
     "fileOwnership": [
       "src/engine/types.ts",
       "src/engine/calculator.ts",
       "src/engine/phase-joust.ts"
     ],
-    "status": "pending",
+    "status": "completed",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:52:00Z"
   }
