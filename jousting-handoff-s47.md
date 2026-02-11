@@ -5,7 +5,7 @@ Orchestrator v8 — throughput & efficiency improvements + bug fixes from code r
 
 ## What Changed
 
-### Orchestrator v8 Features (2759→3049 lines)
+### Orchestrator v8 Features (2759→3105 lines)
 1. **Backlog priority sorting** — Tasks now sorted by priority before assignment (P1 first)
 2. **Smart per-agent revert** — On test regression, reverts individual agents' files instead of full `src/`. Finds the culprit, preserves other agents' work.
 3. **Multi-mission sequencing** — Chain missions in order (e.g., balance → polish). New `type: "sequence"` mission format. See `orchestrator/missions/overnight-sequence.json` for example.
@@ -26,12 +26,20 @@ Orchestrator v8 — throughput & efficiency improvements + bug fixes from code r
 13. **`ui-dev.md`** — Fixed "if possible" to "before writing handoff" for dev server verification.
 14. **`test-writer.md`** — Deleted (deprecated 3-line stub, role merged into qa-engineer).
 
+### Efficiency Optimizations (second commit)
+15. **Cached backlog + handoff metadata per round** — Previously `loadBacklog()` called ~4x per agent and `parseHandoffMeta()` ~3x per agent. Now cached once at round start. Eliminates 20-30 disk reads/round.
+16. **Balance context filtered by role** — Only balance-aware roles (`balance-analyst`, `tech-lead`, `qa-engineer`, `producer`, `engine-dev`, `game-designer`) receive balance context. CSS-artist and ui-dev skip it. Saves 250-1,250 tokens per non-balance agent.
+17. **Round time breakdown metrics** — New `roundTiming` object tracks Phase A, Phase B, tests, sims, overhead (all in ms). Overnight report timeline now shows per-round time columns.
+18. **Backlog velocity tracking** — New "Backlog Velocity" section in overnight report shows pending/completed tasks per round.
+19. **Removed duplicate task board generation** — Was generated twice per round (pre-round + post-Phase-A). Now only post-Phase-A, with a one-time initial generation before round 1.
+20. **Capped smart revert** — Max 2 per-agent test runs before falling back to full `src/` revert. Prevents O(N) test suite invocations.
+
 ### CLAUDE.md Updated
 - Orchestrator section rewritten for v8 (backlog sorting, pre-flight checks, smart revert, multi-mission sequencing)
 - 8 role templates (was 9, test-writer deleted)
 
 ## Files Modified
-- `orchestrator/orchestrator.mjs` — 2759→3049 lines (all v8 features + 4 bug fixes)
+- `orchestrator/orchestrator.mjs` — 2759→3105 lines (v8 features + 5 bug fixes + efficiency optimizations)
 - `orchestrator/missions/overnight-sequence.json` — NEW (example sequence mission)
 - `orchestrator/roles/_common-rules.md` — 17→31 lines
 - `orchestrator/roles/producer.md` — 26→36 lines
