@@ -8,6 +8,19 @@
 // - Producer role integration — generates tasks for other agents
 // - Better overnight sustainability
 //
+// v7 Phase 4 additions (S43):
+// - Parameter search framework: runParameterSearch(), buildParamSearchContext()
+// - simulate.ts --override key=value support (in-memory balance config patching)
+// - Pre-round parameter discovery phase (configurable via mission.balanceConfig.parameterSearch)
+// - Search results injected into balance-analyst prompts as PARAMETER SEARCH RESULTS
+// - Search configs: orchestrator/search-configs/*.json (quick-sweep, sensitivity-sweep, guard-tuning, unseated-tuning)
+//
+// v7 Phase 3 additions (S42):
+// - generateBalanceBacklog() — auto-generates backlog tasks from sim data
+// - getNextBacklogId() — collision-free BL-xxx ID generation
+// - Auto-creates tasks for: outlier archetypes, matchup skews, regressions, QA companion
+// - Updated role templates: balance-analyst, tech-lead, qa-engineer (balance-aware)
+//
 // v5 additions:
 // - archiveCompletedTasks() at startup (keeps backlog lean)
 // - dependsOn enforcement in getNextTask()
@@ -118,6 +131,13 @@ const CONFIG = {
   //   simTimeoutMs: 60000,       // default 60s
   //   runPreSim: true,           // sim before code agents (baseline)
   //   runPostSim: true,          // sim after code agents (validate)
+  //   regressionThresholdPp: 3,  // flag archetype if win rate shifts > this (default 3pp)
+  //   convergenceCriteria: {     // auto-stop when all criteria met (null = disabled)
+  //     maxSpreadPp: { bare: 15, epic: 5, giga: 7, '*': 10 },  // per-tier or '*' default
+  //     maxFlags: 0,             // max total balance flags
+  //     requiredTiers: ['epic', 'giga'],  // tiers that must pass (default: all sim tiers)
+  //     minRounds: 3,            // minimum rounds before convergence can trigger
+  //   },
   // }
 };
 
@@ -705,6 +725,32 @@ function runAgent(agent, round) {
       promptParts.push(`Work through these in order. Note completed task IDs in handoff META under completed-tasks.`);
     }
 
+    // v7 Phase 2: Inject balance context (structured sim data so agents don't run their own sims)
+    if (CONFIG.balanceConfig) {
+      const balanceCtx = buildBalanceContext();
+      if (balanceCtx) {
+        promptParts.push(
+          ``,
+          `--- BALANCE CONTEXT (auto-generated from orchestrator sims — DO NOT run your own sims) ---`,
+          balanceCtx,
+          `Use this data for analysis. The orchestrator runs sims before/after each round automatically.`,
+        );
+      }
+    }
+
+    // v7 Phase 4: Inject parameter search results (if available)
+    if (paramSearchResults && agent.role === 'balance-analyst') {
+      const searchCtx = buildParamSearchContext();
+      if (searchCtx) {
+        promptParts.push(
+          ``,
+          `--- PARAMETER SEARCH RESULTS (auto-generated — use for informed parameter changes) ---`,
+          searchCtx,
+          `Use these results to prioritize which parameters to adjust. Prefer changes the search identifies as improvements.`,
+        );
+      }
+    }
+
     // Append shared rules (common to all agents)
     if (commonRulesContent) {
       promptParts.push(``, `--- SHARED RULES ---`, commonRulesContent);
@@ -1098,6 +1144,591 @@ function updateBalanceState(round, preResults, postResults) {
 }
 
 // ============================================================
+// Balance Regression Detection (v7 — Phase 2)
+// ============================================================
+// Compares pre/post sim data to detect regressions: when a change
+// helps one archetype but hurts another, or increases overall spread.
+
+/**
+ * Detect balance regressions by comparing pre/post sim results.
+ * @param {number} round
+ * @param {Array} preResults - Pre-sim results from runBalanceSims
+ * @param {Array} postResults - Post-sim results from runBalanceSims
+ * @returns {{ regressions: Array, spreadChanges: Array, hasRegressions: boolean }}
+ */
+function detectBalanceRegressions(round, preResults, postResults) {
+  const result = { regressions: [], spreadChanges: [], hasRegressions: false };
+  if (!preResults?.length || !postResults?.length) return result;
+
+  const bc = CONFIG.balanceConfig || {};
+  const regressionThresholdPp = bc.regressionThresholdPp ?? 3.0; // flag if an archetype drops > 3pp
+
+  for (const post of postResults) {
+    if (!post.success || !post.data) continue;
+    const pre = preResults.find(p => p.tier === post.tier && p.variant === post.variant && p.success);
+    if (!pre?.data) continue;
+
+    const tierKey = `${post.tier}${post.variant ? '/' + post.variant : ''}`;
+    const preSpread = pre.data.balanceMetrics.overallSpreadPp;
+    const postSpread = post.data.balanceMetrics.overallSpreadPp;
+    const spreadDelta = Math.round((postSpread - preSpread) * 10) / 10;
+
+    result.spreadChanges.push({ tier: tierKey, preSpread, postSpread, delta: spreadDelta });
+
+    // Per-archetype win rate deltas
+    const winners = [];  // archetypes that improved
+    const losers = [];   // archetypes that got worse
+
+    for (const postStat of post.data.archetypeStats) {
+      const preStat = pre.data.archetypeStats.find(s => s.archetype === postStat.archetype);
+      if (!preStat) continue;
+
+      const deltaPp = Math.round((postStat.overallWinRate - preStat.overallWinRate) * 1000) / 10;
+      if (deltaPp > regressionThresholdPp) {
+        winners.push({ archetype: postStat.archetype, delta: deltaPp });
+      } else if (deltaPp < -regressionThresholdPp) {
+        losers.push({ archetype: postStat.archetype, delta: deltaPp });
+      }
+    }
+
+    // Regression = someone gained significantly AND someone lost significantly
+    if (winners.length > 0 && losers.length > 0) {
+      result.regressions.push({
+        tier: tierKey,
+        winners,
+        losers,
+        spreadDelta,
+      });
+      result.hasRegressions = true;
+    }
+
+    // Also flag if spread increased significantly (balance got worse)
+    if (spreadDelta > regressionThresholdPp) {
+      result.regressions.push({
+        tier: tierKey,
+        type: 'spread_increase',
+        spreadDelta,
+        message: `Spread increased by ${spreadDelta}pp (${preSpread} -> ${postSpread})`,
+      });
+      result.hasRegressions = true;
+    }
+  }
+
+  // Log results
+  if (result.hasRegressions) {
+    log(`  ⚠ BALANCE REGRESSIONS DETECTED (round ${round}):`);
+    for (const reg of result.regressions) {
+      if (reg.type === 'spread_increase') {
+        log(`    [${reg.tier}] ${reg.message}`);
+      } else {
+        const winStr = reg.winners.map(w => `${w.archetype} +${w.delta}pp`).join(', ');
+        const loseStr = reg.losers.map(l => `${l.archetype} ${l.delta}pp`).join(', ');
+        log(`    [${reg.tier}] Winners: ${winStr} | Losers: ${loseStr} (spread Δ: ${reg.spreadDelta > 0 ? '+' : ''}${reg.spreadDelta}pp)`);
+      }
+    }
+  } else if (result.spreadChanges.length) {
+    for (const sc of result.spreadChanges) {
+      const dir = sc.delta > 0 ? '+' : '';
+      log(`  Balance [${sc.tier}]: spread ${dir}${sc.delta}pp (${sc.preSpread} → ${sc.postSpread}pp) — no regressions`);
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// Balance Convergence Detection (v7 — Phase 2)
+// ============================================================
+// Checks if balance metrics meet convergence criteria.
+// When converged, orchestrator can auto-stop.
+//
+// convergenceCriteria config (in balanceConfig):
+// {
+//   maxSpreadPp: { bare: 15, epic: 5, giga: 7 },  // per-tier max spread
+//   maxFlags: 0,       // max total balance flags (dominant + weak + skew)
+//   requiredTiers: ['epic', 'giga'],  // which tiers must pass (default: all sim tiers)
+//   minRounds: 3,      // minimum rounds before convergence can trigger
+// }
+
+/**
+ * Check if balance has converged based on configured criteria.
+ * @param {Array} postSimResults - Post-sim results from runBalanceSims
+ * @param {number} round - Current round number
+ * @returns {{ converged: boolean, report: string, tierResults: object }}
+ */
+function checkConvergence(postSimResults, round) {
+  const bc = CONFIG.balanceConfig;
+  const cc = bc?.convergenceCriteria;
+  if (!cc || !postSimResults?.length) return { converged: false, report: 'No convergence criteria configured', tierResults: {} };
+
+  const minRounds = cc.minRounds ?? 3;
+  if (round < minRounds) return { converged: false, report: `Round ${round} < minRounds ${minRounds}`, tierResults: {} };
+
+  const maxSpreadPp = cc.maxSpreadPp || {};
+  const maxFlags = cc.maxFlags ?? Infinity;
+  const requiredTiers = cc.requiredTiers || bc.sims.map(s => `${s.tier}${s.variant ? '/' + s.variant : ''}`);
+
+  const tierResults = {};
+  let allPassed = true;
+  const reportLines = [];
+
+  for (const r of postSimResults) {
+    if (!r.success || !r.data) continue;
+    const tierKey = `${r.tier}${r.variant ? '/' + r.variant : ''}`;
+    const isRequired = requiredTiers.includes(tierKey);
+    if (!isRequired) continue;
+
+    const spread = r.data.balanceMetrics.overallSpreadPp;
+    const flags = (r.data.balanceFlags.dominant?.length || 0) +
+                  (r.data.balanceFlags.weak?.length || 0) +
+                  (r.data.balanceFlags.matchupSkews?.length || 0);
+
+    const tierThreshold = maxSpreadPp[r.tier] ?? maxSpreadPp['*'] ?? Infinity;
+    const spreadOk = spread <= tierThreshold;
+    const flagsOk = flags <= maxFlags;
+    const tierPassed = spreadOk && flagsOk;
+
+    tierResults[tierKey] = { spread, flags, tierThreshold, spreadOk, flagsOk, passed: tierPassed };
+
+    if (!tierPassed) allPassed = false;
+
+    const statusIcon = tierPassed ? '✓' : '✗';
+    reportLines.push(`  ${statusIcon} [${tierKey}] spread=${spread}pp (max ${tierThreshold}pp), flags=${flags} (max ${maxFlags})`);
+  }
+
+  // Check that all required tiers had results
+  for (const reqTier of requiredTiers) {
+    if (!tierResults[reqTier]) {
+      allPassed = false;
+      reportLines.push(`  ✗ [${reqTier}] missing sim results`);
+    }
+  }
+
+  const report = reportLines.join('\n');
+
+  if (allPassed) {
+    log(`  ✓ BALANCE CONVERGED (round ${round}):`);
+  } else {
+    log(`  Convergence check (round ${round}):`);
+  }
+  for (const line of reportLines) log(line);
+
+  return { converged: allPassed, report, tierResults };
+}
+
+// ============================================================
+// Balance Context Builder (v7 — Phase 2)
+// ============================================================
+// Builds structured balance context for agent prompts.
+// Agents receive current metrics instead of running their own sims.
+
+/**
+ * Build a concise balance context string for agent prompts.
+ * @returns {string|null} Formatted balance context, or null if no data
+ */
+function buildBalanceContext() {
+  const state = loadBalanceState();
+  if (!state.rounds?.length) return null;
+
+  const latest = state.rounds[state.rounds.length - 1];
+  const lines = [`Balance data (round ${latest.round}, ${latest.timestamp}):`];
+
+  // Per-tier summary
+  for (const [tierKey, t] of Object.entries(latest.tiers || {})) {
+    lines.push(`  [${tierKey}] spread=${t.spreadPp}pp, top=${t.topArchetype.archetype}(${t.topArchetype.winRate}%), bottom=${t.bottomArchetype.archetype}(${t.bottomArchetype.winRate}%), flags=${t.flagCount}`);
+
+    // Include per-archetype win rates
+    if (t.archetypeWinRates) {
+      const rateStr = Object.entries(t.archetypeWinRates)
+        .sort(([, a], [, b]) => b - a)
+        .map(([arch, rate]) => `${arch}=${rate}%`)
+        .join(', ');
+      lines.push(`    Win rates: ${rateStr}`);
+    }
+  }
+
+  // Include deltas if available
+  if (latest.deltas) {
+    lines.push(`  Changes this round:`);
+    for (const [tierKey, d] of Object.entries(latest.deltas)) {
+      const dir = d.spreadDelta > 0 ? '+' : '';
+      lines.push(`    [${tierKey}] spread ${dir}${d.spreadDelta}pp`);
+      if (d.archetypeDeltas) {
+        const deltaStr = Object.entries(d.archetypeDeltas)
+          .filter(([, delta]) => Math.abs(delta) >= 0.5)
+          .sort(([, a], [, b]) => b - a)
+          .map(([arch, delta]) => `${arch} ${delta > 0 ? '+' : ''}${delta}pp`)
+          .join(', ');
+        if (deltaStr) lines.push(`    Archetype deltas: ${deltaStr}`);
+      }
+    }
+  }
+
+  // Include trend (last 3 rounds of spread data)
+  if (state.rounds.length >= 2) {
+    const recent = state.rounds.slice(-3);
+    lines.push(`  Trend (last ${recent.length} rounds):`);
+    for (const r of recent) {
+      const tierSpreads = Object.entries(r.tiers || {}).map(([k, t]) => `${k}=${t.spreadPp}pp`).join(', ');
+      lines.push(`    Round ${r.round}: ${tierSpreads}`);
+    }
+  }
+
+  // Include regressions from balance state if available
+  if (latest._regressions?.length) {
+    lines.push(`  ⚠ Regressions detected:`);
+    for (const reg of latest._regressions) {
+      if (reg.type === 'spread_increase') {
+        lines.push(`    [${reg.tier}] ${reg.message}`);
+      } else {
+        const winStr = reg.winners?.map(w => `${w.archetype} +${w.delta}pp`).join(', ') || '';
+        const loseStr = reg.losers?.map(l => `${l.archetype} ${l.delta}pp`).join(', ') || '';
+        lines.push(`    [${reg.tier}] Winners: ${winStr} | Losers: ${loseStr}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================
+// Balance Backlog Generation (v7 — Phase 3)
+// ============================================================
+// Auto-generates targeted backlog tasks from sim data.
+// Called after post-sim + regression detection, before Phase B.
+// Tasks go into backlog.json for balance-analyst to pick up.
+
+/**
+ * Generate backlog tasks from post-sim results.
+ * Identifies outlier archetypes, flagged matchups, and regressions
+ * that need balance-analyst attention.
+ * @param {number} round
+ * @param {Array} postSimResults - Post-sim results from runBalanceSims
+ * @param {{ regressions: Array, hasRegressions: boolean }} regressionResult
+ * @returns {number} Number of tasks generated
+ */
+function generateBalanceBacklog(round, postSimResults, regressionResult) {
+  if (!postSimResults?.length) return 0;
+
+  const backlog = loadBacklog();
+  const existingTitles = new Set(backlog.map(t => t.title));
+  const newTasks = [];
+  let nextId = getNextBacklogId(backlog);
+
+  // --- 1. Outlier archetypes (>58% or <42% at any tier) ---
+  for (const r of postSimResults) {
+    if (!r.success || !r.data) continue;
+    const tierKey = `${r.tier}/${r.variant || 'balanced'}`;
+
+    for (const stat of r.data.archetypeStats) {
+      const winPct = Math.round(stat.overallWinRate * 1000) / 10;
+
+      if (winPct > 58) {
+        const title = `${stat.archetype} too strong at ${r.tier} (${winPct}%)`;
+        if (!existingTitles.has(title)) {
+          newTasks.push({
+            id: `BL-${String(nextId++).padStart(3, '0')}`,
+            role: 'balance-analyst',
+            priority: winPct > 62 ? 1 : 2,
+            title,
+            description: `${stat.archetype} win rate is ${winPct}% at ${tierKey} (target: 42-58%). Consider reducing a primary stat or adjusting a balance-config constant that amplifies this archetype's strength.`,
+            fileOwnership: ['src/engine/balance-config.ts', 'src/engine/archetypes.ts'],
+            status: 'pending',
+            dependsOn: [],
+            generatedBy: 'orchestrator',
+            round,
+          });
+          existingTitles.add(title);
+        }
+      }
+
+      if (winPct < 42) {
+        const title = `${stat.archetype} too weak at ${r.tier} (${winPct}%)`;
+        if (!existingTitles.has(title)) {
+          newTasks.push({
+            id: `BL-${String(nextId++).padStart(3, '0')}`,
+            role: 'balance-analyst',
+            priority: winPct < 38 ? 1 : 2,
+            title,
+            description: `${stat.archetype} win rate is ${winPct}% at ${tierKey} (target: 42-58%). Consider boosting a primary stat or adjusting a balance-config constant that would help this archetype.`,
+            fileOwnership: ['src/engine/balance-config.ts', 'src/engine/archetypes.ts'],
+            status: 'pending',
+            dependsOn: [],
+            generatedBy: 'orchestrator',
+            round,
+          });
+          existingTitles.add(title);
+        }
+      }
+    }
+  }
+
+  // --- 2. Matchup skews from balance flags ---
+  for (const r of postSimResults) {
+    if (!r.success || !r.data?.balanceFlags) continue;
+    const tierKey = `${r.tier}/${r.variant || 'balanced'}`;
+
+    for (const skew of (r.data.balanceFlags.matchupSkews || [])) {
+      const title = `Matchup skew: ${skew.matchup || skew} at ${r.tier}`;
+      if (!existingTitles.has(title)) {
+        newTasks.push({
+          id: `BL-${String(nextId++).padStart(3, '0')}`,
+          role: 'balance-analyst',
+          priority: 3,
+          title,
+          description: `Matchup skew flagged at ${tierKey}: ${typeof skew === 'string' ? skew : JSON.stringify(skew)}. Investigate if a stat or constant change can narrow this matchup.`,
+          fileOwnership: ['src/engine/balance-config.ts', 'src/engine/archetypes.ts'],
+          status: 'pending',
+          dependsOn: [],
+          generatedBy: 'orchestrator',
+          round,
+        });
+        existingTitles.add(title);
+      }
+    }
+  }
+
+  // --- 3. Regression-driven tasks ---
+  if (regressionResult?.hasRegressions) {
+    for (const reg of regressionResult.regressions) {
+      if (reg.type === 'spread_increase') {
+        const title = `Spread regression at ${reg.tier} (+${reg.spreadDelta}pp)`;
+        if (!existingTitles.has(title)) {
+          newTasks.push({
+            id: `BL-${String(nextId++).padStart(3, '0')}`,
+            role: 'balance-analyst',
+            priority: 1,
+            title,
+            description: `${reg.message}. Last round's change made balance worse at this tier. Consider reverting or trying a different approach.`,
+            fileOwnership: ['src/engine/balance-config.ts', 'src/engine/archetypes.ts'],
+            status: 'pending',
+            dependsOn: [],
+            generatedBy: 'orchestrator',
+            round,
+          });
+          existingTitles.add(title);
+        }
+      } else if (reg.winners?.length && reg.losers?.length) {
+        const winStr = reg.winners.map(w => `${w.archetype} +${w.delta}pp`).join(', ');
+        const loseStr = reg.losers.map(l => `${l.archetype} ${l.delta}pp`).join(', ');
+        const title = `Balance regression at ${reg.tier}: winners/losers`;
+        if (!existingTitles.has(title)) {
+          newTasks.push({
+            id: `BL-${String(nextId++).padStart(3, '0')}`,
+            role: 'balance-analyst',
+            priority: 1,
+            title,
+            description: `Regression at ${reg.tier}: Winners: ${winStr} | Losers: ${loseStr}. A change helped some archetypes but hurt others. Address the losers without negating the gains.`,
+            fileOwnership: ['src/engine/balance-config.ts', 'src/engine/archetypes.ts'],
+            status: 'pending',
+            dependsOn: [],
+            generatedBy: 'orchestrator',
+            round,
+          });
+          existingTitles.add(title);
+        }
+      }
+    }
+  }
+
+  // --- 4. QA companion tasks for balance changes ---
+  const balanceTasks = newTasks.filter(t => t.role === 'balance-analyst' && t.priority <= 2);
+  if (balanceTasks.length > 0) {
+    const title = `Validate round ${round} balance changes`;
+    if (!existingTitles.has(title)) {
+      newTasks.push({
+        id: `BL-${String(nextId++).padStart(3, '0')}`,
+        role: 'qa-engineer',
+        priority: 2,
+        title,
+        description: `Write tests validating balance changes made in round ${round}. Focus on boundary conditions near changed parameter values and invariant preservation.`,
+        fileOwnership: ['src/engine/*.test.ts'],
+        status: 'pending',
+        dependsOn: balanceTasks.map(t => t.id),
+        generatedBy: 'orchestrator',
+        round,
+      });
+      existingTitles.add(title);
+    }
+  }
+
+  if (newTasks.length) {
+    backlog.push(...newTasks);
+    saveBacklog(backlog);
+    log(`  Balance backlog: generated ${newTasks.length} task(s) from sim data`);
+    for (const t of newTasks) {
+      log(`    ${t.id} [P${t.priority}] ${t.role}: ${t.title}`);
+    }
+  }
+
+  return newTasks.length;
+}
+
+/**
+ * Get the next available backlog ID number.
+ * Scans existing backlog + archive to avoid collisions.
+ */
+function getNextBacklogId(backlog) {
+  let maxNum = 0;
+  for (const t of backlog) {
+    const match = t.id?.match(/^BL-(\d+)$/);
+    if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+  }
+  // Also check archive
+  if (existsSync(BACKLOG_ARCHIVE_FILE)) {
+    try {
+      const archive = JSON.parse(readFileSync(BACKLOG_ARCHIVE_FILE, 'utf-8'));
+      for (const t of archive) {
+        const match = t.id?.match(/^BL-(\d+)$/);
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      }
+    } catch (_) { /* ignore */ }
+  }
+  return maxNum + 1;
+}
+
+// ============================================================
+// Parameter Search Integration (v7 — Phase 4)
+// ============================================================
+// Runs param-search.ts as a subprocess and captures structured results.
+// Triggered before round 1 if CONFIG.balanceConfig.parameterSearch is configured.
+// Results are cached and injected into balance-analyst prompts.
+
+let paramSearchResults = null; // Cached search results for prompt injection
+
+/**
+ * Run parameter search using a search config file.
+ * Returns parsed SearchReport or null on failure.
+ */
+async function runParameterSearch(configPath, timeoutMs = 600000) {
+  const absConfig = resolve(MVP_DIR, configPath);
+  if (!existsSync(absConfig)) {
+    log(`  Parameter search: config not found: ${absConfig}`);
+    return null;
+  }
+
+  log(`  Running parameter search: ${configPath}...`);
+  const startTime = Date.now();
+
+  return new Promise((resolvePromise) => {
+    const child = spawn('npx', ['tsx', 'src/tools/param-search.ts', absConfig], {
+      cwd: MVP_DIR,
+      shell: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => {
+      const line = data.toString().trim();
+      if (line) log(`    [param-search] ${line}`);
+      stderr += data.toString();
+    });
+
+    const timer = setTimeout(() => {
+      log(`  Parameter search TIMEOUT (${timeoutMs / 1000}s). Killing process.`);
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      if (code !== 0) {
+        log(`  Parameter search failed (exit code ${code}) after ${elapsed}s`);
+        resolvePromise(null);
+        return;
+      }
+
+      try {
+        const report = JSON.parse(stdout);
+        log(`  Parameter search complete: ${report.totalSimulations} sims in ${elapsed}s`);
+        log(`    Baseline score: ${report.baseline.score.toFixed(2)}`);
+        log(`    Best score: ${report.bestResult.score.toFixed(2)} (${report.bestResult.label})`);
+        if (report.bestResult.score < report.baseline.score) {
+          const improvement = report.baseline.score - report.bestResult.score;
+          log(`    Improvement: -${improvement.toFixed(2)} (${JSON.stringify(report.bestResult.overrides)})`);
+        }
+        resolvePromise(report);
+      } catch (err) {
+        log(`  Parameter search: failed to parse JSON output (${err.message})`);
+        resolvePromise(null);
+      }
+    });
+  });
+}
+
+/**
+ * Build a formatted string summarizing parameter search results for agent prompts.
+ * Returns null if no results available.
+ */
+function buildParamSearchContext() {
+  if (!paramSearchResults) return null;
+
+  const r = paramSearchResults;
+  const lines = [];
+
+  lines.push(`Parameter search: "${r.config.name}" (${r.config.strategy} strategy)`);
+  lines.push(`  Params tested: ${r.config.params.map(p => p.label || p.key).join(', ')}`);
+  lines.push(`  Simulations: ${r.totalSimulations}, Time: ${(r.totalElapsedMs / 1000 / 60).toFixed(1)} min`);
+  lines.push(``);
+
+  // Baseline
+  lines.push(`Baseline (current config): score=${r.baseline.score.toFixed(2)}`);
+  if (r.noiseFloor > 0) {
+    lines.push(`  Noise floor: ±${r.noiseFloor.toFixed(2)} score points (from ${r.baselineRuns?.length ?? 1} averaged baselines)`);
+    lines.push(`  Results within noise floor are unreliable — marked as "within noise".`);
+  }
+  for (const [tierKey, tier] of Object.entries(r.baseline.tiers)) {
+    lines.push(`  ${tierKey}: spread=${tier.spreadPp}pp, top=${tier.topArchetype.archetype}(${tier.topArchetype.winRate}%), bottom=${tier.bottomArchetype.archetype}(${tier.bottomArchetype.winRate}%), flags=${tier.flagCount}`);
+  }
+  lines.push(``);
+
+  // Best result
+  lines.push(`Best found: score=${r.bestResult.score.toFixed(2)} (${r.bestResult.label})`);
+  lines.push(`  Overrides: ${JSON.stringify(r.bestResult.overrides)}`);
+  for (const [tierKey, tier] of Object.entries(r.bestResult.tiers)) {
+    const baselineTier = r.baseline.tiers[tierKey];
+    const delta = baselineTier ? (tier.spreadPp - baselineTier.spreadPp).toFixed(1) : '?';
+    const sign = parseFloat(delta) >= 0 ? '+' : '';
+    lines.push(`  ${tierKey}: spread=${tier.spreadPp}pp (${sign}${delta}pp), flags=${tier.flagCount}`);
+  }
+  lines.push(``);
+
+  // Top improvements (sweep only)
+  if (r.improvements?.length > 0) {
+    lines.push(`Parameter sensitivity (most impactful):`);
+    for (const imp of r.improvements.slice(0, 5)) {
+      if (imp.confirmed) {
+        lines.push(`  ${imp.key}: CONFIRMED at ${imp.currentValue} (already optimal)`);
+      } else if (imp.withinNoise) {
+        lines.push(`  ${imp.key}: current=${imp.currentValue}, best=${imp.bestValue} (~${imp.scoreDelta.toFixed(2)}, WITHIN NOISE — not actionable)`);
+      } else {
+        const direction = imp.scoreDelta < 0 ? 'IMPROVES' : 'worsens';
+        const spreadInfo = Object.entries(imp.spreadImprovements)
+          .map(([t, d]) => `${t}:${d > 0 ? '+' : ''}${d}pp`)
+          .join(', ');
+        lines.push(`  ${imp.key}: current=${imp.currentValue}, best=${imp.bestValue} (${direction} by ${Math.abs(imp.scoreDelta).toFixed(2)}) [${spreadInfo}]`);
+      }
+    }
+    lines.push(``);
+  }
+
+  // Top 5 rankings
+  if (r.rankings?.length > 1) {
+    lines.push(`Top 5 configurations:`);
+    for (const ranked of r.rankings.slice(0, 5)) {
+      const overridesStr = Object.entries(ranked.overrides).map(([k, v]) => `${k}=${v}`).join(', ');
+      lines.push(`  score=${ranked.score.toFixed(2)}: ${overridesStr || 'baseline'}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================
 // Cost Tracking (v6 — Action 1.3)
 // ============================================================
 // Approximate pricing per 1M tokens (USD)
@@ -1343,6 +1974,24 @@ async function main() {
   // v5F: Round-level decision log — tracks WHY each agent was included/skipped/blocked each round
   const roundDecisions = [];
 
+  // v7 Phase 4: Run parameter search before round 1 if configured
+  if (CONFIG.balanceConfig?.parameterSearch?.configPath) {
+    const searchConfig = CONFIG.balanceConfig.parameterSearch;
+    log(`\nParameter Search (pre-round discovery phase):`);
+    const timeoutMs = searchConfig.timeoutMs || 600000; // 10 min default
+    paramSearchResults = await runParameterSearch(searchConfig.configPath, timeoutMs);
+    if (paramSearchResults) {
+      // Save results to balance-data for reference
+      const outPath = join(BALANCE_DATA_DIR, `param-search-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+      try {
+        writeFileSync(outPath, JSON.stringify(paramSearchResults, null, 2));
+        log(`  Results saved to: ${outPath}`);
+      } catch (err) {
+        log(`  Warning: could not save search results (${err.message})`);
+      }
+    }
+  }
+
   for (let round = 1; round <= CONFIG.maxRounds; round++) {
     // --- Check max runtime ---
     const elapsed = Date.now() - globalStart;
@@ -1371,6 +2020,20 @@ async function main() {
               existing[field] = newVal;
             }
           }
+        }
+        // v7 Phase 2: Hot-reload balanceConfig (convergence criteria, thresholds)
+        if (freshMission.balanceConfig) {
+          const oldCC = JSON.stringify(CONFIG.balanceConfig?.convergenceCriteria || null);
+          const newCC = JSON.stringify(freshMission.balanceConfig.convergenceCriteria || null);
+          if (oldCC !== newCC) {
+            log(`Hot-reload: convergenceCriteria changed`);
+          }
+          const oldThreshold = CONFIG.balanceConfig?.regressionThresholdPp;
+          const newThreshold = freshMission.balanceConfig.regressionThresholdPp;
+          if (oldThreshold !== newThreshold && newThreshold !== undefined) {
+            log(`Hot-reload: regressionThresholdPp changed ${oldThreshold}->${newThreshold}`);
+          }
+          CONFIG.balanceConfig = freshMission.balanceConfig;
         }
       } catch (err) {
         log(`Hot-reload WARNING: Could not re-read mission config (${err.message}). Keeping existing config.`);
@@ -1496,6 +2159,8 @@ async function main() {
     let didRevert = false;  // v6.1: Track if auto-revert happened (skip Phase B if so)
     let preSimResults = null;  // v7: Balance sim baseline
     let postSimResults = null; // v7: Balance sim after changes
+    let regressionResult = null;   // v7 Phase 2: Regression detection results
+    let convergenceResult = null;  // v7 Phase 2: Convergence check results
 
     // v7: Pre-sim — capture balance baseline before code agents make changes
     if (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length && codeAgents.length) {
@@ -1569,6 +2234,35 @@ async function main() {
       // v7: Update balance state tracker with pre/post sim results
       if (preSimResults?.results?.length || postSimResults?.results?.length) {
         updateBalanceState(round, preSimResults?.results, postSimResults?.results);
+      }
+
+      // v7 Phase 2: Regression detection — flag when changes help one archetype but hurt another
+      if (preSimResults?.results?.length && postSimResults?.results?.length) {
+        regressionResult = detectBalanceRegressions(round, preSimResults.results, postSimResults.results);
+
+        // Store regressions in balance state for agent context
+        if (regressionResult.hasRegressions) {
+          const state = loadBalanceState();
+          if (state.rounds.length) {
+            state.rounds[state.rounds.length - 1]._regressions = regressionResult.regressions;
+            saveBalanceState(state);
+          }
+        }
+      }
+
+      // v7 Phase 2: Convergence check — auto-stop if balance meets criteria
+      if (postSimResults?.results?.length && CONFIG.balanceConfig?.convergenceCriteria) {
+        convergenceResult = checkConvergence(postSimResults.results, round);
+        if (convergenceResult.converged) {
+          stopReason = `balance converged — all tiers within thresholds at round ${round}`;
+          log(`\n✓ BALANCE CONVERGED. Stopping orchestration.`);
+          // Still run Phase B so coordination agents can see final state
+        }
+      }
+
+      // v7 Phase 3: Auto-generate backlog tasks from sim data
+      if (postSimResults?.results?.length) {
+        generateBalanceBacklog(round, postSimResults.results, regressionResult);
       }
     }
 
@@ -1653,6 +2347,9 @@ async function main() {
         pre: preSimResults?.results?.map(r => ({ tier: r.tier, variant: r.variant, success: r.success, spread: r.data?.balanceMetrics?.overallSpreadPp ?? null })) || null,
         post: postSimResults?.results?.map(r => ({ tier: r.tier, variant: r.variant, success: r.success, spread: r.data?.balanceMetrics?.overallSpreadPp ?? null })) || null,
       },
+      // v7 Phase 2: regression + convergence data
+      regressions: regressionResult?.hasRegressions ? regressionResult.regressions : null,
+      convergence: convergenceResult?.converged ? convergenceResult.tierResults : null,
     });
 
     // --- Circuit breaker ---
@@ -1661,6 +2358,12 @@ async function main() {
       log(`\n🛑 CIRCUIT BREAKER: Tests failed ${consecutiveTestFailures} rounds in a row. STOPPING.`);
       log(`Check logs at: ${LOG_DIR}`);
       log(`Last test output saved in test-results.log`);
+      break;
+    }
+
+    // --- v7 Phase 2: Convergence stop (after Phase B has run) ---
+    if (convergenceResult?.converged) {
+      // stopReason already set above — break here after Phase B completed
       break;
     }
 

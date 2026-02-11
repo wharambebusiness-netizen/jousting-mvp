@@ -63,10 +63,10 @@ describe('Soft Cap (Diminishing Returns)', () => {
   });
 
   it('compresses Charger Fast+CF momentum (110) slightly', () => {
-    // Raw 110, knee at 100. Excess = 10, K = 50.
-    // Result = 100 + 10*50/60 = 108.33
+    // Raw 110, knee at 100. Excess = 10, K = 55.
+    // Result = 100 + 10*55/65 ≈ 108.46
     const result = softCap(110);
-    expect(r(result, 2)).toBe(108.33);
+    expect(r(result, 2)).toBe(r(100 + 10 * 55 / 65, 2));
   });
 
   it('compresses harder at higher values', () => {
@@ -171,18 +171,18 @@ describe('Exploratory Edge Cases', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Standard], CdL, 0);
     expect(stats.momentum).toBe(0); // raw * 0.0
     expect(stats.control).toBe(0);
-    // guardFF = 0.5 + 0.5 * 0.0 = 0.5
+    // guardFF = 0.3 + 0.7 * 0.0 = 0.3
     const rawGuard = charger.guard + CdL.deltaGuard; // 50+5=55
-    expect(stats.guard).toBe(rawGuard * 0.5); // guard at fatigue floor
+    expect(stats.guard).toBe(rawGuard * BALANCE.guardFatigueFloor); // guard at fatigue floor
   });
 
-  it('guard fatigue floor clamps at 0.5 (never below)', () => {
-    // ff=0 → guardFF = 0.5 + 0.5*0 = 0.5
+  it('guard fatigue floor clamps at guardFatigueFloor (never below)', () => {
+    // ff=0 → guardFF = 0.3 + 0.7*0 = 0.3
     expect(guardFatigueFactor(0)).toBe(BALANCE.guardFatigueFloor);
-    // ff=1 → guardFF = 0.5 + 0.5*1 = 1.0
+    // ff=1 → guardFF = 0.3 + 0.7*1 = 1.0
     expect(guardFatigueFactor(1)).toBe(1.0);
-    // ff=0.5 → guardFF = 0.5 + 0.5*0.5 = 0.75
-    expect(guardFatigueFactor(0.5)).toBe(0.75);
+    // ff=0.5 → guardFF = 0.3 + 0.7*0.5 = 0.65
+    expect(guardFatigueFactor(0.5)).toBeCloseTo(0.65, 10);
   });
 
   it('negative stamina is clamped to 0 by fatigueFactor', () => {
@@ -201,14 +201,14 @@ describe('Exploratory Edge Cases', () => {
   });
 
   it('unseated impact boost multiplier is applied correctly', () => {
-    expect(BALANCE.unseatedImpactBoost).toBe(1.25);
+    expect(BALANCE.unseatedImpactBoost).toBe(1.35);
     // Verify the boost value is between 1 and 2 (reasonable range)
     expect(BALANCE.unseatedImpactBoost).toBeGreaterThan(1.0);
     expect(BALANCE.unseatedImpactBoost).toBeLessThan(2.0);
   });
 
   it('unseated stamina recovery is a positive value', () => {
-    expect(BALANCE.unseatedStaminaRecovery).toBe(8);
+    expect(BALANCE.unseatedStaminaRecovery).toBe(12);
     expect(BALANCE.unseatedStaminaRecovery).toBeGreaterThan(0);
   });
 
@@ -288,8 +288,8 @@ describe('Guard Fatigue', () => {
 
   it('guard partially degrades when fatigued', () => {
     const halfFatigue = guardFatigueFactor(0.5);
-    // guardFF = 0.5 + 0.5 * 0.5 = 0.75
-    expect(halfFatigue).toBe(0.75);
+    // guardFF = 0.3 + 0.7 * 0.5 = 0.65
+    expect(halfFatigue).toBeCloseTo(0.65, 10);
   });
 
   it('guard drops to floor at zero stamina', () => {
@@ -398,10 +398,10 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     expect(fatigueFactor(55, 55)).toBe(1.0);
   });
 
-  it('Charger Fast+CF momentum is soft-capped (115 → 111.54)', () => {
+  it('Charger Fast+CF momentum is soft-capped (115 → ~111.79)', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Fast], CF, 60);
-    // Raw MOM = 75+15+25 = 115, softCap → 111.54, * ff 1.0
-    expect(r(stats.momentum, 2)).toBe(r(100 + 15 * 50 / 65, 2));
+    // Raw MOM = 75+15+25 = 115, softCap → 100 + 15*55/70 ≈ 111.79, * ff 1.0
+    expect(r(stats.momentum, 2)).toBe(r(100 + 15 * 55 / 70, 2));
     // CTL = 55-15-10 = 30 (below knee, no cap)
     expect(stats.control).toBe(30);
     // GRD = 50-5 = 45, guardFF = 1.0 (full stamina)
@@ -432,11 +432,11 @@ describe('Effective Stats — Pass 1: Charger Fast+CF vs Technician Standard+CdL
     // ff = 43/44 ≈ 0.977
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 43, 10);
     const ff = 43 / 44;
-    const guardFF = 0.5 + 0.5 * ff;
+    const guardFF = BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * ff;
 
     expect(r(stats.momentum, 2)).toBe(r(69 * ff, 2));     // 67.43
     expect(r(stats.control, 2)).toBe(r(85 * ff, 2));      // 83.07
-    expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));    // 64.26
+    expect(r(stats.guard, 2)).toBe(r(65 * guardFF, 2));
     expect(stats.initiative).toBe(59); // 59+10-10 = 59
   });
 
@@ -467,7 +467,7 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
   it('Charger stats use fatigue correctly', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], BdG, 45);
     const ff = 45 / 52;
-    const guardFF = 0.5 + 0.5 * ff;
+    const guardFF = BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * ff;
     // MOM: (75-15+10) = 70 * ff
     expect(r(stats.momentum, 2)).toBe(r(70 * ff, 2));
     // CTL: (55+15+15) = 85 * ff
@@ -479,7 +479,7 @@ describe('Effective Stats — Pass 2: Charger Slow+BdG vs Technician Standard+Pd
 
   it('Technician stats use correct fatigue', () => {
     const ff = 29 / 44;
-    const guardFF = 0.5 + 0.5 * ff;
+    const guardFF = BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], PdL, 29);
     // MOM: 59 * ff, CTL: 80 * ff, GRD: 75 * guardFF
     expect(r(stats.momentum, 2)).toBe(r(59 * ff, 2));
@@ -515,7 +515,7 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
   it('Charger guard now partially fatigued', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Slow], CdL, 35);
     const ff = 35 / 52;
-    const guardFF = 0.5 + 0.5 * ff;
+    const guardFF = BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * ff;
     // GRD: (50+5) = 55 * guardFF
     expect(r(stats.guard, 2)).toBe(r(55 * guardFF, 2));
     // MOM: (75-15+5) = 65 * ff
@@ -526,7 +526,7 @@ describe('Effective Stats — Pass 3: Charger Slow+CdL vs Technician Standard+CE
 
   it('Technician stats at deeper fatigue', () => {
     const ff = 21 / 44;
-    const guardFF = 0.5 + 0.5 * ff;
+    const guardFF = BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * ff;
     const stats = computeEffectiveStats(technician, SPEEDS[SpeedType.Standard], CEP, 21);
     // MOM: 69 * ff, CTL: 85 * ff, GRD: 65 * guardFF
     expect(r(stats.momentum, 2)).toBe(r(69 * ff, 2));
@@ -568,12 +568,12 @@ describe('Accuracy and ImpactScore', () => {
 // 10. Unseat check (uses guardUnseatDivisor = 15)
 // ============================================================
 describe('Unseat Check', () => {
-  it('unseat threshold uses guardUnseatDivisor (15)', () => {
-    // threshold = 20 + 50/15 + 45/20 = 20 + 3.333 + 2.25 ≈ 25.583
+  it('unseat threshold uses guardUnseatDivisor (18)', () => {
+    // threshold = 20 + 50/18 + 45/20 = 20 + 2.778 + 2.25 ≈ 25.028
     const result = checkUnseat(51.5, 50.0, 50, 45);
     expect(result.unseated).toBe(false);
     expect(result.margin).toBe(1.5);
-    expect(result.threshold).toBeCloseTo(25.583, 2);
+    expect(result.threshold).toBeCloseTo(20 + 50/18 + 45/20, 2);
   });
 });
 
@@ -712,14 +712,14 @@ describe('Scaling Properties', () => {
   it('guard fatigue prevents infinite turtle', () => {
     // Bulwark at 0 stamina with Guard High: raw guard = 85
     const stats = computeMeleeEffectiveStats(bulwark, GH, 0);
-    // ff = 0, guardFF = 0.5
-    expect(stats.guard).toBe(85 * 0.5);
-    expect(stats.guard).toBe(42.5);
+    // ff = 0, guardFF = 0.3
+    expect(stats.guard).toBe(85 * BALANCE.guardFatigueFloor);
+    expect(stats.guard).toBe(85 * 0.3);
     // Compare to full stamina
     const fullStats = computeMeleeEffectiveStats(bulwark, GH, 65);
     expect(fullStats.guard).toBe(85); // guardFF = 1.0 at full stamina
-    // Guard dropped by 50% — turtle no longer invincible
-    expect(stats.guard).toBeLessThan(fullStats.guard * 0.6);
+    // Guard dropped by 70% — turtle no longer invincible
+    expect(stats.guard).toBeLessThan(fullStats.guard * 0.4);
   });
 
   it('relative fatigue threshold adapts to gear stamina', () => {
@@ -748,7 +748,7 @@ describe('Edge Cases — Zero Stamina', () => {
     expect(fatigueFactor(0, 100)).toBe(0);
   });
 
-  it('guard fatigue factor at 0 stamina returns floor (0.5)', () => {
+  it('guard fatigue factor at 0 stamina returns floor (0.3)', () => {
     const ff = fatigueFactor(0, 60);
     expect(guardFatigueFactor(ff)).toBe(BALANCE.guardFatigueFloor);
   });
@@ -757,7 +757,7 @@ describe('Edge Cases — Zero Stamina', () => {
     const stats = computeEffectiveStats(charger, SPEEDS[SpeedType.Standard], CF, 0);
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // Guard = softCap(50-5) * guardFatigueFloor = 45 * 0.5 = 22.5
+    // Guard = softCap(50-5) * guardFatigueFloor = 45 * 0.3 = 13.5
     expect(stats.guard).toBe(45 * BALANCE.guardFatigueFloor);
     // Initiative is unaffected by fatigue
     expect(stats.initiative).toBe(65); // 55 + 10 (Standard)
@@ -767,8 +767,8 @@ describe('Edge Cases — Zero Stamina', () => {
     const stats = computeMeleeEffectiveStats(charger, OC, 0);
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // Guard = softCap(50-5) * 0.5 = 45 * 0.5 = 22.5
-    expect(stats.guard).toBe(22.5);
+    // Guard = softCap(50-5) * 0.3 = 45 * 0.3 = 13.5
+    expect(stats.guard).toBe(45 * BALANCE.guardFatigueFloor);
   });
 
   it('applySpeedStamina at 0 does not go negative', () => {
@@ -828,10 +828,10 @@ describe('Edge Cases — Extreme Stat Values', () => {
     };
     // MOM: 98 + 15 (Fast) + 25 (CF) = 138
     const stats = computeEffectiveStats(gigaCharger, SPEEDS[SpeedType.Fast], CF, 73);
-    // softCap(138) = 100 + 38*50/88 ≈ 121.59
+    // softCap(138) = 100 + 38*55/93 ≈ 122.47
     expect(stats.momentum).toBeGreaterThan(100);
     expect(stats.momentum).toBeLessThan(138);
-    expect(stats.momentum).toBeCloseTo(121.59, 0);
+    expect(stats.momentum).toBeCloseTo(100 + 38 * 55 / 93, 0);
   });
 
   it('soft cap ratio: Giga vs base is lower than raw ratio', () => {
@@ -848,16 +848,19 @@ describe('Edge Cases — Extreme Stat Values', () => {
 // ============================================================
 describe('Edge Cases — Unseat Mechanics', () => {
   it('exactly at threshold is unseated (>= check)', () => {
-    // Guard=60, STA=60: threshold = 20 + 60/15 + 60/20 = 20 + 4 + 3 = 27
-    const result = checkUnseat(37, 10, 60, 60);
-    expect(result.margin).toBe(27);
-    expect(result.threshold).toBe(27);
+    // Guard=60, STA=60: threshold = 20 + 60/guardUnseatDivisor + 60/20
+    // Use calcUnseatThreshold result directly to avoid FP mismatch
+    const threshold = 20 + 60 / BALANCE.guardUnseatDivisor + 60 / 20;
+    // Use p2Impact=0 so margin = p1Impact exactly
+    const result = checkUnseat(threshold, 0, 60, 60);
+    expect(result.margin).toBeCloseTo(threshold, 5);
+    expect(result.threshold).toBeCloseTo(threshold, 5);
     expect(result.unseated).toBe(true);
   });
 
   it('just below threshold is not unseated', () => {
-    // threshold = 27, margin = 26.99 is below
-    const result = checkUnseat(36.99, 10, 60, 60);
+    const threshold = 20 + 60 / BALANCE.guardUnseatDivisor + 60 / 20;
+    const result = checkUnseat(threshold - 0.01, 0, 60, 60);
     expect(result.unseated).toBe(false);
   });
 
@@ -888,9 +891,9 @@ describe('Edge Cases — Unseat Mechanics', () => {
     const low = checkUnseat(30, 0, 0, 0);
     expect(low.threshold).toBe(20);
 
-    // High stats: threshold = 20 + 100/15 + 100/20 = 20 + 6.667 + 5 ≈ 31.667
+    // High stats: threshold = 20 + 100/18 + 100/20 = 20 + 5.556 + 5 ≈ 30.556
     const high = checkUnseat(30, 0, 100, 100);
-    expect(high.threshold).toBeCloseTo(31.667, 2);
+    expect(high.threshold).toBeCloseTo(20 + 100/18 + 100/20, 2);
 
     expect(high.threshold).toBeGreaterThan(low.threshold);
   });
@@ -1166,9 +1169,9 @@ describe('Edge Cases — Counter Bonus Asymmetry', () => {
 // ============================================================
 describe('Edge Cases — Unseat Threshold Extremes', () => {
   it('maximum threshold with high guard + stamina', () => {
-    // threshold = 20 + 115/15 + 91/20 = 20 + 7.667 + 4.55 ≈ 32.217
+    // threshold = 20 + 115/18 + 91/20 = 20 + 6.389 + 4.55 ≈ 30.939
     const result = checkUnseat(50, 13, 115, 91);
-    expect(result.threshold).toBeCloseTo(32.217, 1);
+    expect(result.threshold).toBeCloseTo(20 + 115/18 + 91/20, 1);
     expect(result.margin).toBe(37);
     expect(result.unseated).toBe(true);
   });
@@ -1189,8 +1192,8 @@ describe('Edge Cases — Melee at Guard 0 with Carryover', () => {
     // ff = 0 → MOM and CTL are 0
     expect(stats.momentum).toBe(0);
     expect(stats.control).toBe(0);
-    // rawGuard = 50 + (-5) + (-6) = 39, softCap(39) * guardFF(0.5) = 19.5
-    expect(stats.guard).toBe(19.5);
+    // rawGuard = 50 + (-5) + (-6) = 39, softCap(39) * guardFF(0.3) = 11.7
+    expect(stats.guard).toBe(39 * BALANCE.guardFatigueFloor);
   });
 });
 
@@ -1565,12 +1568,12 @@ describe('BL-006 — Stamina/Fatigue Boundary Conditions', () => {
   });
 
   it('guard fatigue factor interpolates between floor and 1.0', () => {
-    // At ff=0.0 → guardFF = 0.5
+    // At ff=0.0 → guardFF = 0.3
     expect(guardFatigueFactor(0)).toBe(BALANCE.guardFatigueFloor);
     // At ff=1.0 → guardFF = 1.0
     expect(guardFatigueFactor(1.0)).toBe(1.0);
-    // At ff=0.5 → guardFF = 0.5 + 0.5*0.5 = 0.75
-    expect(guardFatigueFactor(0.5)).toBe(0.75);
+    // At ff=0.5 → guardFF = 0.3 + 0.7*0.5 = 0.65
+    expect(guardFatigueFactor(0.5)).toBe(BALANCE.guardFatigueFloor + (1 - BALANCE.guardFatigueFloor) * 0.5);
     // monotonically increasing
     for (let ff = 0; ff < 1.0; ff += 0.1) {
       expect(guardFatigueFactor(ff + 0.1)).toBeGreaterThan(guardFatigueFactor(ff));
@@ -2043,11 +2046,11 @@ describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
       guard: 105,    // over knee
     };
     const stats = computeEffectiveStats(highGear, SPEEDS[SpeedType.Standard], CdL, 65);
-    // MOM: 110 + 0 + 5 = 115 → softCap(115) = 100 + 15*50/65 ≈ 111.54
-    expect(stats.momentum).toBeCloseTo(111.54, 1);
-    // GRD: 105 + 0 + 5 = 110 → softCap(110) = 100 + 10*50/60 = 108.33
+    // MOM: 110 + 0 + 5 = 115 → softCap(115) = 100 + 15*55/70 ≈ 111.79
+    expect(stats.momentum).toBeCloseTo(100 + 15 * K / (15 + K), 1);
+    // GRD: 105 + 0 + 5 = 110 → softCap(110) = 100 + 10*55/65 ≈ 108.46
     const rawGuard = 105 + 0 + 5; // 110
-    expect(softCap(rawGuard)).toBeCloseTo(108.33, 1);
+    expect(softCap(rawGuard)).toBeCloseTo(100 + 10 * K / (10 + K), 1);
   });
 
   it('asymmetric softCap: one player over knee, one under', () => {
@@ -2058,14 +2061,15 @@ describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
     const p1Stats = computeEffectiveStats(p1, SPEEDS[SpeedType.Standard], CdL, 65);
     const p2Stats = computeEffectiveStats(p2, SPEEDS[SpeedType.Standard], CdL, 55);
 
-    // P1: 110 + 5 = 115 → softCap(115) ≈ 111.54
-    expect(p1Stats.momentum).toBeCloseTo(111.54, 1);
+    // P1: 110 + 5 = 115 → softCap(115) = 100 + 15*55/70 ≈ 111.79
+    expect(p1Stats.momentum).toBeCloseTo(100 + 15 * K / (15 + K), 1);
     // P2: 70 + 5 = 75 → softCap(75) = 75 (unchanged, below knee)
     expect(p2Stats.momentum).toBe(75);
 
     // Ratio compression: without softCap would be 115/75 = 1.53
-    // With softCap: 111.54/75 ≈ 1.49 (compressed slightly)
-    expect(p1Stats.momentum / p2Stats.momentum).toBeCloseTo(1.49, 2);
+    // With softCap: ~111.79/75 ≈ 1.49 (compressed slightly)
+    const expectedRatio = (100 + 15 * K / (15 + K)) / 75;
+    expect(p1Stats.momentum / p2Stats.momentum).toBeCloseTo(expectedRatio, 2);
   });
 
   it('attack delta pushes stat over knee mid-combat', () => {
@@ -2081,10 +2085,12 @@ describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
     const highMom: Archetype = { ...charger, momentum: 110 };
     // At stamina=10, fatigue threshold = 65*0.8 = 52
     // ff = 10/52 ≈ 0.192
+    const ff = 10 / 52;
     const stats = computeEffectiveStats(highMom, SPEEDS[SpeedType.Standard], CdL, 10);
-    // Raw: 110 + 5 = 115 → softCap(115) ≈ 111.54
-    // After fatigue: 111.54 * 0.192 ≈ 21.4
-    expect(stats.momentum).toBeCloseTo(21.4, 1);
+    // Raw: 110 + 5 = 115 → softCap(115) = 100 + 15*55/70 ≈ 111.79
+    // After fatigue: 111.79 * ff ≈ 21.5
+    const softCapped = 100 + 15 * K / (15 + K);
+    expect(stats.momentum).toBeCloseTo(softCapped * ff, 1);
     expect(stats.momentum).toBeLessThan(knee); // Fatigued below knee
   });
 
@@ -2112,10 +2118,10 @@ describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
 
   it('very high stats (150+) compress heavily but remain monotonic', () => {
     // Test extreme giga gear values
-    // 150: 100 + 50*50/100 = 125
-    expect(softCap(150)).toBeCloseTo(125, 0);
-    // 200: 100 + 100*50/150 ≈ 133.33
-    expect(softCap(200)).toBeCloseTo(133.33, 0);
+    // 150: 100 + 50*55/105 ≈ 126.19
+    expect(softCap(150)).toBeCloseTo(100 + 50 * K / (50 + K), 0);
+    // 200: 100 + 100*55/155 ≈ 135.48
+    expect(softCap(200)).toBeCloseTo(100 + 100 * K / (100 + K), 0);
     // Monotonic: higher input always yields higher output
     expect(softCap(200)).toBeGreaterThan(softCap(150));
     expect(softCap(150)).toBeGreaterThan(softCap(120));

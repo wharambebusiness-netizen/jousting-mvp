@@ -1149,9 +1149,9 @@ describe('ImpactBreakdown — melee', () => {
     const result = resolveMeleeRoundFn(1, p1, p2, OC, MC);
     const bd1 = result.player1Breakdown!;
 
-    // Breakdown is pre-boost, impactScore includes 1.25x boost
+    // Breakdown is pre-boost, impactScore includes 1.35x boost
     const preBoost = bd1.momentumComponent + bd1.accuracyComponent - bd1.guardPenalty;
     expect(result.player1ImpactScore).toBeGreaterThan(preBoost);
-    expect(result.player1ImpactScore).toBeCloseTo(preBoost * 1.25, 5);
+    expect(result.player1ImpactScore).toBeCloseTo(preBoost * 1.35, 5);
   });
 });

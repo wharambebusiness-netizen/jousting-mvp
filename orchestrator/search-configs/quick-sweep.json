@@ -1,0 +1,31 @@
+{
+  "name": "Quick Sweep",
+  "description": "Fast sensitivity check on the 3 most impactful balance knobs. 15 sims + 3 baselines × 3 tiers = 54 sims (~2.5 min).",
+  "strategy": "sweep",
+  "matchesPerMatchup": 200,
+  "baselineRuns": 3,
+  "simTimeoutMs": 90000,
+  "outputDir": "orchestrator/balance-data",
+  "params": [
+    {
+      "key": "guardUnseatDivisor",
+      "label": "guardUnseatDivisor",
+      "values": [12, 13, 15, 17, 20]
+    },
+    {
+      "key": "guardImpactCoeff",
+      "label": "guardImpactCoeff",
+      "values": [0.14, 0.16, 0.18, 0.20, 0.22]
+    },
+    {
+      "key": "unseatedImpactBoost",
+      "label": "unseatedImpactBoost",
+      "values": [1.15, 1.20, 1.25, 1.30, 1.35]
+    }
+  ],
+  "tiers": [
+    { "tier": "bare", "variant": "balanced", "weight": 0.3 },
+    { "tier": "epic", "variant": "balanced", "weight": 1.0 },
+    { "tier": "giga", "variant": "balanced", "weight": 0.8 }
+  ]
+}

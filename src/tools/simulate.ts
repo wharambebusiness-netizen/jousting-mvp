@@ -20,6 +20,7 @@ import { Phase } from '../engine/types';
 import type { Attack, GiglingLoadout, PlayerLoadout, GiglingRarity, GearVariant } from '../engine/types';
 import { createFullLoadout } from '../engine/gigling-gear';
 import { createFullPlayerLoadout } from '../engine/player-gear';
+import { BALANCE } from '../engine/balance-config';
 
 // ============================================================
 // Exported Types
@@ -89,6 +90,7 @@ export interface SimulationReport {
     totalMatches: number;
     timestamp: string;
     elapsedMs: number;
+    overrides?: Record<string, number>;
   };
   archetypeStats: ArchetypeStats[];
   matchups: MatchupResult[];
@@ -102,6 +104,39 @@ export interface SimConfig {
   tier: string;
   variant?: string;
   matchesPerMatchup?: number;
+  overrides?: Record<string, number>;
+}
+
+// ============================================================
+// Balance Config Overrides
+// ============================================================
+
+/**
+ * Apply overrides to the BALANCE config object in-memory.
+ * Supports dot notation for nested properties (e.g. "carryoverDivisors.momentum").
+ * Returns the previous values so they can be restored.
+ */
+export function applyBalanceOverrides(overrides: Record<string, number>): Record<string, number> {
+  const previous: Record<string, number> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    const parts = key.split('.');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let target: any = BALANCE;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (target[parts[i]] === undefined) throw new Error(`Invalid override path: ${key}`);
+      target = target[parts[i]];
+    }
+    const finalKey = parts[parts.length - 1];
+    if (target[finalKey] === undefined) throw new Error(`Invalid override key: ${key} (property "${finalKey}" not found)`);
+    previous[key] = target[finalKey];
+    target[finalKey] = value;
+  }
+  return previous;
+}
+
+/** Restore previous balance config values (undo overrides). */
+export function restoreBalanceOverrides(previous: Record<string, number>): void {
+  applyBalanceOverrides(previous);
 }
 
 // ============================================================
@@ -377,9 +412,20 @@ export function runSimulation(config: SimConfig): SimulationReport {
   const matchesPerMatchup = config.matchesPerMatchup || DEFAULT_MATCHES_PER_MATCHUP;
   const gearMode = (GEAR_MODES.includes(tier as GearMode) ? tier : 'bare') as GearMode;
 
+  // Apply balance config overrides (restored after sim)
+  let previous: Record<string, number> | undefined;
+  if (config.overrides && Object.keys(config.overrides).length > 0) {
+    previous = applyBalanceOverrides(config.overrides);
+  }
+
   const startTime = Date.now();
   const { matchups, archetypeStats } = runAllMatchups(gearMode, variant, matchesPerMatchup);
   const elapsedMs = Date.now() - startTime;
+
+  // Restore original config
+  if (previous) {
+    restoreBalanceOverrides(previous);
+  }
 
   return {
     metadata: {
@@ -389,6 +435,7 @@ export function runSimulation(config: SimConfig): SimulationReport {
       totalMatches: matchups.length * matchesPerMatchup,
       timestamp: new Date().toISOString(),
       elapsedMs,
+      ...(config.overrides && Object.keys(config.overrides).length > 0 ? { overrides: config.overrides } : {}),
     },
     archetypeStats,
     matchups,
@@ -518,9 +565,33 @@ if (IS_CLI) {
   const variantArg = args[1] as GearVariant | undefined;
   const gearVariant: GearVariant | undefined = variantArg && GEAR_VARIANTS_LIST.includes(variantArg) ? variantArg : undefined;
 
+  // Parse --override key=value flags
+  const overrides: Record<string, number> = {};
+  for (let i = 2; i < process.argv.length; i++) {
+    if (process.argv[i] === '--override' && i + 1 < process.argv.length) {
+      const pair = process.argv[i + 1];
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx > 0) {
+        const key = pair.slice(0, eqIdx);
+        const val = parseFloat(pair.slice(eqIdx + 1));
+        if (!isNaN(val)) {
+          overrides[key] = val;
+        } else {
+          console.error(`Warning: ignoring non-numeric override value for "${key}"`);
+        }
+      }
+      i++; // skip value arg
+    }
+  }
+
+  const hasOverrides = Object.keys(overrides).length > 0;
+  if (hasOverrides) {
+    console.error(`Overrides: ${Object.entries(overrides).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  }
+
   console.error(`Running simulations (gear mode: ${gearMode})...`);
 
-  const report = runSimulation({ tier: gearMode, variant: gearVariant });
+  const report = runSimulation({ tier: gearMode, variant: gearVariant, overrides: hasOverrides ? overrides : undefined });
 
   if (JSON_FLAG) {
     console.log(JSON.stringify(report, null, 2));

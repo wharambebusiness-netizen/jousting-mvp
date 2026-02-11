@@ -14,7 +14,7 @@ export const BALANCE = {
   // No-gear max raw combat stat: ~115 (Charger Fast+CF momentum).
   // With Giga gear: Charger MOM base 98, +Fast+CF = 138 → softCap ~120.
   softCapKnee: 100,
-  softCapK: 50,
+  softCapK: 55,
 
   // --- Fatigue ---
   // Fatigue threshold is proportional to max stamina (archetype + gear).
@@ -27,8 +27,8 @@ export const BALANCE = {
   // multiplier applied to guard at 0 stamina. At full stamina, guard
   // is unaffected (multiplier = 1.0). Formula:
   //   guardFF = floor + (1 - floor) * fatigueFactor
-  // 0.5 means guard drops to 50% at complete exhaustion.
-  guardFatigueFloor: 0.5,
+  // 0.3 means guard drops to 30% at complete exhaustion.
+  guardFatigueFloor: 0.3,
 
   // --- Counter Bonus Scaling ---
   // Counter bonus scales with the winner's effective Control.
@@ -48,8 +48,8 @@ export const BALANCE = {
   // Old 0.3 → 0.2 → 0.18: reduces guard's impact subtraction further to improve low-GRD archetypes.
   guardImpactCoeff: 0.18,
   // UnseatThreshold = 20 + Eff_Guard / guardUnseatDivisor + CurrentSTA / 20
-  // Old 10 → 15: makes high-guard archetypes ~33% easier to unseat.
-  guardUnseatDivisor: 15,
+  // Old 10 → 15 → 18: makes high-guard archetypes easier to unseat.
+  guardUnseatDivisor: 18,
 
   // --- Breaker Guard Penetration ---
   // Fraction of opponent's effective guard that Breaker ignores during
@@ -87,11 +87,11 @@ export const BALANCE = {
 
   // Unseated player gets a multiplicative impact boost in melee to partially
   // compensate for carryover + fatigue disadvantage. Target: 15-20% unseated win rate.
-  unseatedImpactBoost: 1.25,
+  unseatedImpactBoost: 1.35,
 
   // Stamina recovered by the unseated player at melee start.
   // Addresses fatigue as the dominant penalty root cause.
-  unseatedStaminaRecovery: 8,
+  unseatedStaminaRecovery: 12,
 
   // --- Melee Win Conditions ---
   // meleeWinsNeeded: round wins required to take the melee.

@@ -74,28 +74,28 @@ describe('v4.1 Worked Example — Charger vs Technician 2-pass scenario', () => 
     );
     expect(match.passResults.length).toBe(1);
     const p1 = match.passResults[0];
-    // With Technician MOM 61 and Charger INIT 55, Technician wins Pass 1
+    // With Technician MOM 64 and Charger INIT 55, Technician wins Pass 1
     expect(p1.player2.impactScore).toBeGreaterThan(p1.player1.impactScore);
     expect(p1.unseat).toBe('none');
     expect(match.player1.currentStamina).toBe(40);
     expect(match.player2.currentStamina).toBe(29);
 
     // Pass 2: Charger Slow+BdG, Technician Standard+PdL
-    // Charger has less fatigue + BdG beats PdL, but Technician MOM 61 prevents unseat
+    // With guardFatigueFloor=0.3 and guardUnseatDivisor=18, the lower guard
+    // fatigue floor + lower divisor makes unseat easier — Charger unseats Technician
     match = submitJoustPass(match,
       { speed: SpeedType.Slow, attack: BdG },
       { speed: SpeedType.Standard, attack: PdL },
     );
     const p2 = match.passResults[1];
     expect(p2.player1.impactScore).toBeGreaterThan(p2.player2.impactScore);
-    expect(p2.unseat).toBe('none');
-    expect(match.player1.currentStamina).toBe(30);
-    expect(match.player2.currentStamina).toBe(21);
+    expect(p2.unseat).toBe('player1'); // Charger unseats Technician with new config
 
-    // No unseat — match continues to pass 3
-    expect(match.passNumber).toBe(3);
-    expect(match.phase).toBe(Phase.SpeedSelect);
-    expect(match.player2.wasUnseated).toBeFalsy();
+    // Unseat → transition to melee with carryover penalties + stamina recovery
+    expect(match.phase).toBe(Phase.MeleeSelect);
+    expect(match.player2.wasUnseated).toBe(true);
+    expect(match.player1.wasUnseated).toBe(false);
+    expect(match.player2.carryoverMomentum).toBeLessThan(0);
   });
 });
 
@@ -201,7 +201,7 @@ describe('Unseat → Melee transition with carryover', () => {
 
       if (lastPass.unseat === 'player1') {
         // P2 was unseated. P2 started at 5 STA, lost 8 from PdL attack → 0.
-        // Then gains unseatedStaminaRecovery (8) → 8, capped at archetype max.
+        // Then gains unseatedStaminaRecovery (12) → capped at archetype max.
         const p2StaAfterAttack = lastPass.player2.staminaAfter;
         const expectedRecovery = Math.min(
           p2StaAfterAttack + BALANCE.unseatedStaminaRecovery,
@@ -1289,13 +1289,14 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
 
     // P1 STA=50 ≥ 48 → ff=1.0 (still fresh)
     // P2 STA=42 < 48 → ff=42/48=0.875
-    // P2 guardFF = 0.5 + 0.5*0.875 = 0.9375
-    // P2 effMOM=80*0.875=70, effCTL=50*0.875=43.75, effGRD=55*0.9375=51.5625
+    // P2 guardFF = 0.3 + 0.7*0.875 = 0.9125
+    // P2 effMOM=80*0.875=70, effCTL=50*0.875=43.75, effGRD=55*0.9125=50.1875
     // Counter bonus: 4 + 70*0.1 = 11.0 (P1 CTL still 70, unfatigued)
-    // P1 impact ≈ 60.62, P2 impact ≈ 41.9
-    expect(r2.player1ImpactScore).toBeCloseTo(60.62, 1);
+    // P1 impact = 32.5 + 37.4 - 50.1875*0.18 = 60.87
+    // P2 impact = 35 + 18.6 - 11.7 = 41.9
+    expect(r2.player1ImpactScore).toBeCloseTo(60.87, 1);
     expect(r2.player2ImpactScore).toBeCloseTo(41.9, 1);
-    expect(r2.margin).toBeCloseTo(18.72, 1);
+    expect(r2.margin).toBeCloseTo(18.97, 1);
     expect(r2.outcome).toBe(MeleeOutcome.Hit);
     expect(r2.winner).toBe('player1');
     expect(match.meleeWins1).toBe(2);
@@ -1316,11 +1317,14 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
 
     // P1 STA=40 < 48 → ff=40/48≈0.833
     // P2 STA=24 < 48 → ff=24/48=0.5
+    // P1 guardFF = 0.3 + 0.7*0.833 = 0.883, P2 guardFF = 0.3 + 0.7*0.5 = 0.65
     // Fatigue gap massive → P1 impact >> P2 impact
-    // Margin=33.0 exceeds critThreshold → CRITICAL
-    expect(r3.player1ImpactScore).toBeCloseTo(54.925, 1);
-    expect(r3.player2ImpactScore).toBeCloseTo(21.925, 1);
-    expect(r3.margin).toBeCloseTo(33.0, 1);
+    // P1 impact = 27.08 + 35.27 - 6.435 = 55.915
+    // P2 impact = 20 + 12.65 - 10.335 = 22.315
+    // Margin=33.6 exceeds critThreshold → CRITICAL
+    expect(r3.player1ImpactScore).toBeCloseTo(55.915, 1);
+    expect(r3.player2ImpactScore).toBeCloseTo(22.315, 1);
+    expect(r3.margin).toBeCloseTo(33.6, 1);
     expect(r3.outcome).toBe(MeleeOutcome.Critical);
     expect(r3.winner).toBe('player1');
     // Critical = 2 wins → 2+2 = 4 → melee ends
@@ -1377,7 +1381,7 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
 // ============================================================
 // Worked example: Technician (unseated, carryover penalties) vs Charger (unseater).
 // Unseat margin = 24 → carryover: MOM -4, CTL -3, GRD -2.
-// Technician gets 1.25x impact boost + 8 STA recovery.
+// Technician gets 1.35x impact boost + 12 STA recovery.
 // P1 (Technician) plays MC, P2 (Charger) plays OC. MC beats OC → P1 counter.
 // Despite carryover, Technician's high CTL + counter + boost compete with Charger.
 describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () => {
@@ -1386,7 +1390,7 @@ describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () =
   function buildCarryoverMatch() {
     let match = createMatch(ARCHETYPES.technician, charger);
     // Simulate: Technician was unseated by Charger with margin=24.
-    // Post-joust stamina: Tech had STA=36 after joust attack drain, recovered +8 → 44.
+    // Post-joust stamina: Tech had STA=32 after joust attack drain, recovered +12 → 44.
     // Charger had STA=40 after joust.
     match = {
       ...match,
@@ -1429,14 +1433,14 @@ describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () =
     // Technician (P1, unseated) with MC:
     //   Raw: MOM=58+5-4=59, CTL=70+10-3=77, GRD=55+5-2=58
     //   STA=44, threshold=55*0.8=44 → ff=1.0 (exactly at threshold)
-    //   guardFF = 0.5 + 0.5*1.0 = 1.0
+    //   guardFF = 0.3 + 0.7*1.0 = 1.0
     //   EffMOM=59, EffCTL=77, EffGRD=58, INIT=60
     //
     // Charger (P2, no carryover) with OC:
     //   Raw: MOM=75+20=95, CTL=55-10=45, GRD=50-5=45
     //   STA=40, threshold=65*0.8=52 → ff=40/52 ≈ 0.7692
-    //   guardFF = 0.5 + 0.5*(40/52) ≈ 0.8846
-    //   EffMOM=95*40/52, EffCTL=45*40/52, EffGRD=45*(0.5+0.5*40/52)
+    //   guardFF = 0.3 + 0.7*(40/52) ≈ 0.8385
+    //   EffMOM=95*40/52, EffCTL=45*40/52, EffGRD=45*(0.3+0.7*40/52)
 
     // P1 wins round (counter + boost overcomes carryover)
     expect(r.winner).toBe('player1');
@@ -1479,7 +1483,7 @@ describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () =
     const rCarryover = withCarryover.meleeRoundResults[0];
     const rBaseline = noCarryover.meleeRoundResults[0];
 
-    // Without carryover, P1 has no 1.25x boost, so baseline P1 impact is lower
+    // Without carryover, P1 has no 1.35x boost, so baseline P1 impact is lower
     // despite having better raw stats (no -4/-3/-2 penalties).
     // This demonstrates the boost overcompensates for the penalties.
     expect(rCarryover.player1ImpactScore).toBeGreaterThan(rBaseline.player1ImpactScore);
@@ -1490,10 +1494,10 @@ describe('Melee with Carryover + Unseated Boost — Technician vs Charger', () =
     match = submitMeleeRound(match, MC, OC);
     const r = match.meleeRoundResults[0];
 
-    // The unboosted P1 impact = r.player1ImpactScore / 1.25
+    // The unboosted P1 impact = r.player1ImpactScore / unseatedImpactBoost
     const unboosted = r.player1ImpactScore / BALANCE.unseatedImpactBoost;
     expect(unboosted).toBeLessThan(r.player1ImpactScore);
-    expect(r.player1ImpactScore / unboosted).toBeCloseTo(1.25, 5);
+    expect(r.player1ImpactScore / unboosted).toBeCloseTo(BALANCE.unseatedImpactBoost, 5);
   });
 });
 

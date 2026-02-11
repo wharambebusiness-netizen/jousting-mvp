@@ -9,8 +9,12 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (908 passing as of S38)
+npx vitest run                              # Run all tests (908 passing as of S43)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
+npx tsx src/tools/simulate.ts bare --json --override softCapK=60  # Sim with balance config overrides
+npx tsx src/tools/param-search.ts <config.json>                   # Parameter search (sweep/descent)
+npx tsx src/tools/param-search.ts <config.json> --dry-run         # Preview search plan
+npx tsx src/tools/param-search.ts <config.json> --matches 500     # Override matches per matchup
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
@@ -35,13 +39,14 @@ src/engine/           Pure TS combat engine (no UI imports)
 
 src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
-src/tools/            simulate.ts CLI balance testing tool
+src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
 orchestrator/         Multi-agent development system (v5)
   orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
   roles/*.md          9 role templates (professional agent briefs)
+  search-configs/*.json  Parameter search configurations (quick-sweep, sensitivity-sweep, guard-tuning, unseated-tuning)
   handoffs/*.md       Agent state files (structured META sections)
   analysis/*.md       Balance/quality reports
   run-overnight.ps1   PowerShell restart loop for overnight runs
@@ -130,26 +135,26 @@ breaker:      62   60   55    55   60  = 292   Guard penetration 0.25
 duelist:      60   60   60    60   60  = 300   Balanced generalist
 ```
 
-**Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.18`
+**Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.18`, `softCapK: 55`, `guardUnseatDivisor: 18`, `unseatedImpactBoost: 1.35`, `unseatedStaminaRecovery: 12`, `guardFatigueFloor: 0.3`
 
-### Win Rate Validation (S35 Balance Analysis)
+### Win Rate Validation (S45 Balance Tuning — Coordinate Descent)
 
 **Bare Tier** (N=200, balanced variant):
-- Bulwark: 61.4% | Technician: 52.4% | Duelist: 51.1% | Tactician: 49.6% | Breaker: 46.5% | Charger: 39.0%
-- Spread: 22.4pp (expected for bare stats, no gear)
-
-**Giga Tier** (N=200, balanced variant):
-- Breaker: 53.9% | Bulwark: 50.4% | Technician: 48.9% | Tactician: 48.0% | Charger: 46.7% | Duelist: 46.7%
-- Spread: 7.2pp (excellent compression, zero flags)
+- Bulwark: 58.1% | Technician: 51.0% | Duelist: 50.3% | Tactician: 49.0% | Charger: 46.0% | Breaker: 45.5%
+- Spread: 12.6pp (1 flag: bulwark dominant)
 
 **Epic Tier** (N=200, balanced variant) — BEST COMPRESSION:
-- Charger: 51.0% | Bulwark: 53.1% | Technician: 49.2% | Duelist: 47.7% | Tactician: 47.4% | Breaker: 47.3%
-- Spread: 5.7pp (tightest balance, zero flags)
+- Charger: 52.2% | Breaker: 50.8% | Bulwark: 50.5% | Duelist: 49.5% | Technician: 49.3% | Tactician: 47.7%
+- Spread: 4.5pp (zero flags)
 
-**Tier Progression**: 22.4pp (bare) → 12.0pp (rare) → 5.7pp (epic) → 7.2pp (giga)
+**Giga Tier** (N=200, balanced variant) — NEAR-PERFECT:
+- Breaker: 51.9% | Bulwark: 50.6% | Charger: 50.1% | Duelist: 49.5% | Technician: 49.1% | Tactician: 48.8%
+- Spread: 3.1pp (zero flags, all archetypes 48.8-51.9%)
+
+**Tier Progression**: 12.6pp (bare) → 4.5pp (epic) → 3.1pp (giga)
 - Balance improves monotonically with tier
-- Epic tier shows tightest compression (validates gear system design)
-- Charger reversal: weakest at bare (39.0%), STRONGEST at epic (51.0%)
+- Giga tier now near-perfect (was 7.2pp, now 3.1pp)
+- Charger: weakest at bare (46.0%), strongest at epic (52.2%)
 
 ### Variant Impact (Giga Tier, N=200 per config)
 

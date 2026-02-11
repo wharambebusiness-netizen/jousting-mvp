@@ -842,10 +842,10 @@ describe('Carryover divisors are from balance-config', () => {
     expect(BALANCE.carryoverDivisors.guard).toBe(9);
   });
   it('unseated impact boost matches config', () => {
-    expect(BALANCE.unseatedImpactBoost).toBe(1.25);
+    expect(BALANCE.unseatedImpactBoost).toBe(1.35);
   });
   it('unseated stamina recovery matches config', () => {
-    expect(BALANCE.unseatedStaminaRecovery).toBe(8);
+    expect(BALANCE.unseatedStaminaRecovery).toBe(12);
   });
 });
 

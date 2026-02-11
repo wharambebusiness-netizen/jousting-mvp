@@ -275,8 +275,8 @@ describe('SoftCap with combined steed + player gear', () => {
 
     // 75 + 13 + 6 + 9 + 6 + 9 + 9 = 127
     expect(boosted.momentum).toBe(127);
-    // softCap(127) = 100 + 27*50/77 ≈ 117.53
-    expect(softCap(boosted.momentum)).toBeCloseTo(117.53, 1);
+    // softCap(127) = 100 + 27*55/82 ≈ 118.11
+    expect(softCap(boosted.momentum)).toBeCloseTo(118.11, 1);
   });
 
   it('moderate gear stays under softCap knee', () => {

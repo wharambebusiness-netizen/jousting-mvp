@@ -262,8 +262,8 @@ describe('Gear + Soft Cap interaction', () => {
     const result = applyGiglingLoadout(charger, loadout);
     // 75 + 13 + 6 + 9 + 6 = 109 — well over softCap knee
     expect(result.momentum).toBe(109);
-    // softCap(109) = 100 + 9*50/59 ≈ 107.63
-    expect(softCap(result.momentum)).toBeCloseTo(107.63, 1);
+    // softCap(109) = 100 + 9*55/64 ≈ 107.73
+    expect(softCap(result.momentum)).toBeCloseTo(107.73, 1);
   });
 
   it('Bulwark guard at Giga with chamfron + barding', () => {

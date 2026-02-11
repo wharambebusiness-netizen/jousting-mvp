@@ -1,0 +1,42 @@
+{
+  "name": "Focused Coordinate Descent",
+  "description": "Coordinate descent on the 5 actionable params from sensitivity sweep (excluding confirmed-optimal guardImpactCoeff, fatigueRatio, and within-noise breakerGuardPenetration). 3 rounds of descent to converge.",
+  "strategy": "descent",
+  "descentRounds": 3,
+  "matchesPerMatchup": 200,
+  "baselineRuns": 3,
+  "simTimeoutMs": 90000,
+  "outputDir": "orchestrator/balance-data",
+  "params": [
+    {
+      "key": "softCapK",
+      "label": "softCapK",
+      "values": [35, 40, 45, 50, 55, 60]
+    },
+    {
+      "key": "guardUnseatDivisor",
+      "label": "guardUnseatDivisor",
+      "values": [12, 15, 18, 20, 22]
+    },
+    {
+      "key": "unseatedImpactBoost",
+      "label": "unseatedImpactBoost",
+      "values": [1.10, 1.15, 1.20, 1.25, 1.30, 1.35]
+    },
+    {
+      "key": "unseatedStaminaRecovery",
+      "label": "unseatedStaminaRecovery",
+      "values": [6, 8, 10, 12]
+    },
+    {
+      "key": "guardFatigueFloor",
+      "label": "guardFatigueFloor",
+      "values": [0.30, 0.40, 0.50, 0.60]
+    }
+  ],
+  "tiers": [
+    { "tier": "bare", "variant": "balanced", "weight": 0.3 },
+    { "tier": "epic", "variant": "balanced", "weight": 1.0 },
+    { "tier": "giga", "variant": "balanced", "weight": 0.8 }
+  ]
+}

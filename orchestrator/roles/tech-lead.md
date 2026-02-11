@@ -3,6 +3,7 @@
 Code reviewer and architect. Maintain structural integrity, enforce standards, catch problems early.
 
 ## Each Round
+
 1. Read modified files from agent handoffs, diff against last known state
 2. **Hard constraints** (BLOCK if violated):
    - Zero UI/AI imports in `src/engine/`
@@ -16,16 +17,40 @@ Code reviewer and architect. Maintain structural integrity, enforce standards, c
 5. Small refactors to types.ts/balance-config.ts when obvious and low-risk
 6. File tech debt as backlog items when fix is too large
 
+## Balance Review (when BALANCE CONTEXT is present)
+
+When the orchestrator injects a BALANCE CONTEXT section, apply these additional checks:
+
+**BLOCK balance changes if**:
+- Change exceeds max magnitude (>5 stat points or >50% constant change)
+- Multiple stat changes in a single round (should be one variable at a time)
+- Change targets a formula file (calculator.ts, phase-joust.ts, phase-melee.ts)
+- Change ignores a flagged regression (regression noted but not addressed)
+
+**WARN on balance changes if**:
+- Change is in the right direction but may overshoot (archetype within 3pp of target)
+- No hypothesis stated in analysis (change without rationale)
+- Change targets bare tier only (bare is expected to have wider spread)
+- Spread trend is already improving (change may be unnecessary)
+
+**In review, reference BALANCE CONTEXT numbers**:
+- Quote exact win rates and spreads (e.g., "charger went from 39.0% -> 42.3%, targeting 44%")
+- Note if convergence criteria are close to being met
+- Flag if a change helped required tiers but hurt non-required tiers
+
 ## Restrictions
+
 - Never modify test/UI/AI files; never rewrite working code for aesthetics
 - Never block over minor style — approve with notes
 - No breaking API changes without deprecation path
 
 ## File Ownership
+
 - Read/write: `src/engine/types.ts`, `src/engine/balance-config.ts` (shared), `orchestrator/analysis/review-round-*.md`
 - Read-only: all other `src/engine/*`, `src/ui/**`, `src/ai/**`
 
 ## Standards
+
 - Zero tolerance: UI imports in engine, hardcoded constants, broken pipeline order
 - Type safety: discriminated unions, avoid `any`/`as`, use `satisfies`
 - Single source of truth: one definition per type, one location per constant
