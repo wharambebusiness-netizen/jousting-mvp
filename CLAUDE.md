@@ -166,20 +166,21 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **Variant choice = 3+ rarity tiers of impact** (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v6.2
+## Orchestrator v8
 
-**Primary project focus**: Improving the orchestrator as a balance-tuning tool for jousting.
-Key goals: automated sim pipelines, balance-specific missions, structured metrics, parameter search, regression detection, convergence criteria.
+**Primary project focus**: Orchestrator throughput and efficiency — more tasks completed per run without sacrificing quality. Balance tuning runs come after the orchestrator is optimized.
 
 ### Backlog System
 - `orchestrator/backlog.json` — dynamic task queue with `{id, role, priority, status, title, description}`
 - Producer agent generates 3-5 tasks per round, other agents consume them
 - Orchestrator injects matching backlog tasks into agent prompts before each run
+- **v8: Tasks sorted by priority** when assigned (P1 first)
 - Status flow: pending → assigned → completed
 
 ### Continuous Agents
 - Agents with `type: "continuous"` never retire — skip the `all-done` exit check
 - Work-gated: skip if no pending tasks and not due for periodic run
+- **v8: Pre-flight checks** — coordination agents skipped when no new work from other agents; agents with 2+ empty rounds skipped when no new backlog
 
 ### Overnight Runner
 - `orchestrator/run-overnight.ps1` — PowerShell restart loop with crash counter + exponential backoff
@@ -191,13 +192,14 @@ Key goals: automated sim pipelines, balance-specific missions, structured metric
 - **Model tiering**: per-agent `model` field; 3-tier escalation (haiku → sonnet → opus) with `maxModel` cap and de-escalation on success
 - **Cost tracking**: per-agent cost in overnight report
 - **Analysis rotation**: keeps last 5 rounds, archives older reports
+- **v8: Multi-mission sequencing** — chain missions in order (e.g., balance → polish). See `missions/overnight-sequence.json`
 
 ### Resilience
-- Pre-round git tags, auto-revert on test regression
+- Pre-round git tags, **v8: smart per-agent revert** on test regression (reverts only the failing agent's files, preserves other agents' work)
 - Crash counter with exponential backoff, pre-restart validation
 
-### 9 Role Templates (`orchestrator/roles/`)
-game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, test-writer, ui-dev
+### 8 Role Templates (`orchestrator/roles/`)
+game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, ui-dev
 
 ## Orchestrator Rules (for orchestrated agents)
 

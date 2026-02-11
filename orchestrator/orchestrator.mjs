@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v4
+// Jousting MVP — Multi-Agent Orchestrator v8
 // ============================================================
-// v4 additions:
-// - Backlog system (orchestrator/backlog.json) for dynamic task injection
-// - Continuous agents never retire — always find more work
-// - Producer role integration — generates tasks for other agents
-// - Better overnight sustainability
+// v8 additions (S47 — throughput & efficiency):
+// - Backlog priority sorting (P1 tasks assigned first)
+// - Smart per-agent revert (only revert failing agent's files, preserve others' work)
+// - Multi-mission sequencing (chain missions: balance → polish → etc.)
+// - Pre-flight checks (skip agents with no new work to react to)
+// - Improved role templates (_common-rules scope limits, producer QA triggers)
 //
 // v7 Phase 4 additions (S43):
 // - Parameter search framework: runParameterSearch(), buildParamSearchContext()
@@ -141,6 +142,21 @@ const CONFIG = {
   // }
 };
 
+// v8 bugfix: Snapshot CONFIG defaults so we can restore between sub-missions.
+// Object.assign(CONFIG, mission.config) is additive — without this, mission 1's
+// config properties would leak into mission 2 if not explicitly overridden.
+const CONFIG_DEFAULTS = { ...CONFIG };
+
+/**
+ * Reset CONFIG to defaults, then apply overrides.
+ * Used when transitioning between sub-missions in a sequence.
+ */
+function resetConfigToDefaults() {
+  for (const key of Object.keys(CONFIG)) {
+    CONFIG[key] = CONFIG_DEFAULTS[key];
+  }
+}
+
 // ============================================================
 // Model Tier Ordering (for escalation/de-escalation)
 // ============================================================
@@ -177,6 +193,7 @@ function getNextTasks(role, maxTasks = 1) {
         return !dep || dep.status === 'completed' || dep.status === 'done';
       }))
     )
+    .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
     .slice(0, maxTasks);
 
   for (const task of tasks) { task.status = 'assigned'; }
@@ -881,21 +898,99 @@ function tagRoundStart(round) {
 }
 
 function gitRevertToTag(round) {
+  return gitRevertFiles(round, ['src/']);
+}
+
+/**
+ * Revert specific files to a round's start tag.
+ * @param {number} round - Round number (used to find the git tag)
+ * @param {string[]} files - File paths or directories to revert
+ * @returns {Promise<boolean>} Whether the revert succeeded
+ */
+function gitRevertFiles(round, files) {
   return new Promise((resolvePromise) => {
     const tag = `round-${round}-start`;
-    const cmd = `git checkout ${tag} -- src/`;
+    const escaped = files.map(f => `"${f}"`).join(' ');
+    const cmd = `git checkout ${tag} -- ${escaped}`;
     const proc = spawn('cmd', ['/c', cmd], {
       cwd: MVP_DIR,
       shell: true,
       stdio: 'pipe',
     });
+    let stderr = '';
+    proc.stderr?.on('data', d => { stderr += d.toString(); });
     proc.on('close', (code) => {
-      if (code === 0) log(`  Reverted src/ to tag ${tag}`);
-      else log(`  Revert to tag ${tag} failed (code ${code})`);
-      resolvePromise();
+      if (code === 0) {
+        log(`  Reverted ${files.length} path(s) to tag ${tag}`);
+      } else {
+        log(`  Revert to tag ${tag} failed (code ${code}): ${stderr.slice(0, 200)}`);
+      }
+      resolvePromise(code === 0);
     });
-    proc.on('error', () => resolvePromise());
+    proc.on('error', () => resolvePromise(false));
   });
+}
+
+/**
+ * Smart revert: try per-agent revert first, fall back to full src/ revert.
+ * Identifies which agents' files broke tests and reverts only those.
+ * @param {number} round
+ * @param {Array} codeResults - Results from Phase A agent runs
+ * @returns {Promise<{reverted: boolean, strategy: string, revertedAgents: string[]}>}
+ */
+async function smartRevert(round, codeResults) {
+  // Collect files modified by each agent this round
+  const agentFiles = {};
+  for (const r of codeResults) {
+    const meta = parseHandoffMeta(r.agentId);
+    const files = meta.filesModified.filter(f => f && f !== '(none yet)');
+    if (files.length) agentFiles[r.agentId] = files;
+  }
+
+  const agentIds = Object.keys(agentFiles);
+
+  // v8 bugfix: If no agents claimed modified files, skip per-agent logic and do full revert
+  if (agentIds.length === 0) {
+    log(`  Smart revert: no agents reported modified files — full src/ revert`);
+    const ok = await gitRevertFiles(round, ['src/']);
+    return { reverted: ok, strategy: 'full', revertedAgents: [] };
+  }
+
+  if (agentIds.length === 1) {
+    // Only one agent modified files — full revert is the same as per-agent
+    log(`  Smart revert: only 1 agent modified files — full src/ revert`);
+    const ok = await gitRevertFiles(round, ['src/']);
+    return { reverted: ok, strategy: 'full', revertedAgents: agentIds };
+  }
+
+  // Multiple agents: try reverting each agent's files individually,
+  // test after each to find the culprit
+  log(`  Smart revert: ${agentIds.length} agents modified files — testing individually...`);
+  const revertedAgents = [];
+
+  for (const agentId of agentIds) {
+    const files = agentFiles[agentId];
+    log(`    Reverting ${agentId}'s files: ${files.join(', ')}`);
+    const ok = await gitRevertFiles(round, files);
+    if (!ok) {
+      log(`    Failed to revert ${agentId}'s files — falling back to full revert`);
+      await gitRevertFiles(round, ['src/']);
+      return { reverted: true, strategy: 'full-fallback', revertedAgents: agentIds };
+    }
+    revertedAgents.push(agentId);
+
+    // Test after this agent's revert
+    const testResult = await runTests();
+    if (testResult.passed) {
+      log(`  Smart revert: tests pass after reverting ${revertedAgents.join(', ')} — keeping other agents' work`);
+      return { reverted: true, strategy: 'per-agent', revertedAgents };
+    }
+  }
+
+  // All agents reverted individually but tests still fail — shouldn't happen, but full revert as safety
+  log(`  Smart revert: all agents reverted individually but tests still fail — full src/ revert`);
+  await gitRevertFiles(round, ['src/']);
+  return { reverted: true, strategy: 'full-safety', revertedAgents: agentIds };
 }
 
 // ============================================================
@@ -1889,6 +1984,106 @@ function runTests() {
 }
 
 // ============================================================
+// Mission Sequence Support (v8)
+// ============================================================
+// A sequence mission chains multiple sub-missions in order.
+// Format: { "type": "sequence", "missions": [{ "path": "...", "maxRounds": N }, ...] }
+// When a sub-mission completes (agents retired, rounds exhausted, convergence),
+// the orchestrator loads the next sub-mission and continues.
+
+let missionSequence = null;     // Array of { path, maxRounds } or null
+let currentMissionIndex = 0;    // Index into missionSequence
+let currentMissionRoundsUsed = 0; // Rounds consumed by current sub-mission
+let currentMissionMaxRounds = Infinity; // Round budget for current sub-mission
+
+/**
+ * Load a mission, detecting sequence missions and expanding them.
+ * Returns the first (or only) mission's data.
+ */
+function loadMissionOrSequence(missionPath) {
+  const absPath = resolve(missionPath);
+  if (!existsSync(absPath)) {
+    console.error(`Mission file not found: ${absPath}`);
+    process.exit(1);
+  }
+
+  const raw = JSON.parse(readFileSync(absPath, 'utf-8'));
+
+  if (raw.type === 'sequence') {
+    log(`Detected mission sequence: ${raw.name} (${raw.missions.length} sub-missions)`);
+
+    // Apply top-level config (global overrides like maxRuntimeMs)
+    if (raw.config) {
+      Object.assign(CONFIG, raw.config);
+      log(`  Sequence config: ${JSON.stringify(raw.config)}`);
+    }
+
+    missionSequence = raw.missions;
+    currentMissionIndex = 0;
+
+    // Load the first sub-mission
+    return loadSubMission(0);
+  }
+
+  // Regular mission — no sequence
+  missionSequence = null;
+  return loadMission(missionPath);
+}
+
+/**
+ * Load a sub-mission from the sequence by index.
+ * Resets agent-specific state but preserves global state (tests, costs, round log).
+ */
+function loadSubMission(index) {
+  const entry = missionSequence[index];
+  const subPath = resolve(ORCH_DIR, '..', entry.path);
+  currentMissionMaxRounds = entry.maxRounds || Infinity;
+  currentMissionRoundsUsed = 0;
+
+  log(`\n${'═'.repeat(50)}`);
+  log(`  MISSION ${index + 1}/${missionSequence.length}: ${entry.path} (max ${currentMissionMaxRounds} rounds)`);
+  log(`${'═'.repeat(50)}`);
+
+  // v8 bugfix: Reset CONFIG to defaults before loading sub-mission.
+  // Without this, mission 1's config properties leak into mission 2.
+  resetConfigToDefaults();
+
+  // v8 bugfix: Update missionConfigPath so hot-reload reads the correct sub-mission file.
+  missionConfigPath = subPath;
+
+  const mission = loadMission(subPath);
+
+  return mission;
+}
+
+/**
+ * Check if current sub-mission is done and transition to next if available.
+ * @param {string} reason - Why the current mission ended
+ * @returns {boolean} True if transitioned to a new mission, false if no more missions
+ */
+function tryTransitionMission(reason) {
+  if (!missionSequence) return false;
+
+  log(`  Mission ${currentMissionIndex + 1} complete: ${reason}`);
+
+  currentMissionIndex++;
+  if (currentMissionIndex >= missionSequence.length) {
+    log(`  All ${missionSequence.length} missions in sequence completed.`);
+    return false;
+  }
+
+  const mission = loadSubMission(currentMissionIndex);
+  AGENTS = mission.agents.map(a => ({
+    ...a,
+    handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
+  }));
+  missionDesignDoc = mission.designDoc;
+
+  // Reset agent-specific tracking for the new team
+  return true;
+}
+
+// ============================================================
 // Main Orchestration Loop
 // ============================================================
 // Module-level variables set by loadMission, used by runAgent and report generation
@@ -1902,7 +2097,7 @@ async function main() {
   // --- Load mission config if provided as CLI argument ---
   missionConfigPath = process.argv[2] || null;
   if (missionConfigPath) {
-    const mission = loadMission(missionConfigPath);
+    const mission = loadMissionOrSequence(missionConfigPath);
     AGENTS = mission.agents.map(a => ({
       ...a,
       handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
@@ -1932,7 +2127,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v5');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v8');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -1961,6 +2156,21 @@ async function main() {
 
   // v6: Cost tracking accumulator — per-agent cost data across rounds
   const costLog = {};  // agentId → { totalCost, inputTokens, outputTokens, rounds, escalations }
+
+  // v8: Reset agent-specific tracking when transitioning between missions in a sequence.
+  // Global state (costLog, roundLog, escalationCounts) is preserved across missions.
+  function resetAgentTracking() {
+    for (const key of Object.keys(lastRunRound)) delete lastRunRound[key];
+    for (const key of Object.keys(consecutiveAgentFailures)) delete consecutiveAgentFailures[key];
+    for (const key of Object.keys(consecutiveEmptyRounds)) delete consecutiveEmptyRounds[key];
+    for (const key of Object.keys(lastFailedRound)) delete lastFailedRound[key];
+    for (const key of Object.keys(lastEscalatedRound)) delete lastEscalatedRound[key];
+    for (const key of Object.keys(successesAfterEscalation)) delete successesAfterEscalation[key];
+    // v8 bugfix: Reset test state so mission 2 doesn't inherit mission 1's failure count
+    consecutiveTestFailures = 0;
+    lastTestStatus = null;
+    log(`  Agent tracking state reset for new mission`);
+  }
 
   // v5/v6: Classify agent roles for two-phase rounds
   const CODE_AGENT_ROLES = new Set([
@@ -2091,6 +2301,53 @@ async function main() {
         log(`  ${agent.id}: CONTINUOUS — has work or due for periodic run`);
       }
 
+      // v8: Pre-flight check — skip agents that likely won't produce useful work
+      // 1. Coordination agents (Phase B) with no new changes to react to
+      if (COORD_AGENT_ROLES.has(agent.role) && round > 1) {
+        const hasBacklogTask = loadBacklog().some(t =>
+          t.status === 'pending' && t.role === agent.role
+        );
+        const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
+        const minFreq = agent.minFrequencyRounds || Infinity;
+        const dueForPeriodicRun = roundsSinceLastRun >= minFreq;
+
+        if (!hasBacklogTask && !dueForPeriodicRun) {
+          // Check if any other agent produced new work since this agent last ran
+          const otherAgentsProducedWork = AGENTS.some(other => {
+            if (other.id === agent.id) return false;
+            const otherLastRun = lastRunRound[other.id] || 0;
+            const myLastRun = lastRunRound[agent.id] || 0;
+            return otherLastRun > myLastRun;
+          });
+
+          if (!otherAgentsProducedWork) {
+            log(`  ${agent.id}: PRE-FLIGHT SKIP (no new work from other agents, no backlog tasks)`);
+            thisRoundDecisions.push({
+              round, agentId: agent.id, decision: 'skipped',
+              reason: 'pre-flight: no new work to react to', model: agent.model || 'default',
+              escalated: false, succeeded: null, elapsed: null,
+            });
+            return false;
+          }
+        }
+      }
+
+      // 2. Agents with 2+ consecutive empty rounds AND no new backlog tasks
+      if ((consecutiveEmptyRounds[agent.id] || 0) >= 2) {
+        const hasBacklogTask = loadBacklog().some(t =>
+          t.status === 'pending' && t.role === agent.role
+        );
+        if (!hasBacklogTask) {
+          log(`  ${agent.id}: PRE-FLIGHT SKIP (${consecutiveEmptyRounds[agent.id]} consecutive empty rounds, no new tasks)`);
+          thisRoundDecisions.push({
+            round, agentId: agent.id, decision: 'skipped',
+            reason: `pre-flight: ${consecutiveEmptyRounds[agent.id]} empty rounds + no tasks`, model: agent.model || 'default',
+            escalated: false, succeeded: null, elapsed: null,
+          });
+          return false;
+        }
+      }
+
       // v5C: Failure cooldown — skip agent for 1 round after failure (unless escalated since)
       if (lastFailedRound[agent.id] && lastFailedRound[agent.id] === round - 1) {
         const escalatedSinceFailure = lastEscalatedRound[agent.id] && lastEscalatedRound[agent.id] >= lastFailedRound[agent.id];
@@ -2140,6 +2397,13 @@ async function main() {
     if (activeAgents.length === 0) {
       const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
       if (allRetired) {
+        // v8: Try transitioning to next mission in sequence before stopping
+        if (tryTransitionMission('all agents retired')) {
+          resetAgentTracking();
+          roundDecisions.push(...thisRoundDecisions);
+          currentMissionRoundsUsed = 0;
+          continue; // Start next mission's first round
+        }
         stopReason = 'all agents exhausted their task lists';
         log('\nAll agents have exhausted their task lists. Done!');
         roundDecisions.push(...thisRoundDecisions);
@@ -2212,13 +2476,17 @@ async function main() {
       // Run tests after code agents
       testResult = await runTests();
 
-      // v7: Auto-revert on test regression
+      // v8: Smart per-agent revert on test regression
+      // Instead of reverting ALL of src/, identify which agent(s) broke tests
+      // and only revert their files — preserving good work from other agents.
       if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
-        log(`  ⚠ Tests regressed this round! Reverting to round-${round}-start...`);
-        await gitRevertToTag(round);
-        log(`  Reverted src/ to pre-round state. Agents that caused regression will retry next round.`);
-        // Re-run tests to confirm revert worked
-        testResult = await runTests();
+        log(`  ⚠ Tests regressed this round! Attempting smart per-agent revert...`);
+        const revertResult = await smartRevert(round, codeResults);
+        if (revertResult.reverted) {
+          log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
+          // Re-run tests to confirm revert worked
+          testResult = await runTests();
+        }
         didRevert = true;
       }
 
@@ -2363,8 +2631,12 @@ async function main() {
 
     // --- v7 Phase 2: Convergence stop (after Phase B has run) ---
     if (convergenceResult?.converged) {
-      // stopReason already set above — break here after Phase B completed
-      break;
+      // v8: Try transitioning to next mission before stopping
+      if (!tryTransitionMission('balance converged')) {
+        break; // stopReason already set above
+      }
+      resetAgentTracking();
+      // Transitioned — continue to next mission's rounds
     }
 
     // --- v5: Smart git backup (skip when only orchestrator internals changed) ---
@@ -2380,12 +2652,30 @@ async function main() {
       log('  Skipping git backup (only internal orchestrator files changed)');
     }
 
+    // --- v8: Check sub-mission round budget ---
+    if (missionSequence) {
+      currentMissionRoundsUsed++;
+      if (currentMissionRoundsUsed >= currentMissionMaxRounds) {
+        if (!tryTransitionMission(`round budget exhausted (${currentMissionMaxRounds} rounds)`)) {
+          stopReason = 'all missions in sequence completed';
+          log('\nAll missions in sequence completed.');
+          break;
+        }
+        resetAgentTracking();
+        // Transitioned — continue to next mission's rounds
+      }
+    }
+
     // --- Check if all agents are retired ---
     const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
     if (allRetired) {
-      stopReason = 'all agents exhausted their task lists';
-      log('\nAll agents have exhausted their task lists. Orchestration finished.');
-      break;
+      // v8: Try transitioning to next mission before stopping
+      if (!tryTransitionMission('all agents retired')) {
+        stopReason = 'all agents exhausted their task lists';
+        log('\nAll agents have exhausted their task lists. Orchestration finished.');
+        break;
+      }
+      resetAgentTracking();
     }
   }
 
@@ -2586,7 +2876,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v5
+> Orchestrator: v8
 
 ## Summary
 - **Started**: ${startTime}

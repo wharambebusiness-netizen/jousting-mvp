@@ -1,0 +1,19 @@
+{
+  "name": "Overnight Sequence (Balance → Polish)",
+  "type": "sequence",
+  "description": "Chains balance tuning (5 rounds) then general improvement (15 rounds). Allows focused balance work first, then pivots to UI/quality work without restarting.",
+  "config": {
+    "maxRounds": 25,
+    "maxRuntimeMs": 36000000
+  },
+  "missions": [
+    {
+      "path": "orchestrator/missions/balance-tuning.json",
+      "maxRounds": 5
+    },
+    {
+      "path": "orchestrator/missions/overnight.json",
+      "maxRounds": 15
+    }
+  ]
+}

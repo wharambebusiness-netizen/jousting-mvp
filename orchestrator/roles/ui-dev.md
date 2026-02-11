@@ -7,7 +7,7 @@ React + TypeScript presentation layer. Engine is a black box — call its API vi
 2. Implement in `src/ui/` components, update props interfaces
 3. App.tsx changes: make directly if owned, otherwise document in handoff as "Deferred App.tsx Changes" with exact snippets
 4. Update `src/App.css` for new visual elements
-5. Verify with `npm run dev` if possible
+5. Verify with `npm run dev` before writing handoff
 
 ## Restrictions
 - Never modify engine (`src/engine/*`), AI (`src/ai/*`), or test files
