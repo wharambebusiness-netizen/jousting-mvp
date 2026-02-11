@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PassResult as PassResultType, MatchState, ImpactBreakdown } from '../engine/types';
 import { resolveCounters } from '../engine/calculator';
+import { BALANCE } from '../engine/balance-config';
 import { Scoreboard, StanceTag } from './helpers';
 
 export function PassResultScreen({ match, result, onContinue }: {
@@ -14,6 +15,8 @@ export function PassResultScreen({ match, result, onContinue }: {
   const absDiff = Math.abs(scoreDiff);
   const counters = resolveCounters(p1.finalAttack, p2.finalAttack);
   const hasCounter = counters.player1Bonus !== 0 || counters.player2Bonus !== 0;
+  const p1Fatigued = p1.staminaAfter < match.player1.archetype.stamina * BALANCE.fatigueRatio;
+  const p2Fatigued = p2.staminaAfter < match.player2.archetype.stamina * BALANCE.fatigueRatio;
 
   // Determine winner label and CSS modifier
   const winnerLabel = scoreDiff > 0 ? 'You win this pass!' : scoreDiff < 0 ? 'Opponent wins this pass!' : 'This pass is a draw!';
@@ -34,6 +37,21 @@ export function PassResultScreen({ match, result, onContinue }: {
         passNumber={result.passNumber}
         totalPasses={5}
       />
+
+      {(p1Fatigued || p2Fatigued) && (
+        <div className="fatigue-warnings">
+          {p1Fatigued && (
+            <span className="fatigue-warning fatigue-warning--p1">
+              {match.player1.archetype.name}: Fatigued! MOM &amp; CTL reduced.
+            </span>
+          )}
+          {p2Fatigued && (
+            <span className="fatigue-warning fatigue-warning--p2">
+              {match.player2.archetype.name}: Fatigued! MOM &amp; CTL reduced.
+            </span>
+          )}
+        </div>
+      )}
 
       {result.unseat !== 'none' && (
         <div className="pass-result__unseat">

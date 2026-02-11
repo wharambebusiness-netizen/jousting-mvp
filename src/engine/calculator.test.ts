@@ -556,11 +556,11 @@ describe('Accuracy and ImpactScore', () => {
     expect(calcAccuracy(20, 80, 55, -10)).toBe(36.25);
   });
 
-  it('ImpactScore uses guardImpactCoeff (0.18)', () => {
-    // 55*0.5 + 97.5*0.4 - 50*0.18 = 27.5 + 39 - 9 = 57.5
-    expect(calcImpactScore(55, 97.5, 50)).toBe(57.5);
-    // 110*0.5 + 36.25*0.4 - 65*0.18 = 55 + 14.5 - 11.7 = 57.8
-    expect(calcImpactScore(110, 36.25, 65)).toBe(57.8);
+  it('ImpactScore uses guardImpactCoeff (0.12)', () => {
+    // 55*0.5 + 97.5*0.4 - 50*0.12 = 27.5 + 39 - 6 = 60.5
+    expect(calcImpactScore(55, 97.5, 50)).toBe(60.5);
+    // 110*0.5 + 36.25*0.4 - 65*0.12 = 55 + 14.5 - 7.8 = 61.7
+    expect(calcImpactScore(110, 36.25, 65)).toBe(61.7);
   });
 });
 
@@ -1363,14 +1363,14 @@ describe('Guard Penetration — calcImpactScore', () => {
   });
 
   it('guardPenetration=0.35 reduces effective guard by 35%', () => {
-    // Without penetration: 60*0.5 + 50*0.4 - 40*0.18 = 30+20-7.2 = 42.8
+    // Without penetration: 60*0.5 + 50*0.4 - 40*0.12 = 30+20-4.8 = 45.2
     const noPen = calcImpactScore(60, 50, 40, 0);
-    expect(noPen).toBe(42.8);
+    expect(noPen).toBe(45.2);
 
     // With 35% penetration: effectiveGuard = 40 * 0.65 = 26
-    // 60*0.5 + 50*0.4 - 26*0.18 = 30+20-4.68 = 45.32
+    // 60*0.5 + 50*0.4 - 26*0.12 = 30+20-3.12 = 46.88
     const withPen = calcImpactScore(60, 50, 40, 0.35);
-    expect(withPen).toBeCloseTo(45.32, 5);
+    expect(withPen).toBeCloseTo(46.88, 5);
   });
 
   it('higher guard penetration always produces higher impact', () => {
@@ -1400,14 +1400,14 @@ describe('Guard Penetration — calcImpactScore', () => {
 
   it('guard penetration benefit scales with opponent guard level', () => {
     const pen = 0.35;
-    // Low guard: benefit = 20 * 0.35 * 0.18 = 1.26
+    // Low guard: benefit = 20 * 0.35 * 0.12 = 0.84
     const lowGuardBenefit = calcImpactScore(60, 50, 20, pen) - calcImpactScore(60, 50, 20, 0);
-    // High guard: benefit = 80 * 0.35 * 0.18 = 5.04
+    // High guard: benefit = 80 * 0.35 * 0.12 = 3.36
     const highGuardBenefit = calcImpactScore(60, 50, 80, pen) - calcImpactScore(60, 50, 80, 0);
 
     expect(highGuardBenefit).toBeGreaterThan(lowGuardBenefit);
-    expect(r(lowGuardBenefit, 1)).toBe(1.3);
-    expect(r(highGuardBenefit, 1)).toBe(5.0);
+    expect(r(lowGuardBenefit, 1)).toBe(0.8);
+    expect(r(highGuardBenefit, 1)).toBe(3.4);
   });
 
   it('guard penetration against 0 guard has no effect', () => {

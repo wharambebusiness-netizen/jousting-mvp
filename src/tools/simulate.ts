@@ -6,8 +6,9 @@
 // Supports bare (no gear), uniform gear, and mixed-rarity gear modes.
 //
 // Usage:
-//   npx tsx src/tools/simulate.ts [tier] [variant]          # Text output (default)
-//   npx tsx src/tools/simulate.ts [tier] [variant] --json   # Structured JSON output
+//   npx tsx src/tools/simulate.ts [tier] [variant]               # Text output (default)
+//   npx tsx src/tools/simulate.ts [tier] [variant] --json        # Structured JSON output
+//   npx tsx src/tools/simulate.ts [tier] [variant] --matches N   # Override matches per matchup (default 200)
 //
 // Exports:
 //   runSimulation(config)  — programmatic access, returns SimulationReport
@@ -545,6 +546,22 @@ function printResults(report: SimulationReport): string {
   }
   lines.push('');
 
+  // Matchup matrix (compact, 1 decimal place, 8-char headers)
+  lines.push('--- MATCHUP MATRIX (P1 win %) ---');
+  const matrixIds = stats.map(s => s.archetype);
+  const COL_W = 9;
+  const abbrev = (name: string) => name.length > 8 ? name.slice(0, 8) : name;
+  const matrixHeader = '             ' + matrixIds.map(id => abbrev(id).padStart(COL_W)).join('');
+  lines.push(matrixHeader);
+  for (const a1 of matrixIds) {
+    const cells = matrixIds.map(a2 => {
+      const mu = matchups.find(mu => mu.p1Archetype === a1 && mu.p2Archetype === a2);
+      return mu ? (mu.p1WinRate * 100).toFixed(1).padStart(COL_W) : '   N/A'.padStart(COL_W);
+    }).join('');
+    lines.push(`  ${abbrev(a1).padEnd(11)}${cells}`);
+  }
+  lines.push('');
+
   return lines.join('\n');
 }
 
@@ -564,6 +581,13 @@ if (IS_CLI) {
   const gearMode: GearMode = gearArg && GEAR_MODES.includes(gearArg) ? gearArg : 'bare';
   const variantArg = args[1] as GearVariant | undefined;
   const gearVariant: GearVariant | undefined = variantArg && GEAR_VARIANTS_LIST.includes(variantArg) ? variantArg : undefined;
+
+  // Parse --matches N flag (override matchesPerMatchup)
+  const matchesIdx = process.argv.indexOf('--matches');
+  const matchesCli = matchesIdx !== -1 && process.argv[matchesIdx + 1]
+    ? parseInt(process.argv[matchesIdx + 1], 10)
+    : undefined;
+  const matchesPerMatchup = matchesCli || DEFAULT_MATCHES_PER_MATCHUP;
 
   // Parse --override key=value flags
   const overrides: Record<string, number> = {};
@@ -589,9 +613,9 @@ if (IS_CLI) {
     console.error(`Overrides: ${Object.entries(overrides).map(([k, v]) => `${k}=${v}`).join(', ')}`);
   }
 
-  console.error(`Running simulations (gear mode: ${gearMode})...`);
+  console.error(`Running simulations (gear mode: ${gearMode}, matches: ${matchesPerMatchup})...`);
 
-  const report = runSimulation({ tier: gearMode, variant: gearVariant, overrides: hasOverrides ? overrides : undefined });
+  const report = runSimulation({ tier: gearMode, variant: gearVariant, matchesPerMatchup, overrides: hasOverrides ? overrides : undefined });
 
   if (JSON_FLAG) {
     console.log(JSON.stringify(report, null, 2));

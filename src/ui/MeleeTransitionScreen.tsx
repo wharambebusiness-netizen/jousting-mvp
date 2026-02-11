@@ -95,6 +95,9 @@ export function MeleeTransitionScreen({ match, lastPassResult, onContinue }: Mel
               <strong>{unseater}</strong> unseats <strong>{unseated}</strong> with a margin of{' '}
               <strong>{lastPassResult.unseatMargin.toFixed(1)}</strong>!
             </div>
+            <div className="unseat-explanation">
+              Impact margin exceeded the unseat threshold — the decisive blow knocked {unseated} from the saddle.
+            </div>
             <div className="unseat-penalties">
               <div className="penalty-label">Carryover Penalties for {unseated}:</div>
               <div className="penalty-grid">

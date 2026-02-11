@@ -9,14 +9,15 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Quick Reference
 
 ```bash
-npx vitest run                              # Run all tests (908 passing as of S43)
+npm test                                    # Run all tests (908 passing as of S46)
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
-npx tsx src/tools/simulate.ts bare --json --override softCapK=60  # Sim with balance config overrides
-npx tsx src/tools/param-search.ts <config.json>                   # Parameter search (sweep/descent)
-npx tsx src/tools/param-search.ts <config.json> --dry-run         # Preview search plan
-npx tsx src/tools/param-search.ts <config.json> --matches 500     # Override matches per matchup
+npx tsx src/tools/simulate.ts bare --matches 500                   # High-precision sim (override default 200)
+npx tsx src/tools/simulate.ts bare --json --override softCapK=60   # Sim with balance config overrides
+npx tsx src/tools/param-search.ts <config.json>                    # Parameter search (sweep/descent)
+npx tsx src/tools/param-search.ts <config.json> --dry-run          # Preview search plan
+npx tsx src/tools/param-search.ts <config.json> --matches 500      # Override matches per matchup
 npm run dev                                 # Dev server
-npm run deploy                              # Deploy to gh-pages
+npm run deploy                              # Deploy to gh-pages (currently disabled)
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
 node orchestrator/orchestrator.mjs orchestrator/missions/X.json  # Launch with mission config
 powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1  # Overnight runner (restart loop)
@@ -117,7 +118,7 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
 
 ## Live Data (verify against source — may drift)
 
-- **Test count**: run `npx vitest run` (908 as of S38)
+- **Test count**: run `npm test` (908 as of S46)
 - **Archetype stats**: `src/engine/archetypes.ts`
 - **Balance constants**: `src/engine/balance-config.ts`
 - **Win rates**: run `npx tsx src/tools/simulate.ts [tier]` or see latest `orchestrator/analysis/balance-tuner-round-*.md`
@@ -135,38 +136,33 @@ breaker:      62   60   55    55   60  = 292   Guard penetration 0.25
 duelist:      60   60   60    60   60  = 300   Balanced generalist
 ```
 
-**Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.18`, `softCapK: 55`, `guardUnseatDivisor: 18`, `unseatedImpactBoost: 1.35`, `unseatedStaminaRecovery: 12`, `guardFatigueFloor: 0.3`
+**Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.12`, `softCapK: 55`, `guardUnseatDivisor: 18`, `unseatedImpactBoost: 1.35`, `unseatedStaminaRecovery: 12`, `guardFatigueFloor: 0.3`
 
-### Win Rate Validation (S45 Balance Tuning — Coordinate Descent)
+### Win Rate Validation (S46 — guardImpactCoeff 0.18→0.12)
 
-**Bare Tier** (N=200, balanced variant):
-- Bulwark: 58.1% | Technician: 51.0% | Duelist: 50.3% | Tactician: 49.0% | Charger: 46.0% | Breaker: 45.5%
-- Spread: 12.6pp (1 flag: bulwark dominant)
+**Bare Tier** (N=500, balanced variant):
+- Bulwark: 55.4% | Tactician: 51.2% | Technician: 51.2% | Duelist: 50.6% | Charger: 46.5% | Breaker: 45.1%
+- Spread: 10.3pp (1 flag: bulwark dominant)
 
-**Epic Tier** (N=200, balanced variant) — BEST COMPRESSION:
-- Charger: 52.2% | Breaker: 50.8% | Bulwark: 50.5% | Duelist: 49.5% | Technician: 49.3% | Tactician: 47.7%
-- Spread: 4.5pp (zero flags)
+**Epic Tier** (N=500, balanced variant):
+- Charger: 53.8% | Technician: 50.1% | Tactician: 49.8% | Duelist: 49.5% | Bulwark: 49.1% | Breaker: 47.6%
+- Spread: 6.2pp (zero flags)
 
-**Giga Tier** (N=200, balanced variant) — NEAR-PERFECT:
-- Breaker: 51.9% | Bulwark: 50.6% | Charger: 50.1% | Duelist: 49.5% | Technician: 49.1% | Tactician: 48.8%
-- Spread: 3.1pp (zero flags, all archetypes 48.8-51.9%)
+**Giga Tier** (N=500, balanced variant) — NEAR-PERFECT:
+- Charger: 51.4% | Technician: 50.6% | Tactician: 50.6% | Duelist: 50.3% | Breaker: 48.9% | Bulwark: 48.2%
+- Spread: 3.2pp (zero flags, all archetypes 48.2-51.4%)
 
-**Tier Progression**: 12.6pp (bare) → 4.5pp (epic) → 3.1pp (giga)
+**Tier Progression**: 10.3pp (bare) → 6.2pp (epic) → 3.2pp (giga)
 - Balance improves monotonically with tier
-- Giga tier now near-perfect (was 7.2pp, now 3.1pp)
-- Charger: weakest at bare (46.0%), strongest at epic (52.2%)
+- Giga near-perfect (3.2pp, zero flags)
+- Bare improved from 13.2pp to 10.3pp, flags reduced from 3 to 1
 
-### Variant Impact (Giga Tier, N=200 per config)
+### Variant Impact (S46, N=300 per config)
 
-**Aggressive variant** (favors high-MOM/low-GRD):
-- Amplifies Bulwark dominance: 50.4% → 56.8% (+6.2pp)
-- Minimal Charger boost: 46.0% → 46.3% (+0.3pp)
-- Spread: 11.0pp (1 flag: Bulwark 56.8%)
-
-**Defensive variant** (favors high-GRD/low-MOM) — BEST BALANCE:
-- Compresses Bulwark: 50.4% → 49.3% (-1.3pp)
-- Boosts Charger: 46.0% → 48.9% (+2.9pp)
-- Spread: 6.6pp (zero flags, all archetypes 47.6-54.2%)
+**Giga Aggressive**: Spread 6.5pp, 0 flags. Bulwark top (52.8%), technician bottom (46.3%).
+**Giga Defensive**: Spread 3.5pp, 0 flags. Breaker top (51.9%), duelist bottom (48.4%). Best giga variant.
+**Bare Aggressive**: Spread 9.3pp, 2 flags (bulwark dominant 55.3%, bulwark-charger skew). Boundary flags within noise.
+**Bare Defensive**: Spread 11.6pp, 2 flags (bulwark dominant 56.3%, breaker weak 44.7%).
 
 **Variant choice = 3+ rarity tiers of impact** (NOT cosmetic). Matchup-level swings: ±10-15pp.
 

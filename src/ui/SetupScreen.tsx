@@ -4,9 +4,9 @@ import { ARCHETYPE_LIST } from '../engine/archetypes';
 import { StatBar } from './helpers';
 
 const DIFFICULTIES: { value: AIDifficulty; label: string; desc: string }[] = [
-  { value: 'easy',   label: 'Easy',   desc: '40% optimal' },
-  { value: 'medium', label: 'Medium', desc: '70% optimal' },
-  { value: 'hard',   label: 'Hard',   desc: '90% optimal' },
+  { value: 'easy',   label: 'Easy',   desc: '40% optimal (~2 min per match)' },
+  { value: 'medium', label: 'Medium', desc: '70% optimal (~3 min per match)' },
+  { value: 'hard',   label: 'Hard',   desc: '90% optimal (~3-5 min per match)' },
 ];
 
 const ARCHETYPE_HINTS: Record<string, { strengths: string; tip: string }> = {

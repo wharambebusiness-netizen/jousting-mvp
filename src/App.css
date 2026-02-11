@@ -80,7 +80,9 @@
 .attack-card__name { font-family: Georgia, 'Times New Roman', serif; font-size: 0.95rem; font-weight: 700; }
 .attack-card__ratings { display: flex; gap: 8px; margin-bottom: 6px; font-size: 0.7rem; color: var(--ink-light); }
 .attack-card__deltas { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.75rem; }
-.attack-card__counters { margin-top: 6px; font-size: 0.7rem; color: var(--ink-faint); line-height: 1.4; }
+.attack-card__counters { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--border-light); font-size: 0.7rem; line-height: 1.4; }
+.attack-card__beats { color: var(--green); }
+.attack-card__weak { color: var(--red); }
 .attack-card__delta { display: inline-flex; align-items: baseline; gap: 2px; }
 
 /* Speed cards */
@@ -332,6 +334,26 @@
 .melee-transition__hint {
   font-size: 0.8rem; color: var(--ink-faint);
   margin-top: 8px; text-align: center;
+}
+.unseat-explanation {
+  font-size: 0.8rem; color: var(--ink-light);
+  text-align: center; margin-top: 8px; font-style: italic;
+}
+
+/* Fatigue warnings */
+.fatigue-warnings {
+  display: flex; justify-content: space-between; gap: 16px;
+  margin-bottom: 12px;
+}
+.fatigue-warning {
+  font-size: 0.8rem; font-weight: 700; color: var(--red);
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  background: rgba(139, 37, 0, 0.08);
+  animation: fatigue-pulse 1.5s ease-in-out infinite alternate;
+}
+@keyframes fatigue-pulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 /* Loadout screen — Rarity grid */

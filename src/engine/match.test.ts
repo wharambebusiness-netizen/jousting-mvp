@@ -1119,11 +1119,11 @@ describe('Multi-pass Worked Example — Tactician vs Duelist (5 passes, no unsea
     expect(p.player1.accuracy).toBeCloseTo(101.25, 1);
     expect(p.player2.accuracy).toBeCloseTo(90, 1);
 
-    // Impact: MOM*0.5 + ACC*0.4 - oppGRD*guardImpactCoeff
-    // P1: 30 + 40.5 - 11.7 = 58.80
-    // P2: 32.5 + 36.0 - 9.9 = 58.60
-    expect(p.player1.impactScore).toBeCloseTo(58.80, 1);
-    expect(p.player2.impactScore).toBeCloseTo(58.60, 1);
+    // Impact: MOM*0.5 + ACC*0.4 - oppGRD*guardImpactCoeff(0.12)
+    // P1: 30 + 40.5 - 65*0.12(=7.8) = 62.70
+    // P2: 32.5 + 36.0 - 55*0.12(=6.6) = 61.90
+    expect(p.player1.impactScore).toBeCloseTo(62.70, 1);
+    expect(p.player2.impactScore).toBeCloseTo(61.90, 1);
 
     // Stamina: 55-10=45, 60-10=50
     expect(match.player1.currentStamina).toBe(45);
@@ -1143,17 +1143,17 @@ describe('Multi-pass Worked Example — Tactician vs Duelist (5 passes, no unsea
     const p2 = match.passResults[1];
     // fatigue thresholds: Tactician 55*0.8=44, Duelist 60*0.8=48
     // Pass 2 stamina: P1=45 > 44, P2=50 > 48 → ff=1.0, same as pass 1
-    expect(p2.player1.impactScore).toBeCloseTo(58.80, 1);
-    expect(p2.player2.impactScore).toBeCloseTo(58.60, 1);
+    expect(p2.player1.impactScore).toBeCloseTo(62.70, 1);
+    expect(p2.player2.impactScore).toBeCloseTo(61.90, 1);
     expect(p2.unseat).toBe('none');
 
     // Stamina: 45-10=35, 50-10=40
     expect(match.player1.currentStamina).toBe(35);
     expect(match.player2.currentStamina).toBe(40);
 
-    // Cumulative: 2 * 58.80 = 117.60, 2 * 58.60 = 117.20
-    expect(match.cumulativeScore1).toBeCloseTo(117.60, 1);
-    expect(match.cumulativeScore2).toBeCloseTo(117.20, 1);
+    // Cumulative: 2 * 62.70 = 125.40, 2 * 61.90 = 123.80
+    expect(match.cumulativeScore1).toBeCloseTo(125.40, 1);
+    expect(match.cumulativeScore2).toBeCloseTo(123.80, 1);
   });
 
   it('Pass 3: fatigue begins, Duelist overtakes in impact', () => {
@@ -1265,11 +1265,11 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
     // Counter: MC beats OC → P1 bonus = 4 + 70*0.1 = 11.0
     // P1 acc = 70 + 30 - 20 + 11 = 91.0
     // P2 acc = 50 + 30 - 16.25 - 11 = 52.75
-    // P1 impact = 32.5 + 36.4 - 9.9 = 59.0
-    // P2 impact = 40 + 21.1 - 11.7 = 49.4
-    expect(r.player1ImpactScore).toBeCloseTo(59.0, 1);
-    expect(r.player2ImpactScore).toBeCloseTo(49.4, 1);
-    expect(r.margin).toBeCloseTo(9.6, 1);
+    // P1 impact = 32.5 + 36.4 - 55*0.12(=6.6) = 62.3
+    // P2 impact = 40 + 21.1 - 65*0.12(=7.8) = 53.3
+    expect(r.player1ImpactScore).toBeCloseTo(62.3, 1);
+    expect(r.player2ImpactScore).toBeCloseTo(53.3, 1);
+    expect(r.margin).toBeCloseTo(9.0, 1);
     expect(r.outcome).toBe(MeleeOutcome.Hit);
     expect(r.winner).toBe('player1');
     expect(match.meleeWins1).toBe(1);
@@ -1292,11 +1292,11 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
     // P2 guardFF = 0.3 + 0.7*0.875 = 0.9125
     // P2 effMOM=80*0.875=70, effCTL=50*0.875=43.75, effGRD=55*0.9125=50.1875
     // Counter bonus: 4 + 70*0.1 = 11.0 (P1 CTL still 70, unfatigued)
-    // P1 impact = 32.5 + 37.4 - 50.1875*0.18 = 60.87
-    // P2 impact = 35 + 18.6 - 11.7 = 41.9
-    expect(r2.player1ImpactScore).toBeCloseTo(60.87, 1);
-    expect(r2.player2ImpactScore).toBeCloseTo(41.9, 1);
-    expect(r2.margin).toBeCloseTo(18.97, 1);
+    // P1 impact = 32.5 + 37.4 - 50.1875*0.12(=6.0225) = 63.88
+    // P2 impact = 35 + 18.6 - 65*0.12(=7.8) = 45.8
+    expect(r2.player1ImpactScore).toBeCloseTo(63.88, 1);
+    expect(r2.player2ImpactScore).toBeCloseTo(45.8, 1);
+    expect(r2.margin).toBeCloseTo(18.08, 1);
     expect(r2.outcome).toBe(MeleeOutcome.Hit);
     expect(r2.winner).toBe('player1');
     expect(match.meleeWins1).toBe(2);
@@ -1319,12 +1319,12 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
     // P2 STA=24 < 48 → ff=24/48=0.5
     // P1 guardFF = 0.3 + 0.7*0.833 = 0.883, P2 guardFF = 0.3 + 0.7*0.5 = 0.65
     // Fatigue gap massive → P1 impact >> P2 impact
-    // P1 impact = 27.08 + 35.27 - 6.435 = 55.915
-    // P2 impact = 20 + 12.65 - 10.335 = 22.315
-    // Margin=33.6 exceeds critThreshold → CRITICAL
-    expect(r3.player1ImpactScore).toBeCloseTo(55.915, 1);
-    expect(r3.player2ImpactScore).toBeCloseTo(22.315, 1);
-    expect(r3.margin).toBeCloseTo(33.6, 1);
+    // P1 impact = 27.08 + 35.27 - 35.75*0.12(=4.29) = 58.06
+    // P2 impact = 20 + 12.65 - 57.4167*0.12(=6.89) = 25.76
+    // Margin=32.30 exceeds critThreshold → CRITICAL
+    expect(r3.player1ImpactScore).toBeCloseTo(58.06, 1);
+    expect(r3.player2ImpactScore).toBeCloseTo(25.76, 1);
+    expect(r3.margin).toBeCloseTo(32.30, 1);
     expect(r3.outcome).toBe(MeleeOutcome.Critical);
     expect(r3.winner).toBe('player1');
     // Critical = 2 wins → 2+2 = 4 → melee ends
@@ -1346,8 +1346,8 @@ describe('Melee Worked Example — Duelist vs Duelist, MC vs OC (3 rounds to cri
     }
 
     const impacts = match.meleeRoundResults.map(r => r.player1ImpactScore);
-    // R1: 59.0 → R2: 60.62 (rises because opponent's guard fatigues faster)
-    // R2: 60.62 → R3: 54.93 (falls because P1's own stats now fatigued)
+    // R1: 62.3 → R2: 63.88 (rises because opponent's guard fatigues faster)
+    // R2: 63.88 → R3: 58.06 (falls because P1's own stats now fatigued)
     expect(impacts[1]).toBeGreaterThan(impacts[0]);
     expect(impacts[2]).toBeLessThan(impacts[1]);
 

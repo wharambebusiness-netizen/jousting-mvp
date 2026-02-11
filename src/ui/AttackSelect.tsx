@@ -53,10 +53,10 @@ function AttackCard({ attack, onClick, selected }: {
       {(attack.beats.length > 0 || attack.beatenBy.length > 0) && (
         <div className="attack-card__counters">
           {attack.beats.length > 0 && (
-            <div>Beats: {attack.beats.map(attackName).join(', ')}</div>
+            <div className="attack-card__beats">Beats: {attack.beats.map(attackName).join(', ')}</div>
           )}
           {attack.beatenBy.length > 0 && (
-            <div>Weak to: {attack.beatenBy.map(attackName).join(', ')}</div>
+            <div className="attack-card__weak">Weak to: {attack.beatenBy.map(attackName).join(', ')}</div>
           )}
         </div>
       )}
