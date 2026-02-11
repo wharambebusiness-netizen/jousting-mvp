@@ -742,8 +742,9 @@ function runAgent(agent, round) {
       promptParts.push(`Work through these in order. Note completed task IDs in handoff META under completed-tasks.`);
     }
 
-    // v7 Phase 2: Inject balance context (structured sim data so agents don't run their own sims)
-    if (CONFIG.balanceConfig) {
+    // v7 Phase 2: Inject balance context (only to balance-aware roles, not css-artist/ui-dev)
+    const BALANCE_AWARE_ROLES = ['balance-analyst', 'tech-lead', 'qa-engineer', 'producer', 'engine-dev', 'game-designer'];
+    if (CONFIG.balanceConfig && BALANCE_AWARE_ROLES.includes(agent.role)) {
       const balanceCtx = buildBalanceContext();
       if (balanceCtx) {
         promptParts.push(
@@ -964,11 +965,21 @@ async function smartRevert(round, codeResults) {
   }
 
   // Multiple agents: try reverting each agent's files individually,
-  // test after each to find the culprit
-  log(`  Smart revert: ${agentIds.length} agents modified files — testing individually...`);
+  // test after each to find the culprit.
+  // v8: Cap at 2 per-agent test runs to avoid O(N) test suite runs. After 2 attempts,
+  // fall back to full src/ revert (each test suite run adds ~2s but could be more).
+  const MAX_PER_AGENT_TESTS = 2;
+  log(`  Smart revert: ${agentIds.length} agents modified files — testing individually (max ${MAX_PER_AGENT_TESTS})...`);
   const revertedAgents = [];
 
   for (const agentId of agentIds) {
+    // v8: Cap per-agent test runs to avoid expensive O(N) test suite invocations
+    if (revertedAgents.length >= MAX_PER_AGENT_TESTS) {
+      log(`  Smart revert: hit cap (${MAX_PER_AGENT_TESTS} per-agent tests) — falling back to full revert`);
+      await gitRevertFiles(round, ['src/']);
+      return { reverted: true, strategy: 'full-capped', revertedAgents: agentIds };
+    }
+
     const files = agentFiles[agentId];
     log(`    Reverting ${agentId}'s files: ${files.join(', ')}`);
     const ok = await gitRevertFiles(round, files);
@@ -2202,6 +2213,9 @@ async function main() {
     }
   }
 
+  // v8: Generate initial task board before round 1 (one-time; per-round refresh is post-Phase-A only)
+  generateTaskBoard(0, null, 0);
+
   for (let round = 1; round <= CONFIG.maxRounds; round++) {
     // --- Check max runtime ---
     const elapsed = Date.now() - globalStart;
@@ -2258,14 +2272,25 @@ async function main() {
     await tagRoundStart(round);
 
     // --- Generate task board (orchestrator-owned) ---
-    generateTaskBoard(round, lastTestStatus, consecutiveTestFailures);
+    // v8: Single generation per round, moved to post-Phase-A (line ~2500) so Phase B
+    // agents see updated test status. Phase A agents still see the board from last round.
+    // generateTaskBoard() removed here — was a redundant duplicate.
 
     // --- Determine which agents run this round (v5: work-gated + min frequency) ---
     // v5F: Track per-agent decisions this round
     const thisRoundDecisions = []; // populated during selection, updated after execution
 
+    // v8: Cache backlog and handoff metadata once per round to avoid repeated disk reads.
+    // Previously loadBacklog() was called ~4x per agent and parseHandoffMeta() ~3x per agent.
+    const backlogCache = loadBacklog();
+    const handoffCache = {};
+    for (const agent of AGENTS) {
+      handoffCache[agent.id] = parseHandoffMeta(agent.id);
+    }
+    const agentHasBacklogTask = (role) => backlogCache.some(t => t.status === 'pending' && t.role === role);
+
     const activeAgents = AGENTS.filter(agent => {
-      const meta = parseHandoffMeta(agent.id);
+      const meta = handoffCache[agent.id];
 
       // Skip agents that have exhausted all tasks (primary + stretch)
       if (meta.status === 'all-done') {
@@ -2280,9 +2305,7 @@ async function main() {
         }
 
         // v5: Work-gated launching for continuous agents
-        const hasBacklogTask = loadBacklog().some(t =>
-          t.status === 'pending' && t.role === agent.role
-        );
+        const hasBacklogTask = agentHasBacklogTask(agent.role);
         const hasLeftoverWork = meta.status === 'in-progress';
         const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
         const minFreq = agent.minFrequencyRounds || Infinity;
@@ -2304,9 +2327,7 @@ async function main() {
       // v8: Pre-flight check — skip agents that likely won't produce useful work
       // 1. Coordination agents (Phase B) with no new changes to react to
       if (COORD_AGENT_ROLES.has(agent.role) && round > 1) {
-        const hasBacklogTask = loadBacklog().some(t =>
-          t.status === 'pending' && t.role === agent.role
-        );
+        const hasBacklogTask = agentHasBacklogTask(agent.role);
         const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
         const minFreq = agent.minFrequencyRounds || Infinity;
         const dueForPeriodicRun = roundsSinceLastRun >= minFreq;
@@ -2334,10 +2355,7 @@ async function main() {
 
       // 2. Agents with 2+ consecutive empty rounds AND no new backlog tasks
       if ((consecutiveEmptyRounds[agent.id] || 0) >= 2) {
-        const hasBacklogTask = loadBacklog().some(t =>
-          t.status === 'pending' && t.role === agent.role
-        );
-        if (!hasBacklogTask) {
+        if (!agentHasBacklogTask(agent.role)) {
           log(`  ${agent.id}: PRE-FLIGHT SKIP (${consecutiveEmptyRounds[agent.id]} consecutive empty rounds, no new tasks)`);
           thisRoundDecisions.push({
             round, agentId: agent.id, decision: 'skipped',
@@ -2363,14 +2381,14 @@ async function main() {
         log(`  ${agent.id}: Would cooldown but was escalated since failure — allowing`);
       }
 
-      // Check dependencies — "complete" and "all-done" both satisfy
+      // Check dependencies — "complete" and "all-done" both satisfy (using cached metadata)
       const depsMet = agent.dependsOn.every(depId => {
-        const depMeta = parseHandoffMeta(depId);
+        const depMeta = handoffCache[depId] || parseHandoffMeta(depId);
         return isDepSatisfied(depMeta.status);
       });
       if (!depsMet) {
         const blockingDeps = agent.dependsOn.filter(depId => {
-          const depMeta = parseHandoffMeta(depId);
+          const depMeta = handoffCache[depId] || parseHandoffMeta(depId);
           return !isDepSatisfied(depMeta.status);
         });
         log(`  ${agent.id}: BLOCKED (needs ${agent.dependsOn.join(', ')})`);
@@ -2395,7 +2413,7 @@ async function main() {
     });
 
     if (activeAgents.length === 0) {
-      const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
+      const allRetired = AGENTS.every(a => handoffCache[a.id]?.status === 'all-done');
       if (allRetired) {
         // v8: Try transitioning to next mission in sequence before stopping
         if (tryTransitionMission('all agents retired')) {
@@ -2426,14 +2444,20 @@ async function main() {
     let regressionResult = null;   // v7 Phase 2: Regression detection results
     let convergenceResult = null;  // v7 Phase 2: Convergence check results
 
+    // v8: Round time breakdown tracking
+    const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, sims: 0, overhead: 0 };
+
     // v7: Pre-sim — capture balance baseline before code agents make changes
     if (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length && codeAgents.length) {
+      const simStart = Date.now();
       log(`\nBalance Pre-Sim (baseline):`);
       preSimResults = await runBalanceSims(round, 'pre');
+      roundTiming.sims += Date.now() - simStart;
     }
 
     // Phase A: Code agents
     if (codeAgents.length) {
+      const phaseAStart = Date.now();
       log(`\nPhase A: Launching ${codeAgents.length} code agent(s)...`);
       const codeResults = await runAgentsWithConcurrency(codeAgents, round, CONFIG.maxConcurrency);
 
@@ -2472,9 +2496,12 @@ async function main() {
 
       // v6: Model escalation check
       handleModelEscalation(codeResults, round);
+      roundTiming.phaseA = Date.now() - phaseAStart;
 
       // Run tests after code agents
+      const testStart = Date.now();
       testResult = await runTests();
+      roundTiming.tests += Date.now() - testStart;
 
       // v8: Smart per-agent revert on test regression
       // Instead of reverting ALL of src/, identify which agent(s) broke tests
@@ -2495,8 +2522,10 @@ async function main() {
 
       // v7: Post-sim — measure balance after code agent changes (only if tests passed and no revert)
       if (CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length && testResult.passed && !didRevert) {
+        const simStart = Date.now();
         log(`\nBalance Post-Sim (after changes):`);
         postSimResults = await runBalanceSims(round, 'post');
+        roundTiming.sims += Date.now() - simStart;
       }
 
       // v7: Update balance state tracker with pre/post sim results
@@ -2540,6 +2569,7 @@ async function main() {
       log(`\nPhase B: SKIPPED (auto-revert happened — coordination agents would see stale state)`);
     }
     if (coordAgents.length && !didRevert) {
+      const phaseBStart = Date.now();
       log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s)...`);
       const coordResults = await runAgentsWithConcurrency(coordAgents, round, CONFIG.maxConcurrency);
 
@@ -2573,7 +2603,12 @@ async function main() {
       }
       validateFileOwnership(coordResults, AGENTS);
       handleModelEscalation(coordResults, round);
+      roundTiming.phaseB = Date.now() - phaseBStart;
     }
+
+    // v8: Compute overhead (everything not in phases, tests, or sims)
+    const roundTotal = Date.now() - roundTiming.roundStart;
+    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.phaseB - roundTiming.tests - roundTiming.sims;
 
     // --- Update test status ---
     if (!testResult) {
@@ -2605,6 +2640,11 @@ async function main() {
     }
     roundDecisions.push(...thisRoundDecisions);
 
+    // v8: Backlog velocity snapshot
+    const postBacklog = loadBacklog();
+    const backlogPending = postBacklog.filter(t => t.status === 'pending').length;
+    const backlogCompleted = postBacklog.filter(t => t.status === 'completed').length;
+
     roundLog.push({
       round,
       agents: roundAgents,
@@ -2618,6 +2658,9 @@ async function main() {
       // v7 Phase 2: regression + convergence data
       regressions: regressionResult?.hasRegressions ? regressionResult.regressions : null,
       convergence: convergenceResult?.converged ? convergenceResult.tierResults : null,
+      // v8: Time breakdown (ms) and backlog velocity
+      timing: roundTiming,
+      backlog: { pending: backlogPending, completed: backlogCompleted },
     });
 
     // --- Circuit breaker ---
@@ -2909,13 +2952,16 @@ ${agentSummaries.map(a => {
 
 ## Round-by-Round Timeline
 
-| Round | Agents | Test Result | Notes |
-|-------|--------|-------------|-------|
+| Round | Agents | Test Result | Phase A | Phase B | Tests | Sims | Overhead | Total |
+|-------|--------|-------------|---------|---------|-------|------|----------|-------|
 ${roundLog.map(r => {
-  if (r.note) return `| ${r.round} | — | — | ${r.note} |`;
+  if (r.note) return `| ${r.round} | — | — | — | — | — | — | — | ${r.note} |`;
   const agents = r.agents.map(a => `${a.id}(${a.status}, ${(a.elapsed/60).toFixed(0)}m)`).join(', ');
   const tests = r.testsPassed ? `PASS (${r.testCount})` : `FAIL (${r.testCount}p, ${r.failCount}f)`;
-  return `| ${r.round} | ${agents} | ${tests} | |`;
+  const t = r.timing || {};
+  const fmt = (ms) => ms ? `${(ms/1000).toFixed(0)}s` : '—';
+  const total = (t.phaseA || 0) + (t.phaseB || 0) + (t.tests || 0) + (t.sims || 0) + (t.overhead || 0);
+  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${fmt(t.phaseB)} | ${fmt(t.tests)} | ${fmt(t.sims)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
 }).join('\n')}
 
 ## All Files Modified
@@ -2931,6 +2977,16 @@ ${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no te
 ${efficiencyMetrics.map(m =>
   `| ${m.id} | ${m.model} | ${m.avgTime}m | ${m.successRate}% | ${m.filesPerRound} | ${m.roundsActive}/${m.totalRounds} | ${m.roundsSkipped} | ${m.roundsBlocked} | ${m.idlePct}% |`
 ).join('\n')}
+
+## Backlog Velocity (v8)
+
+| Round | Pending | Completed | Notes |
+|-------|---------|-----------|-------|
+${roundLog.map(r => {
+  if (r.note) return `| ${r.round} | — | — | ${r.note} |`;
+  const bl = r.backlog || {};
+  return `| ${r.round} | ${bl.pending ?? '—'} | ${bl.completed ?? '—'} | |`;
+}).join('\n')}
 
 ## Cost Summary
 
