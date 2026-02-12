@@ -1,0 +1,2766 @@
+{
+  "config": {
+    "name": "Quick Sweep",
+    "description": "Fast sensitivity check on the 3 most impactful balance knobs. 15 sims + 3 baselines × 3 tiers = 54 sims (~2.5 min).",
+    "strategy": "sweep",
+    "matchesPerMatchup": 200,
+    "baselineRuns": 3,
+    "simTimeoutMs": 90000,
+    "outputDir": "orchestrator/balance-data",
+    "params": [
+      {
+        "key": "guardUnseatDivisor",
+        "label": "guardUnseatDivisor",
+        "values": [
+          14,
+          16,
+          18,
+          20,
+          22
+        ]
+      },
+      {
+        "key": "guardImpactCoeff",
+        "label": "guardImpactCoeff",
+        "values": [
+          0.08,
+          0.1,
+          0.12,
+          0.14,
+          0.16
+        ]
+      },
+      {
+        "key": "unseatedImpactBoost",
+        "label": "unseatedImpactBoost",
+        "values": [
+          1.15,
+          1.2,
+          1.25,
+          1.3,
+          1.35
+        ]
+      }
+    ],
+    "tiers": [
+      {
+        "tier": "bare",
+        "variant": "balanced",
+        "weight": 0.3
+      },
+      {
+        "tier": "epic",
+        "variant": "balanced",
+        "weight": 1
+      },
+      {
+        "tier": "giga",
+        "variant": "balanced",
+        "weight": 0.8
+      }
+    ]
+  },
+  "baseline": {
+    "overrides": {},
+    "label": "baseline (avg of 3)",
+    "tiers": {
+      "bare/balanced": {
+        "tier": "bare",
+        "variant": "balanced",
+        "spreadPp": 12,
+        "topArchetype": {
+          "archetype": "bulwark",
+          "winRate": 56.4
+        },
+        "bottomArchetype": {
+          "archetype": "charger",
+          "winRate": 44.4
+        },
+        "flagCount": 3,
+        "archetypeWinRates": {
+          "charger": 44.4,
+          "technician": 51.5,
+          "bulwark": 56.4,
+          "tactician": 51.6,
+          "breaker": 45.5,
+          "duelist": 50.5
+        }
+      },
+      "epic/balanced": {
+        "tier": "epic",
+        "variant": "balanced",
+        "spreadPp": 3.8,
+        "topArchetype": {
+          "archetype": "charger",
+          "winRate": 52.4
+        },
+        "bottomArchetype": {
+          "archetype": "tactician",
+          "winRate": 49.4
+        },
+        "flagCount": 0,
+        "archetypeWinRates": {
+          "charger": 52.4,
+          "technician": 49.8,
+          "bulwark": 49.5,
+          "tactician": 49.4,
+          "breaker": 49.4,
+          "duelist": 49.5
+        }
+      },
+      "giga/balanced": {
+        "tier": "giga",
+        "variant": "balanced",
+        "spreadPp": 3,
+        "topArchetype": {
+          "archetype": "technician",
+          "winRate": 51.4
+        },
+        "bottomArchetype": {
+          "archetype": "duelist",
+          "winRate": 48.5
+        },
+        "flagCount": 0,
+        "archetypeWinRates": {
+          "charger": 49.8,
+          "technician": 51.4,
+          "bulwark": 49.2,
+          "tactician": 51,
+          "breaker": 50,
+          "duelist": 48.5
+        }
+      }
+    },
+    "score": 6.809523809523808,
+    "elapsedMs": 21291
+  },
+  "baselineRuns": [
+    {
+      "overrides": {},
+      "label": "baseline-1",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12.9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.3
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.3
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 44.3,
+            "technician": 51.5,
+            "bulwark": 57.3,
+            "tactician": 51.4,
+            "breaker": 45.7,
+            "duelist": 49.8
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.4
+          },
+          "bottomArchetype": {
+            "archetype": "technician",
+            "winRate": 48.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.4,
+            "technician": 48.3,
+            "bulwark": 48.7,
+            "tactician": 49.5,
+            "breaker": 50.5,
+            "duelist": 49.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.2,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.3
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 49.1
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.1,
+            "technician": 51.3,
+            "bulwark": 49.6,
+            "tactician": 50.1,
+            "breaker": 50.2,
+            "duelist": 49.6
+          }
+        }
+      },
+      "score": 6.585714285714285,
+      "elapsedMs": 7264
+    },
+    {
+      "overrides": {},
+      "label": "baseline-2",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.7,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 55.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 44.8
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 44.9,
+            "technician": 50.8,
+            "bulwark": 55.6,
+            "tactician": 52.8,
+            "breaker": 44.8,
+            "duelist": 51
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.3
+          },
+          "bottomArchetype": {
+            "archetype": "tactician",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.3,
+            "technician": 51.3,
+            "bulwark": 50.3,
+            "tactician": 48.4,
+            "breaker": 48.5,
+            "duelist": 49.1
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.9,
+          "topArchetype": {
+            "archetype": "tactician",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 47.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.3,
+            "technician": 51.5,
+            "bulwark": 49.3,
+            "tactician": 51.6,
+            "breaker": 50.5,
+            "duelist": 47.7
+          }
+        }
+      },
+      "score": 7.776190476190475,
+      "elapsedMs": 7059
+    },
+    {
+      "overrides": {},
+      "label": "baseline-3",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.4
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.9
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 43.9,
+            "technician": 52.2,
+            "bulwark": 56.4,
+            "tactician": 50.7,
+            "breaker": 46,
+            "duelist": 50.8
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 2.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 51.5
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 49.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.5,
+            "technician": 49.9,
+            "bulwark": 49.4,
+            "tactician": 50.4,
+            "breaker": 49.3,
+            "duelist": 49.6
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.3
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 48.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51,
+            "technician": 51.3,
+            "bulwark": 48.6,
+            "tactician": 51.3,
+            "breaker": 49.4,
+            "duelist": 48.3
+          }
+        }
+      },
+      "score": 6.119047619047619,
+      "elapsedMs": 6968
+    }
+  ],
+  "noiseFloor": 0.8545109504708984,
+  "results": [
+    {
+      "overrides": {
+        "guardUnseatDivisor": 14
+      },
+      "label": "guardUnseatDivisor=14",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.4
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.9
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 43.9,
+            "technician": 52,
+            "bulwark": 54.4,
+            "tactician": 52.3,
+            "breaker": 46,
+            "duelist": 51.4
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "tactician",
+            "winRate": 49
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.3,
+            "technician": 49,
+            "bulwark": 49.1,
+            "tactician": 49,
+            "breaker": 49.6,
+            "duelist": 50
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.1,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 48.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.5,
+            "technician": 51.5,
+            "bulwark": 49.9,
+            "tactician": 49.3,
+            "breaker": 50.9,
+            "duelist": 49.9
+          }
+        }
+      },
+      "score": 5.442857142857142,
+      "elapsedMs": 6363
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 16
+      },
+      "label": "guardUnseatDivisor=16",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.8
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.8
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 43.8,
+            "technician": 52.9,
+            "bulwark": 57.8,
+            "tactician": 50.3,
+            "breaker": 45.1,
+            "duelist": 50.1
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 6.6,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 54.3
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 54.3,
+            "technician": 50.5,
+            "bulwark": 47.7,
+            "tactician": 49.4,
+            "breaker": 49.3,
+            "duelist": 48.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.5,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.2
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.9,
+            "technician": 51.2,
+            "bulwark": 48.8,
+            "tactician": 51.1,
+            "breaker": 49.4,
+            "duelist": 49.7
+          }
+        }
+      },
+      "score": 8.223809523809523,
+      "elapsedMs": 6597
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 18
+      },
+      "label": "guardUnseatDivisor=18",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 9.8,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 55.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 45.3
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 46.3,
+            "technician": 53.8,
+            "bulwark": 55.1,
+            "tactician": 49.3,
+            "breaker": 45.3,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 46.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.1,
+            "technician": 51.6,
+            "bulwark": 51.4,
+            "tactician": 48.8,
+            "breaker": 46.8,
+            "duelist": 49.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.7,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 51.4
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.4,
+            "technician": 49.8,
+            "bulwark": 48.8,
+            "tactician": 50.2,
+            "breaker": 50.5,
+            "duelist": 49.3
+          }
+        }
+      },
+      "score": 5.666666666666667,
+      "elapsedMs": 6421
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 20
+      },
+      "label": "guardUnseatDivisor=20",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.2
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.1
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 44.1,
+            "technician": 51.6,
+            "bulwark": 56.2,
+            "tactician": 52.2,
+            "breaker": 45.4,
+            "duelist": 50.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.7
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.7,
+            "technician": 48.6,
+            "bulwark": 50,
+            "tactician": 49.5,
+            "breaker": 48.4,
+            "duelist": 49.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 49
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.6,
+            "technician": 51,
+            "bulwark": 49,
+            "tactician": 49.8,
+            "breaker": 49.2,
+            "duelist": 50.3
+          }
+        }
+      },
+      "score": 7.157142857142857,
+      "elapsedMs": 6476
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 22
+      },
+      "label": "guardUnseatDivisor=22",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 58.5
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 45.1
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 45.4,
+            "technician": 53.6,
+            "bulwark": 58.5,
+            "tactician": 48.8,
+            "breaker": 45.1,
+            "duelist": 48.6
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.9,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53,
+            "technician": 49.8,
+            "bulwark": 49.8,
+            "tactician": 49.6,
+            "breaker": 48,
+            "duelist": 49.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 5.4,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.2,
+            "technician": 53.3,
+            "bulwark": 47.9,
+            "tactician": 50.6,
+            "breaker": 47.9,
+            "duelist": 49.2
+          }
+        }
+      },
+      "score": 7.747619047619047,
+      "elapsedMs": 6402
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.08
+      },
+      "label": "guardImpactCoeff=0.08",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.9
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 42.8
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 47.6,
+            "technician": 51.1,
+            "bulwark": 54.9,
+            "tactician": 53.3,
+            "breaker": 42.8,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 7,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 54.2
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.2
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 54.2,
+            "technician": 52.5,
+            "bulwark": 47.2,
+            "tactician": 49.5,
+            "breaker": 47.3,
+            "duelist": 49.4
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.6,
+            "technician": 50,
+            "bulwark": 49.3,
+            "tactician": 50.3,
+            "breaker": 48.4,
+            "duelist": 50.4
+          }
+        }
+      },
+      "score": 6.980952380952381,
+      "elapsedMs": 6627
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.1
+      },
+      "label": "guardImpactCoeff=0.1",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.6
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 45.6
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 45.6,
+            "technician": 52.2,
+            "bulwark": 54.6,
+            "tactician": 52.3,
+            "breaker": 45.8,
+            "duelist": 49.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.3,
+            "technician": 49.5,
+            "bulwark": 50.3,
+            "tactician": 50.1,
+            "breaker": 48,
+            "duelist": 48.9
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.9,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.8,
+            "technician": 51.7,
+            "bulwark": 48.8,
+            "tactician": 50.4,
+            "breaker": 50.5,
+            "duelist": 49.8
+          }
+        }
+      },
+      "score": 4.914285714285715,
+      "elapsedMs": 6737
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.12
+      },
+      "label": "guardImpactCoeff=0.12",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.7,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.9
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 44.3
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 45.3,
+            "technician": 53.1,
+            "bulwark": 54.9,
+            "tactician": 51.6,
+            "breaker": 44.3,
+            "duelist": 50.8
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 8.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 55.5
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 47.4
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 55.5,
+            "technician": 48.9,
+            "bulwark": 50.1,
+            "tactician": 49.8,
+            "breaker": 48.4,
+            "duelist": 47.4
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 4.5,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.9
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.4,
+            "technician": 51.9,
+            "bulwark": 47.4,
+            "tactician": 50.3,
+            "breaker": 50,
+            "duelist": 49
+          }
+        }
+      },
+      "score": 10.195238095238095,
+      "elapsedMs": 7162
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.14
+      },
+      "label": "guardImpactCoeff=0.14",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.7,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.4
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 45.7
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 45.7,
+            "technician": 53,
+            "bulwark": 56.4,
+            "tactician": 49.1,
+            "breaker": 46.5,
+            "duelist": 49.3
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.4
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.4,
+            "technician": 49.2,
+            "bulwark": 51,
+            "tactician": 49.8,
+            "breaker": 48.3,
+            "duelist": 49.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3,
+          "topArchetype": {
+            "archetype": "breaker",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "tactician",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50,
+            "technician": 50.2,
+            "bulwark": 50.2,
+            "tactician": 48.7,
+            "breaker": 51.7,
+            "duelist": 49.1
+          }
+        }
+      },
+      "score": 6.052380952380951,
+      "elapsedMs": 6446
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.16
+      },
+      "label": "guardImpactCoeff=0.16",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.7
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.1
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 44.1,
+            "technician": 52.5,
+            "bulwark": 57.7,
+            "tactician": 48.7,
+            "breaker": 45.8,
+            "duelist": 51.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.6,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.1,
+            "technician": 49.9,
+            "bulwark": 49.8,
+            "tactician": 49.5,
+            "breaker": 48.5,
+            "duelist": 49.2
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.1,
+          "topArchetype": {
+            "archetype": "duelist",
+            "winRate": 51
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.8,
+            "technician": 49.3,
+            "bulwark": 48.9,
+            "tactician": 50.4,
+            "breaker": 50.6,
+            "duelist": 51
+          }
+        }
+      },
+      "score": 7.776190476190475,
+      "elapsedMs": 6492
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.15
+      },
+      "label": "unseatedImpactBoost=1.15",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.8
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.9
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.9,
+            "technician": 52.3,
+            "bulwark": 57.8,
+            "tactician": 51.3,
+            "breaker": 44.5,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.5,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52,
+            "technician": 51.2,
+            "bulwark": 49.3,
+            "tactician": 49.3,
+            "breaker": 47.5,
+            "duelist": 50.7
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.8,
+          "topArchetype": {
+            "archetype": "tactician",
+            "winRate": 51.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.7,
+            "technician": 50.4,
+            "bulwark": 50,
+            "tactician": 51.5,
+            "breaker": 49.5,
+            "duelist": 50
+          }
+        }
+      },
+      "score": 8.052380952380952,
+      "elapsedMs": 6538
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.2
+      },
+      "label": "unseatedImpactBoost=1.2",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.5
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 43.5,
+            "technician": 54,
+            "bulwark": 56.5,
+            "tactician": 50.5,
+            "breaker": 44.3,
+            "duelist": 51.3
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.5
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.5,
+            "technician": 49.4,
+            "bulwark": 50.9,
+            "tactician": 48.6,
+            "breaker": 47.3,
+            "duelist": 51.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.1,
+            "technician": 51.7,
+            "bulwark": 48.7,
+            "tactician": 49.8,
+            "breaker": 50.7,
+            "duelist": 50
+          }
+        }
+      },
+      "score": 7.619047619047619,
+      "elapsedMs": 6484
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.25
+      },
+      "label": "unseatedImpactBoost=1.25",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 14.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.2
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.1
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.1,
+            "technician": 54,
+            "bulwark": 57.2,
+            "tactician": 50.7,
+            "breaker": 45.5,
+            "duelist": 49.4
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.7
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.7,
+            "technician": 50.3,
+            "bulwark": 48.5,
+            "tactician": 48.6,
+            "breaker": 48.4,
+            "duelist": 50.5
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.2,
+          "topArchetype": {
+            "archetype": "breaker",
+            "winRate": 51.1
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 48.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.6,
+            "technician": 51,
+            "bulwark": 49,
+            "tactician": 50.3,
+            "breaker": 51.1,
+            "duelist": 48.9
+          }
+        }
+      },
+      "score": 8.233333333333334,
+      "elapsedMs": 7991
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.3
+      },
+      "label": "unseatedImpactBoost=1.3",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 14,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 43.5
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.8,
+            "technician": 51.8,
+            "bulwark": 57.6,
+            "tactician": 52.4,
+            "breaker": 43.5,
+            "duelist": 51
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 6.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.8
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.8,
+            "technician": 50.6,
+            "bulwark": 50.5,
+            "tactician": 48.8,
+            "breaker": 47.8,
+            "duelist": 48.5
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.2,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.7,
+            "technician": 51.6,
+            "bulwark": 50,
+            "tactician": 49.5,
+            "breaker": 48.4,
+            "duelist": 49.9
+          }
+        }
+      },
+      "score": 8.980952380952381,
+      "elapsedMs": 7680
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.35
+      },
+      "label": "unseatedImpactBoost=1.35",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 11.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.9
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 44.9,
+            "technician": 51.5,
+            "bulwark": 56,
+            "tactician": 52.3,
+            "breaker": 45.8,
+            "duelist": 49.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.1
+          },
+          "bottomArchetype": {
+            "archetype": "technician",
+            "winRate": 47.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.1,
+            "technician": 47.9,
+            "bulwark": 50.6,
+            "tactician": 50.3,
+            "breaker": 48.9,
+            "duelist": 49.1
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.5,
+          "topArchetype": {
+            "archetype": "duelist",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.5,
+            "technician": 50.3,
+            "bulwark": 48,
+            "tactician": 50.5,
+            "breaker": 49,
+            "duelist": 51.6
+          }
+        }
+      },
+      "score": 6.823809523809524,
+      "elapsedMs": 7317
+    }
+  ],
+  "rankings": [
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.1
+      },
+      "label": "guardImpactCoeff=0.1",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.6
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 45.6
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 45.6,
+            "technician": 52.2,
+            "bulwark": 54.6,
+            "tactician": 52.3,
+            "breaker": 45.8,
+            "duelist": 49.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.3,
+            "technician": 49.5,
+            "bulwark": 50.3,
+            "tactician": 50.1,
+            "breaker": 48,
+            "duelist": 48.9
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.9,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.8,
+            "technician": 51.7,
+            "bulwark": 48.8,
+            "tactician": 50.4,
+            "breaker": 50.5,
+            "duelist": 49.8
+          }
+        }
+      },
+      "score": 4.914285714285715,
+      "elapsedMs": 6737
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 14
+      },
+      "label": "guardUnseatDivisor=14",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.4
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.9
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 43.9,
+            "technician": 52,
+            "bulwark": 54.4,
+            "tactician": 52.3,
+            "breaker": 46,
+            "duelist": 51.4
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "tactician",
+            "winRate": 49
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.3,
+            "technician": 49,
+            "bulwark": 49.1,
+            "tactician": 49,
+            "breaker": 49.6,
+            "duelist": 50
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.1,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 48.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.5,
+            "technician": 51.5,
+            "bulwark": 49.9,
+            "tactician": 49.3,
+            "breaker": 50.9,
+            "duelist": 49.9
+          }
+        }
+      },
+      "score": 5.442857142857142,
+      "elapsedMs": 6363
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 18
+      },
+      "label": "guardUnseatDivisor=18",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 9.8,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 55.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 45.3
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 46.3,
+            "technician": 53.8,
+            "bulwark": 55.1,
+            "tactician": 49.3,
+            "breaker": 45.3,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 46.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.1,
+            "technician": 51.6,
+            "bulwark": 51.4,
+            "tactician": 48.8,
+            "breaker": 46.8,
+            "duelist": 49.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.7,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 51.4
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.4,
+            "technician": 49.8,
+            "bulwark": 48.8,
+            "tactician": 50.2,
+            "breaker": 50.5,
+            "duelist": 49.3
+          }
+        }
+      },
+      "score": 5.666666666666667,
+      "elapsedMs": 6421
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.14
+      },
+      "label": "guardImpactCoeff=0.14",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.7,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.4
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 45.7
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 45.7,
+            "technician": 53,
+            "bulwark": 56.4,
+            "tactician": 49.1,
+            "breaker": 46.5,
+            "duelist": 49.3
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.4
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.4,
+            "technician": 49.2,
+            "bulwark": 51,
+            "tactician": 49.8,
+            "breaker": 48.3,
+            "duelist": 49.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3,
+          "topArchetype": {
+            "archetype": "breaker",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "tactician",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50,
+            "technician": 50.2,
+            "bulwark": 50.2,
+            "tactician": 48.7,
+            "breaker": 51.7,
+            "duelist": 49.1
+          }
+        }
+      },
+      "score": 6.052380952380951,
+      "elapsedMs": 6446
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.35
+      },
+      "label": "unseatedImpactBoost=1.35",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 11.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.9
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 44.9,
+            "technician": 51.5,
+            "bulwark": 56,
+            "tactician": 52.3,
+            "breaker": 45.8,
+            "duelist": 49.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.1
+          },
+          "bottomArchetype": {
+            "archetype": "technician",
+            "winRate": 47.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.1,
+            "technician": 47.9,
+            "bulwark": 50.6,
+            "tactician": 50.3,
+            "breaker": 48.9,
+            "duelist": 49.1
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.5,
+          "topArchetype": {
+            "archetype": "duelist",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.5,
+            "technician": 50.3,
+            "bulwark": 48,
+            "tactician": 50.5,
+            "breaker": 49,
+            "duelist": 51.6
+          }
+        }
+      },
+      "score": 6.823809523809524,
+      "elapsedMs": 7317
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.08
+      },
+      "label": "guardImpactCoeff=0.08",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.9
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 42.8
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 47.6,
+            "technician": 51.1,
+            "bulwark": 54.9,
+            "tactician": 53.3,
+            "breaker": 42.8,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 7,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 54.2
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.2
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 54.2,
+            "technician": 52.5,
+            "bulwark": 47.2,
+            "tactician": 49.5,
+            "breaker": 47.3,
+            "duelist": 49.4
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.6,
+            "technician": 50,
+            "bulwark": 49.3,
+            "tactician": 50.3,
+            "breaker": 48.4,
+            "duelist": 50.4
+          }
+        }
+      },
+      "score": 6.980952380952381,
+      "elapsedMs": 6627
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 20
+      },
+      "label": "guardUnseatDivisor=20",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 12.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.2
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.1
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 44.1,
+            "technician": 51.6,
+            "bulwark": 56.2,
+            "tactician": 52.2,
+            "breaker": 45.4,
+            "duelist": 50.5
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.7
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.7,
+            "technician": 48.6,
+            "bulwark": 50,
+            "tactician": 49.5,
+            "breaker": 48.4,
+            "duelist": 49.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 49
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.6,
+            "technician": 51,
+            "bulwark": 49,
+            "tactician": 49.8,
+            "breaker": 49.2,
+            "duelist": 50.3
+          }
+        }
+      },
+      "score": 7.157142857142857,
+      "elapsedMs": 6476
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.2
+      },
+      "label": "unseatedImpactBoost=1.2",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 56.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.5
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 43.5,
+            "technician": 54,
+            "bulwark": 56.5,
+            "tactician": 50.5,
+            "breaker": 44.3,
+            "duelist": 51.3
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.2,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52.5
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.3
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52.5,
+            "technician": 49.4,
+            "bulwark": 50.9,
+            "tactician": 48.6,
+            "breaker": 47.3,
+            "duelist": 51.3
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.7
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.1,
+            "technician": 51.7,
+            "bulwark": 48.7,
+            "tactician": 49.8,
+            "breaker": 50.7,
+            "duelist": 50
+          }
+        }
+      },
+      "score": 7.619047619047619,
+      "elapsedMs": 6484
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 22
+      },
+      "label": "guardUnseatDivisor=22",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 58.5
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 45.1
+          },
+          "flagCount": 2,
+          "archetypeWinRates": {
+            "charger": 45.4,
+            "technician": 53.6,
+            "bulwark": 58.5,
+            "tactician": 48.8,
+            "breaker": 45.1,
+            "duelist": 48.6
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.9,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53,
+            "technician": 49.8,
+            "bulwark": 49.8,
+            "tactician": 49.6,
+            "breaker": 48,
+            "duelist": 49.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 5.4,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 53.3
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.2,
+            "technician": 53.3,
+            "bulwark": 47.9,
+            "tactician": 50.6,
+            "breaker": 47.9,
+            "duelist": 49.2
+          }
+        }
+      },
+      "score": 7.747619047619047,
+      "elapsedMs": 6402
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.16
+      },
+      "label": "guardImpactCoeff=0.16",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.5,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.7
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 44.1
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 44.1,
+            "technician": 52.5,
+            "bulwark": 57.7,
+            "tactician": 48.7,
+            "breaker": 45.8,
+            "duelist": 51.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.6,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.1
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.1,
+            "technician": 49.9,
+            "bulwark": 49.8,
+            "tactician": 49.5,
+            "breaker": 48.5,
+            "duelist": 49.2
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.1,
+          "topArchetype": {
+            "archetype": "duelist",
+            "winRate": 51
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.8,
+            "technician": 49.3,
+            "bulwark": 48.9,
+            "tactician": 50.4,
+            "breaker": 50.6,
+            "duelist": 51
+          }
+        }
+      },
+      "score": 7.776190476190475,
+      "elapsedMs": 6492
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.15
+      },
+      "label": "unseatedImpactBoost=1.15",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.8
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.9
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.9,
+            "technician": 52.3,
+            "bulwark": 57.8,
+            "tactician": 51.3,
+            "breaker": 44.5,
+            "duelist": 50.2
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 4.5,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 52
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.5
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 52,
+            "technician": 51.2,
+            "bulwark": 49.3,
+            "tactician": 49.3,
+            "breaker": 47.5,
+            "duelist": 50.7
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.8,
+          "topArchetype": {
+            "archetype": "tactician",
+            "winRate": 51.5
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 48.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 48.7,
+            "technician": 50.4,
+            "bulwark": 50,
+            "tactician": 51.5,
+            "breaker": 49.5,
+            "duelist": 50
+          }
+        }
+      },
+      "score": 8.052380952380952,
+      "elapsedMs": 6538
+    },
+    {
+      "overrides": {
+        "guardUnseatDivisor": 16
+      },
+      "label": "guardUnseatDivisor=16",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 13.9,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.8
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.8
+          },
+          "flagCount": 3,
+          "archetypeWinRates": {
+            "charger": 43.8,
+            "technician": 52.9,
+            "bulwark": 57.8,
+            "tactician": 50.3,
+            "breaker": 45.1,
+            "duelist": 50.1
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 6.6,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 54.3
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.7
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 54.3,
+            "technician": 50.5,
+            "bulwark": 47.7,
+            "tactician": 49.4,
+            "breaker": 49.3,
+            "duelist": 48.8
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.5,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.2
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 48.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.9,
+            "technician": 51.2,
+            "bulwark": 48.8,
+            "tactician": 51.1,
+            "breaker": 49.4,
+            "duelist": 49.7
+          }
+        }
+      },
+      "score": 8.223809523809523,
+      "elapsedMs": 6597
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.25
+      },
+      "label": "unseatedImpactBoost=1.25",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 14.1,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.2
+          },
+          "bottomArchetype": {
+            "archetype": "charger",
+            "winRate": 43.1
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.1,
+            "technician": 54,
+            "bulwark": 57.2,
+            "tactician": 50.7,
+            "breaker": 45.5,
+            "duelist": 49.4
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 5.3,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.7
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.7,
+            "technician": 50.3,
+            "bulwark": 48.5,
+            "tactician": 48.6,
+            "breaker": 48.4,
+            "duelist": 50.5
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 2.2,
+          "topArchetype": {
+            "archetype": "breaker",
+            "winRate": 51.1
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 48.9
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 49.6,
+            "technician": 51,
+            "bulwark": 49,
+            "tactician": 50.3,
+            "breaker": 51.1,
+            "duelist": 48.9
+          }
+        }
+      },
+      "score": 8.233333333333334,
+      "elapsedMs": 7991
+    },
+    {
+      "overrides": {
+        "unseatedImpactBoost": 1.3
+      },
+      "label": "unseatedImpactBoost=1.3",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 14,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 57.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 43.5
+          },
+          "flagCount": 4,
+          "archetypeWinRates": {
+            "charger": 43.8,
+            "technician": 51.8,
+            "bulwark": 57.6,
+            "tactician": 52.4,
+            "breaker": 43.5,
+            "duelist": 51
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 6.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 53.8
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 47.8
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 53.8,
+            "technician": 50.6,
+            "bulwark": 50.5,
+            "tactician": 48.8,
+            "breaker": 47.8,
+            "duelist": 48.5
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 3.2,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.6
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 48.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 50.7,
+            "technician": 51.6,
+            "bulwark": 50,
+            "tactician": 49.5,
+            "breaker": 48.4,
+            "duelist": 49.9
+          }
+        }
+      },
+      "score": 8.980952380952381,
+      "elapsedMs": 7680
+    },
+    {
+      "overrides": {
+        "guardImpactCoeff": 0.12
+      },
+      "label": "guardImpactCoeff=0.12",
+      "tiers": {
+        "bare/balanced": {
+          "tier": "bare",
+          "variant": "balanced",
+          "spreadPp": 10.7,
+          "topArchetype": {
+            "archetype": "bulwark",
+            "winRate": 54.9
+          },
+          "bottomArchetype": {
+            "archetype": "breaker",
+            "winRate": 44.3
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 45.3,
+            "technician": 53.1,
+            "bulwark": 54.9,
+            "tactician": 51.6,
+            "breaker": 44.3,
+            "duelist": 50.8
+          }
+        },
+        "epic/balanced": {
+          "tier": "epic",
+          "variant": "balanced",
+          "spreadPp": 8.1,
+          "topArchetype": {
+            "archetype": "charger",
+            "winRate": 55.5
+          },
+          "bottomArchetype": {
+            "archetype": "duelist",
+            "winRate": 47.4
+          },
+          "flagCount": 1,
+          "archetypeWinRates": {
+            "charger": 55.5,
+            "technician": 48.9,
+            "bulwark": 50.1,
+            "tactician": 49.8,
+            "breaker": 48.4,
+            "duelist": 47.4
+          }
+        },
+        "giga/balanced": {
+          "tier": "giga",
+          "variant": "balanced",
+          "spreadPp": 4.5,
+          "topArchetype": {
+            "archetype": "technician",
+            "winRate": 51.9
+          },
+          "bottomArchetype": {
+            "archetype": "bulwark",
+            "winRate": 47.4
+          },
+          "flagCount": 0,
+          "archetypeWinRates": {
+            "charger": 51.4,
+            "technician": 51.9,
+            "bulwark": 47.4,
+            "tactician": 50.3,
+            "breaker": 50,
+            "duelist": 49
+          }
+        }
+      },
+      "score": 10.195238095238095,
+      "elapsedMs": 7162
+    }
+  ],
+  "bestResult": {
+    "overrides": {
+      "guardImpactCoeff": 0.1
+    },
+    "label": "guardImpactCoeff=0.1",
+    "tiers": {
+      "bare/balanced": {
+        "tier": "bare",
+        "variant": "balanced",
+        "spreadPp": 9,
+        "topArchetype": {
+          "archetype": "bulwark",
+          "winRate": 54.6
+        },
+        "bottomArchetype": {
+          "archetype": "charger",
+          "winRate": 45.6
+        },
+        "flagCount": 0,
+        "archetypeWinRates": {
+          "charger": 45.6,
+          "technician": 52.2,
+          "bulwark": 54.6,
+          "tactician": 52.3,
+          "breaker": 45.8,
+          "duelist": 49.5
+        }
+      },
+      "epic/balanced": {
+        "tier": "epic",
+        "variant": "balanced",
+        "spreadPp": 5.3,
+        "topArchetype": {
+          "archetype": "charger",
+          "winRate": 53.3
+        },
+        "bottomArchetype": {
+          "archetype": "breaker",
+          "winRate": 48
+        },
+        "flagCount": 0,
+        "archetypeWinRates": {
+          "charger": 53.3,
+          "technician": 49.5,
+          "bulwark": 50.3,
+          "tactician": 50.1,
+          "breaker": 48,
+          "duelist": 48.9
+        }
+      },
+      "giga/balanced": {
+        "tier": "giga",
+        "variant": "balanced",
+        "spreadPp": 2.9,
+        "topArchetype": {
+          "archetype": "technician",
+          "winRate": 51.7
+        },
+        "bottomArchetype": {
+          "archetype": "bulwark",
+          "winRate": 48.8
+        },
+        "flagCount": 0,
+        "archetypeWinRates": {
+          "charger": 48.8,
+          "technician": 51.7,
+          "bulwark": 48.8,
+          "tactician": 50.4,
+          "breaker": 50.5,
+          "duelist": 49.8
+        }
+      }
+    },
+    "score": 4.914285714285715,
+    "elapsedMs": 6737
+  },
+  "improvements": [
+    {
+      "key": "guardImpactCoeff",
+      "bestValue": 0.1,
+      "currentValue": 0.12,
+      "scoreDelta": -1.9,
+      "confirmed": false,
+      "withinNoise": false,
+      "spreadImprovements": {
+        "bare/balanced": 3,
+        "epic/balanced": -1.5,
+        "giga/balanced": 0.1
+      }
+    },
+    {
+      "key": "guardUnseatDivisor",
+      "bestValue": 14,
+      "currentValue": 18,
+      "scoreDelta": -1.37,
+      "confirmed": false,
+      "withinNoise": false,
+      "spreadImprovements": {
+        "bare/balanced": 1.5,
+        "epic/balanced": -0.5,
+        "giga/balanced": -0.1
+      }
+    },
+    {
+      "key": "unseatedImpactBoost",
+      "bestValue": 1.35,
+      "currentValue": 1.35,
+      "scoreDelta": 0,
+      "confirmed": true,
+      "withinNoise": false,
+      "spreadImprovements": {
+        "bare/balanced": 0,
+        "epic/balanced": 0,
+        "giga/balanced": 0
+      }
+    }
+  ],
+  "timestamp": "2026-02-12T01:19:58.816Z",
+  "totalSimulations": 54,
+  "totalElapsedMs": 123030
+}

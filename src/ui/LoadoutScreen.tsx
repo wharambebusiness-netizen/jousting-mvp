@@ -4,7 +4,7 @@ import { createStatGear, applyGiglingLoadout } from '../engine/gigling-gear';
 import { createPlayerGear, applyPlayerLoadout } from '../engine/player-gear';
 import { getSteedVariantDef, getPlayerVariantDef, ALL_STEED_SLOTS, ALL_PLAYER_SLOTS, ALL_GEAR_VARIANTS } from '../engine/gear-variants';
 import { BALANCE } from '../engine/balance-config';
-import { StatBar } from './helpers';
+import { StatBar, STAT_ABBR } from './helpers';
 
 const RARITIES: { id: GiglingRarity; label: string }[] = [
   { id: 'uncommon', label: 'Uncommon' },
@@ -34,10 +34,6 @@ const PLAYER_SLOT_LABELS: Record<PlayerGearSlot, { name: string; desc: string }>
   armor:        { name: 'Armor',      desc: 'Body Protection' },
   gauntlets:    { name: 'Gauntlets',  desc: 'Grip & Stability' },
   melee_weapon: { name: 'Melee Wpn',  desc: 'Ground Weapon' },
-};
-
-const STAT_ABBR: Record<string, string> = {
-  momentum: 'MOM', control: 'CTL', guard: 'GRD', initiative: 'INIT', stamina: 'STA',
 };
 
 const STAT_TIPS: Record<string, string> = {

@@ -1,1 +1,44 @@
-[]
+[
+  {
+    "id": "BL-064",
+    "priority": 1,
+    "role": "ui-dev",
+    "title": "Impact Breakdown UI (Complete MVP Onboarding)",
+    "description": "Implement impact breakdown display on pass result screens. Shows momentum component, accuracy component, guard penalty, counter bonus for each pass. Closes final 14% MVP gap (7/7 onboarding features complete). Design spec complete (design-round-5.md). PassResult extensions shipped in S38 commit 70abfc2 (BL-076). Ready to implement immediately. Acceptance: Impact breakdown visible on joust + melee result screens, explains all 4 impact components, helps players understand why they won/lost.",
+    "fileOwnership": [
+      "src/ui/MatchSummary.tsx",
+      "src/ui/MeleeResult.tsx",
+      "src/ui/JoustResult.tsx",
+      "src/App.css"
+    ],
+    "status": "assigned",
+    "dependsOn": [],
+    "estimate": "6-8 hours"
+  },
+  {
+    "id": "BL-077",
+    "priority": 2,
+    "role": "qa",
+    "title": "Manual QA Testing (4 Shipped Features)",
+    "description": "Execute manual QA for 4 shipped onboarding features: BL-073 (Stat Tooltips), BL-071 (Variant Tooltips), BL-068 (Counter Chart), BL-070 (Melee Transition). Test plan includes screen readers (NVDA/JAWS/VoiceOver), cross-browser (Chrome/Safari/Firefox/Edge), touch devices (iOS/Android), accessibility (WCAG AAA), responsive layouts (320px-1920px). Cannot be automated by AI agent — requires human tester. Acceptance: All 4 features verified across 3 browsers, 2 screen readers, 1 mobile device. Zero accessibility issues.",
+    "fileOwnership": [],
+    "status": "pending",
+    "dependsOn": [],
+    "estimate": "6-10 hours (human QA required)"
+  },
+  {
+    "id": "BL-078",
+    "priority": 2,
+    "role": "ui-dev",
+    "title": "STAT_ABBR Refactor (Reduce Duplication)",
+    "description": "Reduce duplication of STAT_ABBR mapping. Currently duplicated in MatchSummary.tsx and LoadoutScreen.tsx (quality-review flagged). Move to shared constant. Low priority Polish — code works correctly, this is maintenance. Acceptance: STAT_ABBR defined in single location, both components import and use it.",
+    "fileOwnership": [
+      "src/ui/App.tsx",
+      "src/ui/MatchSummary.tsx",
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "status": "assigned",
+    "dependsOn": [],
+    "estimate": "1-2 hours"
+  }
+]

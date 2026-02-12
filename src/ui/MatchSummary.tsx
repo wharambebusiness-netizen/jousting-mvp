@@ -1,4 +1,5 @@
 import type { MatchState, GiglingLoadout, PlayerLoadout, SteedGearSlot, PlayerGearSlot } from '../engine/types';
+import { STAT_ABBR } from './helpers';
 
 const STEED_SLOTS: SteedGearSlot[] = ['chamfron', 'barding', 'saddle', 'stirrups', 'reins', 'horseshoes'];
 const PLAYER_SLOTS: PlayerGearSlot[] = ['helm', 'shield', 'lance', 'armor', 'gauntlets', 'melee_weapon'];
@@ -10,9 +11,6 @@ const SLOT_LABELS: Record<string, string> = {
   armor: 'Armor', gauntlets: 'Gauntlets', melee_weapon: 'Melee Wpn',
 };
 
-const STAT_ABBR: Record<string, string> = {
-  momentum: 'MOM', control: 'CTL', guard: 'GRD', initiative: 'INIT', stamina: 'STA',
-};
 
 export function MatchSummary({ match, p1Loadout, p2Loadout, p1PlayerLoadout, p2PlayerLoadout, onRematch }: {
   match: MatchState;

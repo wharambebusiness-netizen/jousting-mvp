@@ -15,6 +15,10 @@ const ARCHETYPE_ICON: Record<string, string> = {
 const ALL_ATTACKS: Record<string, Attack> = { ...JOUST_ATTACKS, ...MELEE_ATTACKS };
 
 // --- Stat descriptions for tooltips ---
+export const STAT_ABBR: Record<string, string> = {
+  momentum: 'MOM', control: 'CTL', guard: 'GRD', initiative: 'INIT', stamina: 'STA',
+};
+
 const STAT_TIPS: Record<string, string> = {
   mom: 'Momentum — Attack speed and power. Determines how much damage you deal. High Momentum lets you hit first, but leaves you more vulnerable to counters.',
   ctl: 'Control — Defense and precision. Determines your attack accuracy and when you can shift attacks mid-speed. High Control keeps you resilient.',
