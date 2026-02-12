@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v13
+// Jousting MVP — Multi-Agent Orchestrator v14
 // ============================================================
+// v14 additions (S51 — quality & observability):
+// - Agent effectiveness tracking: per-agent tasks-completed, tokens/file, success rate across rounds
+// - Dynamic concurrency: adjusts maxConcurrency based on fast/slow agent mix from runtime history
+// - Enhanced backlog depth guard: skip coordination agents when backlog empty + no handoff changes
+// - Round Quality table in overnight report: utilization, files modified, cost per round
+// - Agent Effectiveness table in overnight report: tokens/file, cost/task, productivity score
+// - Version strings updated to v14
+//
 // v13 additions (S50 — experiment log + agent memory):
 // - Experiment log: persistent JSON log of balance-config.ts changes and their outcomes
 // - parseBalanceConfigDiff(): git diff parsing to auto-detect parameter changes
@@ -2225,6 +2233,54 @@ function getAdaptiveTimeout(agent) {
 }
 
 // ============================================================
+// Agent Effectiveness Tracking (v14 — per-agent productivity metrics)
+// ============================================================
+// Tracks cumulative per-agent metrics across rounds for the overnight report.
+// Updated from processAgentResult() after each agent completes.
+const agentEffectiveness = {};  // agentId → { tasksCompleted, totalFiles, totalTokens, totalCost, totalSeconds, rounds }
+
+function recordAgentEffectiveness(agentId, { filesModified, costEntry, elapsedSeconds, isEmptyWork }) {
+  if (!agentEffectiveness[agentId]) {
+    agentEffectiveness[agentId] = { tasksCompleted: 0, totalFiles: 0, totalTokens: 0, totalCost: 0, totalSeconds: 0, rounds: 0 };
+  }
+  const eff = agentEffectiveness[agentId];
+  eff.rounds++;
+  eff.totalSeconds += elapsedSeconds || 0;
+  eff.totalFiles += (filesModified?.length || 0);
+  if (costEntry) {
+    eff.totalTokens += (costEntry.inputTokens || 0) + (costEntry.outputTokens || 0);
+    eff.totalCost += costEntry.totalCost || 0;
+  }
+  if (!isEmptyWork && filesModified?.length > 0) {
+    eff.tasksCompleted++;
+  }
+}
+
+// v14: Dynamic concurrency — adjust pool size based on agent speed mix
+function getDynamicConcurrency() {
+  const configured = CONFIG.maxConcurrency;
+  if (!configured || configured <= 0) return 0; // unlimited
+
+  const histories = Object.values(agentRuntimeHistory);
+  if (histories.length < 2) return configured; // not enough data yet
+
+  const allAvgs = histories.map(h => h.reduce((a, b) => a + b, 0) / h.length);
+  const fastest = Math.min(...allAvgs);
+  const slowest = Math.max(...allAvgs);
+
+  // If slowest agent is 3x+ slower than fastest, increase concurrency by 1
+  // so fast agents aren't bottlenecked waiting for slow ones in the pool
+  if (slowest > fastest * 3 && fastest > 0) {
+    const bumped = Math.min(configured + 1, AGENTS.length);
+    if (bumped > configured) {
+      log(`  Dynamic concurrency: ${configured} → ${bumped} (speed ratio ${(slowest/fastest).toFixed(1)}x)`);
+    }
+    return bumped;
+  }
+  return configured;
+}
+
+// ============================================================
 // Agent Pool (v9 — streaming pipeline, replaces batch concurrency)
 // ============================================================
 // Queue-drain pool: launches up to maxConcurrency agents. As each finishes,
@@ -2306,6 +2362,16 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   const balanceConfigChanged = filesModified.some(f =>
     f.includes('balance-config') || f.includes('archetypes')
   );
+
+  // v14: Record agent effectiveness metrics
+  const costEntry = costLog[result.agentId];
+  recordAgentEffectiveness(result.agentId, {
+    filesModified,
+    costEntry,
+    elapsedSeconds: result.elapsed,
+    isEmptyWork,
+  });
+
   return { status, isEmptyWork, filesModified, balanceConfigChanged };
 }
 
@@ -2575,7 +2641,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v10');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v14');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -2806,6 +2872,24 @@ async function main() {
             });
             return false;
           }
+
+          // v14: Enhanced backlog depth guard — even if other agents ran, skip coordination
+          // agents when backlog is completely empty and no handoff files were actually modified.
+          const backlogEmpty = backlogCache.filter(t => t.status === 'pending').length === 0;
+          const otherHandoffsChanged = AGENTS.some(other => {
+            if (other.id === agent.id || COORD_AGENT_ROLES.has(other.role)) return false;
+            const otherMeta = handoffCache[other.id];
+            return otherMeta?.filesModified?.length > 0;
+          });
+          if (backlogEmpty && !otherHandoffsChanged) {
+            log(`  ${agent.id}: PRE-FLIGHT SKIP (backlog empty + no code agent output)`);
+            thisRoundDecisions.push({
+              round, agentId: agent.id, decision: 'skipped',
+              reason: 'pre-flight: backlog empty + no handoff changes', model: agent.model || 'default',
+              escalated: false, succeeded: null, elapsed: null,
+            });
+            return false;
+          }
         }
       }
 
@@ -2933,6 +3017,8 @@ async function main() {
 
     // v9: Round time breakdown tracking (split sims into preSim/postSim for pipeline visibility)
     const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
+    // v14: Dynamic concurrency — adjust once per round based on agent speed mix
+    const roundConcurrency = getDynamicConcurrency();
     // v10: Collect modified files from all code agents for incremental testing
     const roundModifiedFiles = [];
     // v13: Track which agent modified balance-config.ts this round (for experiment logging)
@@ -2950,7 +3036,7 @@ async function main() {
         : Promise.resolve(null);
 
       // v9: Streaming agent pool — agents complete individually, no batch barrier
-      const codeResultsPromise = runAgentPool(codeAgents, round, CONFIG.maxConcurrency, (result) => {
+      const codeResultsPromise = runAgentPool(codeAgents, round, roundConcurrency, (result) => {
         const { filesModified, balanceConfigChanged } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
         roundModifiedFiles.push(...filesModified);
         // v13: Track the agent that changed balance config
@@ -3003,7 +3089,7 @@ async function main() {
         ? (() => {
             const phaseBStart = Date.now();
             log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s) concurrently with tests...`);
-            return runAgentPool(coordAgents, round, CONFIG.maxConcurrency, (result) => {
+            return runAgentPool(coordAgents, round, roundConcurrency, (result) => {
               processAgentResult(result, round, roundAgents, costLog, trackingCtx);
               phaseBCoordResults.push(result);
             }).then(results => {
@@ -3099,7 +3185,7 @@ async function main() {
       const phaseBStart = Date.now();
       log(`\nPhase B (standalone): Launching ${coordAgents.length} coordination agent(s)...`);
 
-      const coordResults = await runAgentPool(coordAgents, round, CONFIG.maxConcurrency, (result) => {
+      const coordResults = await runAgentPool(coordAgents, round, roundConcurrency, (result) => {
         processAgentResult(result, round, roundAgents, costLog, trackingCtx);
       });
 
@@ -3455,7 +3541,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v10
+> Orchestrator: v14
 
 ## Summary
 - **Started**: ${startTime}
@@ -3516,6 +3602,39 @@ ${allFiles.length ? allFiles.map(f => `- ${f}`).join('\n') : '(none)'}
 
 ## Test Trajectory
 ${testTrajectory.length ? testTrajectory.map(t => `- ${t}`).join('\n') : '(no test data)'}
+
+## Round Quality (v14)
+
+| Round | Active | Idle | Util% | Files | OK | Failed |
+|-------|--------|------|-------|-------|----|--------|
+${roundLog.map(r => {
+  if (r.note) return `| ${r.round} | — | — | — | — | — | ${r.note} |`;
+  const q = r.quality || {};
+  return `| ${r.round} | ${q.agentsActive ?? '—'} | ${q.agentsIdle ?? '—'} | ${q.utilization ?? '—'}% | ${q.filesModified ?? '—'} | ${q.successful ?? '—'} | ${q.failed ?? '—'} |`;
+}).join('\n')}
+
+## Agent Effectiveness (v14)
+
+${(() => {
+  const ids = Object.keys(agentEffectiveness);
+  if (!ids.length) return '> No effectiveness data captured yet.\n';
+
+  const rows = ids.map(id => {
+    const e = agentEffectiveness[id];
+    const tokensPerFile = e.totalFiles > 0 ? Math.round(e.totalTokens / e.totalFiles) : '—';
+    const costPerTask = e.tasksCompleted > 0 ? '$' + (e.totalCost / e.tasksCompleted).toFixed(4) : '—';
+    const avgMin = e.rounds > 0 ? (e.totalSeconds / e.rounds / 60).toFixed(1) : '0';
+    const successRate = e.rounds > 0 ? Math.round((e.tasksCompleted / e.rounds) * 100) : 0;
+    return `| ${id} | ${e.rounds} | ${e.tasksCompleted} | ${e.totalFiles} | ${tokensPerFile} | ${costPerTask} | ${avgMin}m | ${successRate}% |`;
+  });
+
+  return `| Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
+|-------|--------|------------|-------|-------------|-----------|----------|-------|
+${rows.join('\n')}
+
+> **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
+`;
+})()}
 
 ## Agent Efficiency (v6.1 Metrics)
 
