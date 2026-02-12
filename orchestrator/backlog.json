@@ -9,5 +9,69 @@
     "status": "pending",
     "dependsOn": [],
     "estimate": "6-10 hours (human QA required)"
+  },
+  {
+    "id": "BL-079",
+    "priority": 1,
+    "role": "balance-tuner",
+    "title": "Variant-Specific Balance Sweep (Aggressive/Defensive Optimization)",
+    "description": "Systematically optimize balance for aggressive and defensive gear variants independently. Run high-precision sims (N=500) at bare/uncommon/epic/giga tiers for all 3 variants. Identify worst archetype per variant/tier. Propose small stat tweaks (±1-3 points) if needed to tighten spreads. Acceptance: spreads <8pp all variants all tiers, zero flags (<42% or >58%), analysis doc with tables and proposed changes (if any).",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "estimate": "4-6 hours"
+  },
+  {
+    "id": "BL-080",
+    "priority": 2,
+    "role": "qa",
+    "title": "Variant Interaction Unit Tests (Rare/Epic/Giga Coverage)",
+    "description": "Add deterministic unit tests for variant-specific matchups flagged by BL-079. For each variant/tier combination with imbalance (e.g., 'Aggressive Giga: Breaker 58.2%'), add 1 test (3-round matchup) covering carryover+softCap+fatigue pipeline. Target 8-12 new tests across all 3 variants at rare/epic/giga. Acceptance: 8-12 tests in gear-variants.test.ts, all 908+ tests passing, tests cover 2+ tiers, test data matches BL-079 win rate expectations.",
+    "fileOwnership": [
+      "src/engine/gear-variants.test.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [
+      "BL-079"
+    ],
+    "estimate": "3-4 hours"
+  },
+  {
+    "id": "BL-081",
+    "priority": 2,
+    "role": "ui-dev",
+    "title": "Phase 2 Planning: Top 5 Polish Opportunities",
+    "description": "Analyze codebase for non-blocking UI improvements (things that don't change game logic). Identify: inline style migration (59 identified in S53), responsive gaps (320px-1920px), stat/gear clarity, animation polish, accessibility micro-improvements. Rank top 5 by impact. Write specs for each (what, why, estimate, acceptance criteria). NO CODE CHANGES this round — analysis only. Acceptance: 5 specs ranked by impact, clear acceptance criteria, clear estimates, document in orchestrator/analysis/bl-081-phase2-polish.md.",
+    "fileOwnership": [],
+    "status": "completed",
+    "dependsOn": [],
+    "estimate": "2-3 hours",
+    "completedAt": "2026-02-12T22:42:18.969Z"
+  },
+  {
+    "id": "BL-082",
+    "priority": 3,
+    "role": "designer",
+    "title": "Post-MVP Design Spec: Archetype Feel & Identity",
+    "description": "Design specs for deepening archetype identity in Phase 2. For each archetype: define identity statement (what makes it special), identify 2-3 signature strategies (Charger unseats early, Bulwark turtles, etc.), propose teaching approach for each. Optional: propose new mechanics that reinforce identity (no balance impact). Acceptance: 6 archetype specs with identity+strategies+teaching, no balance changes proposed, document in orchestrator/analysis/bl-082-archetype-identity.md, ready for Phase 2 implementation.",
+    "fileOwnership": [],
+    "status": "pending",
+    "dependsOn": [],
+    "estimate": "3-4 hours"
+  },
+  {
+    "id": "BL-083",
+    "priority": 3,
+    "role": "balance-tuner",
+    "title": "Legendary/Relic Tier Deep Dive (N=500 High-Precision Simulation)",
+    "description": "Ultra-high precision analysis of legendary/relic tiers at N=500 matches per matchup. Run sims for legendary (N=500, balanced variant) and relic (N=500, balanced variant). Analyze 36-archetype matchups at each tier. Identify patterns: which archetypes scale best with rarity, does balance improve/degrade at ultra-high tiers, are there tier-specific imbalances. Create analysis tables + findings. Acceptance: 36-matchup table legendary, 36-matchup table relic, tier progression analysis (bare→legendary→relic), recommendations for Phase 2 work (if any), document in orchestrator/analysis/bl-083-ultra-high-tier.md.",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "pending",
+    "dependsOn": [],
+    "estimate": "4-5 hours"
   }
 ]
