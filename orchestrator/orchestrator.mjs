@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v15
+// Jousting MVP — Multi-Agent Orchestrator v16
 // ============================================================
+// v16 additions (S54 — agent session continuity + inline context):
+// - Agent session continuity: --session-id on first run, --resume on subsequent rounds
+// - Delta prompts: returning agents get compact "what changed" prompt (skip role template, shared rules)
+// - Inline handoff injection: pre-read handoff content into prompt (eliminates tool calls)
+// - Session invalidation: auto-invalidate on revert, mission transition, or resume failure
+// - getChangelogSinceRound(): extracts changelog entries since a given round
+// - readHandoffContent(): reads agent handoff file for inline injection
+// - agentSessions map: tracks sessionId, lastRound, resumeCount per agent
+// - Session Continuity section in overnight report with resume/fresh/invalidation stats
+// - Version strings updated to v16
+//
 // v15 additions (S52 — priority scheduling, task decomposition, live dashboard):
 // - Priority-based scheduling: agents with P1 tasks launch first in pool, bypass pre-flight checks
 // - getAgentPriority(): scores agents by pending task priority for pool ordering
@@ -115,6 +126,7 @@ import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, rea
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { runConsistencyCheck } from './consistency-check.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -803,41 +815,89 @@ function runAgent(agent, round) {
     // v12: When using claudeMdPath (temp cwd), prefix paths with absolute project dir
     const p = (relPath) => agent.claudeMdPath ? join(MVP_DIR, relPath).replace(/\\/g, '/') : relPath;
 
-    const promptParts = [
-      `You are "${agent.name}", part of a multi-agent team. Round ${round}.`,
-      `Project context is in CLAUDE.md (auto-loaded).`,
-      agent.claudeMdPath ? `Project files are at: ${MVP_DIR.replace(/\\/g, '/')}` : null,
-      ``,
-      `READ FIRST:`,
-      `1. ${p('orchestrator/session-changelog.md')} (what changed this session so far)`,
-      `2. ${p('orchestrator/task-board.md')} (coordination status — DO NOT edit)`,
-      `3. ${p(`orchestrator/handoffs/${agent.id}.md`)} (your tasks and progress)`,
-    ].filter(Boolean);
+    // v16: Session continuity — determine if this agent can resume a previous session
+    const existingSession = agentSessions[agent.id];
+    const isResuming = !!existingSession;
 
-    // Add design doc reference if mission specifies one
-    if (missionDesignDoc) {
-      promptParts.push(`3. ${p(missionDesignDoc)} (design reference)`);
+    let promptParts;
+    if (isResuming) {
+      // --- RESUME PROMPT: compact delta for returning agents ---
+      // Agent retains full context from prior rounds (CLAUDE.md, role template, codebase understanding).
+      // We only inject what's NEW: round number, changelog delta, current handoff, new tasks.
+      promptParts = [
+        `--- ROUND ${round} (resumed session) ---`,
+        `You are "${agent.name}". Round ${round} (last ran round ${existingSession.lastRound}).`,
+        `You have full context from your prior session — do NOT re-read CLAUDE.md or role guidelines.`,
+        ``,
+      ];
+
+      // Inject changes by other agents since this agent's last round
+      const changesSince = getChangelogSinceRound(existingSession.lastRound);
+      if (changesSince) {
+        promptParts.push(`--- CHANGES SINCE ROUND ${existingSession.lastRound} ---`, changesSince, ``);
+      } else {
+        promptParts.push(`No other agents made changes since your last round.`, ``);
+      }
+
+      // Inline current handoff (may have been updated by orchestrator since agent's last write)
+      const handoffContent = readHandoffContent(agent.id);
+      if (handoffContent) {
+        promptParts.push(`--- YOUR CURRENT HANDOFF ---`, handoffContent, ``);
+      }
+
+      promptParts.push(
+        `Do your work. Update handoff: ${p(`orchestrator/handoffs/${agent.id}.md`)}`,
+        `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
+        agent.type === 'continuous'
+          ? `Write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
+          : `Mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
+      );
+
+    } else {
+      // --- FRESH PROMPT: full context for first-run agents ---
+      promptParts = [
+        `You are "${agent.name}", part of a multi-agent team. Round ${round}.`,
+        `Project context is in CLAUDE.md (auto-loaded).`,
+        agent.claudeMdPath ? `Project files are at: ${MVP_DIR.replace(/\\/g, '/')}` : null,
+        ``,
+        `READ FIRST:`,
+        `1. ${p('orchestrator/session-changelog.md')} (what changed this session so far)`,
+        `2. ${p('orchestrator/task-board.md')} (coordination status — DO NOT edit)`,
+      ].filter(Boolean);
+
+      // Add design doc reference if mission specifies one
+      if (missionDesignDoc) {
+        promptParts.push(`3. ${p(missionDesignDoc)} (design reference)`);
+      }
+
+      // v16: Inline handoff content (saves a Read tool call on agent startup)
+      const handoffContent = readHandoffContent(agent.id);
+      if (handoffContent) {
+        promptParts.push(``, `--- YOUR CURRENT HANDOFF (${p(`orchestrator/handoffs/${agent.id}.md`)}) ---`, handoffContent);
+      } else {
+        promptParts.push(`3. ${p(`orchestrator/handoffs/${agent.id}.md`)} (your tasks and progress)`);
+      }
+
+      promptParts.push(
+        ``,
+        `Then do your work. When done, write updated handoff to ${p(`orchestrator/handoffs/${agent.id}.md`)}.`,
+        ``,
+        `HANDOFF FORMAT (top of file):`,
+        `## META`,
+        `- status: in-progress | complete | all-done`,
+        `- files-modified: comma-separated list`,
+        `- tests-passing: true | false`,
+        `- notes-for-others: messages for other agents`,
+        ``,
+        `Status: in-progress (working) → complete (primary done, unblocks others, do stretch goals) → all-done (everything done, retired)`,
+        `Include: ## What Was Done, ## What's Left, ## Issues`,
+        ``,
+        `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
+        agent.type === 'continuous'
+          ? `You are CONTINUOUS — write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
+          : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
+      );
     }
-
-    promptParts.push(
-      ``,
-      `Then do your work. When done, write updated handoff to ${p(`orchestrator/handoffs/${agent.id}.md`)}.`,
-      ``,
-      `HANDOFF FORMAT (top of file):`,
-      `## META`,
-      `- status: in-progress | complete | all-done`,
-      `- files-modified: comma-separated list`,
-      `- tests-passing: true | false`,
-      `- notes-for-others: messages for other agents`,
-      ``,
-      `Status: in-progress (working) → complete (primary done, unblocks others, do stretch goals) → all-done (everything done, retired)`,
-      `Include: ## What Was Done, ## What's Left, ## Issues`,
-      ``,
-      `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
-      agent.type === 'continuous'
-        ? `You are CONTINUOUS — write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
-        : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
-    );
 
     // v12: Inject runtime stats for continuous agents (helps agents self-regulate pacing)
     if (agent.type === 'continuous') {
@@ -931,21 +991,23 @@ function runAgent(agent, round) {
       }
     }
 
-    // Append shared rules (common to all agents)
-    if (commonRulesContent) {
-      promptParts.push(``, `--- SHARED RULES ---`, commonRulesContent);
-    }
-
-    // Append role template if available (provides domain-specific guidelines)
-    if (roleTemplate) {
-      promptParts.push(``, `--- ROLE GUIDELINES ---`, roleTemplate);
+    // v16: Shared rules and role template — skip for resumed sessions.
+    // Returning agents already have these from their initial session.
+    if (!isResuming) {
+      if (commonRulesContent) {
+        promptParts.push(``, `--- SHARED RULES ---`, commonRulesContent);
+      }
+      if (roleTemplate) {
+        promptParts.push(``, `--- ROLE GUIDELINES ---`, roleTemplate);
+      }
     }
 
     const prompt = promptParts.join('\n');
 
     // v6.1: Log estimated prompt tokens for Phase 4 cost analysis
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'})`);
+    const sessionMode = isResuming ? 'resume' : 'fresh';
+    log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'}, session=${sessionMode})`);
     const startTime = Date.now();
 
     // v12: Per-agent CLAUDE.md override — create temp dir with trimmed CLAUDE.md
@@ -968,6 +1030,15 @@ function runAgent(agent, round) {
     if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
     // v12: When using temp dir for lite CLAUDE.md, grant access to actual project
     if (tempDir) cliArgs.push('--add-dir', MVP_DIR);
+
+    // v16: Session continuity — resume existing session or establish new one
+    if (isResuming) {
+      cliArgs.push('--resume', existingSession.sessionId);
+    } else {
+      const sessionId = randomUUID();
+      agentSessions[agent.id] = { sessionId, lastRound: round, resumeCount: 0, freshCount: 1, invalidations: 0 };
+      cliArgs.push('--session-id', sessionId);
+    }
 
     // Spawn claude with prompt piped via stdin (avoids Windows cmd length limit)
     const proc = spawn('claude', cliArgs, {
@@ -1024,8 +1095,19 @@ function runAgent(agent, round) {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const elapsedMin = (elapsed / 60).toFixed(1);
       const status = timedOut ? 'TIMEOUT' : code === 0 ? 'OK' : `EXIT-${code}`;
-      log(`  ${agent.id} finished: ${status} (${elapsedMin} min)`);
-      resolvePromise({ agentId: agent.id, code, timedOut, elapsed, stdout, stderr });
+      log(`  ${agent.id} finished: ${status} (${elapsedMin} min, session=${sessionMode})`);
+
+      // v16: Update session tracking after agent completes
+      if (code === 0 && !timedOut && agentSessions[agent.id]) {
+        // Success — update last round for next resume
+        agentSessions[agent.id].lastRound = round;
+        if (isResuming) agentSessions[agent.id].resumeCount++;
+      } else if (isResuming && elapsed < 30 && code !== 0) {
+        // Very short failure during resume — likely session issue (expired, corrupted)
+        invalidateAgentSession(agent.id, `resume failure (${elapsed}s, code=${code})`);
+      }
+
+      resolvePromise({ agentId: agent.id, code, timedOut, elapsed, stdout, stderr, wasResumed: isResuming });
     });
 
     proc.on('error', (err) => {
@@ -1196,6 +1278,13 @@ async function smartRevert(round, codeResults) {
   log(`  Smart revert: all agents reverted individually but tests still fail — full src/ revert`);
   await gitRevertFiles(round, ['src/']);
   return { reverted: true, strategy: 'full-safety', revertedAgents: agentIds };
+}
+
+// v16: Invalidate sessions for all reverted agents (their context references reverted code)
+function invalidateRevertedSessions(revertedAgents) {
+  for (const agentId of revertedAgents) {
+    invalidateAgentSession(agentId, 'files reverted');
+  }
 }
 
 // ============================================================
@@ -2355,6 +2444,69 @@ function getDynamicConcurrency() {
 }
 
 // ============================================================
+// Agent Session Continuity (v16 — persist sessions across rounds)
+// ============================================================
+// Tracks Claude CLI session IDs per agent so subsequent rounds can --resume
+// the conversation instead of starting fresh. Returning agents keep their full
+// context from prior rounds (file reads, codebase understanding, decisions)
+// and receive a compact delta prompt instead of the full initial prompt.
+const agentSessions = {};  // agentId → { sessionId, lastRound, resumeCount, freshCount, invalidations }
+
+/**
+ * Read an agent's handoff file content for inline injection into prompts.
+ * Returns the full file content or null if unavailable.
+ */
+function readHandoffContent(agentId) {
+  const handoffPath = join(HANDOFF_DIR, `${agentId}.md`);
+  if (!existsSync(handoffPath)) return null;
+  try {
+    const content = readFileSync(handoffPath, 'utf-8');
+    return content.trim() || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Extract session changelog entries since a given round.
+ * Parses the changelog file looking for "## Round N" headers and returns
+ * only entries from rounds > sinceRound.
+ */
+function getChangelogSinceRound(sinceRound) {
+  if (!existsSync(CHANGELOG_FILE)) return null;
+  try {
+    const content = readFileSync(CHANGELOG_FILE, 'utf-8');
+    const lines = content.split('\n');
+    const relevantLines = [];
+    let capturing = false;
+    for (const line of lines) {
+      const roundMatch = line.match(/^## Round (\d+)/);
+      if (roundMatch) {
+        capturing = parseInt(roundMatch[1]) > sinceRound;
+      }
+      if (capturing) {
+        relevantLines.push(line);
+      }
+    }
+    return relevantLines.length > 0 ? relevantLines.join('\n').trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Invalidate an agent's session (e.g., after revert or mission transition).
+ * The agent will start a fresh session on its next run.
+ */
+function invalidateAgentSession(agentId, reason) {
+  if (agentSessions[agentId]) {
+    agentSessions[agentId].invalidations = (agentSessions[agentId].invalidations || 0) + 1;
+    log(`  Session invalidated for ${agentId} (${reason})`);
+    delete agentSessions[agentId];
+  }
+}
+
+// ============================================================
 // Live Progress Dashboard (v15 — real-time agent status)
 // ============================================================
 // Shows running/queued/done/failed status for each agent with elapsed time.
@@ -2797,7 +2949,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v15');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v16');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -2842,7 +2994,9 @@ async function main() {
     // v8 bugfix: Reset test state so mission 2 doesn't inherit mission 1's failure count
     consecutiveTestFailures = 0;
     lastTestStatus = null;
-    log(`  Agent tracking state reset for new mission`);
+    // v16: Clear all sessions on mission transition (new agents, different context)
+    for (const key of Object.keys(agentSessions)) delete agentSessions[key];
+    log(`  Agent tracking state reset for new mission (sessions cleared)`);
   }
 
   // v5/v6: Classify agent roles for two-phase rounds
@@ -3299,6 +3453,8 @@ async function main() {
         const revertResult = await smartRevert(round, codeResults);
         if (revertResult.reverted) {
           log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
+          // v16: Invalidate sessions for reverted agents (their context is stale)
+          invalidateRevertedSessions(revertResult.revertedAgents);
           testResult = await runTests();
         }
         didRevert = true;
@@ -3757,7 +3913,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v15
+> Orchestrator: v16
 
 ## Summary
 - **Started**: ${startTime}
@@ -3849,6 +4005,35 @@ ${(() => {
 ${rows.join('\n')}
 
 > **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
+`;
+})()}
+
+## Session Continuity (v16)
+
+${(() => {
+  const sessionIds = Object.keys(agentSessions);
+  if (!sessionIds.length) return '> No session data captured (all agents ran fresh only).\n';
+
+  const totalResumes = sessionIds.reduce((sum, id) => sum + (agentSessions[id]?.resumeCount || 0), 0);
+  const totalFresh = sessionIds.reduce((sum, id) => sum + (agentSessions[id]?.freshCount || 0), 0);
+  const totalInvalidations = sessionIds.reduce((sum, id) => sum + (agentSessions[id]?.invalidations || 0), 0);
+  const resumePct = (totalResumes + totalFresh) > 0
+    ? Math.round((totalResumes / (totalResumes + totalFresh)) * 100) : 0;
+
+  const rows = sessionIds.map(id => {
+    const s = agentSessions[id];
+    return `| ${id} | ${s.freshCount || 1} | ${s.resumeCount || 0} | ${s.invalidations || 0} | ${s.sessionId?.slice(0, 8) ?? '—'}... |`;
+  });
+
+  return `- **Resumed sessions**: ${totalResumes} (${resumePct}% of agent-rounds used session continuity)
+- **Fresh sessions**: ${totalFresh}
+- **Session invalidations**: ${totalInvalidations}
+
+| Agent | Fresh | Resumes | Invalidations | Session ID |
+|-------|-------|---------|---------------|------------|
+${rows.join('\n')}
+
+> Resumed agents skip role template + shared rules loading and receive a compact delta prompt.
 `;
 })()}
 
