@@ -1,7 +1,17 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v16
+// Jousting MVP — Multi-Agent Orchestrator v17
 // ============================================================
+// v17 additions (S55 — unified agent pool, cost enforcement, session health):
+// - Unified agent pool: code + coordination agents run in a single pool (eliminates Phase A→B barrier)
+// - Coordination agents now overlap with code agents (~3min savings per round)
+// - Three execution paths (Phase A pool, Phase B concurrent, Phase B standalone) consolidated to one
+// - Cost budget enforcement: agents exceeding maxBudgetUsd are skipped in pre-flight checks
+// - Stale session invalidation: proactive cleanup after 5+ empty rounds or 10+ round session age
+// - Simplified timing: "agents" column replaces "Phase A" + "Phase B" in overnight report
+// - Task board refresh moved to round start (all agents see same state)
+// - Version strings updated to v17
+//
 // v16 additions (S54 — agent session continuity + inline context):
 // - Agent session continuity: --session-id on first run, --resume on subsequent rounds
 // - Delta prompts: returning agents get compact "what changed" prompt (skip role template, shared rules)
@@ -2506,6 +2516,30 @@ function invalidateAgentSession(agentId, reason) {
   }
 }
 
+/**
+ * v17: Invalidate stale sessions — agents that haven't been productive for too long
+ * get a fresh session to avoid accumulated context drift.
+ * @param {number} round - Current round
+ * @param {Object} consecutiveEmptyRounds - Map of agentId → consecutive empty round count
+ */
+function invalidateStaleSessions(round, consecutiveEmptyRounds) {
+  const STALE_EMPTY_THRESHOLD = 5;  // Invalidate after 5 consecutive empty rounds
+  const STALE_AGE_THRESHOLD = 10;   // Invalidate if session is 10+ rounds old without productive run
+
+  for (const [agentId, session] of Object.entries(agentSessions)) {
+    // Check consecutive empty rounds
+    if ((consecutiveEmptyRounds[agentId] || 0) >= STALE_EMPTY_THRESHOLD) {
+      invalidateAgentSession(agentId, `stale: ${consecutiveEmptyRounds[agentId]} consecutive empty rounds`);
+      continue;
+    }
+    // Check session age vs productivity
+    const sessionAge = round - (session.lastRound || 0);
+    if (sessionAge >= STALE_AGE_THRESHOLD) {
+      invalidateAgentSession(agentId, `stale: session ${sessionAge} rounds old (last active round ${session.lastRound})`);
+    }
+  }
+}
+
 // ============================================================
 // Live Progress Dashboard (v15 — real-time agent status)
 // ============================================================
@@ -2949,7 +2983,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v16');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v17');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -3087,10 +3121,11 @@ async function main() {
     // --- v7: Pre-round git tag ---
     await tagRoundStart(round);
 
-    // --- Generate task board (orchestrator-owned) ---
-    // v8: Single generation per round, moved to post-Phase-A (line ~2500) so Phase B
-    // agents see updated test status. Phase A agents still see the board from last round.
-    // generateTaskBoard() removed here — was a redundant duplicate.
+    // --- Task board refresh moved to just before unified agent pool launch (v17) ---
+    // All agents (code + coord) now see the same refreshed task board at round start.
+
+    // v17: Invalidate stale sessions at round start (before agent selection)
+    invalidateStaleSessions(round, consecutiveEmptyRounds);
 
     // --- Determine which agents run this round (v5: work-gated + min frequency) ---
     // v5F: Track per-agent decisions this round
@@ -3122,6 +3157,21 @@ async function main() {
           escalated: false, succeeded: null, elapsed: null,
         });
         return false;
+      }
+
+      // v17: Cost budget enforcement — skip agents that have exceeded their budget
+      if (agent.maxBudgetUsd) {
+        const agentCost = costLog[agent.id]?.totalCost || 0;
+        if (agentCost >= agent.maxBudgetUsd) {
+          log(`  ${agent.id}: OVER BUDGET ($${agentCost.toFixed(4)} >= $${agent.maxBudgetUsd} limit, skipping)`);
+          thisRoundDecisions.push({
+            round, agentId: agent.id, decision: 'skipped',
+            reason: `cost budget exceeded: $${agentCost.toFixed(4)} >= $${agent.maxBudgetUsd}`,
+            model: agent.model || 'default',
+            escalated: false, succeeded: null, elapsed: null,
+          });
+          return false;
+        }
       }
 
       // Skip agents that have exhausted all tasks (primary + stretch)
@@ -3170,7 +3220,7 @@ async function main() {
       }
 
       // v8: Pre-flight check — skip agents that likely won't produce useful work
-      // 1. Coordination agents (Phase B) with no new changes to react to
+      // 1. Coordination agents with no new changes to react to
       if (COORD_AGENT_ROLES.has(agent.role) && round > 1) {
         const hasBacklogTask = agentHasBacklogTask(agent.role);
         const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
@@ -3327,165 +3377,154 @@ async function main() {
       continue;
     }
 
-    // --- v6: Two-phase rounds (code agents first, then coordination) ---
-    const codeAgents = activeAgents.filter(a => CODE_AGENT_ROLES.has(a.role));
-    const coordAgents = activeAgents.filter(a => COORD_AGENT_ROLES.has(a.role));
+    // --- v17: Unified agent pool (replaces v6 two-phase rounds) ---
+    // All agents (code + coordination) run in a single pool, eliminating the Phase A→B barrier.
+    // Coordination agents overlap with code agents instead of waiting for them to finish.
+    // Tests only run after code agents complete. Coord results discarded on revert.
+    const codeAgentIds = new Set(activeAgents.filter(a => CODE_AGENT_ROLES.has(a.role)).map(a => a.id));
+    const hasCodeAgents = codeAgentIds.size > 0;
 
-    // v15: Priority-based scheduling — sort agents by task priority so P1 agents launch first.
-    // When maxConcurrency limits pool size, this ensures critical work gets resources first.
-    codeAgents.sort((a, b) => getAgentTaskPriority(a.role, backlogCache) - getAgentTaskPriority(b.role, backlogCache));
-    coordAgents.sort((a, b) => getAgentTaskPriority(a.role, backlogCache) - getAgentTaskPriority(b.role, backlogCache));
+    // v15: Priority-based scheduling — sort by task priority (P1 first)
+    // Tie-break: code agents before coord (they take longer, should start first)
+    activeAgents.sort((a, b) => {
+      const pA = getAgentTaskPriority(a.role, backlogCache);
+      const pB = getAgentTaskPriority(b.role, backlogCache);
+      if (pA !== pB) return pA - pB;
+      const aCode = CODE_AGENT_ROLES.has(a.role) ? 0 : 1;
+      const bCode = CODE_AGENT_ROLES.has(b.role) ? 0 : 1;
+      return aCode - bCode;
+    });
 
     const roundAgents = [];
     let testResult = null;
-    let didRevert = false;  // v6.1: Track if auto-revert happened (skip Phase B if so)
-    let preSimResults = null;  // v7: Balance sim baseline
-    let postSimResults = null; // v7: Balance sim after changes
-    let regressionResult = null;   // v7 Phase 2: Regression detection results
-    let convergenceResult = null;  // v7 Phase 2: Convergence check results
+    let didRevert = false;
+    let preSimResults = null;
+    let postSimResults = null;
+    let regressionResult = null;
+    let convergenceResult = null;
 
-    // v9: Round time breakdown tracking (split sims into preSim/postSim for pipeline visibility)
-    const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
-    // v14: Dynamic concurrency — adjust once per round based on agent speed mix
+    // v17: Simplified timing — "agents" replaces separate phaseA/phaseB
+    const roundTiming = { roundStart: Date.now(), agents: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
     const roundConcurrency = getDynamicConcurrency();
-    // v10: Collect modified files from all code agents for incremental testing
     const roundModifiedFiles = [];
-    // v13: Track which agent modified balance-config.ts this round (for experiment logging)
     let balanceChangeAgent = null;
+    const codeResults = [];
+    const coordResults = [];
 
-    // Phase A: Code agents + pre-sim pipeline
-    if (codeAgents.length) {
-      const phaseAStart = Date.now();
-      // v15: Log priority order when agents have different priorities
-      const priorities = codeAgents.map(a => `${a.id}(P${getAgentTaskPriority(a.role, backlogCache)})`);
-      log(`\nPhase A: Launching ${codeAgents.length} code agent(s)... [${priorities.join(', ')}]`);
+    // v17: Refresh task board at round start so all agents see latest state
+    generateTaskBoard(round, lastTestStatus || 'pending', consecutiveTestFailures);
 
-      // v9: Pipeline pre-sims with Phase A — run concurrently since code agents
-      // never read balance-data/ files. Pre-sim writes JSON, agents read source code.
+    // v17: Unified agent pool — all agents in one pool
+    if (activeAgents.length) {
+      const agentsStart = Date.now();
+      const priorities = activeAgents.map(a => {
+        const tag = codeAgentIds.has(a.id) ? 'code' : 'coord';
+        return `${a.id}(P${getAgentTaskPriority(a.role, backlogCache)},${tag})`;
+      });
+      log(`\nLaunching ${activeAgents.length} agent(s)... [${priorities.join(', ')}]`);
+
+      // Pre-sims run concurrently with agent pool
       const preSimPromise = (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length)
         ? (() => { log(`  (pre-sim running concurrently with agents)`); return runBalanceSims(round, 'pre'); })()
         : Promise.resolve(null);
 
-      // v15: Live progress dashboard for Phase A
-      const phaseADashboard = new ProgressDashboard(codeAgents, `Phase A (Round ${round})`);
-      phaseADashboard.start();
+      // v15: Live progress dashboard
+      const dashboard = new ProgressDashboard(activeAgents, `Round ${round}`);
+      dashboard.start();
 
-      // v9: Streaming agent pool — agents complete individually, no batch barrier
-      const codeResultsPromise = runAgentPool(codeAgents, round, roundConcurrency, (result) => {
+      // v17: Single pool — code + coord agents run together, results classified in callback
+      const poolPromise = runAgentPool(activeAgents, round, roundConcurrency, (result) => {
         const { filesModified, balanceConfigChanged } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
-        roundModifiedFiles.push(...filesModified);
-        // v13: Track the agent that changed balance config
-        if (balanceConfigChanged && !balanceChangeAgent) {
-          balanceChangeAgent = result.agentId;
+        if (codeAgentIds.has(result.agentId)) {
+          codeResults.push(result);
+          roundModifiedFiles.push(...filesModified);
+          if (balanceConfigChanged && !balanceChangeAgent) {
+            balanceChangeAgent = result.agentId;
+          }
+        } else {
+          coordResults.push(result);
         }
-      }, phaseADashboard);
+      }, dashboard);
 
-      // Wait for both pre-sim and all agents to complete
-      const [preSimRes, codeResults] = await Promise.all([preSimPromise, codeResultsPromise]);
-      phaseADashboard.stop();
+      const [preSimRes, allResults] = await Promise.all([preSimPromise, poolPromise]);
+      dashboard.stop();
       if (preSimRes) {
         preSimResults = preSimRes;
         roundTiming.preSim = preSimRes.elapsedMs || 0;
       }
+      roundTiming.agents = Date.now() - agentsStart;
 
-      // Post-Phase A: changelog, task completion, failed task reassignment, validation
-      appendSessionChangelog(round, codeResults);
-      handleCompletedTasks(codeResults);
-      handleFailedTasks(codeResults);
-      validateFileOwnership(codeResults, AGENTS);
-      handleModelEscalation(codeResults, round);
-      roundTiming.phaseA = Date.now() - phaseAStart;
-
-      // v11: Pipeline tests + post-sims + Phase B concurrently.
-      // Phase B agents (producer, reviewer, designer) only modify docs/analysis/handoffs —
-      // not source code. They can safely run while tests execute.
-      // If tests fail + revert: discard Phase B results (handoffs reference reverted code).
-      const testStart = Date.now();
-      const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
-
-      // v10: Incremental testing — only run affected suites after round 1
-      // Round 1 always gets full suite (baseline). After reverts, full suite too (handled below).
-      const testFilter = round === 1 ? null : getTestFilter(roundModifiedFiles);
-      if (testFilter !== null && testFilter !== '') {
-        log(`  Incremental test filter: ${testFilter.split('|').length} suite(s) of 8`);
+      // Post-pool: process code agent results (changelog, tasks, ownership, escalation)
+      if (codeResults.length) {
+        appendSessionChangelog(round, codeResults);
+        handleCompletedTasks(codeResults);
+        handleFailedTasks(codeResults);
+        validateFileOwnership(codeResults, AGENTS);
+        handleModelEscalation(codeResults, round);
       }
 
-      // Refresh task-board before Phase B launch so coordination agents see latest state.
-      // Use last known test status since current tests haven't completed yet.
-      generateTaskBoard(round, lastTestStatus || 'pending', consecutiveTestFailures);
+      // Tests + post-sims (only when code agents ran — they're the ones that modify source)
+      if (hasCodeAgents) {
+        const testStart = Date.now();
+        const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
 
-      // v11: Launch tests + optimistic post-sim + Phase B agents concurrently
-      const testPromise = runTests(testFilter);
-      const postSimPromise = postSimShouldRun
-        ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
-        : Promise.resolve(null);
-
-      // Phase B: launch concurrently with tests (only if we have coord agents and no revert yet)
-      const phaseBCoordResults = [];
-      const phaseBPromise = (coordAgents.length > 0)
-        ? (() => {
-            const phaseBStart = Date.now();
-            log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s) concurrently with tests...`);
-            // v15: Phase B dashboard (non-TTY friendly — only renders if TTY)
-            const phaseBDashboard = new ProgressDashboard(coordAgents, `Phase B (Round ${round})`);
-            phaseBDashboard.start();
-            return runAgentPool(coordAgents, round, roundConcurrency, (result) => {
-              processAgentResult(result, round, roundAgents, costLog, trackingCtx);
-              phaseBCoordResults.push(result);
-            }, phaseBDashboard).then(results => {
-              phaseBDashboard.stop();
-              roundTiming.phaseB = Date.now() - phaseBStart;
-              return results;
-            });
-          })()
-        : Promise.resolve([]);
-
-      const [testRes, postSimOptimistic, coordResults] = await Promise.all([testPromise, postSimPromise, phaseBPromise]);
-      testResult = testRes;
-      roundTiming.tests = Date.now() - testStart;
-      if (postSimOptimistic) {
-        roundTiming.postSim = postSimOptimistic.elapsedMs || 0;
-      }
-
-      // v8: Smart per-agent revert on test regression
-      if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
-        log(`  ⚠ Tests regressed this round! Attempting smart per-agent revert...`);
-        const revertResult = await smartRevert(round, codeResults);
-        if (revertResult.reverted) {
-          log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
-          // v16: Invalidate sessions for reverted agents (their context is stale)
-          invalidateRevertedSessions(revertResult.revertedAgents);
-          testResult = await runTests();
+        // v10: Incremental testing — only run affected suites after round 1
+        const testFilter = round === 1 ? null : getTestFilter(roundModifiedFiles);
+        if (testFilter !== null && testFilter !== '') {
+          log(`  Incremental test filter: ${testFilter.split('|').length} suite(s) of 8`);
         }
-        didRevert = true;
+
+        const testPromise = runTests(testFilter);
+        const postSimPromise = postSimShouldRun
+          ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
+          : Promise.resolve(null);
+
+        const [testRes, postSimOptimistic] = await Promise.all([testPromise, postSimPromise]);
+        testResult = testRes;
+        roundTiming.tests = Date.now() - testStart;
+        if (postSimOptimistic) {
+          roundTiming.postSim = postSimOptimistic.elapsedMs || 0;
+        }
+
+        // v8: Smart per-agent revert on test regression
+        if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
+          log(`  ⚠ Tests regressed this round! Attempting smart per-agent revert...`);
+          const revertResult = await smartRevert(round, codeResults);
+          if (revertResult.reverted) {
+            log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
+            invalidateRevertedSessions(revertResult.revertedAgents);
+            testResult = await runTests();
+          }
+          didRevert = true;
+        }
+
+        // Accept or discard optimistic post-sim results
+        if (testResult.passed && !didRevert && postSimOptimistic) {
+          postSimResults = postSimOptimistic;
+        } else if (didRevert && postSimOptimistic) {
+          log(`  Post-sim results discarded (revert happened — sim data reflects reverted code)`);
+          postSimResults = null;
+        }
       }
 
-      // v11: If revert happened, discard Phase B results — handoffs reference reverted code
-      if (didRevert && coordResults.length > 0) {
-        log(`  Phase B results discarded (revert happened — coordination handoffs reference reverted code)`);
-      } else if (coordResults.length > 0) {
-        // Phase B succeeded alongside tests — process coordination results
-        appendSessionChangelog(round, coordResults);
-        handleCompletedTasks(coordResults);
-        handleFailedTasks(coordResults);
-        validateFileOwnership(coordResults, AGENTS);
-        handleModelEscalation(coordResults, round);
+      // Process coordination agent results (discard on revert)
+      if (coordResults.length) {
+        if (didRevert) {
+          log(`  Coordination results discarded (revert happened — handoffs reference reverted code)`);
+        } else {
+          appendSessionChangelog(round, coordResults);
+          handleCompletedTasks(coordResults);
+          handleFailedTasks(coordResults);
+          validateFileOwnership(coordResults, AGENTS);
+          handleModelEscalation(coordResults, round);
+        }
       }
 
-      // v9: Accept or discard optimistic post-sim results
-      if (testResult.passed && !didRevert && postSimOptimistic) {
-        postSimResults = postSimOptimistic;
-      } else if (didRevert && postSimOptimistic) {
-        log(`  Post-sim results discarded (revert happened — sim data reflects reverted code)`);
-        postSimResults = null;
-      }
-
-      // v7: Update balance state tracker with pre/post sim results
+      // Balance state, experiment logging, regression detection, convergence, backlog generation
       if (preSimResults?.results?.length || postSimResults?.results?.length) {
         updateBalanceState(round, preSimResults?.results, postSimResults?.results);
       }
 
-      // v13: Experiment logging — detect balance-config.ts param changes and record outcomes
       if (balanceChangeAgent && !didRevert) {
         const paramChanges = parseBalanceConfigDiff(round);
         if (paramChanges.length) {
@@ -3494,11 +3533,8 @@ async function main() {
         }
       }
 
-      // v7 Phase 2: Regression detection — flag when changes help one archetype but hurt another
       if (preSimResults?.results?.length && postSimResults?.results?.length) {
         regressionResult = detectBalanceRegressions(round, preSimResults.results, postSimResults.results);
-
-        // Store regressions in balance state for agent context
         if (regressionResult.hasRegressions) {
           const state = loadBalanceState();
           if (state.rounds.length) {
@@ -3508,7 +3544,6 @@ async function main() {
         }
       }
 
-      // v7 Phase 2: Convergence check — auto-stop if balance meets criteria
       if (postSimResults?.results?.length && CONFIG.balanceConfig?.convergenceCriteria) {
         convergenceResult = checkConvergence(postSimResults.results, round);
         if (convergenceResult.converged) {
@@ -3517,39 +3552,14 @@ async function main() {
         }
       }
 
-      // v7 Phase 3: Auto-generate backlog tasks from sim data
       if (postSimResults?.results?.length) {
         generateBalanceBacklog(round, postSimResults.results, regressionResult);
       }
     }
 
-    // v11: Phase B now runs concurrently with tests (above). Handle the case where
-    // there are coord agents but no code agents ran this round (no test phase to pipeline with).
-    if (!codeAgents.length && coordAgents.length && !didRevert) {
-      const phaseBStart = Date.now();
-      log(`\nPhase B (standalone): Launching ${coordAgents.length} coordination agent(s)...`);
-
-      // v15: Standalone Phase B dashboard
-      const standaloneDashboard = new ProgressDashboard(coordAgents, `Phase B Standalone (Round ${round})`);
-      standaloneDashboard.start();
-
-      const coordResults = await runAgentPool(coordAgents, round, roundConcurrency, (result) => {
-        processAgentResult(result, round, roundAgents, costLog, trackingCtx);
-      }, standaloneDashboard);
-      standaloneDashboard.stop();
-
-      appendSessionChangelog(round, coordResults);
-      handleCompletedTasks(coordResults);
-      handleFailedTasks(coordResults);
-      validateFileOwnership(coordResults, AGENTS);
-      handleModelEscalation(coordResults, round);
-      roundTiming.phaseB = Date.now() - phaseBStart;
-    }
-
-    // v11: Compute overhead — Phase B is now concurrent with tests (subsumed into test time),
-    // so overhead = total - phaseA - tests. Standalone Phase B (no code agents) still tracked.
+    // v17: Compute overhead = total - agents - tests (sims are concurrent, subsumed)
     const roundTotal = Date.now() - roundTiming.roundStart;
-    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.tests - (codeAgents.length ? 0 : roundTiming.phaseB);
+    roundTiming.overhead = roundTotal - roundTiming.agents - roundTiming.tests;
 
     // --- Update test status ---
     if (!testResult) {
@@ -3644,7 +3654,7 @@ async function main() {
       break;
     }
 
-    // --- v7 Phase 2: Convergence stop (after Phase B has run) ---
+    // --- v7 Phase 2: Convergence stop (after all agents have run) ---
     if (convergenceResult?.converged) {
       // v8: Try transitioning to next mission before stopping
       if (!tryTransitionMission('balance converged')) {
@@ -3913,7 +3923,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v16
+> Orchestrator: v17
 
 ## Summary
 - **Started**: ${startTime}
@@ -3946,27 +3956,21 @@ ${agentSummaries.map(a => {
 
 ## Round-by-Round Timeline
 
-| Round | Agents | Test Result | Phase A | Phase B | Tests | Pre-Sim | Post-Sim | Overhead | Total |
-|-------|--------|-------------|---------|---------|-------|---------|----------|----------|-------|
+| Round | Agents | Test Result | Agent Pool | Tests | Pre-Sim | Post-Sim | Overhead | Total |
+|-------|--------|-------------|------------|-------|---------|----------|----------|-------|
 ${roundLog.map(r => {
-  if (r.note) return `| ${r.round} | — | — | — | — | — | — | — | — | ${r.note} |`;
+  if (r.note) return `| ${r.round} | — | — | — | — | — | — | — | ${r.note} |`;
   const agents = r.agents.map(a => `${a.id}(${a.status}, ${(a.elapsed/60).toFixed(0)}m)`).join(', ');
   const tests = r.testsPassed ? `PASS (${r.testCount})` : `FAIL (${r.testCount}p, ${r.failCount}f)`;
   const t = r.timing || {};
   const fmt = (ms) => ms ? `${(ms/1000).toFixed(0)}s` : '—';
-  // v11: preSim/postSim/phaseB are concurrent (inside phaseA/tests) — shown for visibility, not added to total.
-  // Support old 'sims' field from v8 round logs for backwards compat in reports.
+  // v17: "agents" field (unified pool) or legacy "phaseA"+"phaseB" for old round data
   const preSim = t.preSim || 0;
   const postSim = t.postSim || 0;
   const simsCompat = t.sims || 0;
-  // v11: Phase B is concurrent with tests when code agents ran. For standalone Phase B (no code agents), it's serial.
-  // Total = phaseA + tests + overhead (phaseB/sims are concurrent, subsumed into test time)
-  // For v8 compat: old 'sims' was serial and was separate, so add it for old round data
-  const hasCodeAgents = r.agents.some(a => !['producer', 'tech-lead', 'game-designer'].includes(a.id.replace(/-\d+$/, '')));
-  const phaseBForTotal = hasCodeAgents ? 0 : (t.phaseB || 0); // concurrent → already in tests; standalone → add
-  const total = (t.phaseA || 0) + phaseBForTotal + (t.tests || 0) + simsCompat + (t.overhead || 0);
-  const phaseBDisplay = (t.phaseB && hasCodeAgents) ? `${fmt(t.phaseB)}*` : fmt(t.phaseB); // * = concurrent
-  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${phaseBDisplay} | ${fmt(t.tests)} | ${fmt(preSim || simsCompat)} | ${fmt(postSim)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
+  const agentPoolMs = t.agents || ((t.phaseA || 0) + (t.phaseB || 0)); // v17 or legacy sum
+  const total = agentPoolMs + (t.tests || 0) + simsCompat + (t.overhead || 0);
+  return `| ${r.round} | ${agents} | ${tests} | ${fmt(agentPoolMs)} | ${fmt(t.tests)} | ${fmt(preSim || simsCompat)} | ${fmt(postSim)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
 }).join('\n')}
 
 ## All Files Modified
