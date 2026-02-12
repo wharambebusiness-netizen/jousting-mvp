@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v8
+// Jousting MVP — Multi-Agent Orchestrator v10
 // ============================================================
+// v10 additions (S49 — adaptive timeouts, lookahead, incremental tests):
+// - Adaptive timeouts: per-agent runtime history (last 5 runs), timeout = max(2*avg, 25%*config, 2min)
+// - Multi-round lookahead: skip empty rounds when all agents idle, jump to next minFrequencyRounds activation
+// - Incremental testing: source→test mapping, only run affected suites (full suite on round 1 + after revert)
+//
+// v9 additions (S48 — streaming pipeline):
+// - Streaming agent pool (runAgentPool): queue-drain pattern, completion-order callbacks
+// - Pipelined sims: pre-sims concurrent with Phase A, post-sims concurrent with tests
+// - Extracted processAgentResult from duplicated Phase A/B blocks
+// - Split timing: preSim/postSim tracked separately for pipeline visibility
+//
 // v8 additions (S47 — throughput & efficiency):
 // - Backlog priority sorting (P1 tasks assigned first)
 // - Smart per-agent revert (only revert failing agent's files, preserve others' work)
@@ -805,11 +816,18 @@ function runAgent(agent, round) {
 
     activeProcs.add(proc.pid);
 
-    // v5: Per-agent timeout override or global default
-    const timeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
+    // v10: Adaptive timeout — 2x average runtime, capped at configured max
+    const timeout = getAdaptiveTimeout(agent);
+    const configTimeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
+    const isAdapted = timeout < configTimeout;
+    if (isAdapted) {
+      const history = agentRuntimeHistory[agent.id] || [];
+      const avgMin = history.length ? ((history.reduce((a, b) => a + b, 0) / history.length) / 60).toFixed(1) : '?';
+      log(`    adaptive timeout: ${(timeout / 60000).toFixed(1)}min (avg ${avgMin}min, max ${(configTimeout / 60000).toFixed(0)}min)`);
+    }
     const timer = setTimeout(() => {
       timedOut = true;
-      log(`  ${agent.id} TIMED OUT after ${timeout / 60000} minutes — killing process tree (PID ${proc.pid})`);
+      log(`  ${agent.id} TIMED OUT after ${(timeout / 60000).toFixed(1)} minutes — killing process tree (PID ${proc.pid})`);
       killProcessTree(proc.pid);
     }, timeout);
 
@@ -1940,6 +1958,34 @@ function accumulateAgentCost(costLog, result, agents) {
 }
 
 // ============================================================
+// Adaptive Timeouts (v10 — track per-agent runtime history)
+// ============================================================
+// Tracks the last N runtimes per agent (in seconds). Used to compute
+// a timeout of max(2 * avg, configTimeout * 0.25, 120000ms).
+// Capped at agent.timeoutMs. Falls back to configured timeout on first run.
+const RUNTIME_HISTORY_SIZE = 5;
+const agentRuntimeHistory = {};  // agentId → number[] (elapsed seconds, last N runs)
+
+function recordAgentRuntime(agentId, elapsedSeconds) {
+  if (!agentRuntimeHistory[agentId]) agentRuntimeHistory[agentId] = [];
+  agentRuntimeHistory[agentId].push(elapsedSeconds);
+  if (agentRuntimeHistory[agentId].length > RUNTIME_HISTORY_SIZE) {
+    agentRuntimeHistory[agentId].shift();
+  }
+}
+
+function getAdaptiveTimeout(agent) {
+  const configTimeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
+  const history = agentRuntimeHistory[agent.id];
+  if (!history || history.length === 0) return configTimeout; // first run — use configured
+
+  const avgSeconds = history.reduce((a, b) => a + b, 0) / history.length;
+  const avgMs = avgSeconds * 1000;
+  const adaptedMs = Math.max(2 * avgMs, configTimeout * 0.25, 120000);
+  return Math.min(adaptedMs, configTimeout); // never exceed configured max
+}
+
+// ============================================================
 // Agent Pool (v9 — streaming pipeline, replaces batch concurrency)
 // ============================================================
 // Queue-drain pool: launches up to maxConcurrency agents. As each finishes,
@@ -1988,6 +2034,11 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   ctx.lastRunRound[result.agentId] = round;
   accumulateAgentCost(costLog, result, AGENTS);
 
+  // v10: Record runtime for adaptive timeout (only successful non-timeout runs)
+  if (!result.timedOut && result.elapsed > 0) {
+    recordAgentRuntime(result.agentId, result.elapsed);
+  }
+
   const { warnings, isEmptyWork } = validateAgentOutput(result.agentId, round, result);
   for (const w of warnings) log(`  ⚠ ${w}`);
 
@@ -2001,16 +2052,101 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   } else if (result.code === 0 && !result.timedOut) {
     ctx.consecutiveEmptyRounds[result.agentId] = 0;
   }
-  return { status, isEmptyWork };
+  // v10: Collect modified files from handoff for incremental testing
+  const meta = parseHandoffMeta(result.agentId);
+  return { status, isEmptyWork, filesModified: meta.filesModified || [] };
+}
+
+// ============================================================
+// Incremental Testing (v10 — only run affected test suites)
+// ============================================================
+// Maps source files to the test suites that exercise them.
+// Any file not in the map triggers a full test run (conservative fallback).
+const SOURCE_TO_TESTS = {
+  'calculator.ts':       ['calculator.test.ts', 'gear-variants.test.ts'],
+  'balance-config.ts':   ['calculator.test.ts', 'playtest.test.ts', 'gear-variants.test.ts'],
+  'phase-joust.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
+  'phase-melee.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
+  'match.ts':            ['match.test.ts'],
+  'gigling-gear.ts':     ['gigling-gear.test.ts', 'gear-variants.test.ts'],
+  'player-gear.ts':      ['player-gear.test.ts', 'gear-variants.test.ts'],
+  'archetypes.ts':       ['playtest.test.ts', 'match.test.ts', 'gear-variants.test.ts'],
+  'attacks.ts':          ['calculator.test.ts', 'phase-resolution.test.ts', 'match.test.ts'],
+};
+// AI source files → ai.test.ts
+const AI_SOURCE_PATTERN = /^src\/ai\//;
+// Files that always trigger full suite (types, config, shared infrastructure)
+const FULL_SUITE_TRIGGERS = ['types.ts', 'index.ts'];
+
+/**
+ * Given a list of modified file paths (from agent handoffs), return
+ * the vitest --testPathPattern regex string, or null for full suite.
+ */
+function getTestFilter(modifiedFiles) {
+  if (!modifiedFiles || !modifiedFiles.length) return null; // no info → full suite
+
+  const affectedTests = new Set();
+  let needFullSuite = false;
+
+  for (const filePath of modifiedFiles) {
+    const basename = filePath.split('/').pop().split('\\').pop();
+
+    // Non-source files (CSS, MD, JSON, orchestrator, etc.) — no tests needed
+    if (!filePath.includes('src/')) continue;
+
+    // Full suite triggers
+    if (FULL_SUITE_TRIGGERS.includes(basename)) {
+      needFullSuite = true;
+      break;
+    }
+
+    // AI files
+    if (AI_SOURCE_PATTERN.test(filePath)) {
+      affectedTests.add('ai.test.ts');
+      continue;
+    }
+
+    // Check the mapping
+    const mapped = SOURCE_TO_TESTS[basename];
+    if (mapped) {
+      for (const t of mapped) affectedTests.add(t);
+    } else if (filePath.includes('src/engine/') || filePath.includes('src/ui/')) {
+      // Unknown engine/ui file — be conservative
+      needFullSuite = true;
+      break;
+    }
+    // Other files (non-src) are ignored — no tests needed
+  }
+
+  if (needFullSuite) return null;
+  if (affectedTests.size === 0) return ''; // empty string → skip tests entirely (no src changes)
+  // Build regex: match any of the test file names
+  return [...affectedTests].join('|');
 }
 
 // ============================================================
 // Run Tests
 // ============================================================
-function runTests() {
+// testFilter: null → full suite, '' → skip, string → --testPathPattern
+function runTests(testFilter = null) {
   return new Promise((resolvePromise) => {
-    log('Running test suite...');
-    const proc = spawn('npx', ['vitest', 'run'], {
+    // v10: Skip tests if no source files were modified
+    if (testFilter === '') {
+      log('Running test suite... SKIPPED (no source files modified)');
+      resolvePromise({ passed: true, count: 'skipped', failCount: '0', output: 'skipped — no source changes', skipped: true });
+      return;
+    }
+
+    const isIncremental = testFilter !== null;
+    if (isIncremental) {
+      log(`Running tests (incremental: ${testFilter.split('|').length} suite(s))...`);
+    } else {
+      log('Running test suite (full)...');
+    }
+
+    const vitestArgs = ['vitest', 'run'];
+    if (isIncremental) vitestArgs.push('--testPathPattern', testFilter);
+    const proc = spawn('npx', vitestArgs, {
       cwd: MVP_DIR,
       shell: true,
       stdio: 'pipe',
@@ -2187,7 +2323,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v8');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v10');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -2479,6 +2615,37 @@ async function main() {
         roundDecisions.push(...thisRoundDecisions);
         break;
       }
+      // v10: Multi-round lookahead — skip ahead to next scheduled activation
+      // instead of iterating empty rounds one at a time.
+      let nextActivation = round + 1; // default: just try next round
+      const agentsWithFreq = AGENTS.filter(a => {
+        const freq = a.minFrequencyRounds;
+        if (!freq || freq <= 0) return false;
+        const meta = handoffCache[a.id];
+        // Only consider agents that aren't permanently retired (or are continuous)
+        return meta?.status !== 'all-done' || a.type === 'continuous';
+      });
+      if (agentsWithFreq.length) {
+        const candidateRounds = agentsWithFreq.map(a => {
+          const lastRan = lastRunRound[a.id] || 0;
+          return lastRan + (a.minFrequencyRounds || 1);
+        });
+        nextActivation = Math.min(...candidateRounds);
+        if (nextActivation <= round) nextActivation = round + 1; // safety: never go backwards
+      }
+
+      const skippedCount = nextActivation - round;
+      if (skippedCount > 1) {
+        log(`\nNo agents can run. Skipping ${skippedCount - 1} empty round(s) → jumping to round ${nextActivation}.`);
+        // Record skipped rounds in roundLog for visibility
+        for (let s = round; s < nextActivation; s++) {
+          roundLog.push({ round: s, agents: [], testsPassed: null, testCount: '-', failCount: '-', note: `skipped (lookahead → ${nextActivation})` });
+        }
+        roundDecisions.push(...thisRoundDecisions);
+        round = nextActivation - 1; // loop increment will make it nextActivation
+        continue;
+      }
+
       log('\nNo agents can run this round (all blocked or all-done). Waiting...');
       roundDecisions.push(...thisRoundDecisions);
       roundLog.push({ round, agents: [], testsPassed: null, testCount: '-', failCount: '-', note: 'skipped (all blocked)' });
@@ -2498,6 +2665,8 @@ async function main() {
 
     // v9: Round time breakdown tracking (split sims into preSim/postSim for pipeline visibility)
     const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
+    // v10: Collect modified files from all code agents for incremental testing
+    const roundModifiedFiles = [];
 
     // Phase A: Code agents + pre-sim pipeline
     if (codeAgents.length) {
@@ -2512,7 +2681,8 @@ async function main() {
 
       // v9: Streaming agent pool — agents complete individually, no batch barrier
       const codeResultsPromise = runAgentPool(codeAgents, round, CONFIG.maxConcurrency, (result) => {
-        processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+        const { filesModified } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+        roundModifiedFiles.push(...filesModified);
       });
 
       // Wait for both pre-sim and all agents to complete
@@ -2534,8 +2704,15 @@ async function main() {
       const testStart = Date.now();
       const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
 
+      // v10: Incremental testing — only run affected suites after round 1
+      // Round 1 always gets full suite (baseline). After reverts, full suite too (handled below).
+      const testFilter = round === 1 ? null : getTestFilter(roundModifiedFiles);
+      if (testFilter !== null && testFilter !== '') {
+        log(`  Incremental test filter: ${testFilter.split('|').length} suite(s) of 8`);
+      }
+
       // Launch tests + optimistic post-sim concurrently
-      const testPromise = runTests();
+      const testPromise = runTests(testFilter);
       const postSimPromise = postSimShouldRun
         ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
         : Promise.resolve(null);
@@ -2941,7 +3118,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v8
+> Orchestrator: v10
 
 ## Summary
 - **Started**: ${startTime}

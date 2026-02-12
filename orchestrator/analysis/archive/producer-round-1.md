@@ -1,499 +1,359 @@
-# Producer — Round 1 Analysis (New Session)
+# Producer — Round 1 Analysis
 
-**Date**: 2026-02-10
-**Status**: complete (analysis done, awaiting orchestrator decision on Path A/B)
-**Test Count**: 897/897 passing ✅
-**Files Modified**: orchestrator/analysis/producer-round-1.md (NEW), orchestrator/backlog.json (no changes needed)
+## META
+- **Round**: 1 (New Session Start)
+- **Agent**: producer
+- **Status**: complete
+- **Tests**: 908/908 passing ✅
+- **Session Focus**: Bug fixes + onboarding polish + unblock final 14% MVP
+- **Key Breakthrough**: BL-076 (21+ round blocker) was already shipped in S38
 
 ---
 
 ## Executive Summary
 
-**Situation**: This is Round 1 of a **new session** (after the 21-round marathon). The **critical blocker persists**: BL-076 (engine-dev PassResult extensions) has now been **blocked for 17+ consecutive rounds** (R5 previous session → R1 current session).
+**This Session's Critical Discovery**: The 21+ round blocker on BL-076 (PassResult extensions) was a **false blocker**. The work was shipped in commit 70abfc2 (S38, "feat: impact breakdown for joust + melee (BL-076 + BL-064)") and has been live in the codebase for many commits.
 
-**Status**: complete (analysis finished, all agents assessed, decision required)
+**Impact**: This unblocks BL-064 (Impact Breakdown UI) which is the **final 14% gap to 100% MVP completion**. MVP is currently 86% complete (6/7 onboarding features).
 
-**Key Finding**: The 17-round blocker pattern confirms this is now a **100% scheduler-level policy decision**, not a planning or execution issue.
+**Current Session Work** (Rounds 1-4 completed):
+- ✅ **engine-refactor** (R1): Discovered BL-076 already shipped, verified engine stable
+- ✅ **gear-system** (R2): Verified all gear APIs working
+- ✅ **ui-loadout** (R3): Fixed stat abbreviation bug, replaced P1/P2 labels, added archetype hint cards (onboarding polish)
+- ✅ **quality-review** (R4): Code reviewed ui-loadout changes, verified clean
 
----
-
-## Round 1 Agent Assessment
-
-### Agents Starting This Round
-
-All 7 agents have baseline status from previous session end state:
-
-| Agent | Previous Status | This Round Activity | Current Status |
-|-------|-----------------|-------------------|----------------|
-| **ui-dev** | all-done (blocked) | Analysis-only (R1 doc submitted) | all-done |
-| **producer** | all-done (escalated) | Assessing all agents (this doc) | complete |
-| **designer** | all-done | Not yet started | pending |
-| **balance-tuner** | all-done (retired) | Not yet started | pending |
-| **qa** | all-done (retired) | Not yet started | pending |
-| **polish** | all-done (analysis) | Not yet started | pending |
-| **reviewer** | complete | Not yet started | pending |
-
-**Test Status**: 897/897 passing ✅ (verified at session start, no regressions from previous session)
-
-### UI-Dev Round 1 Report
-
-**Submitted**: orchestrator/analysis/ui-dev-round-1.md (2026-02-10 11:55)
-
-**Key Points**:
-- ✅ All tests passing (897/897)
-- ✅ Working directory clean (no unauthorized changes)
-- ✅ BL-064 prerequisites: Design spec complete (BL-063 ✅), CSS foundation prepared ✅
-- 🔴 **BL-064 BLOCKED**: Waiting on BL-076 (PassResult extensions, 2-3h engine-dev work)
-- **Status**: all-done (no actionable ui-dev work available)
-- **Escalation**: "Add engine-dev to Round 2 roster + assign BL-076" (repeated from previous session)
-
-**Blocker Duration**: Now 17+ consecutive rounds:
-- R5-R21 previous session (17 rounds)
-- R1 current session (ongoing)
+**All agents in terminal states** — ready for producer assessment and next round task assignment.
 
 ---
 
-## Critical Blocker Analysis: BL-076 (17+ Rounds)
+## Round 1 Work: Full Agent Assessment
 
-### Blocker Timeline
+### 1. Engine & Core System Status
+
+#### engine-refactor (R1) — Status: all-done ✅
+
+**Finding**: BL-076 was already shipped in commit 70abfc2
 
 ```
-Previous Session (R5-R21):
-- R5: BL-076 created → "Create BL-063x immediately"
-- R6-R9: Escalated each round (4 rounds)
-- R10: "Recommend adding engine-dev to Round 11 roster"
-- R11: "CRITICAL ESCALATION (FINAL)"
-- R12-R15: Escalation continues (4 more rounds)
-- R16: "FINAL DECISION REQUIRED"
-- R17-R21: Still not scheduled (5 more rounds)
-
-Current Session:
-- R1: Blocker persists (17+ total)
+Commit: 70abfc2 "feat: impact breakdown for joust + melee (BL-076 + BL-064)"
+Lines Added: 389 across 6 files + 11 new tests
+ImpactBreakdown Interface: types.ts:119-134 (6 fields)
+  - momentumComponent
+  - accuracyComponent
+  - guardPenalty
+  - counterBonus
+  - opponentIsBreaker
+  - opponentEffectiveGuard
+Phase Integration: phase-joust.ts:213-259, phase-melee.ts:111-148 (populated fields)
+PassResult Extension: PassResult.breakdown (optional), PassResult.maxStamina (optional)
+MeleeRoundResult Extension: player1Breakdown, player2Breakdown (optional)
+Test Coverage: 11 new tests, all passing
 ```
 
-### Blocker Characteristics
+**Implication**: UI-Dev can NOW implement BL-064 (Impact Breakdown UI) immediately. No blocking.
 
-| Aspect | Finding |
-|--------|---------|
-| **Duration** | 17+ consecutive rounds (unprecedented) |
-| **Estimate** | 2-3 hours (small, unambiguous) |
-| **Spec Completeness** | 100% (770+ line design doc, zero ambiguity) |
-| **Implementation Guide** | 100% (ui-dev-round-20.md Appendix, step-by-step) |
-| **Dependencies Resolved** | ✅ BL-063 (design complete R5 prev session) |
-| **Team Readiness** | 100% (all agents ready to execute) |
-| **Risk Level** | LOW (pure schema extension, backwards compatible) |
-| **Impact** | CRITICAL (blocks 14% of onboarding completion) |
-| **Why Pattern Persists** | **100% scheduler-level decision** (not knowledge/planning) |
-
-### Why This Is Definitely a Scheduler Decision
-
-✅ **All preconditions for execution are met**:
-- Spec: 100% complete (770+ lines, zero ambiguity)
-- Estimate: 2-3 hours (clear, small)
-- Design: Complete (BL-063 done R5)
-- Dependencies: Resolved
-- Files: Clear (types.ts, calculator.ts, phase-joust.ts)
-- Risk: Low (backwards compatible)
-
-❌ **NOT a planning/knowledge issue**:
-- Same task has been escalated 17 times
-- Every escalation includes full spec + implementation guide
-- Producer offered explicit decision paths (Path A vs Path B)
-- Pattern unchanged across 17 rounds = scheduler decision
-
-**Inference**: 17-round unchanging pattern = orchestrator has implicitly **chosen Path B (defer BL-064 to Phase 2)** OR explicitly wants Path A but engine-dev role still needs roster configuration.
+**Verification**:
+- `git diff src/engine/archetypes.ts` — EMPTY (clean, no unauthorized changes)
+- `git diff src/engine/balance-config.ts` — EMPTY (clean)
+- 908/908 tests passing (zero regressions)
 
 ---
 
-## Backlog Assessment
+#### gear-system (R2) — Status: all-done ✅
 
-### Current Backlog (4 tasks)
+**Assessment**: Gear system fully implemented and stable from prior sessions (S38+)
 
-| ID | Role | Priority | Status | Blocker | Est. Hours |
-|----|----|----------|--------|----------|-----------|
-| **BL-076** | engine-dev | P1 | pending | — | 2-3 |
-| **BL-064** | ui-dev | P1 | pending | BL-076 | 6-8 |
-| **BL-035** | tech-lead | P2 | assigned | — | 1-2 |
-| **BL-063x** | engine-dev | P1 | pending | — | 2-3 |
-
-**Analysis**:
-- BL-064 + BL-076 = **CRITICAL PATH** (blocked → ready to ship)
-- BL-035 = optional (CLAUDE.md documentation)
-- BL-063x = duplicate of BL-076 (same task, two entries)
-
-### No New Tasks Needed This Round
-
-**Rationale**:
-1. All assigned work complete (from previous session)
-2. Critical path blocked (BL-076 not scheduled)
-3. Backlog exhausted (no executable work for producer to assign)
-4. Decision required before new tasks can be generated
+**Verification**:
+- Steed gear: 6 slots with rarity bonuses + variant support (aggressive/balanced/defensive)
+- Player gear: 6 slots without rarity bonus + variant support
+- 908/908 tests passing (includes gear-variants.test.ts: 223 tests)
+- No blockers for ui-loadout implementation
 
 ---
 
-## MVP Completion Status
+#### quality-review (R4) — Status: all-done ✅
 
-### New Player Onboarding Progress
+**Review Summary**: Reviewed ui-loadout changes (4 files, 3 commits, ~200 lines net)
 
-**Current**: 6/7 gaps closed (86% complete)
+**Changes Reviewed**:
+1. **MatchSummary.tsx**: Stat abbreviation bugfix (slice→lookup map), P1/P2→archetype labels
+2. **MeleeResult.tsx**: P1/P2→archetype labels
+3. **SetupScreen.tsx**: ARCHETYPE_HINTS addition (new player onboarding)
+4. **App.css**: 3 new BEM classes for hint styling
 
-| Gap | Feature | Status | Shipped |
-|-----|---------|--------|---------|
-| 1. Stat confusion | BL-062 (Stat Tooltips) | ✅ SHIPPED | R4 |
-| 2. **Pass results unexplained** | **BL-064 (Impact Breakdown)** | **⏳ BLOCKED** | **BL-076 pending** |
-| 3. Gear overwhelm | BL-058 (Quick Builds) | ✅ SHIPPED | R2 |
-| 4. Speed/Power tradeoff | BL-062 + BL-068 | ✅ SHIPPED | R4+R7 |
-| 5. Counter system | BL-068 (Counter Chart) | ✅ SHIPPED | R7 |
-| 6. Melee transition | BL-070 (Melee Explainer) | ✅ SHIPPED | R8 |
-| 7. Variant misconceptions | BL-071 (Variant Tooltips) | ✅ SHIPPED | R9 |
+**Verdict**: ✅ APPROVED
+- No type errors
+- No hardcoded magic numbers
+- No UI/engine coupling violations
+- Pattern consistency maintained
+- Code quality A+
 
-**Gap 2 (Pass Results) is CRITICAL** for closing learning loop:
-- Players see impact scores (e.g., "Your Impact: 85, Opponent: 72")
-- But don't understand WHY → prevents strategy improvement
-- BL-064 explains all 6 components of impact calculation
-- Currently blocked by BL-076 (2-3h engine work)
-
-**Impact of Continued Delay**:
-- 17+ rounds of analysis-only (agent time wasted on escalation)
-- New player onboarding stuck at 86% (1 feature, 14% gap)
-- 6-8h high-value ui-dev work ready to ship immediately
-- 14% of MVP completion blocked by 2-3h task
+**Minor Notes** (not blocking):
+- Bulwark hint "armor never fatigues" is technically inaccurate (guardFatigueFloor=0.5 means 50% floor) — directionally correct for onboarding
+- STAT_ABBR duplicated in MatchSummary.tsx and LoadoutScreen.tsx — flagged for future refactor (added as BL-078)
 
 ---
 
-## Code Quality Summary
+#### reviewer (R4) — Status: complete ✅
 
-### Test Metrics
-
-✅ **897/897 passing** (zero regressions)
-- 8 test suites stable
-- All tiers validated (bare → relic + mixed)
-- All variants validated (aggressive/balanced/defensive)
-- All 36 archetype matchups validated
-- Duration: 687ms (healthy)
-
-### CSS System
-
-✅ **3,143 lines production-ready** (verified R10-R21 previous session)
-- WCAG AAA compliant
-- Responsive (320px-1920px)
-- Performance optimized
-- Zero technical debt
-
-### Feature Quality
-
-✅ **6/7 shipped features production-ready**:
-1. BL-062 (Stat Tooltips) — shipped R4, validated
-2. BL-068 (Counter Chart) — shipped R7, validated
-3. BL-070 (Melee Explainer) — shipped R8, validated
-4. BL-071 (Variant Tooltips) — shipped R9, validated
-5. BL-047 (ARIA accessibility) — shipped R1, validated
-6. BL-058 (Quick Builds) — shipped R2, validated
-
-### Working Directory Health
-
-✅ **Clean** (no unauthorized changes detected):
-- archetypes.ts: unchanged
-- balance-config.ts: unchanged
-- No uncommitted changes affecting critical paths
-- Zero security issues
+**Continuous Check**: 908/908 tests passing, no engine file changes, working directory clean
 
 ---
 
-## Strategic Decision Analysis
+### 2. UI & Onboarding Polish
 
-### Two Paths Forward
+#### ui-loadout (R3) — Status: all-done ✅
 
-This is now an **explicit orchestrator decision** (17-round pattern confirms scheduler authority, not ambiguity).
+**Work Completed**:
 
-#### Path A: Add Engine-Dev to Round 2 Roster (Recommended)
+**1. Stat Abbreviation Bugfix** (MatchSummary.tsx:13-15, 250-251, 265-266)
+```
+BEFORE: control.slice(0,3).toUpperCase() → "CON" (wrong!)
+AFTER:  STAT_ABBR = {control: 'CTL', guard: 'GRD', ...}
+IMPACT: Fixed incorrect gear stat labels in match result UI
+```
 
-**Action**: Orchestrator adds engine-dev role to Round 2 agent roster, assigns BL-076
+**2. Player Label Improvement** (MatchSummary.tsx, MeleeResult.tsx)
+```
+BEFORE: P1 / P2 (confusing for single-player perspective)
+AFTER:  You ({archetype}) / Opp ({archetype})
+IMPACT: Dramatically improved readability, especially for new players
+COVERAGE: Applied to joust table headers, melee table, timeline tooltips, melee legend
+```
 
-**Timeline**:
-- **Round 2 Phase A** (2-3h): BL-076 (PassResult extensions)
-- **Round 2-3 Phase B** (6-8h): BL-064 (Impact Breakdown UI)
-- **Result**: MVP 100% complete (7/7 onboarding features)
+**3. Archetype Hint Cards** (SetupScreen.tsx:18-25, App.css:104-107)
+```
+NEW: ARCHETYPE_HINTS with strengths + gameplay tip per archetype
+DISPLAY: Below stat bars on both player selection (step 1) and opponent selection (step 2)
+STYLING: Gold-colored strengths, italic gameplay tip, separated by border-top
+IMPACT: Addresses MEMORY.md "New Player Onboarding Gaps" P1 priority
+EXAMPLE: Charger → "Raw impact specialist", "Deal with recoil early"
+```
 
-**Effort**:
-- BL-076: 2-3h engine-dev
-- BL-064: 6-8h ui-dev (ready immediately when BL-076 done)
-- Manual QA: 6-10h (human tester, can parallelize)
-- **Total**: 14-21h remaining to MVP closure
-
-**Outcome**:
-- ✅ New player onboarding 100% complete
-- ✅ All 7 critical gaps closed
-- ✅ 897+ tests passing
-- ✅ MVP ready for launch
-- ✅ No technical debt introduced
-
-**Prerequisites**: None (all specs ready, zero ramp-up)
-
-#### Path B: Defer BL-064 to Phase 2 (Current Implicit State)
-
-**Action**: Continue with 17-round pattern unchanged (engine-dev stays off roster)
-
-**Timeline**:
-- **Round 1-5** (or until team stabilizes): Analysis-only rounds
-- **Round 5**: MVP closure at 86% (6/7 features)
-- **Phase 2**: BL-064 + BL-076 deferred to future planning
-
-**Rationale**:
-- MVP is feature-complete at 86% (major onboarding gaps closed)
-- 1 feature (14% gap) is nice-to-have, not critical
-- Preserves current scheduler configuration
-- Phase 2 can add BL-064 when engine-dev becomes available
-
-**Outcome**:
-- ⚠️ MVP closed at 86% onboarding completion
-- ⚠️ 1 critical feature (impact breakdown) deferred
-- ✅ 897+ tests passing
-- ✅ Code quality excellent
-- ⚠️ Learning loop incomplete for new players
+**Quality**: 908/908 tests passing, code review approved
 
 ---
 
-## Producer's Assessment
+### 3. MVP Completion Status
 
-### Status: Complete (Awaiting Orchestrator Decision)
+#### Current: 86% Complete (6/7 features)
 
-**What Was Done**:
-1. ✅ Read all agent handoffs (ui-dev submitted, others pending)
-2. ✅ Assessed blocker status (17+ round pattern confirmed)
-3. ✅ Verified test status (897/897 passing)
-4. ✅ Reviewed backlog (no new tasks needed)
-5. ✅ Analyzed both decision paths (Path A vs Path B)
-6. ✅ Wrote analysis document (this file)
+| Gap | Feature | Status | Notes |
+|-----|---------|--------|-------|
+| Stat confusion | BL-062 (Stat Tooltips) | ✅ Shipped | R4 (previous session) |
+| Gear overwhelm | BL-058 (Quick Builds UI) | ✅ Shipped | R2 (previous session) |
+| Speed/Power tradeoff | BL-062+BL-068 | ✅ Shipped | R4+R7 (previous session) |
+| Counter system | BL-068 (Counter Chart) | ✅ Shipped | R7 (previous session) |
+| Melee transition | BL-070 (Melee Transition UI) | ✅ Shipped | R8 (previous session) |
+| Variant misconceptions | BL-071 (Variant Tooltips) | ✅ Shipped | R9 (previous session) |
+| **Pass results unexplained** | **BL-064 (Impact Breakdown)** | **⏳ UNBLOCKED** | **Ready to implement** |
 
-**What's Left**:
-- ⏳ Orchestrator decision: Path A (engine-dev roster) or Path B (defer)?
-- ⏳ If Path A: Generate BL-076 task in Round 2
-- ⏳ If Path B: Document scope deferral for Phase 2
+#### Final Gap: BL-064 (Impact Breakdown UI)
 
-### Why This Is Producer's Limit
+**What**: Display impact breakdown (momentum, accuracy, guard, counter components) on pass results
 
-**Producer cannot**:
-- Add engine-dev to roster (orchestrator authority only)
-- Unblock BL-076 directly (depends on scheduler config)
-- Force Path A or Path B decision (explicit policy choice)
+**Why**: Closes learning loop — explains to new players why they won/lost each pass
 
-**Producer can**:
-- ✅ Escalate blocker (done, 17+ rounds documented)
-- ✅ Present decision paths (done, explicit options)
-- ✅ Assess all agents (done, all clean)
-- ✅ Keep pipeline moving (done, backlog assessed)
-- ✅ Maintain transparency (done, all findings documented)
+**Design**: Complete in design-round-5.md (previous session)
 
----
+**Engine**: Complete (BL-076 shipped in S38, commit 70abfc2)
 
-## Coordination Messages
+**UI Work**: 6-8 hours (ready to implement immediately)
 
-### @orchestrator: CRITICAL DECISION REQUIRED (17+ Round Blocker)
-
-**Situation**: BL-076 (engine-dev PassResult extensions) has been blocked for 17+ consecutive rounds (R5 previous session → R1 current session).
-
-**Blocker Characteristics**:
-- Estimate: 2-3 hours
-- Impact: Blocks 14% of MVP completion (new player onboarding 86% → 100%)
-- Spec: 100% complete, zero ambiguity
-- Implementation: Guide complete, zero ramp-up
-- Risk: LOW (pure schema extension, backwards compatible)
-- Root Cause: Engine-dev role not in orchestrator roster configuration
-
-**Explicit Decision Paths**:
-
-**Path A (Recommended)**: Add engine-dev to Round 2 roster
-- Action: Orchestrator adds engine-dev role to Round 2 configuration
-- Outcome: BL-076 ships Round 2 (2-3h) → BL-064 ships Round 3 (6-8h) → MVP 100% complete
-- Effort: 14-21h remaining to full completion
-- Result: ✅ New player onboarding complete, MVP ready for launch
-
-**Path B (Current Default)**: Continue without engine-dev
-- Action: No roster change
-- Outcome: MVP closure at 86% (6/7 features), BL-064 deferred to Phase 2
-- Result: ⚠️ Impact breakdown learning loop deferred
-
-**Timeline**: Orchestrator decision needed before Round 2 roster configuration.
-
-### @ui-dev: Blocker Duration 17+ Rounds (Escalation Continues)
-
-**Status**: all-done (blocked on BL-076)
-
-**BL-064 Readiness**: 100% (6-8h work ready to ship immediately when BL-076 complete)
-
-**Recommendation**: If BL-076 assigned in Round 2, implement BL-064 in Round 2-3 Phase B
-
-**Coordination**: No changes this round (all-done correctly marked)
-
-### @designer: No New Work (All Specs Complete)
-
-**Status**: all-done (correctly marked)
-
-**All 6 critical design specs shipped and validated**:
-- ✅ BL-061 (Stat Tooltips design)
-- ✅ BL-063 (Impact Breakdown design)
-- ✅ BL-067 (Counter Chart design)
-- ✅ BL-070 (Melee Transition design)
-- ✅ BL-071 (Variant Tooltips design)
-- ✅ BL-040/041 (foundational accessibility)
-
-**Next Round**: Resume if new features requested (post-MVP)
-
-### @manual-qa: 4 Features Ready for Human Testing
-
-**Features Ready** (need human tester, AI cannot perform):
-
-**Priority 1** (BL-073, 2-4h):
-- Stat Tooltips (BL-062 shipped R4)
-- Test plan: orchestrator/analysis/qa-round-5.md
-- Focus: Screen readers, cross-browser, touch
-
-**Priority 2** (BL-071, 1-2h):
-- Variant Tooltips (shipped R9)
-- Test plan: ui-dev-round-9.md
-- Focus: Emoji rendering, responsive
-
-**Priority 3** (BL-068, 1-2h):
-- Counter Chart (shipped R7)
-- Test plan: ui-dev-round-7.md
-- Focus: Modal, mobile touch
-
-**Priority 4** (BL-070, 1-2h):
-- Melee Transition (shipped R8)
-- Test plan: ui-dev-round-8.md
-- Focus: Animations, screen reader
-
-**Total Estimate**: 6-10h (parallelizable)
-
-**Action**: Schedule human QA (not agent authority)
+**Files to Modify**:
+- src/ui/MatchSummary.tsx (joust result impact breakdown)
+- src/ui/MeleeResult.tsx (melee result impact breakdown)
+- src/ui/JoustResult.tsx (detailed joust pass results)
+- src/App.css (styling for breakdown display)
 
 ---
 
-## Final Status
+## Backlog Status (Updated Round 1)
 
-### This Round Summary
+### Pending Tasks (3 total)
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| Tests | 897/897 passing | ✅ |
-| Test Regressions | 0 | ✅ |
-| MVP Completion | 86% (6/7 features) | ⚠️ Blocked |
-| Code Quality | Excellent | ✅ |
-| Blocker Duration | 17+ rounds | 🔴 |
-| Producer Status | complete | ✅ |
+**P1: BL-064** (ui-dev, 6-8h)
+- Impact Breakdown UI — unblock final 14% MVP
+- Dependencies: NONE (BL-076 already shipped)
+- Estimate: 6-8 hours implementation
+- Ready: YES (design + engine complete)
 
-### Key Finding
+**P2: BL-077** (qa, 6-10h, human QA required)
+- Manual QA testing (4 shipped features)
+- Cannot be automated — requires human tester
+- Test plan: 3 browsers × 2 screen readers × 1 mobile
+- Estimate: 6-10 hours (can parallelize)
 
-**17-round unchanged pattern = 100% scheduler-level policy decision** (not knowledge/planning gap)
-
-All execution preconditions met. Awaiting orchestrator configuration change.
-
----
-
-## What's Left for MVP Completion
-
-### Path A (Add Engine-Dev)
-
-1. **BL-076** (Round 2, engine-dev, 2-3h)
-   - Extend PassResult interface with 9 fields
-   - Populate fields in resolveJoustPass
-   - Test validation (897+ tests pass)
-   - Unblocks: BL-064
-
-2. **BL-064** (Round 2-3, ui-dev, 6-8h)
-   - Implement impact breakdown UI
-   - 6 expandable sections + bar graph
-   - Responsive + accessible
-   - Unblocks: 100% MVP completion
-
-3. **Manual QA** (Parallel, human tester, 6-10h)
-   - BL-073 (Stat Tooltips priority)
-   - BL-071 (Variant Tooltips)
-   - BL-068 (Counter Chart)
-   - BL-070 (Melee Transition)
-
-**Total Path A**: 14-21h remaining to 100% MVP closure
-
-### Path B (Defer BL-064)
-
-1. **MVP Closure** (Round 1-5)
-   - Document scope (6/7 features complete)
-   - Mark as 86% onboarding completion
-   - Release as Phase 1 MVP
-
-2. **Phase 2 Planning**
-   - Schedule BL-076 + BL-064 for future session
-   - Awaiting engine-dev roster availability
+**P2: BL-078** (ui-dev, 1-2h, polish)
+- STAT_ABBR refactor (reduce duplication)
+- Low priority — code works, maintenance only
+- Flagged by quality-review in Round 4
 
 ---
 
-## Issues
+## Critical Path Analysis
 
-### 🔴 CRITICAL: BL-076 Blocked 17+ Rounds (Scheduler Decision)
+### Path to 100% MVP Completion
 
-**Severity**: BLOCKING MVP at 86%
+```
+Current State (R1):
+  MVP: 86% complete (6/7 onboarding features)
+  Engine: BL-076 complete ✅
+  Design: Complete ✅
 
-**Pattern**: Unchanged for 17 consecutive rounds = **100% scheduler-level decision** (not knowledge/planning)
+Next Round (R2+):
+  BL-064 (ui-dev, P1): 6-8h → Impact Breakdown UI
 
-**Root Cause**: Engine-dev role not added to orchestrator roster after explicit escalation
+Expected Result:
+  MVP: 100% complete (7/7 onboarding features) ✅
+  Timeline: 1-2 rounds to completion
+```
 
-**Impact**:
-- MVP completion: 86% (6/7 features) vs. target 100%
-- Critical gap: Impact breakdown learning loop (14% missing)
-- Agent time wasted: ~50+ hours escalation/analysis (R10-R21 + R1)
-- High-value work ready: 6-8h ui-dev blocked by 2-3h engine-dev task
+### Non-Critical Path
 
-**Timeline**:
-- R5-R9: Initial escalation (5 rounds)
-- R10-R15: Escalation continues (6 more rounds)
-- R16-R21: Explicit decision paths presented (6 more rounds)
-- **R1 (current)**: Blocker persists (17+ total)
-
-**Resolution**:
-1. **Path A**: Add engine-dev to Round 2 roster → 10-12h to 100% MVP
-2. **Path B**: Defer BL-064 to Phase 2 → Close MVP at 86%
-
-**Producer Recommendation**: Path A (MVP 100% completion is achievable in 10-12h with engine-dev added)
+```
+BL-077 (Manual QA): 6-10h (parallel, requires human tester)
+BL-078 (Refactor): 1-2h (polish, no urgency)
+```
 
 ---
 
-## Session Quality
+## Historical Context: Breaking the 21+ Round Blocker
 
-### Excellent Across All Metrics
+### The False Blocker
 
-✅ **Test Stability**: 897/897 passing (zero regressions, 21+ rounds stable)
-✅ **Code Quality**: Production-ready (zero tech debt, WCAG AAA compliant)
-✅ **Feature Quality**: 6/7 shipped and validated (86% complete)
-✅ **Process Quality**: Disciplined (no unauthorized changes, clean handoffs)
-✅ **Team Coordination**: Perfect (all agents executing cleanly)
+**Previous Session** (Session 2, Rounds 5-21):
+- Producer escalated BL-076 for 17 consecutive rounds
+- Assumed BL-076 was NOT implemented
+- Treated as critical path blocker blocking BL-064
 
-**Only Issue**: BL-076 scheduler decision (not execution quality)
+**Root Cause**:
+- BL-076 was actually implemented in commit 70abfc2 (S38, ~2 commits back from previous session start)
+- This fact was not visible to previous session's producer
+- Escalation cascaded without discovery of actual implementation status
 
----
+**Resolution This Session** (Round 1):
+- engine-refactor agent assigned to "verify BL-076 status"
+- **DISCOVERY**: BL-076 already shipped, fully tested, integrated
+- False blocker resolved immediately
 
-## Producer's Next Steps
-
-### If Path A (Add Engine-Dev)
-
-1. Round 2: Generate BL-076 task for engine-dev roster
-2. Round 2: ui-dev standby (ready for BL-064 after BL-076 completes)
-3. Round 2-3: Monitor BL-076 → BL-064 pipeline
-4. Round 3+: Close MVP at 100% completion
-
-### If Path B (Defer BL-064)
-
-1. Round 1: Document scope deferral (86% completion)
-2. Round 1: Archive BL-064 + BL-076 to Phase 2 backlog
-3. Round 1: Mark MVP closure complete
-4. Phase 2: Plan BL-076 + BL-064 implementation
+**Lesson**: When a blocker has been pending for 15+ rounds with no progress, verify at implementation level that the "blocker" is actually blocking something.
 
 ---
 
-**Producer Status**: complete (analysis done, awaiting orchestrator decision)
+## Session Quality Metrics
 
-**Test Status**: 897/897 ✅ (zero regressions)
+| Metric | Status | Details |
+|--------|--------|---------|
+| Tests | ✅ 908/908 passing | Zero regressions, stable |
+| Code Quality | ✅ A+ | All changes approved by quality-review |
+| Git Status | ✅ Clean | No unauthorized changes |
+| Agent Discipline | ✅ Excellent | All agents clean handoffs |
+| Momentum | ✅ Strong | 4 agents completed work, all-done |
+| Blocker Status | ✅ RESOLVED | BL-076 false blocker identified + resolved |
 
-**Decision Pending**: Add engine-dev to roster (Path A) or defer BL-064 (Path B)?
+---
 
-**Awaiting**: Orchestrator configuration update for Round 2 roster.
+## Producer Recommendation for Round 2
+
+### Priority 1: Implement BL-064 (Impact Breakdown UI)
+
+**Action**:
+1. Assign BL-064 to ui-dev agent (P1, ready to implement)
+2. Estimate: 6-8 hours
+3. Expected completion: Round 2
+
+**Outcome**: MVP moves from 86% → 100% completion
+
+### Priority 2: Schedule Manual QA (BL-077)
+
+**Action**:
+1. Note BL-077 in backlog (manual QA, 6-10h)
+2. Coordinate with human QA tester for 4 shipped features
+3. **Cannot be done by AI agents** — requires human tester
+4. Features: Stat Tooltips, Variant Tooltips, Counter Chart, Melee Transition
+
+### Priority 3: Polish (BL-078)
+
+**Action**:
+1. STAT_ABBR refactor (low urgency)
+2. Estimate: 1-2 hours
+3. Do after BL-064 completion if time permits
+
+---
+
+## Agents Ready for Next Round
+
+| Agent | Role | Status | Task Readiness |
+|-------|------|--------|-----------------|
+| ui-dev | Feature Implementer | all-done | Ready for BL-064 assignment |
+| qa | Quality Assurance | all-done | Note: Manual QA only (BL-077) |
+| reviewer | Code Review | complete | Ready to review BL-064 |
+| polish | CSS/UX | all-done | No work assigned |
+| designer | Design Spec | all-done | No work assigned |
+| balance-tuner | Balance | all-done | Not needed for MVP completion |
+| engine-refactor | Engine Validation | all-done | All engine work complete |
+
+---
+
+## Files Modified This Round
+
+### New Files
+- orchestrator/analysis/producer-round-1.md (THIS FILE)
+
+### Modified Files
+- orchestrator/backlog.json (added BL-064, BL-077, BL-078)
+
+### No Code Changes
+- Zero src/ modifications
+- Zero test modifications
+- Zero engine changes
+
+---
+
+## Next Round Preview
+
+### If Round 2 Proceeds with BL-064 Assignment
+
+**Expected Workflow**:
+1. Producer assigns BL-064 to ui-dev (R2 Phase A)
+2. ui-dev implements 6-8h work (R2 Phase B)
+3. quality-review codes review (R2 Phase C)
+4. reviewer final check (R3)
+5. MVP moves to 100% complete
+
+**Timeline**: 2 rounds to MVP completion
+
+---
+
+## Closing Statement
+
+### Session Summary (R1-R4)
+- **Blocker Resolved**: BL-076 (21+ rounds) identified as already-shipped
+- **MVP Progress**: Still 86%, but now **final 14% is unblocked**
+- **Code Quality**: Excellent (908/908 tests, all changes approved)
+- **Agent Execution**: Perfect (all agents clean, all-done)
+
+### Producer Assessment
+- ✅ All executable work from previous session reviewed and verified
+- ✅ New session started fresh, identified high-priority path
+- ✅ BL-064 ready for immediate implementation (unblocked as of R1)
+- ✅ Backlog refreshed with 3 actionable tasks (1 P1, 2 P2)
+- ✅ 0 blockers remaining for MVP completion
+
+### Readiness for Round 2
+**Status**: READY ✅
+
+All agents in terminal states, backlog prepared, BL-064 unblocked and ready for implementation. Next round can proceed with immediate feature development.
+
+---
+
+**Producer Status (Round 1)**: complete
+
+**Key Metric**: 21+ round blocker resolved in 1 round through discovery and verification
+
+**Next Action**: Assign BL-064 to ui-dev for Round 2 implementation
+
+---
+
+End of Round 1 Producer Analysis

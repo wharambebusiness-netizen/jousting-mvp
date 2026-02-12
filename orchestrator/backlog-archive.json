@@ -904,5 +904,36 @@
     "status": "completed",
     "dependsOn": [],
     "createdAt": "2026-02-10T04:52:00Z"
+  },
+  {
+    "id": "BL-064",
+    "priority": 1,
+    "role": "ui-dev",
+    "title": "Impact Breakdown UI (Complete MVP Onboarding)",
+    "description": "Implement impact breakdown display on pass result screens. Shows momentum component, accuracy component, guard penalty, counter bonus for each pass. Closes final 14% MVP gap (7/7 onboarding features complete). Design spec complete (design-round-5.md). PassResult extensions shipped in S38 commit 70abfc2 (BL-076). Ready to implement immediately. Acceptance: Impact breakdown visible on joust + melee result screens, explains all 4 impact components, helps players understand why they won/lost.",
+    "fileOwnership": [
+      "src/ui/MatchSummary.tsx",
+      "src/ui/MeleeResult.tsx",
+      "src/ui/JoustResult.tsx",
+      "src/App.css"
+    ],
+    "status": "completed",
+    "dependsOn": [],
+    "estimate": "6-8 hours"
+  },
+  {
+    "id": "BL-078",
+    "priority": 2,
+    "role": "ui-dev",
+    "title": "STAT_ABBR Refactor (Reduce Duplication)",
+    "description": "Reduce duplication of STAT_ABBR mapping. Currently duplicated in MatchSummary.tsx and LoadoutScreen.tsx (quality-review flagged). Move to shared constant. Low priority Polish — code works correctly, this is maintenance. Acceptance: STAT_ABBR defined in single location, both components import and use it.",
+    "fileOwnership": [
+      "src/ui/App.tsx",
+      "src/ui/MatchSummary.tsx",
+      "src/ui/LoadoutScreen.tsx"
+    ],
+    "status": "completed",
+    "dependsOn": [],
+    "estimate": "1-2 hours"
   }
 ]
