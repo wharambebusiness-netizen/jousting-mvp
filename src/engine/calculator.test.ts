@@ -106,25 +106,25 @@ describe('Soft Cap Boundary Behavior (BL-005)', () => {
     expect(softCap(knee - 1)).toBe(knee - 1);
   });
 
-  it('Bulwark GRD at giga rarity can cross knee (65+13+gear)', () => {
-    // Bulwark GRD=65, giga rarity bonus=13 → base 78
-    // With max giga chamfron primary (9) + barding secondary (6) + armor secondary (6) = up to 99
+  it('Bulwark GRD at giga rarity can cross knee (64+13+gear)', () => {
+    // Bulwark GRD=64, giga rarity bonus=13 → base 77
+    // With max giga chamfron primary (9) + barding secondary (6) + armor secondary (6) = up to 98
     // Only with extreme gear can Bulwark GRD cross 100
-    const bulwarkGrdBase = bulwark.guard; // 65
+    const bulwarkGrdBase = bulwark.guard; // 64
     const rarityBonus = BALANCE.giglingRarityBonus.giga; // 13
-    const grdWithRarity = bulwarkGrdBase + rarityBonus; // 78
-    expect(grdWithRarity).toBe(78);
-    // At 78 (below knee), no compression
-    expect(softCap(grdWithRarity)).toBe(78);
+    const grdWithRarity = bulwarkGrdBase + rarityBonus; // 77
+    expect(grdWithRarity).toBe(77);
+    // At 77 (below knee), no compression
+    expect(softCap(grdWithRarity)).toBe(77);
 
-    // Simulate max gear pushing above knee: 78 + chamfron primary(9) + barding secondary(6) + attack deltaGuard(20) = 113
+    // Simulate max gear pushing above knee: 77 + chamfron primary(9) + barding secondary(6) + attack deltaGuard(20) = 112
     const grdWithMaxGearAndAttack = grdWithRarity + 9 + 6 + 20; // PdL deltaGuard=+20
-    expect(grdWithMaxGearAndAttack).toBe(113);
-    // excess=13, formula: 100 + 13*50/(13+50) = 100 + 650/63 ≈ 110.32
+    expect(grdWithMaxGearAndAttack).toBe(112);
+    // excess=12, formula: 100 + 12*K/(12+K)
     const capped = softCap(grdWithMaxGearAndAttack);
     expect(capped).toBeLessThan(grdWithMaxGearAndAttack);
     expect(capped).toBeGreaterThan(knee);
-    expect(r(capped, 2)).toBe(r(knee + 13 * K / (13 + K), 2));
+    expect(r(capped, 2)).toBe(r(knee + 12 * K / (12 + K), 2));
   });
 
   it('softCap formula matches: knee + excess*K/(excess+K)', () => {
@@ -233,7 +233,7 @@ describe('Exploratory Edge Cases', () => {
     for (const name of archetypeNames) {
       const a = ARCHETYPES[name];
       const total = a.momentum + a.control + a.guard + a.initiative + a.stamina;
-      expect(total, `${name} total=${total}`).toBeGreaterThanOrEqual(290);
+      expect(total, `${name} total=${total}`).toBeGreaterThanOrEqual(289);
       expect(total, `${name} total=${total}`).toBeLessThanOrEqual(305);
     }
   });
@@ -710,14 +710,14 @@ describe('Scaling Properties', () => {
   });
 
   it('guard fatigue prevents infinite turtle', () => {
-    // Bulwark at 0 stamina with Guard High: raw guard = 85
+    // Bulwark at 0 stamina with Guard High: raw guard = 84
     const stats = computeMeleeEffectiveStats(bulwark, GH, 0);
     // ff = 0, guardFF = 0.3
-    expect(stats.guard).toBe(85 * BALANCE.guardFatigueFloor);
-    expect(stats.guard).toBe(85 * 0.3);
+    expect(stats.guard).toBe(84 * BALANCE.guardFatigueFloor);
+    expect(stats.guard).toBe(84 * 0.3);
     // Compare to full stamina
     const fullStats = computeMeleeEffectiveStats(bulwark, GH, 65);
-    expect(fullStats.guard).toBe(85); // guardFF = 1.0 at full stamina
+    expect(fullStats.guard).toBe(84); // guardFF = 1.0 at full stamina
     // Guard dropped by 70% — turtle no longer invincible
     expect(stats.guard).toBeLessThan(fullStats.guard * 0.4);
   });

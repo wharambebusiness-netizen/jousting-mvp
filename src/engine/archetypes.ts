@@ -29,7 +29,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
     name: 'Bulwark',
     momentum: 58,
     control: 52,
-    guard: 65,
+    guard: 64,
     initiative: 53,
     stamina: 62,
     identity: 'Immovable wall; wins on attrition',
@@ -51,7 +51,7 @@ export const ARCHETYPES: Record<string, Archetype> = {
     control: 60,
     guard: 55,
     initiative: 55,
-    stamina: 60,
+    stamina: 62,
     identity: 'Guard shatter; anti-Bulwark',
   },
   duelist: {

@@ -1,0 +1,36 @@
+{
+  "name": "Archetype Tuning",
+  "description": "Sweep archetype stat adjustments to find tighter balance. Tests small ±2 adjustments to the weakest/strongest archetypes.",
+  "strategy": "sweep",
+  "matchesPerMatchup": 200,
+  "baselineRuns": 3,
+  "simTimeoutMs": 90000,
+  "outputDir": "orchestrator/balance-data",
+  "params": [
+    {
+      "key": "archetype.charger.momentum",
+      "label": "charger MOM",
+      "values": [73, 74, 75, 76, 77]
+    },
+    {
+      "key": "archetype.charger.stamina",
+      "label": "charger STA",
+      "values": [63, 64, 65, 66, 67]
+    },
+    {
+      "key": "archetype.bulwark.guard",
+      "label": "bulwark GRD",
+      "values": [62, 63, 64, 65, 66]
+    },
+    {
+      "key": "archetype.breaker.stamina",
+      "label": "breaker STA",
+      "values": [60, 61, 62, 63, 64]
+    }
+  ],
+  "tiers": [
+    { "tier": "bare", "variant": "balanced", "weight": 0.3 },
+    { "tier": "epic", "variant": "balanced", "weight": 1.0 },
+    { "tier": "giga", "variant": "balanced", "weight": 0.8 }
+  ]
+}

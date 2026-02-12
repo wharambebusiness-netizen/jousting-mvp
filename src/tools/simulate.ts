@@ -9,6 +9,9 @@
 //   npx tsx src/tools/simulate.ts [tier] [variant]               # Text output (default)
 //   npx tsx src/tools/simulate.ts [tier] [variant] --json        # Structured JSON output
 //   npx tsx src/tools/simulate.ts [tier] [variant] --matches N   # Override matches per matchup (default 200)
+//   npx tsx src/tools/simulate.ts --summary [variant]            # Multi-tier summary (bare+epic+giga)
+//   npx tsx src/tools/simulate.ts --summary [variant] --json     # Multi-tier summary as JSON
+//   npx tsx src/tools/simulate.ts [tier] --override archetype.breaker.stamina=65  # Override archetype stats
 //
 // Exports:
 //   runSimulation(config)  — programmatic access, returns SimulationReport
@@ -106,6 +109,30 @@ export interface SimConfig {
   variant?: string;
   matchesPerMatchup?: number;
   overrides?: Record<string, number>;
+  archetypeOverrides?: Record<string, number>;
+}
+
+export interface SummaryTierResult {
+  tier: string;
+  variant: string | null;
+  spreadPp: number;
+  flags: number;
+  topArchetype: string;
+  topWinRate: number;
+  bottomArchetype: string;
+  bottomWinRate: number;
+  elapsedMs: number;
+}
+
+export interface SummaryReport {
+  tiers: SummaryTierResult[];
+  reports: SimulationReport[];
+  metadata: {
+    variant: string | null;
+    matchesPerMatchup: number;
+    timestamp: string;
+    totalElapsedMs: number;
+  };
 }
 
 // ============================================================
@@ -138,6 +165,39 @@ export function applyBalanceOverrides(overrides: Record<string, number>): Record
 /** Restore previous balance config values (undo overrides). */
 export function restoreBalanceOverrides(previous: Record<string, number>): void {
   applyBalanceOverrides(previous);
+}
+
+// ============================================================
+// Archetype Stat Overrides
+// ============================================================
+
+const ARCHETYPE_STAT_KEYS = ['momentum', 'control', 'guard', 'initiative', 'stamina'] as const;
+
+/**
+ * Apply archetype stat overrides in-memory.
+ * Keys use dot notation: "breaker.stamina", "bulwark.guard", etc.
+ * Returns previous values for restoration.
+ */
+export function applyArchetypeOverrides(overrides: Record<string, number>): Record<string, number> {
+  const previous: Record<string, number> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    const [archId, statName] = key.split('.');
+    if (!archId || !statName) throw new Error(`Invalid archetype override key: ${key} (expected "archetype.stat")`);
+    const arch = ARCHETYPES[archId];
+    if (!arch) throw new Error(`Unknown archetype: ${archId}`);
+    if (!ARCHETYPE_STAT_KEYS.includes(statName as typeof ARCHETYPE_STAT_KEYS[number])) {
+      throw new Error(`Unknown stat: ${statName} (valid: ${ARCHETYPE_STAT_KEYS.join(', ')})`);
+    }
+    const stat = statName as keyof typeof arch & string;
+    previous[key] = arch[stat] as number;
+    (arch as Record<string, unknown>)[stat] = value;
+  }
+  return previous;
+}
+
+/** Restore previous archetype stat values. */
+export function restoreArchetypeOverrides(previous: Record<string, number>): void {
+  applyArchetypeOverrides(previous);
 }
 
 // ============================================================
@@ -419,11 +479,20 @@ export function runSimulation(config: SimConfig): SimulationReport {
     previous = applyBalanceOverrides(config.overrides);
   }
 
+  // Apply archetype stat overrides (restored after sim)
+  let previousArchetypes: Record<string, number> | undefined;
+  if (config.archetypeOverrides && Object.keys(config.archetypeOverrides).length > 0) {
+    previousArchetypes = applyArchetypeOverrides(config.archetypeOverrides);
+  }
+
   const startTime = Date.now();
   const { matchups, archetypeStats } = runAllMatchups(gearMode, variant, matchesPerMatchup);
   const elapsedMs = Date.now() - startTime;
 
   // Restore original config
+  if (previousArchetypes) {
+    restoreArchetypeOverrides(previousArchetypes);
+  }
   if (previous) {
     restoreBalanceOverrides(previous);
   }
@@ -566,6 +635,102 @@ function printResults(report: SimulationReport): string {
 }
 
 // ============================================================
+// Multi-Tier Summary
+// ============================================================
+
+const DEFAULT_SUMMARY_TIERS: GearMode[] = ['bare', 'epic', 'giga'];
+
+export function runSummary(config: { tiers?: string[]; variant?: string; matchesPerMatchup?: number; overrides?: Record<string, number>; archetypeOverrides?: Record<string, number> }): SummaryReport {
+  const startTime = Date.now();
+  const reports: SimulationReport[] = [];
+  const tiers = (config.tiers?.length ? config.tiers.filter(t => GEAR_MODES.includes(t as GearMode)) as GearMode[] : DEFAULT_SUMMARY_TIERS);
+
+  for (const tier of tiers) {
+    reports.push(runSimulation({
+      tier,
+      variant: config.variant,
+      matchesPerMatchup: config.matchesPerMatchup,
+      overrides: config.overrides,
+      archetypeOverrides: config.archetypeOverrides,
+    }));
+  }
+
+  const tierResults: SummaryTierResult[] = reports.map(r => {
+    const totalFlags = r.balanceFlags.dominant.length + r.balanceFlags.weak.length + r.balanceFlags.matchupSkews.length;
+    return {
+      tier: r.metadata.tier,
+      variant: r.metadata.variant,
+      spreadPp: r.balanceMetrics.overallSpreadPp,
+      flags: totalFlags,
+      topArchetype: r.balanceMetrics.topArchetype.archetype,
+      topWinRate: r.balanceMetrics.topArchetype.winRate,
+      bottomArchetype: r.balanceMetrics.bottomArchetype.archetype,
+      bottomWinRate: r.balanceMetrics.bottomArchetype.winRate,
+      elapsedMs: r.metadata.elapsedMs,
+    };
+  });
+
+  return {
+    tiers: tierResults,
+    reports,
+    metadata: {
+      variant: config.variant || null,
+      matchesPerMatchup: config.matchesPerMatchup || DEFAULT_MATCHES_PER_MATCHUP,
+      timestamp: new Date().toISOString(),
+      totalElapsedMs: Date.now() - startTime,
+    },
+  };
+}
+
+function printSummary(summary: SummaryReport): string {
+  const lines: string[] = [];
+  const variantLabel = summary.metadata.variant ? ` (variant: ${summary.metadata.variant})` : '';
+
+  lines.push('='.repeat(70));
+  lines.push('JOUSTING MVP — MULTI-TIER BALANCE SUMMARY');
+  lines.push(`Matches per matchup: ${summary.metadata.matchesPerMatchup}${variantLabel}`);
+  lines.push('='.repeat(70));
+  lines.push('');
+
+  // Summary table
+  lines.push('  Tier       Spread   Flags   Top                    Bottom');
+  lines.push('  ' + '-'.repeat(66));
+  for (const t of summary.tiers) {
+    const flagStr = t.flags === 0 ? '  0  ' : ` ${t.flags}! `;
+    const top = `${t.topArchetype} ${t.topWinRate}%`;
+    const bottom = `${t.bottomArchetype} ${t.bottomWinRate}%`;
+    lines.push(`  ${t.tier.padEnd(10)} ${t.spreadPp.toFixed(1).padStart(5)}pp  ${flagStr}   ${top.padEnd(22)} ${bottom}`);
+  }
+  lines.push('');
+
+  // Tier progression
+  const spreads = summary.tiers.map(t => `${t.spreadPp.toFixed(1)}pp (${t.tier})`);
+  lines.push(`  Progression: ${spreads.join(' -> ')}`);
+
+  const totalFlags = summary.tiers.reduce((sum, t) => sum + t.flags, 0);
+  if (totalFlags === 0) {
+    lines.push('  ALL TIERS ZERO FLAGS');
+  } else {
+    lines.push(`  Total flags: ${totalFlags}`);
+  }
+  lines.push('');
+
+  // Per-tier archetype win rates
+  for (const report of summary.reports) {
+    const sorted = [...report.archetypeStats].sort((a, b) => b.overallWinRate - a.overallWinRate);
+    lines.push(`  --- ${report.metadata.tier.toUpperCase()} ---`);
+    for (const s of sorted) {
+      const pct = (s.overallWinRate * 100).toFixed(1);
+      lines.push(`    ${s.archetype.padEnd(12)} ${pct.padStart(5)}%`);
+    }
+    lines.push('');
+  }
+
+  lines.push(`Completed in ${(summary.metadata.totalElapsedMs / 1000).toFixed(1)}s`);
+  return lines.join('\n');
+}
+
+// ============================================================
 // CLI Entry Point
 // ============================================================
 
@@ -573,13 +738,14 @@ const IS_CLI = process.argv[1]?.replace(/\\/g, '/').includes('simulate');
 
 if (IS_CLI) {
   const JSON_FLAG = process.argv.includes('--json');
+  const SUMMARY_FLAG = process.argv.includes('--summary');
 
   // Parse gear mode (first non-flag arg after script name)
   const GEAR_VARIANTS_LIST = ['aggressive', 'balanced', 'defensive'] as const;
   const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
   const gearArg = args[0] as GearMode | undefined;
   const gearMode: GearMode = gearArg && GEAR_MODES.includes(gearArg) ? gearArg : 'bare';
-  const variantArg = args[1] as GearVariant | undefined;
+  const variantArg = SUMMARY_FLAG ? args[0] as GearVariant | undefined : args[1] as GearVariant | undefined;
   const gearVariant: GearVariant | undefined = variantArg && GEAR_VARIANTS_LIST.includes(variantArg) ? variantArg : undefined;
 
   // Parse --matches N flag (override matchesPerMatchup)
@@ -589,8 +755,9 @@ if (IS_CLI) {
     : undefined;
   const matchesPerMatchup = matchesCli || DEFAULT_MATCHES_PER_MATCHUP;
 
-  // Parse --override key=value flags
-  const overrides: Record<string, number> = {};
+  // Parse --override key=value flags (split into balance vs archetype overrides)
+  const balanceOverrides: Record<string, number> = {};
+  const archetypeOverrides: Record<string, number> = {};
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--override' && i + 1 < process.argv.length) {
       const pair = process.argv[i + 1];
@@ -599,7 +766,12 @@ if (IS_CLI) {
         const key = pair.slice(0, eqIdx);
         const val = parseFloat(pair.slice(eqIdx + 1));
         if (!isNaN(val)) {
-          overrides[key] = val;
+          if (key.startsWith('archetype.')) {
+            // archetype.breaker.stamina=65 -> breaker.stamina=65
+            archetypeOverrides[key.slice('archetype.'.length)] = val;
+          } else {
+            balanceOverrides[key] = val;
+          }
         } else {
           console.error(`Warning: ignoring non-numeric override value for "${key}"`);
         }
@@ -608,20 +780,58 @@ if (IS_CLI) {
     }
   }
 
-  const hasOverrides = Object.keys(overrides).length > 0;
-  if (hasOverrides) {
-    console.error(`Overrides: ${Object.entries(overrides).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  const hasBalanceOverrides = Object.keys(balanceOverrides).length > 0;
+  const hasArchetypeOverrides = Object.keys(archetypeOverrides).length > 0;
+  if (hasBalanceOverrides) {
+    console.error(`Balance overrides: ${Object.entries(balanceOverrides).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  }
+  if (hasArchetypeOverrides) {
+    console.error(`Archetype overrides: ${Object.entries(archetypeOverrides).map(([k, v]) => `archetype.${k}=${v}`).join(', ')}`);
   }
 
-  console.error(`Running simulations (gear mode: ${gearMode}, matches: ${matchesPerMatchup})...`);
+  // Parse --tiers flag for summary mode (e.g. --tiers bare,uncommon,epic,giga)
+  const tiersIdx = process.argv.indexOf('--tiers');
+  const customTiers = tiersIdx !== -1 && process.argv[tiersIdx + 1]
+    ? process.argv[tiersIdx + 1].split(',').map(t => t.trim()).filter(t => GEAR_MODES.includes(t as GearMode))
+    : undefined;
 
-  const report = runSimulation({ tier: gearMode, variant: gearVariant, matchesPerMatchup, overrides: hasOverrides ? overrides : undefined });
+  if (SUMMARY_FLAG) {
+    // Multi-tier summary mode
+    const tierLabel = customTiers ? customTiers.join('+') : 'bare+epic+giga';
+    console.error(`Running multi-tier summary (${tierLabel}, matches: ${matchesPerMatchup})...`);
+    const summary = runSummary({
+      tiers: customTiers,
+      variant: gearVariant,
+      matchesPerMatchup,
+      overrides: hasBalanceOverrides ? balanceOverrides : undefined,
+      archetypeOverrides: hasArchetypeOverrides ? archetypeOverrides : undefined,
+    });
 
-  if (JSON_FLAG) {
-    console.log(JSON.stringify(report, null, 2));
+    if (JSON_FLAG) {
+      console.log(JSON.stringify(summary, null, 2));
+    } else {
+      console.log(printSummary(summary));
+    }
+
+    console.error(`Total: ${(summary.metadata.totalElapsedMs / 1000).toFixed(1)}s`);
   } else {
-    console.log(printResults(report));
-  }
+    // Single-tier mode
+    console.error(`Running simulations (gear mode: ${gearMode}, matches: ${matchesPerMatchup})...`);
 
-  console.error(`Completed in ${(report.metadata.elapsedMs / 1000).toFixed(1)}s`);
+    const report = runSimulation({
+      tier: gearMode,
+      variant: gearVariant,
+      matchesPerMatchup,
+      overrides: hasBalanceOverrides ? balanceOverrides : undefined,
+      archetypeOverrides: hasArchetypeOverrides ? archetypeOverrides : undefined,
+    });
+
+    if (JSON_FLAG) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(printResults(report));
+    }
+
+    console.error(`Completed in ${(report.metadata.elapsedMs / 1000).toFixed(1)}s`);
+  }
 }

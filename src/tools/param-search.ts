@@ -9,8 +9,9 @@
 //   descent  — iterative sweep: keep best value, move to next param
 //
 // Usage:
-//   npx tsx src/tools/param-search.ts <config.json>             # Run search
-//   npx tsx src/tools/param-search.ts <config.json> --dry-run   # Show plan only
+//   npx tsx src/tools/param-search.ts <config.json>                # Run search
+//   npx tsx src/tools/param-search.ts <config.json> --dry-run      # Show plan only
+//   npx tsx src/tools/param-search.ts <config.json> --with-summary # Run multi-tier summary after search
 //
 // Config format: see orchestrator/search-configs/README or examples.
 // Output: JSON to stdout with rankings, recommendations, and raw data.
@@ -21,13 +22,28 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BALANCE } from '../engine/balance-config';
+import { ARCHETYPES } from '../engine/archetypes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = resolve(__dirname, '../..');
 
-/** Read a dot-notation key from the BALANCE config object. */
-function getBalanceValue(key: string): number | undefined {
+/**
+ * Read a dot-notation key from the BALANCE config or ARCHETYPES.
+ * Keys starting with "archetype." resolve against ARCHETYPES (e.g. "archetype.breaker.stamina").
+ * Other keys resolve against BALANCE (e.g. "softCapK", "carryoverDivisors.momentum").
+ */
+function getConfigValue(key: string): number | undefined {
+  if (key.startsWith('archetype.')) {
+    const subKey = key.slice('archetype.'.length); // "breaker.stamina"
+    const [archId, statName] = subKey.split('.');
+    if (!archId || !statName) return undefined;
+    const arch = ARCHETYPES[archId];
+    if (!arch) return undefined;
+    const val = (arch as Record<string, unknown>)[statName];
+    return typeof val === 'number' ? val : undefined;
+  }
+
   const parts = key.split('.');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let target: any = BALANCE;
@@ -332,7 +348,7 @@ function analyzeImprovements(
     if (paramResults.length === 0) continue;
 
     const best = paramResults.reduce((a, b) => a.score < b.score ? a : b);
-    const currentValue = getBalanceValue(param.key) ?? 0;
+    const currentValue = getConfigValue(param.key) ?? 0;
     const confirmed = best.overrides[param.key] === currentValue;
 
     // If best value IS the current value, the delta is just noise — report 0
@@ -471,6 +487,7 @@ function loadConfig(path: string): SearchConfig {
 function main() {
   const configPath = process.argv[2];
   const dryRun = process.argv.includes('--dry-run');
+  const withSummary = process.argv.includes('--with-summary');
 
   // CLI --matches N override
   const matchesIdx = process.argv.indexOf('--matches');
@@ -638,6 +655,31 @@ function main() {
     const outPath = join(outDir, filename);
     writeFileSync(outPath, JSON.stringify(report, null, 2));
     console.error(`\nResults saved to: ${outPath}`);
+  }
+
+  // Run multi-tier verification summary with best overrides
+  if (withSummary && bestResult.score < baseline.score) {
+    console.error(`\n${'='.repeat(60)}`);
+    console.error(`VERIFICATION SUMMARY (bare+epic+giga with best overrides)`);
+    console.error(`${'='.repeat(60)}`);
+
+    const overrideArgs = Object.entries(bestResult.overrides)
+      .map(([k, v]) => `--override ${k}=${v}`)
+      .join(' ');
+    const summaryCmd = `npx tsx src/tools/simulate.ts --summary --matches ${matchesPerMatchup} ${overrideArgs}`;
+
+    try {
+      const summaryOutput = execSync(summaryCmd, {
+        timeout: timeoutMs * 3,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: PROJECT_ROOT,
+      });
+      console.error(summaryOutput);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`  Summary failed: ${msg.slice(0, 200)}`);
+    }
   }
 }
 

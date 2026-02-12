@@ -13,6 +13,9 @@ npm test                                    # Run all tests (908 passing as of S
 npx tsx src/tools/simulate.ts [tier] [variant]  # Balance simulation (tier: bare|uncommon|rare|epic|legendary|relic|giga|mixed; variant: aggressive|balanced|defensive)
 npx tsx src/tools/simulate.ts bare --matches 500                   # High-precision sim (override default 200)
 npx tsx src/tools/simulate.ts bare --json --override softCapK=60   # Sim with balance config overrides
+npx tsx src/tools/simulate.ts bare --override archetype.breaker.stamina=65  # Sim with archetype stat overrides
+npx tsx src/tools/simulate.ts --summary [variant]                  # Multi-tier summary (bare+epic+giga)
+npx tsx src/tools/simulate.ts --summary --json --matches 500       # Summary as JSON with high precision
 npx tsx src/tools/param-search.ts <config.json>                    # Parameter search (sweep/descent)
 npx tsx src/tools/param-search.ts <config.json> --dry-run          # Preview search plan
 npx tsx src/tools/param-search.ts <config.json> --matches 500      # Override matches per matchup
@@ -59,7 +62,7 @@ orchestrator/         Multi-agent development system (v5)
 Base archetype stats (MOM/CTL/GRD/INIT/STA)
   -> applyGiglingLoadout (steed gear bonuses + flat rarity bonus to all stats)
   -> applyPlayerLoadout (player gear bonuses only, NO rarity bonus)
-  -> softCap(knee=100, K=50) on MOM/CTL/GRD/INIT (NOT stamina)
+  -> softCap(knee=100, K=55) on MOM/CTL/GRD/INIT (NOT stamina)
   -> computeEffectiveStats (speed + attack deltas)
   -> fatigueFactor(currentStamina, maxStamina)
   -> Combat resolution (impact, accuracy, guard, unseat check)
@@ -130,41 +133,41 @@ aiPickMeleeAttackWithReasoning(player, lastAtk?, difficulty?): { attack, reasoni
              MOM  CTL  GRD  INIT  STA  Total  Notes
 charger:      75   55   50    55   65  = 300   Raw impact specialist
 technician:   64   70   55    59   55  = 303   MOM+6, INIT-1 (S35)
-bulwark:      58   52   65    53   62  = 290   MOM+3, CTL-3 (S35 R6)
+bulwark:      58   52   64    53   62  = 289   MOM+3, CTL-3 (S35 R6)
 tactician:    55   65   50    75   55  = 300   Tempo control
-breaker:      62   60   55    55   60  = 292   Guard penetration 0.25
+breaker:      62   60   55    55   62  = 294   Guard penetration 0.25
 duelist:      60   60   60    60   60  = 300   Balanced generalist
 ```
 
 **Balance coefficients**: `breakerGuardPenetration: 0.25`, `guardImpactCoeff: 0.12`, `softCapK: 55`, `guardUnseatDivisor: 18`, `unseatedImpactBoost: 1.35`, `unseatedStaminaRecovery: 12`, `guardFatigueFloor: 0.3`
 
-### Win Rate Validation (S46 — guardImpactCoeff 0.18→0.12)
+### Win Rate Validation (S52 — breaker STA +2, bulwark GRD -1)
 
-**Bare Tier** (N=500, balanced variant):
-- Bulwark: 55.4% | Tactician: 51.2% | Technician: 51.2% | Duelist: 50.6% | Charger: 46.5% | Breaker: 45.1%
-- Spread: 10.3pp (1 flag: bulwark dominant)
+**Bare Tier** (N=1000, balanced variant):
+- Technician: 52.9% | Bulwark: 52.4% | Duelist: 50.4% | Tactician: 50.2% | Breaker: 48.2% | Charger: 45.9%
+- Spread: 7.0pp (zero flags)
 
-**Epic Tier** (N=500, balanced variant):
-- Charger: 53.8% | Technician: 50.1% | Tactician: 49.8% | Duelist: 49.5% | Bulwark: 49.1% | Breaker: 47.6%
-- Spread: 6.2pp (zero flags)
+**Epic Tier** (N=1000, balanced variant):
+- Charger: 53.0% | Breaker: 50.0% | Bulwark: 49.7% | Tactician: 49.2% | Technician: 49.2% | Duelist: 48.9%
+- Spread: 4.1pp (zero flags)
 
-**Giga Tier** (N=500, balanced variant) — NEAR-PERFECT:
-- Charger: 51.4% | Technician: 50.6% | Tactician: 50.6% | Duelist: 50.3% | Breaker: 48.9% | Bulwark: 48.2%
-- Spread: 3.2pp (zero flags, all archetypes 48.2-51.4%)
+**Giga Tier** (N=1000, balanced variant):
+- Breaker: 51.6% | Technician: 51.2% | Tactician: 50.3% | Charger: 49.8% | Duelist: 49.1% | Bulwark: 48.0%
+- Spread: 3.6pp (zero flags)
 
-**Tier Progression**: 10.3pp (bare) → 6.2pp (epic) → 3.2pp (giga)
+**Tier Progression**: 7.0pp (bare) → 4.1pp (epic) → 3.6pp (giga) — ALL ZERO FLAGS
 - Balance improves monotonically with tier
-- Giga near-perfect (3.2pp, zero flags)
-- Bare improved from 13.2pp to 10.3pp, flags reduced from 3 to 1
+- All tiers zero flags (bare improved from 10.3pp/1 flag to 7.0pp/0 flags)
+- Giga tight (3.6pp), epic tight (4.1pp), bare much improved (7.0pp)
 
-### Variant Impact (S46, N=300 per config)
+### Variant Impact (S52, N=500 per config)
 
-**Giga Aggressive**: Spread 6.5pp, 0 flags. Bulwark top (52.8%), technician bottom (46.3%).
-**Giga Defensive**: Spread 3.5pp, 0 flags. Breaker top (51.9%), duelist bottom (48.4%). Best giga variant.
-**Bare Aggressive**: Spread 9.3pp, 2 flags (bulwark dominant 55.3%, bulwark-charger skew). Boundary flags within noise.
-**Bare Defensive**: Spread 11.6pp, 2 flags (bulwark dominant 56.3%, breaker weak 44.7%).
+**Giga Aggressive**: Spread 4.1pp, 0 flags. Bulwark top (51.6%), technician bottom (47.5%).
+**Giga Defensive**: Spread 3.3pp, 0 flags. Breaker top (52.3%), technician bottom (49.0%). Best giga variant.
+**Bare Aggressive**: Spread 6.2pp, 0 flags. Technician top (52.3%), charger bottom (46.1%).
+**Bare Defensive**: Spread 6.6pp, 0 flags. Technician top (52.6%), charger bottom (46.0%).
 
-**Variant choice = 3+ rarity tiers of impact** (NOT cosmetic). Matchup-level swings: ±10-15pp.
+**ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
 ## Orchestrator v8
 

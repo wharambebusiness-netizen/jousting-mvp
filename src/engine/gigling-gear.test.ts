@@ -273,9 +273,9 @@ describe('Gear + Soft Cap interaction', () => {
       barding: makeGear('barding', 'giga', 9, 4),   // guard +9
     };
     const result = applyGiglingLoadout(bulwark, loadout);
-    // bulwark guard 65 + 13 + 9 + 9 = 96 — under knee
-    expect(result.guard).toBe(96);
-    expect(softCap(result.guard)).toBe(96);
+    // bulwark guard 64 + 13 + 9 + 9 = 95 — under knee
+    expect(result.guard).toBe(95);
+    expect(softCap(result.guard)).toBe(95);
   });
 
   it('realistic Epic loadout stays well under softCap knee', () => {

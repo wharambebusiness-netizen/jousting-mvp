@@ -267,15 +267,15 @@ describe('Archetype stats — S15 rebalance', () => {
     expect(ARCHETYPES.charger.stamina).toBe(65);
   });
 
-  it('Breaker guard is 55 and stamina is 60', () => {
+  it('Breaker guard is 55 and stamina is 62', () => {
     expect(ARCHETYPES.breaker.guard).toBe(55);
-    expect(ARCHETYPES.breaker.stamina).toBe(60);
+    expect(ARCHETYPES.breaker.stamina).toBe(62);
   });
 
   it('stat totals are within expected range', () => {
     for (const arch of ARCHETYPE_LIST) {
       const total = arch.momentum + arch.control + arch.guard + arch.initiative + arch.stamina;
-      expect(total, `${arch.id} total=${total}`).toBeGreaterThanOrEqual(290);
+      expect(total, `${arch.id} total=${total}`).toBeGreaterThanOrEqual(289);
       expect(total, `${arch.id} total=${total}`).toBeLessThanOrEqual(305);
     }
   });
