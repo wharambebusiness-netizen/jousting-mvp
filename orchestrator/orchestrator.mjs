@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v14
+// Jousting MVP — Multi-Agent Orchestrator v15
 // ============================================================
+// v15 additions (S52 — priority scheduling, task decomposition, live dashboard):
+// - Priority-based scheduling: agents with P1 tasks launch first in pool, bypass pre-flight checks
+// - getAgentPriority(): scores agents by pending task priority for pool ordering
+// - Task decomposition: subtask support in backlog (subtasks array, incremental assignment)
+// - getNextSubtask()/completeSubtask(): subtask lifecycle management
+// - Live progress dashboard: real-time agent status during pool execution
+// - ProgressDashboard class: in-place terminal updates with ANSI codes
+// - Version strings updated to v15
+//
 // v14 additions (S51 — quality & observability):
 // - Agent effectiveness tracking: per-agent tasks-completed, tokens/file, success rate across rounds
 // - Dynamic concurrency: adjusts maxConcurrency based on fast/slow agent mix from runtime history
@@ -250,6 +259,48 @@ function completeBacklogTask(taskId) {
     task.completedAt = new Date().toISOString();
     saveBacklog(backlog);
   }
+}
+
+// v15: Subtask support — break large tasks into focused units of work.
+// Tasks with a `subtasks` array get assigned one subtask at a time.
+// Format: { id: "BL-077-1", title: "...", status: "pending"|"completed" }
+function getNextSubtask(taskId) {
+  const backlog = loadBacklog();
+  const task = backlog.find(t => t.id === taskId);
+  if (!task?.subtasks?.length) return null;
+  return task.subtasks.find(st => st.status === 'pending') || null;
+}
+
+function completeSubtask(taskId, subtaskId) {
+  const backlog = loadBacklog();
+  const task = backlog.find(t => t.id === taskId);
+  if (!task?.subtasks) return;
+  const sub = task.subtasks.find(st => st.id === subtaskId);
+  if (sub) {
+    sub.status = 'completed';
+    sub.completedAt = new Date().toISOString();
+    // Auto-complete parent when all subtasks done
+    const allDone = task.subtasks.every(st => st.status === 'completed');
+    if (allDone) {
+      task.status = 'completed';
+      task.completedAt = new Date().toISOString();
+      log(`  Backlog: ${taskId} auto-completed (all ${task.subtasks.length} subtasks done)`);
+    }
+    saveBacklog(backlog);
+  }
+}
+
+// v15: Get highest-priority pending task priority for an agent's role (from cache).
+// Returns numeric priority (1=P1, 2=P2, ... 99=none). Used to sort agents for pool launch order.
+function getAgentTaskPriority(role, backlogCache) {
+  const pending = backlogCache.filter(t => t.status === 'pending' && t.role === role);
+  if (!pending.length) return 99;
+  return Math.min(...pending.map(t => t.priority ?? 99));
+}
+
+// v15: Check if agent has a critical (P1) task waiting
+function agentHasCriticalTask(role, backlogCache) {
+  return backlogCache.some(t => t.status === 'pending' && t.role === role && (t.priority ?? 99) <= 1);
 }
 
 function resetStaleAssignments() {
@@ -556,6 +607,14 @@ function parseHandoffMeta(agentId) {
       meta.notesForOthers = meta.notes;
     }
 
+    // v15: Parse completed-tasks from META for subtask completion tracking
+    const completedMatch = content.match(/^-\s*completed[\s-]*tasks\s*:\s*(.+)$/im);
+    if (completedMatch) {
+      meta.completedTasks = completedMatch[1].split(',').map(t => t.trim()).filter(Boolean);
+    } else {
+      meta.completedTasks = [];
+    }
+
     // --- Quality signals ---
     // testsHealthy: scan full handoff text for health indicators
     const lowerContent = content.toLowerCase();
@@ -794,20 +853,35 @@ function runAgent(agent, round) {
 
     // v5/v6: Inject batch backlog tasks if available
     // v12: Truncate descriptions to first sentence to reduce prompt bloat
+    // v15: Subtask support — when a task has subtasks, assign only the next incomplete one
     const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1);
     if (backlogTasks.length) {
       promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
       for (let i = 0; i < backlogTasks.length; i++) {
         const bt = backlogTasks[i];
-        // v12: First sentence only (up to first period+space or newline)
-        const shortDesc = bt.description
-          ? bt.description.split(/(?<=\.)\s|\n/)[0]
-          : '';
-        promptParts.push(
-          `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
-          `Description: ${shortDesc}`,
-          `Files: ${(bt.fileOwnership || []).join(', ')}`,
-        );
+        // v15: Check for subtasks — assign only the next incomplete subtask
+        const nextSub = getNextSubtask(bt.id);
+        if (nextSub) {
+          const totalSubs = bt.subtasks.length;
+          const completedSubs = bt.subtasks.filter(s => s.status === 'completed').length;
+          promptParts.push(
+            `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
+            `  SUBTASK ${completedSubs + 1}/${totalSubs}: ${nextSub.id} — ${nextSub.title}`,
+            `  Description: ${nextSub.description || ''}`,
+            `  Focus ONLY on this subtask. Note subtask ID ${nextSub.id} in handoff META under completed-tasks.`,
+            `Files: ${(bt.fileOwnership || []).join(', ')}`,
+          );
+        } else {
+          // v12: First sentence only (up to first period+space or newline)
+          const shortDesc = bt.description
+            ? bt.description.split(/(?<=\.)\s|\n/)[0]
+            : '';
+          promptParts.push(
+            `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
+            `Description: ${shortDesc}`,
+            `Files: ${(bt.fileOwnership || []).join(', ')}`,
+          );
+        }
       }
       promptParts.push(`Work through these in order. See ${p('orchestrator/backlog.json')} for full task details. Note completed task IDs in handoff META under completed-tasks.`);
     }
@@ -2281,12 +2355,87 @@ function getDynamicConcurrency() {
 }
 
 // ============================================================
+// Live Progress Dashboard (v15 — real-time agent status)
+// ============================================================
+// Shows running/queued/done/failed status for each agent with elapsed time.
+// Updates in-place using ANSI cursor control. Falls back to simple logging
+// when output is not a TTY (e.g., piped to file).
+class ProgressDashboard {
+  constructor(agents, phase) {
+    this.agents = agents.map(a => ({
+      id: a.id, status: 'queued', elapsed: 0, startTime: null, task: null
+    }));
+    this.phase = phase || 'Agents';
+    this.isTTY = process.stdout.isTTY || false;
+    this.lineCount = 0;
+    this.interval = null;
+    this.stopped = false;
+  }
+
+  start() {
+    if (!this.isTTY || this.agents.length === 0) return;
+    this.render();
+    // Refresh elapsed times every 5 seconds
+    this.interval = setInterval(() => {
+      if (!this.stopped) this.render();
+    }, 5000);
+  }
+
+  updateAgent(agentId, status, extra) {
+    const agent = this.agents.find(a => a.id === agentId);
+    if (!agent) return;
+    agent.status = status;
+    if (status === 'running' && !agent.startTime) {
+      agent.startTime = Date.now();
+    }
+    if (extra?.elapsed) agent.elapsed = extra.elapsed;
+    if (extra?.task) agent.task = extra.task;
+    if (this.isTTY && !this.stopped) this.render();
+  }
+
+  render() {
+    // Clear previous output
+    if (this.lineCount > 0) {
+      process.stdout.write(`\x1b[${this.lineCount}A\x1b[J`);
+    }
+    const lines = [];
+    lines.push(`  ┌─ ${this.phase} Dashboard ─────────────────────────────┐`);
+    for (const agent of this.agents) {
+      const elapsed = agent.status === 'running' && agent.startTime
+        ? ((Date.now() - agent.startTime) / 60000).toFixed(1)
+        : agent.elapsed ? (agent.elapsed / 60).toFixed(1) : '0.0';
+      const icon = agent.status === 'running' ? '▶' :
+                   agent.status === 'done' ? '✓' :
+                   agent.status === 'failed' ? '✗' :
+                   agent.status === 'timeout' ? '⏱' : '·';
+      const statusStr = agent.status.toUpperCase().padEnd(7);
+      const taskStr = agent.task ? ` [${agent.task}]` : '';
+      lines.push(`  │ ${icon} ${agent.id.padEnd(20)} ${statusStr} ${elapsed}min${taskStr}`);
+    }
+    lines.push(`  └───────────────────────────────────────────────────┘`);
+    process.stdout.write(lines.join('\n') + '\n');
+    this.lineCount = lines.length;
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+    // Final render to show completed state
+    if (this.isTTY) this.render();
+  }
+}
+
+// ============================================================
 // Agent Pool (v9 — streaming pipeline, replaces batch concurrency)
 // ============================================================
 // Queue-drain pool: launches up to maxConcurrency agents. As each finishes,
 // fires onAgentComplete callback immediately and launches the next queued agent.
 // Results are in completion order (not submission order).
-async function runAgentPool(agents, round, maxConcurrency, onAgentComplete) {
+// v15: accepts optional dashboard for live progress updates.
+async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard) {
   if (!agents.length) return [];
   const limit = (!maxConcurrency || maxConcurrency >= agents.length)
     ? agents.length : maxConcurrency;
@@ -2301,9 +2450,16 @@ async function runAgentPool(agents, round, maxConcurrency, onAgentComplete) {
     while (active < limit && queue.length > 0) {
       const agent = queue.shift();
       active++;
+      // v15: Notify dashboard of agent launch
+      if (dashboard) dashboard.updateAgent(agent.id, 'running');
       runAgent(agent, round).then(result => {
         active--;
         results.push(result);
+        // v15: Notify dashboard of agent completion
+        if (dashboard) {
+          const dStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'done' : 'failed';
+          dashboard.updateAgent(result.agentId, dStatus, { elapsed: result.elapsed });
+        }
         if (onAgentComplete) onAgentComplete(result);
         if (active === 0 && queue.length === 0) resolveAll();
         else tryLaunch();
@@ -2641,7 +2797,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v14');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v15');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -2846,6 +3002,19 @@ async function main() {
         log(`  ${agent.id}: CONTINUOUS — has work or due for periodic run`);
       }
 
+      // v15: Critical task fast-path — agents with P1 tasks bypass all pre-flight checks.
+      // This ensures regressions, test fixes, and other critical work is never delayed.
+      if (agentHasCriticalTask(agent.role, backlogCache)) {
+        log(`  ${agent.id}: CRITICAL TASK (P1) — bypassing pre-flight checks`);
+        const phase = meta.status === 'complete' ? 'stretch goals' : agent.type;
+        thisRoundDecisions.push({
+          round, agentId: agent.id, decision: 'included',
+          reason: 'critical P1 task — fast-path', model: agent.model || 'default',
+          escalated: false, succeeded: null, elapsed: null,
+        });
+        return true;
+      }
+
       // v8: Pre-flight check — skip agents that likely won't produce useful work
       // 1. Coordination agents (Phase B) with no new changes to react to
       if (COORD_AGENT_ROLES.has(agent.role) && round > 1) {
@@ -3007,6 +3176,12 @@ async function main() {
     // --- v6: Two-phase rounds (code agents first, then coordination) ---
     const codeAgents = activeAgents.filter(a => CODE_AGENT_ROLES.has(a.role));
     const coordAgents = activeAgents.filter(a => COORD_AGENT_ROLES.has(a.role));
+
+    // v15: Priority-based scheduling — sort agents by task priority so P1 agents launch first.
+    // When maxConcurrency limits pool size, this ensures critical work gets resources first.
+    codeAgents.sort((a, b) => getAgentTaskPriority(a.role, backlogCache) - getAgentTaskPriority(b.role, backlogCache));
+    coordAgents.sort((a, b) => getAgentTaskPriority(a.role, backlogCache) - getAgentTaskPriority(b.role, backlogCache));
+
     const roundAgents = [];
     let testResult = null;
     let didRevert = false;  // v6.1: Track if auto-revert happened (skip Phase B if so)
@@ -3027,13 +3202,19 @@ async function main() {
     // Phase A: Code agents + pre-sim pipeline
     if (codeAgents.length) {
       const phaseAStart = Date.now();
-      log(`\nPhase A: Launching ${codeAgents.length} code agent(s)...`);
+      // v15: Log priority order when agents have different priorities
+      const priorities = codeAgents.map(a => `${a.id}(P${getAgentTaskPriority(a.role, backlogCache)})`);
+      log(`\nPhase A: Launching ${codeAgents.length} code agent(s)... [${priorities.join(', ')}]`);
 
       // v9: Pipeline pre-sims with Phase A — run concurrently since code agents
       // never read balance-data/ files. Pre-sim writes JSON, agents read source code.
       const preSimPromise = (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length)
         ? (() => { log(`  (pre-sim running concurrently with agents)`); return runBalanceSims(round, 'pre'); })()
         : Promise.resolve(null);
+
+      // v15: Live progress dashboard for Phase A
+      const phaseADashboard = new ProgressDashboard(codeAgents, `Phase A (Round ${round})`);
+      phaseADashboard.start();
 
       // v9: Streaming agent pool — agents complete individually, no batch barrier
       const codeResultsPromise = runAgentPool(codeAgents, round, roundConcurrency, (result) => {
@@ -3043,17 +3224,19 @@ async function main() {
         if (balanceConfigChanged && !balanceChangeAgent) {
           balanceChangeAgent = result.agentId;
         }
-      });
+      }, phaseADashboard);
 
       // Wait for both pre-sim and all agents to complete
       const [preSimRes, codeResults] = await Promise.all([preSimPromise, codeResultsPromise]);
+      phaseADashboard.stop();
       if (preSimRes) {
         preSimResults = preSimRes;
         roundTiming.preSim = preSimRes.elapsedMs || 0;
       }
 
-      // Post-Phase A: changelog, failed task reassignment, validation
+      // Post-Phase A: changelog, task completion, failed task reassignment, validation
       appendSessionChangelog(round, codeResults);
+      handleCompletedTasks(codeResults);
       handleFailedTasks(codeResults);
       validateFileOwnership(codeResults, AGENTS);
       handleModelEscalation(codeResults, round);
@@ -3089,10 +3272,14 @@ async function main() {
         ? (() => {
             const phaseBStart = Date.now();
             log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s) concurrently with tests...`);
+            // v15: Phase B dashboard (non-TTY friendly — only renders if TTY)
+            const phaseBDashboard = new ProgressDashboard(coordAgents, `Phase B (Round ${round})`);
+            phaseBDashboard.start();
             return runAgentPool(coordAgents, round, roundConcurrency, (result) => {
               processAgentResult(result, round, roundAgents, costLog, trackingCtx);
               phaseBCoordResults.push(result);
-            }).then(results => {
+            }, phaseBDashboard).then(results => {
+              phaseBDashboard.stop();
               roundTiming.phaseB = Date.now() - phaseBStart;
               return results;
             });
@@ -3123,6 +3310,7 @@ async function main() {
       } else if (coordResults.length > 0) {
         // Phase B succeeded alongside tests — process coordination results
         appendSessionChangelog(round, coordResults);
+        handleCompletedTasks(coordResults);
         handleFailedTasks(coordResults);
         validateFileOwnership(coordResults, AGENTS);
         handleModelEscalation(coordResults, round);
@@ -3185,11 +3373,17 @@ async function main() {
       const phaseBStart = Date.now();
       log(`\nPhase B (standalone): Launching ${coordAgents.length} coordination agent(s)...`);
 
+      // v15: Standalone Phase B dashboard
+      const standaloneDashboard = new ProgressDashboard(coordAgents, `Phase B Standalone (Round ${round})`);
+      standaloneDashboard.start();
+
       const coordResults = await runAgentPool(coordAgents, round, roundConcurrency, (result) => {
         processAgentResult(result, round, roundAgents, costLog, trackingCtx);
-      });
+      }, standaloneDashboard);
+      standaloneDashboard.stop();
 
       appendSessionChangelog(round, coordResults);
+      handleCompletedTasks(coordResults);
       handleFailedTasks(coordResults);
       validateFileOwnership(coordResults, AGENTS);
       handleModelEscalation(coordResults, round);
@@ -3356,6 +3550,28 @@ async function main() {
           log(`  Resetting task ${task.id} to pending (agent ${result.agentId} failed)`);
         }
         if (stuckTasks.length) saveBacklog(backlog);
+      }
+    }
+  }
+
+  // v15: Process completed tasks/subtasks from agent handoffs
+  function handleCompletedTasks(results) {
+    for (const result of results) {
+      if (result.timedOut || result.code !== 0) continue;
+      const meta = parseHandoffMeta(result.agentId);
+      if (!meta.completedTasks?.length) continue;
+
+      for (const taskId of meta.completedTasks) {
+        // Check if it's a subtask ID (contains a hyphen after BL-XXX pattern, e.g., BL-077-1)
+        const subtaskMatch = taskId.match(/^(BL-\d+)-(\d+)$/);
+        if (subtaskMatch) {
+          const [, parentId, subNum] = subtaskMatch;
+          completeSubtask(parentId, taskId);
+          log(`  Subtask ${taskId} completed by ${result.agentId}`);
+        } else {
+          completeBacklogTask(taskId);
+          log(`  Task ${taskId} completed by ${result.agentId}`);
+        }
       }
     }
   }
@@ -3541,7 +3757,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v14
+> Orchestrator: v15
 
 ## Summary
 - **Started**: ${startTime}
