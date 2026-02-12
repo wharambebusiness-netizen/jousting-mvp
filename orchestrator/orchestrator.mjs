@@ -1,7 +1,28 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v10
+// Jousting MVP — Multi-Agent Orchestrator v13
 // ============================================================
+// v13 additions (S50 — experiment log + agent memory):
+// - Experiment log: persistent JSON log of balance-config.ts changes and their outcomes
+// - parseBalanceConfigDiff(): git diff parsing to auto-detect parameter changes
+// - logExperiment(): records round, agent, params, pre/post sim spreads
+// - buildExperimentContext(): last 10 experiments with IMPROVED/WORSENED/MIXED verdict
+// - Injected into balance-analyst prompt as EXPERIMENT HISTORY section
+// - processAgentResult returns balanceConfigChanged flag for experiment tracking
+//
+// v12 additions (S50 — prompt trimming + agent context optimization):
+// - Balance context injection narrowed: full context only for balance-analyst + qa-engineer
+// - claudeMdPath: per-agent CLAUDE.md override via temp-dir (non-engine agents get CLAUDE-lite.md)
+// - Backlog description compression: first sentence only in prompt, "see backlog.json for details"
+// - Agent runtime stats injection: continuous agents see their avg runtime + timeout
+// - Path helper p(): auto-converts relative paths to absolute when using claudeMdPath temp dir
+//
+// v11 additions (S50 — parallel Phase B, quick wins):
+// - Parallel Phase B: coordination agents run concurrently with tests + post-sims (20-25% throughput gain)
+// - Producer overflow guard: skip producer when backlog has 5+ pending tasks
+// - Smarter escalation guard: don't escalate when agent has no pending backlog tasks
+// - Role template caching: loadRoleTemplate() reads from disk once, reuses across rounds
+//
 // v10 additions (S49 — adaptive timeouts, lookahead, incremental tests):
 // - Adaptive timeouts: per-agent runtime history (last 5 runs), timeout = max(2*avg, 25%*config, 2min)
 // - Multi-round lookahead: skip empty rounds when all agents idle, jump to next minFrequencyRounds activation
@@ -72,9 +93,10 @@
 //   node orchestrator.mjs missions/breaker-mechanic.json  # Load mission config
 // ============================================================
 
-import { spawn } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
+import { spawn, execSync } from 'child_process';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync, mkdtempSync, rmSync, copyFileSync } from 'fs';
 import { join, resolve } from 'path';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { runConsistencyCheck } from './consistency-check.mjs';
 
@@ -413,11 +435,19 @@ function loadCommonRules() {
   }
 }
 
+// v11: Role template cache — avoids re-reading the same template from disk every agent spawn
+const roleTemplateCache = {};
+
 function loadRoleTemplate(roleName) {
   if (!roleName) return '';
+  if (roleTemplateCache[roleName] !== undefined) return roleTemplateCache[roleName];
   const rolePath = join(ROLES_DIR, `${roleName}.md`);
-  if (!existsSync(rolePath)) return '';
-  return readFileSync(rolePath, 'utf-8');
+  if (!existsSync(rolePath)) {
+    roleTemplateCache[roleName] = '';
+    return '';
+  }
+  roleTemplateCache[roleName] = readFileSync(rolePath, 'utf-8');
+  return roleTemplateCache[roleName];
 }
 
 // ============================================================
@@ -703,24 +733,28 @@ function runAgent(agent, round) {
 
     // Build prompt — CLAUDE.md provides project context (auto-loaded by Claude Code)
     // so we only need coordination info + role guidelines + task reference
+    // v12: When using claudeMdPath (temp cwd), prefix paths with absolute project dir
+    const p = (relPath) => agent.claudeMdPath ? join(MVP_DIR, relPath).replace(/\\/g, '/') : relPath;
+
     const promptParts = [
       `You are "${agent.name}", part of a multi-agent team. Round ${round}.`,
       `Project context is in CLAUDE.md (auto-loaded).`,
+      agent.claudeMdPath ? `Project files are at: ${MVP_DIR.replace(/\\/g, '/')}` : null,
       ``,
       `READ FIRST:`,
-      `1. orchestrator/session-changelog.md (what changed this session so far)`,
-      `2. orchestrator/task-board.md (coordination status — DO NOT edit)`,
-      `3. orchestrator/handoffs/${agent.id}.md (your tasks and progress)`,
-    ];
+      `1. ${p('orchestrator/session-changelog.md')} (what changed this session so far)`,
+      `2. ${p('orchestrator/task-board.md')} (coordination status — DO NOT edit)`,
+      `3. ${p(`orchestrator/handoffs/${agent.id}.md`)} (your tasks and progress)`,
+    ].filter(Boolean);
 
     // Add design doc reference if mission specifies one
     if (missionDesignDoc) {
-      promptParts.push(`3. ${missionDesignDoc} (design reference)`);
+      promptParts.push(`3. ${p(missionDesignDoc)} (design reference)`);
     }
 
     promptParts.push(
       ``,
-      `Then do your work. When done, write updated handoff to orchestrator/handoffs/${agent.id}.md.`,
+      `Then do your work. When done, write updated handoff to ${p(`orchestrator/handoffs/${agent.id}.md`)}.`,
       ``,
       `HANDOFF FORMAT (top of file):`,
       `## META`,
@@ -734,28 +768,46 @@ function runAgent(agent, round) {
       ``,
       `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
       agent.type === 'continuous'
-        ? `You are CONTINUOUS — write analysis to orchestrator/analysis/${agent.id}-round-${round}.md`
+        ? `You are CONTINUOUS — write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
         : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
     );
 
+    // v12: Inject runtime stats for continuous agents (helps agents self-regulate pacing)
+    if (agent.type === 'continuous') {
+      const history = agentRuntimeHistory[agent.id];
+      if (history?.length) {
+        const avgSec = history.reduce((a, b) => a + b, 0) / history.length;
+        const timeoutMs = getAdaptiveTimeout(agent);
+        promptParts.push(
+          `Your recent performance: avg ${(avgSec / 60).toFixed(1)}min over ${history.length} run(s), timeout ${(timeoutMs / 60000).toFixed(1)}min. Stay focused to finish within budget.`,
+        );
+      }
+    }
+
     // v5/v6: Inject batch backlog tasks if available
+    // v12: Truncate descriptions to first sentence to reduce prompt bloat
     const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1);
     if (backlogTasks.length) {
       promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
       for (let i = 0; i < backlogTasks.length; i++) {
         const bt = backlogTasks[i];
+        // v12: First sentence only (up to first period+space or newline)
+        const shortDesc = bt.description
+          ? bt.description.split(/(?<=\.)\s|\n/)[0]
+          : '';
         promptParts.push(
           `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
-          `Description: ${bt.description}`,
+          `Description: ${shortDesc}`,
           `Files: ${(bt.fileOwnership || []).join(', ')}`,
         );
       }
-      promptParts.push(`Work through these in order. Note completed task IDs in handoff META under completed-tasks.`);
+      promptParts.push(`Work through these in order. See ${p('orchestrator/backlog.json')} for full task details. Note completed task IDs in handoff META under completed-tasks.`);
     }
 
-    // v7 Phase 2: Inject balance context (only to balance-aware roles, not css-artist/ui-dev)
-    const BALANCE_AWARE_ROLES = ['balance-analyst', 'tech-lead', 'qa-engineer', 'producer', 'engine-dev', 'game-designer'];
-    if (CONFIG.balanceConfig && BALANCE_AWARE_ROLES.includes(agent.role)) {
+    // v12: Balance context — full injection only for balance-analyst and qa-engineer.
+    // Other roles get a 1-line pointer to avoid prompt bloat.
+    const BALANCE_FULL_ROLES = ['balance-analyst', 'qa-engineer'];
+    if (CONFIG.balanceConfig && BALANCE_FULL_ROLES.includes(agent.role)) {
       const balanceCtx = buildBalanceContext();
       if (balanceCtx) {
         promptParts.push(
@@ -765,6 +817,11 @@ function runAgent(agent, round) {
           `Use this data for analysis. The orchestrator runs sims before/after each round automatically.`,
         );
       }
+    } else if (CONFIG.balanceConfig) {
+      promptParts.push(
+        ``,
+        `Balance data available in ${p('orchestrator/balance-state.json')} if needed (run \`cat ${p('orchestrator/balance-state.json')}\` to read).`,
+      );
     }
 
     // v7 Phase 4: Inject parameter search results (if available)
@@ -776,6 +833,18 @@ function runAgent(agent, round) {
           `--- PARAMETER SEARCH RESULTS (auto-generated — use for informed parameter changes) ---`,
           searchCtx,
           `Use these results to prioritize which parameters to adjust. Prefer changes the search identifies as improvements.`,
+        );
+      }
+    }
+
+    // v13: Inject experiment history (what has been tried and outcomes)
+    if (agent.role === 'balance-analyst') {
+      const experimentCtx = buildExperimentContext();
+      if (experimentCtx) {
+        promptParts.push(
+          ``,
+          `--- EXPERIMENT HISTORY (auto-generated — what previous rounds tried and the outcomes) ---`,
+          experimentCtx,
         );
       }
     }
@@ -797,14 +866,30 @@ function runAgent(agent, round) {
     log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'})`);
     const startTime = Date.now();
 
+    // v12: Per-agent CLAUDE.md override — create temp dir with trimmed CLAUDE.md
+    // so the CLI auto-loads the lite version. Use --add-dir for project file access.
+    let agentCwd = MVP_DIR;
+    let tempDir = null;
+    if (agent.claudeMdPath) {
+      const litePath = join(MVP_DIR, agent.claudeMdPath);
+      if (existsSync(litePath)) {
+        tempDir = mkdtempSync(join(tmpdir(), `orch-${agent.id}-`));
+        copyFileSync(litePath, join(tempDir, 'CLAUDE.md'));
+        agentCwd = tempDir;
+        log(`    using ${agent.claudeMdPath} (temp dir: ${tempDir})`);
+      }
+    }
+
     // v5/v6: Build CLI args with optional per-agent model + budget
     const cliArgs = ['-p', '--allowedTools', CONFIG.allowedTools, '--output-format', 'text'];
     if (agent.model) cliArgs.push('--model', agent.model);
     if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
+    // v12: When using temp dir for lite CLAUDE.md, grant access to actual project
+    if (tempDir) cliArgs.push('--add-dir', MVP_DIR);
 
     // Spawn claude with prompt piped via stdin (avoids Windows cmd length limit)
     const proc = spawn('claude', cliArgs, {
-      cwd: MVP_DIR,
+      cwd: agentCwd,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
@@ -843,9 +928,17 @@ function runAgent(agent, round) {
       appendFileSync(logFile, `[STDERR] ${text}`);
     });
 
+    // v12: Helper to clean up temp dir after agent finishes
+    const cleanupTempDir = () => {
+      if (tempDir) {
+        try { rmSync(tempDir, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+      }
+    };
+
     proc.on('close', (code) => {
       clearTimeout(timer);
       activeProcs.delete(proc.pid);
+      cleanupTempDir();
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const elapsedMin = (elapsed / 60).toFixed(1);
       const status = timedOut ? 'TIMEOUT' : code === 0 ? 'OK' : `EXIT-${code}`;
@@ -856,6 +949,7 @@ function runAgent(agent, round) {
     proc.on('error', (err) => {
       clearTimeout(timer);
       activeProcs.delete(proc.pid);
+      cleanupTempDir();
       log(`  ${agent.id} SPAWN ERROR: ${err.message}`);
       resolvePromise({ agentId: agent.id, code: -1, timedOut: false, elapsed: 0, stdout: '', stderr: err.message });
     });
@@ -1267,6 +1361,151 @@ function updateBalanceState(round, preResults, postResults) {
     const deltaStr = delta ? ` (Δ spread: ${delta.spreadDelta > 0 ? '+' : ''}${delta.spreadDelta}pp)` : '';
     log(`  Balance state [${key}]: spread=${t.spreadPp}pp, ${t.topArchetype.archetype} ${t.topArchetype.winRate}% → ${t.bottomArchetype.archetype} ${t.bottomArchetype.winRate}%${deltaStr}`);
   }
+}
+
+// ============================================================
+// Experiment Log (v13 — persistent memory of what agents tried)
+// ============================================================
+// Tracks parameter changes and their outcomes so balance-analyst
+// can avoid repeating failed approaches and build on successes.
+//
+// Each entry: { round, agentId, timestamp, params: [{key, from, to}], outcome: {tierSpreads, deltaStr}, metrics }
+// Auto-detected from git diff of balance-config.ts after agent modifies it.
+
+const EXPERIMENT_LOG_FILE = join(ORCH_DIR, 'experiment-log.json');
+
+function loadExperimentLog() {
+  if (!existsSync(EXPERIMENT_LOG_FILE)) return [];
+  try { return JSON.parse(readFileSync(EXPERIMENT_LOG_FILE, 'utf-8')); }
+  catch (_) { return []; }
+}
+
+function saveExperimentLog(entries) {
+  writeFileSync(EXPERIMENT_LOG_FILE, JSON.stringify(entries, null, 2));
+}
+
+/**
+ * Parse git diff of balance-config.ts to extract parameter changes.
+ * Returns array of { key, from, to } for numeric value changes.
+ * Uses the round-start tag as the base for comparison.
+ */
+function parseBalanceConfigDiff(round) {
+  const tag = `round-${round}-start`;
+  try {
+    const diff = execSync(`git diff ${tag} -- src/engine/balance-config.ts`, {
+      cwd: MVP_DIR,
+      encoding: 'utf-8',
+      timeout: 5000,
+    });
+    if (!diff.trim()) return [];
+
+    const changes = [];
+    const lines = diff.split('\n');
+    for (const line of lines) {
+      // Match lines like "-  softCapK: 50," → "+  softCapK: 55,"
+      // We look for removed (-) and added (+) pairs with the same key
+      if (line.startsWith('-') && !line.startsWith('---')) {
+        const keyMatch = line.match(/^\-\s*(\w+)\s*:\s*([\d.]+)/);
+        if (keyMatch) {
+          const [, key, fromVal] = keyMatch;
+          // Find corresponding + line with same key
+          const addLine = lines.find(l =>
+            l.startsWith('+') && !l.startsWith('+++') &&
+            l.match(new RegExp(`^\\+\\s*${key}\\s*:\\s*[\\d.]+`))
+          );
+          if (addLine) {
+            const toMatch = addLine.match(new RegExp(`^\\+\\s*${key}\\s*:\\s*([\\d.]+)`));
+            if (toMatch && toMatch[1] !== fromVal) {
+              changes.push({ key, from: parseFloat(fromVal), to: parseFloat(toMatch[1]) });
+            }
+          }
+        }
+      }
+    }
+    return changes;
+  } catch (err) {
+    log(`  Experiment log: git diff failed — ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Log an experiment entry after a balance-config.ts change is detected.
+ * Called after post-sims so we can record the outcome.
+ */
+function logExperiment(round, agentId, paramChanges, preSimResults, postSimResults) {
+  if (!paramChanges.length) return;
+
+  const entries = loadExperimentLog();
+
+  // Build outcome from pre/post sim spreads
+  const outcome = {};
+  if (preSimResults?.length && postSimResults?.length) {
+    outcome.tierSpreads = {};
+    outcome.tierDeltas = {};
+    for (const post of postSimResults) {
+      if (!post.success || !post.data) continue;
+      const key = `${post.tier}${post.variant ? '/' + post.variant : ''}`;
+      const postSpread = post.data.balanceMetrics?.overallSpreadPp;
+      outcome.tierSpreads[key] = postSpread;
+
+      // Find matching pre-sim
+      const pre = preSimResults.find(p => p.tier === post.tier && p.variant === post.variant);
+      if (pre?.success && pre.data) {
+        const preSpread = pre.data.balanceMetrics?.overallSpreadPp;
+        outcome.tierDeltas[key] = Math.round((postSpread - preSpread) * 10) / 10;
+      }
+    }
+  }
+
+  const entry = {
+    round,
+    agentId,
+    timestamp: new Date().toISOString(),
+    params: paramChanges,
+    outcome,
+  };
+
+  entries.push(entry);
+
+  // Keep last 50 entries to prevent unbounded growth
+  if (entries.length > 50) entries.splice(0, entries.length - 50);
+
+  saveExperimentLog(entries);
+
+  // Log summary
+  const paramStr = paramChanges.map(p => `${p.key}: ${p.from}→${p.to}`).join(', ');
+  const deltaStr = Object.entries(outcome.tierDeltas || {})
+    .map(([k, d]) => `${k} ${d > 0 ? '+' : ''}${d}pp`)
+    .join(', ');
+  log(`  Experiment logged: ${paramStr} → ${deltaStr || 'no sim data'}`);
+}
+
+/**
+ * Build experiment context for injection into balance-analyst prompt.
+ * Returns formatted string of recent experiments, or null if none.
+ */
+function buildExperimentContext() {
+  const entries = loadExperimentLog();
+  if (!entries.length) return null;
+
+  // Last 10 entries (most recent first)
+  const recent = entries.slice(-10).reverse();
+  const lines = [`Recent experiments (${recent.length} of ${entries.length} total):`];
+
+  for (const e of recent) {
+    const paramStr = e.params.map(p => `${p.key}: ${p.from}→${p.to}`).join(', ');
+    const deltaStr = Object.entries(e.outcome?.tierDeltas || {})
+      .map(([k, d]) => `${k} ${d > 0 ? '+' : ''}${d}pp`)
+      .join(', ');
+    const improved = Object.values(e.outcome?.tierDeltas || {}).every(d => d <= 0);
+    const worsened = Object.values(e.outcome?.tierDeltas || {}).some(d => d > 1);
+    const verdict = worsened ? 'WORSENED' : improved ? 'IMPROVED' : 'MIXED';
+    lines.push(`  Round ${e.round} (${e.agentId}): ${paramStr} → ${deltaStr || 'no data'} [${verdict}]`);
+  }
+
+  lines.push(`Avoid repeating WORSENED experiments. Build on IMPROVED ones.`);
+  return lines.join('\n');
 }
 
 // ============================================================
@@ -2045,16 +2284,29 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   if (isEmptyWork) {
     ctx.consecutiveEmptyRounds[result.agentId] = (ctx.consecutiveEmptyRounds[result.agentId] || 0) + 1;
     if (ctx.consecutiveEmptyRounds[result.agentId] >= 3) {
-      log(`  ⚠ ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds — auto-escalating model`);
+      // v11: Smarter escalation guard — don't escalate if agent has no backlog tasks.
+      // Empty work from "nothing to do" shouldn't burn cost on a bigger model.
       const agent = AGENTS.find(a => a.id === result.agentId);
-      if (agent) ctx.consecutiveAgentFailures[result.agentId] = 2;
+      const backlog = loadBacklog();
+      const hasBacklogTask = agent && backlog.some(t => t.status === 'pending' && t.role === agent.role);
+      if (!hasBacklogTask) {
+        log(`  ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds but no pending tasks — skipping escalation`);
+      } else {
+        log(`  ⚠ ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds — auto-escalating model`);
+        if (agent) ctx.consecutiveAgentFailures[result.agentId] = 2;
+      }
     }
   } else if (result.code === 0 && !result.timedOut) {
     ctx.consecutiveEmptyRounds[result.agentId] = 0;
   }
   // v10: Collect modified files from handoff for incremental testing
   const meta = parseHandoffMeta(result.agentId);
-  return { status, isEmptyWork, filesModified: meta.filesModified || [] };
+  // v13: Flag if balance-config.ts was modified (for experiment logging)
+  const filesModified = meta.filesModified || [];
+  const balanceConfigChanged = filesModified.some(f =>
+    f.includes('balance-config') || f.includes('archetypes')
+  );
+  return { status, isEmptyWork, filesModified, balanceConfigChanged };
 }
 
 // ============================================================
@@ -2477,8 +2729,24 @@ async function main() {
     }
     const agentHasBacklogTask = (role) => backlogCache.some(t => t.status === 'pending' && t.role === role);
 
+    // v11: Producer overflow guard — skip producer when backlog already has enough pending tasks.
+    // Prevents producer from flooding backlog faster than code agents can drain it.
+    const PRODUCER_BACKLOG_LIMIT = 5;
+
     const activeAgents = AGENTS.filter(agent => {
       const meta = handoffCache[agent.id];
+
+      // v11: Skip producer if backlog already has enough pending tasks
+      if (agent.role === 'producer' && backlogCache.filter(t => t.status === 'pending').length >= PRODUCER_BACKLOG_LIMIT) {
+        log(`  ${agent.id}: PRODUCER OVERFLOW (${backlogCache.filter(t => t.status === 'pending').length} pending tasks >= ${PRODUCER_BACKLOG_LIMIT}, skipping)`);
+        thisRoundDecisions.push({
+          round, agentId: agent.id, decision: 'skipped',
+          reason: `producer overflow: ${backlogCache.filter(t => t.status === 'pending').length} pending tasks`,
+          model: agent.model || 'default',
+          escalated: false, succeeded: null, elapsed: null,
+        });
+        return false;
+      }
 
       // Skip agents that have exhausted all tasks (primary + stretch)
       if (meta.status === 'all-done') {
@@ -2667,6 +2935,8 @@ async function main() {
     const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
     // v10: Collect modified files from all code agents for incremental testing
     const roundModifiedFiles = [];
+    // v13: Track which agent modified balance-config.ts this round (for experiment logging)
+    let balanceChangeAgent = null;
 
     // Phase A: Code agents + pre-sim pipeline
     if (codeAgents.length) {
@@ -2681,8 +2951,12 @@ async function main() {
 
       // v9: Streaming agent pool — agents complete individually, no batch barrier
       const codeResultsPromise = runAgentPool(codeAgents, round, CONFIG.maxConcurrency, (result) => {
-        const { filesModified } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+        const { filesModified, balanceConfigChanged } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
         roundModifiedFiles.push(...filesModified);
+        // v13: Track the agent that changed balance config
+        if (balanceConfigChanged && !balanceChangeAgent) {
+          balanceChangeAgent = result.agentId;
+        }
       });
 
       // Wait for both pre-sim and all agents to complete
@@ -2699,8 +2973,10 @@ async function main() {
       handleModelEscalation(codeResults, round);
       roundTiming.phaseA = Date.now() - phaseAStart;
 
-      // v9: Pipeline tests + post-sims concurrently — both read from disk, neither
-      // writes to source files. If tests fail and we revert, discard post-sim results.
+      // v11: Pipeline tests + post-sims + Phase B concurrently.
+      // Phase B agents (producer, reviewer, designer) only modify docs/analysis/handoffs —
+      // not source code. They can safely run while tests execute.
+      // If tests fail + revert: discard Phase B results (handoffs reference reverted code).
       const testStart = Date.now();
       const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
 
@@ -2711,13 +2987,33 @@ async function main() {
         log(`  Incremental test filter: ${testFilter.split('|').length} suite(s) of 8`);
       }
 
-      // Launch tests + optimistic post-sim concurrently
+      // Refresh task-board before Phase B launch so coordination agents see latest state.
+      // Use last known test status since current tests haven't completed yet.
+      generateTaskBoard(round, lastTestStatus || 'pending', consecutiveTestFailures);
+
+      // v11: Launch tests + optimistic post-sim + Phase B agents concurrently
       const testPromise = runTests(testFilter);
       const postSimPromise = postSimShouldRun
         ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
         : Promise.resolve(null);
 
-      const [testRes, postSimOptimistic] = await Promise.all([testPromise, postSimPromise]);
+      // Phase B: launch concurrently with tests (only if we have coord agents and no revert yet)
+      const phaseBCoordResults = [];
+      const phaseBPromise = (coordAgents.length > 0)
+        ? (() => {
+            const phaseBStart = Date.now();
+            log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s) concurrently with tests...`);
+            return runAgentPool(coordAgents, round, CONFIG.maxConcurrency, (result) => {
+              processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+              phaseBCoordResults.push(result);
+            }).then(results => {
+              roundTiming.phaseB = Date.now() - phaseBStart;
+              return results;
+            });
+          })()
+        : Promise.resolve([]);
+
+      const [testRes, postSimOptimistic, coordResults] = await Promise.all([testPromise, postSimPromise, phaseBPromise]);
       testResult = testRes;
       roundTiming.tests = Date.now() - testStart;
       if (postSimOptimistic) {
@@ -2735,6 +3031,17 @@ async function main() {
         didRevert = true;
       }
 
+      // v11: If revert happened, discard Phase B results — handoffs reference reverted code
+      if (didRevert && coordResults.length > 0) {
+        log(`  Phase B results discarded (revert happened — coordination handoffs reference reverted code)`);
+      } else if (coordResults.length > 0) {
+        // Phase B succeeded alongside tests — process coordination results
+        appendSessionChangelog(round, coordResults);
+        handleFailedTasks(coordResults);
+        validateFileOwnership(coordResults, AGENTS);
+        handleModelEscalation(coordResults, round);
+      }
+
       // v9: Accept or discard optimistic post-sim results
       if (testResult.passed && !didRevert && postSimOptimistic) {
         postSimResults = postSimOptimistic;
@@ -2743,12 +3050,18 @@ async function main() {
         postSimResults = null;
       }
 
-      // Refresh task-board so Phase B agents see updated state
-      generateTaskBoard(round, testResult.passed ? `PASSING (${testResult.count} tests)` : lastTestStatus, consecutiveTestFailures);
-
       // v7: Update balance state tracker with pre/post sim results
       if (preSimResults?.results?.length || postSimResults?.results?.length) {
         updateBalanceState(round, preSimResults?.results, postSimResults?.results);
+      }
+
+      // v13: Experiment logging — detect balance-config.ts param changes and record outcomes
+      if (balanceChangeAgent && !didRevert) {
+        const paramChanges = parseBalanceConfigDiff(round);
+        if (paramChanges.length) {
+          logExperiment(round, balanceChangeAgent, paramChanges,
+            preSimResults?.results, postSimResults?.results);
+        }
       }
 
       // v7 Phase 2: Regression detection — flag when changes help one archetype but hurt another
@@ -2771,7 +3084,6 @@ async function main() {
         if (convergenceResult.converged) {
           stopReason = `balance converged — all tiers within thresholds at round ${round}`;
           log(`\n✓ BALANCE CONVERGED. Stopping orchestration.`);
-          // Still run Phase B so coordination agents can see final state
         }
       }
 
@@ -2781,16 +3093,12 @@ async function main() {
       }
     }
 
-    // Phase B: Coordination agents (see fresh handoffs from Phase A)
-    // v6.1: Skip Phase B if auto-revert happened — handoffs reference reverted work
-    if (didRevert && coordAgents.length) {
-      log(`\nPhase B: SKIPPED (auto-revert happened — coordination agents would see stale state)`);
-    }
-    if (coordAgents.length && !didRevert) {
+    // v11: Phase B now runs concurrently with tests (above). Handle the case where
+    // there are coord agents but no code agents ran this round (no test phase to pipeline with).
+    if (!codeAgents.length && coordAgents.length && !didRevert) {
       const phaseBStart = Date.now();
-      log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s)...`);
+      log(`\nPhase B (standalone): Launching ${coordAgents.length} coordination agent(s)...`);
 
-      // v9: Streaming agent pool with per-agent result processing
       const coordResults = await runAgentPool(coordAgents, round, CONFIG.maxConcurrency, (result) => {
         processAgentResult(result, round, roundAgents, costLog, trackingCtx);
       });
@@ -2802,12 +3110,10 @@ async function main() {
       roundTiming.phaseB = Date.now() - phaseBStart;
     }
 
-    // v9: Compute overhead (everything not in phases or tests)
-    // Note: preSim/postSim run concurrently inside phaseA/tests respectively,
-    // so their wall-clock time is already subsumed. They're tracked separately
-    // for visibility in the report (to show pipeline savings).
+    // v11: Compute overhead — Phase B is now concurrent with tests (subsumed into test time),
+    // so overhead = total - phaseA - tests. Standalone Phase B (no code agents) still tracked.
     const roundTotal = Date.now() - roundTiming.roundStart;
-    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.phaseB - roundTiming.tests;
+    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.tests - (codeAgents.length ? 0 : roundTiming.phaseB);
 
     // --- Update test status ---
     if (!testResult) {
@@ -2844,6 +3150,35 @@ async function main() {
     const backlogPending = postBacklog.filter(t => t.status === 'pending').length;
     const backlogCompleted = postBacklog.filter(t => t.status === 'completed').length;
 
+    // v14: Round quality metrics — track productivity per round
+    const roundSuccessful = roundAgents.filter(a => a.status === 'OK').length;
+    const roundFailed = roundAgents.filter(a => a.status !== 'OK').length;
+    const roundFilesModified = roundModifiedFiles.length;
+    const roundTokensSpent = roundAgents.reduce((sum, ra) => {
+      const c = costLog[ra.id];
+      return sum + (c?.inputTokens || 0) + (c?.outputTokens || 0);
+    }, 0);
+    const roundCost = roundAgents.reduce((sum, ra) => {
+      const c = costLog[ra.id];
+      return sum + (c?.totalCost || 0);
+    }, 0);
+    const agentsActive = roundAgents.length;
+    const agentsIdle = thisRoundDecisions.filter(d => d.decision === 'skipped' || d.decision === 'blocked').length;
+    const utilization = (agentsActive + agentsIdle) > 0
+      ? Math.round((agentsActive / (agentsActive + agentsIdle)) * 100)
+      : 0;
+    const roundQuality = {
+      successful: roundSuccessful,
+      failed: roundFailed,
+      filesModified: roundFilesModified,
+      agentsActive,
+      agentsIdle,
+      utilization,
+    };
+
+    // Log round quality summary
+    log(`  Round quality: ${roundSuccessful} OK, ${roundFailed} failed, ${roundFilesModified} files, ${utilization}% utilization`);
+
     roundLog.push({
       round,
       agents: roundAgents,
@@ -2860,6 +3195,8 @@ async function main() {
       // v8: Time breakdown (ms) and backlog velocity
       timing: roundTiming,
       backlog: { pending: backlogPending, completed: backlogCompleted },
+      // v14: Round quality metrics
+      quality: roundQuality,
     });
 
     // --- Circuit breaker ---
@@ -3159,15 +3496,19 @@ ${roundLog.map(r => {
   const tests = r.testsPassed ? `PASS (${r.testCount})` : `FAIL (${r.testCount}p, ${r.failCount}f)`;
   const t = r.timing || {};
   const fmt = (ms) => ms ? `${(ms/1000).toFixed(0)}s` : '—';
-  // v9: preSim/postSim are concurrent (inside phaseA/tests) — shown for visibility, not added to total.
+  // v11: preSim/postSim/phaseB are concurrent (inside phaseA/tests) — shown for visibility, not added to total.
   // Support old 'sims' field from v8 round logs for backwards compat in reports.
   const preSim = t.preSim || 0;
   const postSim = t.postSim || 0;
   const simsCompat = t.sims || 0;
-  // Total = phaseA + phaseB + tests + overhead (sims are concurrent, already inside phaseA/tests)
+  // v11: Phase B is concurrent with tests when code agents ran. For standalone Phase B (no code agents), it's serial.
+  // Total = phaseA + tests + overhead (phaseB/sims are concurrent, subsumed into test time)
   // For v8 compat: old 'sims' was serial and was separate, so add it for old round data
-  const total = (t.phaseA || 0) + (t.phaseB || 0) + (t.tests || 0) + simsCompat + (t.overhead || 0);
-  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${fmt(t.phaseB)} | ${fmt(t.tests)} | ${fmt(preSim || simsCompat)} | ${fmt(postSim)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
+  const hasCodeAgents = r.agents.some(a => !['producer', 'tech-lead', 'game-designer'].includes(a.id.replace(/-\d+$/, '')));
+  const phaseBForTotal = hasCodeAgents ? 0 : (t.phaseB || 0); // concurrent → already in tests; standalone → add
+  const total = (t.phaseA || 0) + phaseBForTotal + (t.tests || 0) + simsCompat + (t.overhead || 0);
+  const phaseBDisplay = (t.phaseB && hasCodeAgents) ? `${fmt(t.phaseB)}*` : fmt(t.phaseB); // * = concurrent
+  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${phaseBDisplay} | ${fmt(t.tests)} | ${fmt(preSim || simsCompat)} | ${fmt(postSim)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
 }).join('\n')}
 
 ## All Files Modified
