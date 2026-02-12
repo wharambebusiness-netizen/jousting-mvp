@@ -1119,12 +1119,13 @@ function runBalanceSim(tier, variant, timeoutMs = 60000) {
  */
 async function runBalanceSims(round, phase) {
   const bc = CONFIG.balanceConfig;
-  if (!bc || !bc.sims?.length) return { results: [], allSucceeded: true };
+  if (!bc || !bc.sims?.length) return { results: [], allSucceeded: true, elapsedMs: 0 };
 
   mkdirSync(BALANCE_DATA_DIR, { recursive: true });
 
   const timeoutMs = bc.simTimeoutMs || 60000;
   const results = [];
+  const simStartMs = Date.now();
 
   log(`  Balance sims (${phase}): running ${bc.sims.length} sim(s)...`);
 
@@ -1153,7 +1154,8 @@ async function runBalanceSims(round, phase) {
   }
 
   const allSucceeded = results.every(r => r.success);
-  return { results, allSucceeded };
+  const elapsedMs = Date.now() - simStartMs;
+  return { results, allSucceeded, elapsedMs };
 }
 
 // ============================================================
@@ -1938,21 +1940,68 @@ function accumulateAgentCost(costLog, result, agents) {
 }
 
 // ============================================================
-// Concurrency Limiter (v5 Phase 6D)
+// Agent Pool (v9 — streaming pipeline, replaces batch concurrency)
 // ============================================================
-async function runAgentsWithConcurrency(agents, round, maxConcurrency) {
-  if (!maxConcurrency || maxConcurrency >= agents.length) {
-    return Promise.all(agents.map(a => runAgent(a, round)));
-  }
+// Queue-drain pool: launches up to maxConcurrency agents. As each finishes,
+// fires onAgentComplete callback immediately and launches the next queued agent.
+// Results are in completion order (not submission order).
+async function runAgentPool(agents, round, maxConcurrency, onAgentComplete) {
+  if (!agents.length) return [];
+  const limit = (!maxConcurrency || maxConcurrency >= agents.length)
+    ? agents.length : maxConcurrency;
 
   const results = [];
-  for (let i = 0; i < agents.length; i += maxConcurrency) {
-    const batch = agents.slice(i, i + maxConcurrency);
-    log(`  Concurrency batch ${Math.floor(i / maxConcurrency) + 1}: ${batch.map(a => a.id).join(', ')}`);
-    const batchResults = await Promise.all(batch.map(a => runAgent(a, round)));
-    results.push(...batchResults);
+  const queue = [...agents];
+  let active = 0;
+  let resolveAll;
+  const allDone = new Promise(r => { resolveAll = r; });
+
+  function tryLaunch() {
+    while (active < limit && queue.length > 0) {
+      const agent = queue.shift();
+      active++;
+      runAgent(agent, round).then(result => {
+        active--;
+        results.push(result);
+        if (onAgentComplete) onAgentComplete(result);
+        if (active === 0 && queue.length === 0) resolveAll();
+        else tryLaunch();
+      });
+    }
+    if (active === 0 && queue.length === 0) resolveAll();
   }
+
+  tryLaunch();
+  await allDone;
   return results;
+}
+
+// ============================================================
+// Process Agent Result (v9 — extracted from Phase A/B duplicated blocks)
+// ============================================================
+// ctx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures }
+// These are main()-scoped tracking objects passed by reference.
+function processAgentResult(result, round, roundAgents, costLog, ctx) {
+  const status = result.timedOut ? 'TIMEOUT' : result.code === 0 ? 'OK' : `ERROR(${result.code})`;
+  log(`  ${result.agentId}: ${status} in ${(result.elapsed / 60).toFixed(1)}min`);
+  roundAgents.push({ id: result.agentId, status, elapsed: result.elapsed });
+  ctx.lastRunRound[result.agentId] = round;
+  accumulateAgentCost(costLog, result, AGENTS);
+
+  const { warnings, isEmptyWork } = validateAgentOutput(result.agentId, round, result);
+  for (const w of warnings) log(`  ⚠ ${w}`);
+
+  if (isEmptyWork) {
+    ctx.consecutiveEmptyRounds[result.agentId] = (ctx.consecutiveEmptyRounds[result.agentId] || 0) + 1;
+    if (ctx.consecutiveEmptyRounds[result.agentId] >= 3) {
+      log(`  ⚠ ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds — auto-escalating model`);
+      const agent = AGENTS.find(a => a.id === result.agentId);
+      if (agent) ctx.consecutiveAgentFailures[result.agentId] = 2;
+    }
+  } else if (result.code === 0 && !result.timedOut) {
+    ctx.consecutiveEmptyRounds[result.agentId] = 0;
+  }
+  return { status, isEmptyWork };
 }
 
 // ============================================================
@@ -2157,6 +2206,9 @@ async function main() {
 
   // v5B: Track per-agent empty rounds (ran OK but modified zero files)
   const consecutiveEmptyRounds = {};    // agentId → consecutive empty-work count
+
+  // v9: Context object for processAgentResult (passes main-scoped tracking by reference)
+  const trackingCtx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures };
 
   // v5C: Track per-agent failure cooldown
   const lastFailedRound = {};           // agentId → round number of last failure
@@ -2444,89 +2496,78 @@ async function main() {
     let regressionResult = null;   // v7 Phase 2: Regression detection results
     let convergenceResult = null;  // v7 Phase 2: Convergence check results
 
-    // v8: Round time breakdown tracking
-    const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, sims: 0, overhead: 0 };
+    // v9: Round time breakdown tracking (split sims into preSim/postSim for pipeline visibility)
+    const roundTiming = { roundStart: Date.now(), phaseA: 0, phaseB: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
 
-    // v7: Pre-sim — capture balance baseline before code agents make changes
-    if (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length && codeAgents.length) {
-      const simStart = Date.now();
-      log(`\nBalance Pre-Sim (baseline):`);
-      preSimResults = await runBalanceSims(round, 'pre');
-      roundTiming.sims += Date.now() - simStart;
-    }
-
-    // Phase A: Code agents
+    // Phase A: Code agents + pre-sim pipeline
     if (codeAgents.length) {
       const phaseAStart = Date.now();
       log(`\nPhase A: Launching ${codeAgents.length} code agent(s)...`);
-      const codeResults = await runAgentsWithConcurrency(codeAgents, round, CONFIG.maxConcurrency);
 
-      for (const r of codeResults) {
-        const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
-        log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
-        roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
-        lastRunRound[r.agentId] = round;
+      // v9: Pipeline pre-sims with Phase A — run concurrently since code agents
+      // never read balance-data/ files. Pre-sim writes JSON, agents read source code.
+      const preSimPromise = (CONFIG.balanceConfig?.runPreSim !== false && CONFIG.balanceConfig?.sims?.length)
+        ? (() => { log(`  (pre-sim running concurrently with agents)`); return runBalanceSims(round, 'pre'); })()
+        : Promise.resolve(null);
+
+      // v9: Streaming agent pool — agents complete individually, no batch barrier
+      const codeResultsPromise = runAgentPool(codeAgents, round, CONFIG.maxConcurrency, (result) => {
+        processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+      });
+
+      // Wait for both pre-sim and all agents to complete
+      const [preSimRes, codeResults] = await Promise.all([preSimPromise, codeResultsPromise]);
+      if (preSimRes) {
+        preSimResults = preSimRes;
+        roundTiming.preSim = preSimRes.elapsedMs || 0;
       }
 
-      // Post-Phase A: changelog, failed task reassignment, validation, cost tracking
+      // Post-Phase A: changelog, failed task reassignment, validation
       appendSessionChangelog(round, codeResults);
       handleFailedTasks(codeResults);
-      for (const r of codeResults) {
-        accumulateAgentCost(costLog, r, AGENTS);
-        const { warnings, isEmptyWork } = validateAgentOutput(r.agentId, round, r);
-        for (const w of warnings) log(`  ⚠ ${w}`);
-
-        // v5B: Track consecutive empty rounds per agent
-        if (isEmptyWork) {
-          consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
-          if (consecutiveEmptyRounds[r.agentId] >= 3) {
-            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — auto-escalating model`);
-            // v6.1: Auto-escalate after 3 empty rounds (agent may need smarter model)
-            const agent = AGENTS.find(a => a.id === r.agentId);
-            if (agent) {
-              consecutiveAgentFailures[r.agentId] = 2; // trigger escalation in handleModelEscalation
-            }
-          }
-        } else if (r.code === 0 && !r.timedOut) {
-          // Reset on successful non-empty work
-          consecutiveEmptyRounds[r.agentId] = 0;
-        }
-      }
       validateFileOwnership(codeResults, AGENTS);
-
-      // v6: Model escalation check
       handleModelEscalation(codeResults, round);
       roundTiming.phaseA = Date.now() - phaseAStart;
 
-      // Run tests after code agents
+      // v9: Pipeline tests + post-sims concurrently — both read from disk, neither
+      // writes to source files. If tests fail and we revert, discard post-sim results.
       const testStart = Date.now();
-      testResult = await runTests();
-      roundTiming.tests += Date.now() - testStart;
+      const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
+
+      // Launch tests + optimistic post-sim concurrently
+      const testPromise = runTests();
+      const postSimPromise = postSimShouldRun
+        ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
+        : Promise.resolve(null);
+
+      const [testRes, postSimOptimistic] = await Promise.all([testPromise, postSimPromise]);
+      testResult = testRes;
+      roundTiming.tests = Date.now() - testStart;
+      if (postSimOptimistic) {
+        roundTiming.postSim = postSimOptimistic.elapsedMs || 0;
+      }
 
       // v8: Smart per-agent revert on test regression
-      // Instead of reverting ALL of src/, identify which agent(s) broke tests
-      // and only revert their files — preserving good work from other agents.
       if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
         log(`  ⚠ Tests regressed this round! Attempting smart per-agent revert...`);
         const revertResult = await smartRevert(round, codeResults);
         if (revertResult.reverted) {
           log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
-          // Re-run tests to confirm revert worked
           testResult = await runTests();
         }
         didRevert = true;
       }
 
+      // v9: Accept or discard optimistic post-sim results
+      if (testResult.passed && !didRevert && postSimOptimistic) {
+        postSimResults = postSimOptimistic;
+      } else if (didRevert && postSimOptimistic) {
+        log(`  Post-sim results discarded (revert happened — sim data reflects reverted code)`);
+        postSimResults = null;
+      }
+
       // Refresh task-board so Phase B agents see updated state
       generateTaskBoard(round, testResult.passed ? `PASSING (${testResult.count} tests)` : lastTestStatus, consecutiveTestFailures);
-
-      // v7: Post-sim — measure balance after code agent changes (only if tests passed and no revert)
-      if (CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length && testResult.passed && !didRevert) {
-        const simStart = Date.now();
-        log(`\nBalance Post-Sim (after changes):`);
-        postSimResults = await runBalanceSims(round, 'post');
-        roundTiming.sims += Date.now() - simStart;
-      }
 
       // v7: Update balance state tracker with pre/post sim results
       if (preSimResults?.results?.length || postSimResults?.results?.length) {
@@ -2571,44 +2612,25 @@ async function main() {
     if (coordAgents.length && !didRevert) {
       const phaseBStart = Date.now();
       log(`\nPhase B: Launching ${coordAgents.length} coordination agent(s)...`);
-      const coordResults = await runAgentsWithConcurrency(coordAgents, round, CONFIG.maxConcurrency);
 
-      for (const r of coordResults) {
-        const status = r.timedOut ? 'TIMEOUT' : r.code === 0 ? 'OK' : `ERROR(${r.code})`;
-        log(`  ${r.agentId}: ${status} in ${(r.elapsed / 60).toFixed(1)}min`);
-        roundAgents.push({ id: r.agentId, status, elapsed: r.elapsed });
-        lastRunRound[r.agentId] = round;
-      }
+      // v9: Streaming agent pool with per-agent result processing
+      const coordResults = await runAgentPool(coordAgents, round, CONFIG.maxConcurrency, (result) => {
+        processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+      });
 
       appendSessionChangelog(round, coordResults);
       handleFailedTasks(coordResults);
-      for (const r of coordResults) {
-        accumulateAgentCost(costLog, r, AGENTS);
-        const { warnings, isEmptyWork } = validateAgentOutput(r.agentId, round, r);
-        for (const w of warnings) log(`  ⚠ ${w}`);
-
-        // v5B: Track consecutive empty rounds per agent
-        if (isEmptyWork) {
-          consecutiveEmptyRounds[r.agentId] = (consecutiveEmptyRounds[r.agentId] || 0) + 1;
-          if (consecutiveEmptyRounds[r.agentId] >= 3) {
-            log(`  ⚠ ${r.agentId}: ${consecutiveEmptyRounds[r.agentId]} consecutive empty rounds — auto-escalating model`);
-            const agent = AGENTS.find(a => a.id === r.agentId);
-            if (agent) {
-              consecutiveAgentFailures[r.agentId] = 2;
-            }
-          }
-        } else if (r.code === 0 && !r.timedOut) {
-          consecutiveEmptyRounds[r.agentId] = 0;
-        }
-      }
       validateFileOwnership(coordResults, AGENTS);
       handleModelEscalation(coordResults, round);
       roundTiming.phaseB = Date.now() - phaseBStart;
     }
 
-    // v8: Compute overhead (everything not in phases, tests, or sims)
+    // v9: Compute overhead (everything not in phases or tests)
+    // Note: preSim/postSim run concurrently inside phaseA/tests respectively,
+    // so their wall-clock time is already subsumed. They're tracked separately
+    // for visibility in the report (to show pipeline savings).
     const roundTotal = Date.now() - roundTiming.roundStart;
-    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.phaseB - roundTiming.tests - roundTiming.sims;
+    roundTiming.overhead = roundTotal - roundTiming.phaseA - roundTiming.phaseB - roundTiming.tests;
 
     // --- Update test status ---
     if (!testResult) {
@@ -2952,16 +2974,23 @@ ${agentSummaries.map(a => {
 
 ## Round-by-Round Timeline
 
-| Round | Agents | Test Result | Phase A | Phase B | Tests | Sims | Overhead | Total |
-|-------|--------|-------------|---------|---------|-------|------|----------|-------|
+| Round | Agents | Test Result | Phase A | Phase B | Tests | Pre-Sim | Post-Sim | Overhead | Total |
+|-------|--------|-------------|---------|---------|-------|---------|----------|----------|-------|
 ${roundLog.map(r => {
-  if (r.note) return `| ${r.round} | — | — | — | — | — | — | — | ${r.note} |`;
+  if (r.note) return `| ${r.round} | — | — | — | — | — | — | — | — | ${r.note} |`;
   const agents = r.agents.map(a => `${a.id}(${a.status}, ${(a.elapsed/60).toFixed(0)}m)`).join(', ');
   const tests = r.testsPassed ? `PASS (${r.testCount})` : `FAIL (${r.testCount}p, ${r.failCount}f)`;
   const t = r.timing || {};
   const fmt = (ms) => ms ? `${(ms/1000).toFixed(0)}s` : '—';
-  const total = (t.phaseA || 0) + (t.phaseB || 0) + (t.tests || 0) + (t.sims || 0) + (t.overhead || 0);
-  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${fmt(t.phaseB)} | ${fmt(t.tests)} | ${fmt(t.sims)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
+  // v9: preSim/postSim are concurrent (inside phaseA/tests) — shown for visibility, not added to total.
+  // Support old 'sims' field from v8 round logs for backwards compat in reports.
+  const preSim = t.preSim || 0;
+  const postSim = t.postSim || 0;
+  const simsCompat = t.sims || 0;
+  // Total = phaseA + phaseB + tests + overhead (sims are concurrent, already inside phaseA/tests)
+  // For v8 compat: old 'sims' was serial and was separate, so add it for old round data
+  const total = (t.phaseA || 0) + (t.phaseB || 0) + (t.tests || 0) + simsCompat + (t.overhead || 0);
+  return `| ${r.round} | ${agents} | ${tests} | ${fmt(t.phaseA)} | ${fmt(t.phaseB)} | ${fmt(t.tests)} | ${fmt(preSim || simsCompat)} | ${fmt(postSim)} | ${fmt(t.overhead)} | ${fmt(total)} |`;
 }).join('\n')}
 
 ## All Files Modified
