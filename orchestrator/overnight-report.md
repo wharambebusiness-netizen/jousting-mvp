@@ -1,121 +1,354 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-12 13:38:55
-> Orchestrator: v15
+> Generated: 2026-02-12 23:40:13
+> Orchestrator: v17
 
 ## Summary
-- **Started**: 2026-02-12 13:38:53
-- **Ended**: 2026-02-12 13:38:55
-- **Total runtime**: 0.0 minutes (0.0 hours)
-- **Rounds completed**: 0
-- **Stop reason**: all agents exhausted their task lists
-- **Mission**: default agents
+- **Started**: 2026-02-12 22:30:23
+- **Ended**: 2026-02-12 23:40:13
+- **Total runtime**: 69.8 minutes (1.2 hours)
+- **Rounds completed**: 50
+- **Stop reason**: max rounds reached
+- **Mission**: orchestrator\missions\overnight.json
 - **Final test status**: ALL PASSING (8 tests)
 
 ## Agent Results
 
 | Agent | Type | Role | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
 |-------|------|------|-------------|---------------|----------|--------|----------------|
-| engine-refactor | feature | engine-dev | all-done | 0 | 0 | 0 | 1 |
-| gear-system | feature | engine-dev | all-done | 0 | 0 | 0 | 1 |
-| ui-loadout | feature | ui-dev | all-done | 0 | 0 | 0 | 4 |
-| quality-review | continuous | test-writer | all-done | 0 | 0 | 0 | 1 |
+| producer | continuous | producer | complete | 1 | 0 | 0 | 2 |
+| balance-tuner | continuous | balance-analyst | all-done | 0 | 0 | 0 | 1 |
+| qa | continuous | qa-engineer | all-done | 0 | 0 | 0 | 2 |
+| polish | continuous | css-artist | all-done | 0 | 0 | 0 | 1 |
+| reviewer | continuous | tech-lead | complete | 25 | 0 | 0 | 1 |
+| ui-dev | continuous | ui-dev | all-done | 2 | 0 | 0 | 1 |
+| designer | continuous | game-designer | all-done | 10 | 0 | 0 | 2 |
 
 ### Agent Details
 
-#### Engine Refactor Agent (engine-refactor)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: none
-- **Notes**: @gear-system: Engine is stable, all impact breakdown fields populated in phase-joust.ts and phase-melee.ts — no blockers from engine side. @quality-review: Working directory clean (git diff src/engine/archetypes.ts and balance-config.ts both empty). 908/908 tests passing. @all: BL-076 + BL-064 were already shipped in commit 70abfc2 (S38). ImpactBreakdown interface in types.ts:119-134, populated in phase-joust.ts:213-259 and phase-melee.ts:111-148. No engine work remaining.
+#### Producer (producer)
+- **Status**: complete
+- **Rounds active**: 1
+- **Files modified**: orchestrator/backlog.json (populated 5 new tasks), orchestrator/analysis/producer-round-1.md (NEW)
+- **Notes**: @all: S54 Round 1 complete. Interpreted orchestrator decision: engine-dev NOT in roster = implicit Path B (MVP frozen at 86%, BL-064/076 deferred to Phase 2). Generated 5 new tasks for available 7-agent roster. BL-079 (variant balance sweep) is P1 blocker for BL-080 (variant tests in R2). BL-081/082/083 are parallel stretch goals. Manual QA (BL-077) requires human tester resource (not producer authority). Next round: balance-tuner executes BL-079, ui-dev executes BL-081, designer executes BL-082.
+- **Max model**: haiku
 
-#### Gear System Agent (gear-system)
+#### Balance Analyst (balance-tuner)
 - **Status**: all-done
 - **Rounds active**: 0
-- **Files modified**: none
-- **Notes**: @ui-loadout: Gear system is fully implemented and stable. 6 steed slots (chamfron, barding, saddle, stirrups, reins, horseshoes) + 6 player slots (helm, shield, lance, armor, gauntlets, melee_weapon). 3 gear variants (aggressive, balanced, defensive) per slot. All API functions working: createStatGear, createFullLoadout, createPlayerGear, createFullPlayerLoadout — all accept optional variant param. ImpactBreakdown populated in phase-joust.ts and phase-melee.ts (BL-076/BL-064 shipped). No engine-side blockers. @quality-review: No files modified this round — gear system was already complete from prior sessions.
+- **Files modified**: orchestrator/analysis/balance-tuner-round-7.md
+- **Notes**: @all: Round 7 checkpoint — no new balance tasks in backlog. All critical tier validation complete (bare → relic + mixed, 8 tier configurations documented). Balance is stable and excellent across all documented tiers. All stretch goals complete. Status: all-done (retired).
+- **Max model**: opus
 
-#### UI & Loadout Agent (ui-loadout)
+#### QA Engineer (qa)
 - **Status**: all-done
 - **Rounds active**: 0
-- **Files modified**: src/ui/MatchSummary.tsx, src/ui/MeleeResult.tsx, src/ui/SetupScreen.tsx, src/App.css
-- **Notes**: @quality-review: Fixed a real bug in MatchSummary LoadoutMini — stat abbreviations used `.slice(0,3).toUpperCase()` which produced wrong labels (control→CON instead of CTL, guard→GUA instead of GRD, initiative→INI instead of INIT). Now uses proper STAT_ABBR mapping. Also replaced all P1/P2 labels across MatchSummary and MeleeResult with "You"/"Opp" + archetype names for readability. Added archetype hint cards (strengths + gameplay tip) to SetupScreen for new player onboarding (addresses MEMORY.md P1 gap). @all: No engine files modified. No App.tsx changes needed.
+- **Files modified**: src/engine/gear-variants.test.ts, orchestrator/analysis/qa-round-6.md
+- **Notes**: @all: Stretch goal complete. Added 8 legendary/relic tier unit tests (889→897). All tests passing. Zero bugs found. Ultra-high tier combat validated at unit test level. Extends BL-065 pattern to complete tier progression coverage (bare → relic). See orchestrator/analysis/qa-round-6.md for comprehensive findings.
+- **Max model**: opus
 
-#### Quality & Review Agent (quality-review)
+#### CSS Artist (polish)
 - **Status**: all-done
 - **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/quality-review-round-4.md
-- **Notes**: @ui-loadout: All changes look good. STAT_ABBR bug fix verified correct. One minor note: Bulwark tip "your armor never fatigues" is technically inaccurate (guard fatigues to 50% floor via guardFatigueFloor=0.5). Consider "your armor barely fatigues" — not blocking. STAT_ABBR duplicated in MatchSummary.tsx and LoadoutScreen.tsx — flag for future UI refactor. @all: 908/908 tests passing. Working directory clean. All feature agents retired. No further review work remaining.
+- **Files modified**: orchestrator/analysis/polish-round-12.md
+- **Notes**: |
+- **Max model**: sonnet
+
+#### Tech Lead (reviewer)
+- **Status**: complete
+- **Rounds active**: 25
+- **Files modified**: orchestrator/analysis/reviewer-round-49.md
+- **Notes**: @all: **Round 49 status verification complete** — No agent activity R47-R49. 908/908 tests passing (stable R1-R49). Zero code changes R5-R49. All hard constraints passing. MVP 100% complete. 49 rounds complete, all agents terminal. Session S54 stable. Standing by for new work.
+- **Max model**: sonnet
+
+#### UI Developer (ui-dev)
+- **Status**: all-done
+- **Rounds active**: 2
+- **Files modified**: orchestrator/analysis/ui-dev-round-3.md (NEW)
+- **Notes**: @producer: BL-081 complete (confirmed in backlog.json). No new ui-dev tasks in backlog. MVP 100% complete (7/7 onboarding features). Phase 2 planning delivered (15-19h estimate, Sprint 1-3 roadmap). UI-dev status: all-done (retired until Phase 2 approval). @all: 908/908 tests passing, zero regressions R1-R3.
+- **Max model**: opus
+
+#### Game Designer (designer)
+- **Status**: all-done
+- **Rounds active**: 10
+- **Files modified**: orchestrator/analysis/designer-round-50.md (NEW, R50 final checkpoint)
+- **Notes**: @producer: R50 FINAL — MVP 100% stable (908/908, zero changes R5-R50). Designer all-done. Session S54 complete.
+- **Max model**: haiku
 
 ## Round-by-Round Timeline
 
-| Round | Agents | Test Result | Phase A | Phase B | Tests | Pre-Sim | Post-Sim | Overhead | Total |
-|-------|--------|-------------|---------|---------|-------|---------|----------|----------|-------|
-
+| Round | Agents | Test Result | Agent Pool | Tests | Pre-Sim | Post-Sim | Overhead | Total |
+|-------|--------|-------------|------------|-------|---------|----------|----------|-------|
+| 1 | producer(OK, 3m), reviewer(OK, 5m) | FAIL (-p, 0f) | 297s | — | — | — | 0s | 297s |
+| 2 | ui-dev(OK, 7m) | PASS (skipped) | 417s | 0s | — | — | 0s | 417s |
+| 3 | ui-dev(OK, 3m), reviewer(OK, 5m) | PASS (skipped) | 289s | 0s | — | — | 0s | 289s |
+| 4 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 5 | designer(OK, 3m), reviewer(OK, 4m) | FAIL (-p, 0f) | 227s | — | — | — | 0s | 227s |
+| 6 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 7 | reviewer(OK, 3m) | FAIL (-p, 0f) | 180s | — | — | — | 0s | 180s |
+| 8 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 9 | reviewer(OK, 3m) | FAIL (-p, 0f) | 174s | — | — | — | 0s | 174s |
+| 10 | designer(OK, 1m) | FAIL (-p, 0f) | 45s | — | — | — | 0s | 45s |
+| 11 | reviewer(OK, 2m) | FAIL (-p, 0f) | 135s | — | — | — | 0s | 135s |
+| 12 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 13 | reviewer(OK, 2m) | FAIL (-p, 0f) | 134s | — | — | — | 0s | 134s |
+| 14 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 15 | designer(OK, 1m), reviewer(OK, 2m) | FAIL (-p, 0f) | 132s | — | — | — | 0s | 132s |
+| 16 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 17 | reviewer(OK, 2m) | FAIL (-p, 0f) | 134s | — | — | — | 0s | 134s |
+| 18 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 19 | reviewer(OK, 1m) | FAIL (-p, 0f) | 88s | — | — | — | 0s | 88s |
+| 20 | designer(OK, 1m) | FAIL (-p, 0f) | 35s | — | — | — | 0s | 35s |
+| 21 | reviewer(OK, 2m) | FAIL (-p, 0f) | 127s | — | — | — | 0s | 127s |
+| 22 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 23 | reviewer(OK, 2m) | FAIL (-p, 0f) | 141s | — | — | — | 0s | 141s |
+| 24 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 25 | designer(OK, 1m), reviewer(OK, 2m) | FAIL (-p, 0f) | 108s | — | — | — | 0s | 108s |
+| 26 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 27 | reviewer(OK, 2m) | FAIL (-p, 0f) | 134s | — | — | — | 0s | 134s |
+| 28 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 29 | reviewer(OK, 2m) | FAIL (-p, 0f) | 116s | — | — | — | 0s | 116s |
+| 30 | designer(OK, 1m) | FAIL (-p, 0f) | 40s | — | — | — | 0s | 40s |
+| 31 | reviewer(OK, 2m) | FAIL (-p, 0f) | 126s | — | — | — | 0s | 126s |
+| 32 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 33 | reviewer(OK, 2m) | FAIL (-p, 0f) | 120s | — | — | — | 0s | 120s |
+| 34 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 35 | designer(OK, 1m), reviewer(OK, 4m) | FAIL (-p, 0f) | 217s | — | — | — | 0s | 217s |
+| 36 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 37 | reviewer(OK, 1m) | FAIL (-p, 0f) | 87s | — | — | — | 0s | 87s |
+| 38 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 39 | reviewer(OK, 2m) | FAIL (-p, 0f) | 97s | — | — | — | 0s | 97s |
+| 40 | designer(OK, 0m) | FAIL (-p, 0f) | 29s | — | — | — | 0s | 29s |
+| 41 | reviewer(OK, 2m) | FAIL (-p, 0f) | 106s | — | — | — | 0s | 106s |
+| 42 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 43 | reviewer(OK, 1m) | FAIL (-p, 0f) | 87s | — | — | — | 0s | 87s |
+| 44 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 45 | designer(OK, 1m), reviewer(OK, 2m) | FAIL (-p, 0f) | 99s | — | — | — | 0s | 99s |
+| 46 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 47 | reviewer(OK, 2m) | FAIL (-p, 0f) | 103s | — | — | — | 0s | 103s |
+| 48 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 49 | reviewer(OK, 2m) | FAIL (-p, 0f) | 111s | — | — | — | 0s | 111s |
+| 50 | designer(OK, 1m) | FAIL (-p, 0f) | 40s | — | — | — | 0s | 40s |
 
 ## All Files Modified
-- none
-- orchestrator/analysis/quality-review-round-4.md
-- src/App.css
-- src/ui/MatchSummary.tsx
-- src/ui/MeleeResult.tsx
-- src/ui/SetupScreen.tsx
+- R50 final checkpoint)
+- orchestrator/analysis/balance-tuner-round-7.md
+- orchestrator/analysis/designer-round-50.md (NEW
+- orchestrator/analysis/polish-round-12.md
+- orchestrator/analysis/producer-round-1.md (NEW)
+- orchestrator/analysis/qa-round-6.md
+- orchestrator/analysis/reviewer-round-49.md
+- orchestrator/analysis/ui-dev-round-3.md (NEW)
+- orchestrator/backlog.json (populated 5 new tasks)
+- src/engine/gear-variants.test.ts
 
 ## Test Trajectory
-(no test data)
+- Round 2: PASS (skipped passed)
+- Round 3: PASS (skipped passed)
 
 ## Round Quality (v14)
 
 | Round | Active | Idle | Util% | Files | OK | Failed |
 |-------|--------|------|-------|-------|----|--------|
-
+| 1 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 2 | 1 | 6 | 14% | 1 | 1 | 0 |
+| 3 | 2 | 5 | 29% | 1 | 2 | 0 |
+| 4 | — | — | — | — | — | skipped (all blocked) |
+| 5 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 6 | — | — | — | — | — | skipped (all blocked) |
+| 7 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 8 | — | — | — | — | — | skipped (all blocked) |
+| 9 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 10 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 11 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 12 | — | — | — | — | — | skipped (all blocked) |
+| 13 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 14 | — | — | — | — | — | skipped (all blocked) |
+| 15 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 16 | — | — | — | — | — | skipped (all blocked) |
+| 17 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 18 | — | — | — | — | — | skipped (all blocked) |
+| 19 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 20 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 21 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 22 | — | — | — | — | — | skipped (all blocked) |
+| 23 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 24 | — | — | — | — | — | skipped (all blocked) |
+| 25 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 26 | — | — | — | — | — | skipped (all blocked) |
+| 27 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 28 | — | — | — | — | — | skipped (all blocked) |
+| 29 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 30 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 31 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 32 | — | — | — | — | — | skipped (all blocked) |
+| 33 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 34 | — | — | — | — | — | skipped (all blocked) |
+| 35 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 36 | — | — | — | — | — | skipped (all blocked) |
+| 37 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 38 | — | — | — | — | — | skipped (all blocked) |
+| 39 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 40 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 41 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 42 | — | — | — | — | — | skipped (all blocked) |
+| 43 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 44 | — | — | — | — | — | skipped (all blocked) |
+| 45 | 2 | 5 | 29% | 0 | 2 | 0 |
+| 46 | — | — | — | — | — | skipped (all blocked) |
+| 47 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 48 | — | — | — | — | — | skipped (all blocked) |
+| 49 | 1 | 6 | 14% | 0 | 1 | 0 |
+| 50 | 1 | 6 | 14% | 0 | 1 | 0 |
 
 ## Agent Effectiveness (v14)
 
-> No effectiveness data captured yet.
+| Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
+|-------|--------|------------|-------|-------------|-----------|----------|-------|
+| producer | 1 | 1 | 2 | 0 | $0.0000 | 3.3m | 100% |
+| reviewer | 25 | 25 | 25 | 0 | $0.0000 | 2.4m | 100% |
+| ui-dev | 2 | 2 | 2 | 0 | $0.0000 | 4.9m | 100% |
+| designer | 10 | 10 | 20 | 0 | $0.0000 | 0.9m | 100% |
+
+> **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
+
+
+## Session Continuity (v16)
+
+- **Resumed sessions**: 33 (94% of agent-rounds used session continuity)
+- **Fresh sessions**: 2
+- **Session invalidations**: 0
+
+| Agent | Fresh | Resumes | Invalidations | Session ID |
+|-------|-------|---------|---------------|------------|
+| reviewer | 1 | 24 | 0 | 5c4ca2c3... |
+| designer | 1 | 9 | 0 | aabcfac4... |
+
+> Resumed agents skip role template + shared rules loading and receive a compact delta prompt.
 
 
 ## Agent Efficiency (v6.1 Metrics)
 
 | Agent | Model | Avg Time | Success | Files/Rnd | Active | Skipped | Blocked | Idle% |
 |-------|-------|----------|---------|-----------|--------|---------|---------|-------|
-| engine-refactor | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| gear-system | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| ui-loadout | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| quality-review | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
+| producer | haiku | 3.3m | 100% | 2.0 | 1/50 | 49 | 0 | 98% |
+| balance-tuner | sonnet | 0m | 0% | 0 | 0/50 | 50 | 0 | 100% |
+| qa | sonnet | 0m | 0% | 0 | 0/50 | 50 | 0 | 100% |
+| polish | haiku | 0m | 0% | 0 | 0/50 | 50 | 0 | 100% |
+| reviewer | sonnet | 2.4m | 100% | 0.0 | 25/50 | 25 | 0 | 50% |
+| ui-dev | sonnet | 4.9m | 100% | 0.5 | 2/50 | 48 | 0 | 96% |
+| designer | haiku | 0.9m | 100% | 0.2 | 10/50 | 40 | 0 | 80% |
 
 ## Backlog Velocity (v8)
 
 | Round | Pending | Completed | Notes |
 |-------|---------|-----------|-------|
-
+| 1 | 6 | 0 | |
+| 2 | 5 | 1 | |
+| 3 | 5 | 1 | |
+| 4 | — | — | skipped (all blocked) |
+| 5 | 5 | 1 | |
+| 6 | — | — | skipped (all blocked) |
+| 7 | 5 | 1 | |
+| 8 | — | — | skipped (all blocked) |
+| 9 | 5 | 1 | |
+| 10 | 5 | 1 | |
+| 11 | 5 | 1 | |
+| 12 | — | — | skipped (all blocked) |
+| 13 | 5 | 1 | |
+| 14 | — | — | skipped (all blocked) |
+| 15 | 5 | 1 | |
+| 16 | — | — | skipped (all blocked) |
+| 17 | 5 | 1 | |
+| 18 | — | — | skipped (all blocked) |
+| 19 | 5 | 1 | |
+| 20 | 5 | 1 | |
+| 21 | 5 | 1 | |
+| 22 | — | — | skipped (all blocked) |
+| 23 | 5 | 1 | |
+| 24 | — | — | skipped (all blocked) |
+| 25 | 5 | 1 | |
+| 26 | — | — | skipped (all blocked) |
+| 27 | 5 | 1 | |
+| 28 | — | — | skipped (all blocked) |
+| 29 | 5 | 1 | |
+| 30 | 5 | 1 | |
+| 31 | 5 | 1 | |
+| 32 | — | — | skipped (all blocked) |
+| 33 | 5 | 1 | |
+| 34 | — | — | skipped (all blocked) |
+| 35 | 5 | 1 | |
+| 36 | — | — | skipped (all blocked) |
+| 37 | 5 | 1 | |
+| 38 | — | — | skipped (all blocked) |
+| 39 | 5 | 1 | |
+| 40 | 5 | 1 | |
+| 41 | 5 | 1 | |
+| 42 | — | — | skipped (all blocked) |
+| 43 | 5 | 1 | |
+| 44 | — | — | skipped (all blocked) |
+| 45 | 5 | 1 | |
+| 46 | — | — | skipped (all blocked) |
+| 47 | 5 | 1 | |
+| 48 | — | — | skipped (all blocked) |
+| 49 | 5 | 1 | |
+| 50 | 5 | 1 | |
 
 ## Cost Summary
 
-> No cost data captured. Claude CLI may not have emitted token/cost info to stderr.
-> Once cost data is available, this section will populate automatically.
+| Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
+|-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
+| producer | haiku | 1 | — | — | — | — | 0 |
+| balance-tuner | sonnet | 0 | — | — | — | — | 0 |
+| qa | sonnet | 0 | — | — | — | — | 0 |
+| polish | haiku | 0 | — | — | — | — | 0 |
+| reviewer | sonnet | 25 | — | — | — | — | 0 |
+| ui-dev | sonnet | 2 | — | — | — | — | 0 |
+| designer | haiku | 10 | — | — | — | — | 0 |
+| **TOTAL** | | **38** | **—** | **—** | **—** | **—** | **0** |
 
+- **Cost per successful agent-round**: —
+- **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
+- **Note**: Costs are estimates from token counts if CLI did not report direct cost
 
 ## Model Escalation Summary
 
 | Agent | Base Model | Max Model | Final Model | Escalations |
 |-------|-----------|-----------|-------------|-------------|
-| engine-refactor | default | none | default | 0 |
-| gear-system | default | none | default | 0 |
-| ui-loadout | default | none | default | 0 |
-| quality-review | default | none | default | 0 |
+| producer | haiku | haiku | haiku | 0 |
+| balance-tuner | sonnet | opus | sonnet | 0 |
+| qa | sonnet | opus | sonnet | 0 |
+| polish | haiku | sonnet | haiku | 0 |
+| reviewer | sonnet | sonnet | sonnet | 0 |
+| ui-dev | sonnet | opus | sonnet | 0 |
+| designer | haiku | haiku | haiku | 0 |
 
 ## Decision Log Summary
 
 | Agent | Included | Skipped | Blocked | Success Rate |
 |-------|----------|---------|---------|-------------|
-| engine-refactor | 0 | 1 | 0 | — |
-| gear-system | 0 | 1 | 0 | — |
-| ui-loadout | 0 | 1 | 0 | — |
-| quality-review | 0 | 1 | 0 | — |
+| producer | 1 | 49 | 0 | 100% |
+| balance-tuner | 0 | 50 | 0 | — |
+| qa | 0 | 50 | 0 | — |
+| polish | 0 | 50 | 0 | — |
+| reviewer | 25 | 25 | 0 | 100% |
+| ui-dev | 2 | 48 | 0 | 100% |
+| designer | 10 | 40 | 0 | 100% |
 
 > Full decision log: `orchestrator/logs/round-decisions.json`
 
 ## Analysis Reports Generated
+- producer round 1: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\producer-round-1.md`
+- reviewer round 1: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-1.md`
+- reviewer round 3: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-3.md`
+- ui-dev round 3: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\ui-dev-round-3.md`
+- reviewer round 5: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-5.md`
+- reviewer round 7: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-7.md`
+- reviewer round 9: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-9.md`
+- designer round 10: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-10.md`
+- reviewer round 11: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-11.md`
+- reviewer round 13: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-13.md`
+- designer round 15: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-15.md`
+- reviewer round 15: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-15.md`
 - producer round 17: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\producer-round-17.md`
 - reviewer round 17: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-17.md`
 - ui-dev round 17: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\ui-dev-round-17.md`
@@ -126,12 +359,34 @@
 - producer round 19: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\producer-round-19.md`
 - reviewer round 19: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-19.md`
 - ui-dev round 19: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\ui-dev-round-19.md`
+- designer round 20: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-20.md`
 - producer round 20: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\producer-round-20.md`
 - reviewer round 20: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-20.md`
 - ui-dev round 20: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\ui-dev-round-20.md`
 - producer round 21: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\producer-round-21.md`
 - reviewer round 21: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-21.md`
 - ui-dev round 21: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\ui-dev-round-21.md`
+- reviewer round 23: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-23.md`
+- designer round 25: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-25.md`
+- reviewer round 25: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-25.md`
+- reviewer round 27: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-27.md`
+- reviewer round 29: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-29.md`
+- designer round 30: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-30.md`
+- reviewer round 31: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-31.md`
+- reviewer round 33: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-33.md`
+- designer round 35: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-35.md`
+- reviewer round 35: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-35.md`
+- reviewer round 36: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-36.md`
+- reviewer round 37: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-37.md`
+- reviewer round 39: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-39.md`
+- designer round 40: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-40.md`
+- reviewer round 41: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-41.md`
+- reviewer round 43: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-43.md`
+- designer round 45: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-45.md`
+- reviewer round 45: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-45.md`
+- reviewer round 47: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-47.md`
+- reviewer round 49: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\reviewer-round-49.md`
+- designer round 50: `C:\Users\rvecc\Documents\Jousting\Jousting\jousting-mvp\orchestrator\analysis\designer-round-50.md`
 
 ## How to Review
 1. Read each agent's handoff for detailed work log: `orchestrator/handoffs/<agent>.md`

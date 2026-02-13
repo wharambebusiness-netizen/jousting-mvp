@@ -39,18 +39,6 @@
     "estimate": "3-4 hours"
   },
   {
-    "id": "BL-081",
-    "priority": 2,
-    "role": "ui-dev",
-    "title": "Phase 2 Planning: Top 5 Polish Opportunities",
-    "description": "Analyze codebase for non-blocking UI improvements (things that don't change game logic). Identify: inline style migration (59 identified in S53), responsive gaps (320px-1920px), stat/gear clarity, animation polish, accessibility micro-improvements. Rank top 5 by impact. Write specs for each (what, why, estimate, acceptance criteria). NO CODE CHANGES this round — analysis only. Acceptance: 5 specs ranked by impact, clear acceptance criteria, clear estimates, document in orchestrator/analysis/bl-081-phase2-polish.md.",
-    "fileOwnership": [],
-    "status": "completed",
-    "dependsOn": [],
-    "estimate": "2-3 hours",
-    "completedAt": "2026-02-12T22:42:18.969Z"
-  },
-  {
     "id": "BL-082",
     "priority": 3,
     "role": "designer",
