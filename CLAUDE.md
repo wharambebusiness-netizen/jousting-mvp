@@ -45,15 +45,25 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
-orchestrator/         Multi-agent development system (v18)
+orchestrator/         Multi-agent development system (v19, general-purpose)
   orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
-  roles/*.md          9 role templates (professional agent briefs)
-  search-configs/*.json  Parameter search configurations (quick-sweep, sensitivity-sweep, guard-tuning, unseated-tuning)
+  roles/*.md          15 role templates (professional agent briefs)
+  search-configs/*.json  Parameter search configurations
   handoffs/*.md       Agent state files (structured META sections)
-  analysis/*.md       Balance/quality reports
+  analysis/*.md       Balance/quality/security/architecture reports
   run-overnight.ps1   PowerShell restart loop for overnight runs
+  project-detect.mjs  Auto-detect project language, framework, test runner
+  quality-gates.mjs   Pluggable quality gate chain (lint → typecheck → test → security)
+  role-registry.mjs   Discoverable role registry from roles/*.md templates
+
+.claude/skills/       Custom Claude Code skills (slash commands)
+  orchestrator-status/ Quick orchestrator health check
+  code-review/        AI-powered code review
+  security-scan/      Security vulnerability scanning
+  project-detect/     Project type auto-detection
+  agent-report/       Agent capability and effectiveness report
 ```
 
 ## Stat Pipeline
@@ -169,9 +179,18 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v18
+## Orchestrator v19
 
-**Primary project focus**: Orchestrator throughput and efficiency — more tasks completed per run without sacrificing quality. Balance tuning runs come after the orchestrator is optimized.
+**General-purpose multi-agent orchestrator** — works with any project. Auto-detects language, framework, and test runner. Pluggable quality gates and discoverable role registry.
+
+### New in v19
+- **Project auto-detection**: `node orchestrator/project-detect.mjs` scans for language, framework, test runner
+- **Role registry**: `node orchestrator/role-registry.mjs` lists all 15 available roles with capabilities
+- **Quality gate chain**: `node orchestrator/quality-gates.mjs --run typescript vitest` runs pluggable checks
+- **Per-agent tools**: `allowedTools` field in mission config overrides default tool restrictions per agent
+- **6 new roles**: architect, security-auditor, performance-analyst, research-agent, devops, test-generator
+- **5 custom skills**: /orchestrator-status, /code-review, /security-scan, /project-detect, /agent-report
+- **General-purpose mission**: `orchestrator/missions/general-dev.json` — 8-agent team for any project
 
 ### Backlog System
 - `orchestrator/backlog.json` — dynamic task queue with `{id, role, priority, status, title, description}`
@@ -205,8 +224,10 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 - Pre-round git tags, **v8: smart per-agent revert** on test regression (reverts only the failing agent's files, preserves other agents' work)
 - Crash counter with exponential backoff, pre-restart validation
 
-### 8 Role Templates (`orchestrator/roles/`)
-game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, ui-dev
+### 15 Role Templates (`orchestrator/roles/`)
+**Original 8**: game-designer, producer, tech-lead, qa-engineer, css-artist, engine-dev, balance-analyst, ui-dev
+**New 6**: architect, security-auditor, performance-analyst, research-agent, devops, test-generator
+**Shared**: _common-rules.md (injected into all agents)
 
 ## Orchestrator Rules (for orchestrated agents)
 

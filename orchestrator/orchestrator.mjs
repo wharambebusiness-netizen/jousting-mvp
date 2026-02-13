@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v18
+// Multi-Agent Orchestrator v19
 // ============================================================
+// v19 additions (S57 — general-purpose expansion):
+// - Project auto-detection: auto-detect language, framework, test runner at startup
+// - Role registry: discoverable, composable agent roles from roles/*.md templates
+// - Quality gate chain: pluggable lint → typecheck → test → security pipeline
+// - Per-agent allowedTools: override tool restrictions per agent in mission config
+// - 6 new role templates: architect, security-auditor, performance-analyst, research-agent, devops, test-generator
+// - 5 custom skills: orchestrator-status, code-review, security-scan, project-detect, agent-report
+// - General-purpose mission template (general-dev.json): 8-agent team for any project
+// - Removed "Jousting MVP" branding — orchestrator is now project-agnostic
+// - Version strings updated to v19
+//
 // v18 additions (S56 — early test start, all-done exit code):
 // - Early test start: tests begin as soon as code agents finish, while coord agents still run
 // - runAgentPool groupIds/groupDone: fires when a subset of agents (code group) completes
@@ -146,6 +157,9 @@ import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { runConsistencyCheck } from './consistency-check.mjs';
+import { RoleRegistry } from './role-registry.mjs';
+import { QualityGateChain, createGateChainFromDetection } from './quality-gates.mjs';
+import { detectProject } from './project-detect.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -513,6 +527,12 @@ function loadMission(missionPath) {
   if (mission.balanceConfig) {
     CONFIG.balanceConfig = mission.balanceConfig;
     log(`  Balance config: ${mission.balanceConfig.sims?.length || 0} sim configs, pre=${mission.balanceConfig.runPreSim ?? true}, post=${mission.balanceConfig.runPostSim ?? true}`);
+  }
+
+  // v19: Load quality gates config if present in mission
+  if (mission.qualityGates) {
+    CONFIG.qualityGates = mission.qualityGates;
+    log(`  Quality gates: ${mission.qualityGates.length} gates configured`);
   }
 
   return { agents, missionName: mission.name, designDoc: mission.designDoc || null };
@@ -1050,7 +1070,9 @@ function runAgent(agent, round) {
     }
 
     // v5/v6: Build CLI args with optional per-agent model + budget
-    const cliArgs = ['-p', '--allowedTools', CONFIG.allowedTools, '--output-format', 'text'];
+    // v19: Per-agent allowedTools override (falls back to CONFIG.allowedTools)
+    const agentTools = agent.allowedTools || CONFIG.allowedTools;
+    const cliArgs = ['-p', '--allowedTools', agentTools, '--output-format', 'text'];
     if (agent.model) cliArgs.push('--model', agent.model);
     if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
     // v12: When using temp dir for lite CLAUDE.md, grant access to actual project
@@ -3008,9 +3030,39 @@ async function main() {
   try { rotateAnalysisFiles(5); }
   catch (err) { log(`Analysis rotation error: ${err.message}`); }
 
+  // v19: Project auto-detection (informational — logged at startup)
+  let projectDetection = null;
+  try {
+    projectDetection = await detectProject(MVP_DIR);
+    log(`Project detected: ${projectDetection.language}/${projectDetection.frameworks.map(f => f.name).join('+') || 'no-framework'} (${projectDetection.testRunner?.name || 'no-test-runner'})`);
+  } catch (err) { log(`Project detection skipped: ${err.message}`); }
+
+  // v19: Role registry — validate agent roles at startup
+  let roleRegistry = null;
+  try {
+    roleRegistry = new RoleRegistry(ROLES_DIR);
+    await roleRegistry.load();
+    const knownRoles = new Set(roleRegistry.list().map(r => r.name));
+    for (const agent of AGENTS) {
+      if (agent.role && !knownRoles.has(agent.role)) {
+        log(`  WARNING: Agent ${agent.id} has role "${agent.role}" but no template found in roles/`);
+      }
+    }
+    log(`Role registry: ${roleRegistry.roles.size} roles loaded (${roleRegistry.getCodeAgents().length} code, ${roleRegistry.getCoordinationAgents().length} coordination)`);
+  } catch (err) { log(`Role registry skipped: ${err.message}`); }
+
+  // v19: Quality gate chain (optional — enabled via mission qualityGates config)
+  let qualityGateChain = null;
+  if (CONFIG.qualityGates && CONFIG.qualityGates.length > 0) {
+    try {
+      qualityGateChain = new QualityGateChain(CONFIG.qualityGates, { cwd: MVP_DIR, verbose: true });
+      log(`Quality gates: ${CONFIG.qualityGates.length} gates configured (${CONFIG.qualityGates.map(g => g.preset || g.name).join(', ')})`);
+    } catch (err) { log(`Quality gate setup failed: ${err.message}`); }
+  }
+
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v18');
+  log('  MULTI-AGENT ORCHESTRATOR v19');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -3135,6 +3187,10 @@ async function main() {
             log(`Hot-reload: regressionThresholdPp changed ${oldThreshold}->${newThreshold}`);
           }
           CONFIG.balanceConfig = freshMission.balanceConfig;
+        }
+        // v19: Hot-reload quality gates
+        if (freshMission.qualityGates) {
+          CONFIG.qualityGates = freshMission.qualityGates;
         }
       } catch (err) {
         log(`Hot-reload WARNING: Could not re-read mission config (${err.message}). Keeping existing config.`);
@@ -3973,7 +4029,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v18
+> Orchestrator: v19
 
 ## Summary
 - **Started**: ${startTime}

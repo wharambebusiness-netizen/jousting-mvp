@@ -1,0 +1,145 @@
+{
+  "name": "General Development",
+  "description": "General-purpose development mission with expanded agent team. Includes security, testing, and architecture roles beyond the standard overnight team. Project-agnostic — works with any codebase.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 36000000,
+    "maxConcurrency": 4
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs, the project TODO list, and current backlog.json. Identify what work needs doing next. Generate 3-5 new tasks in backlog.json for other agents. Prioritize: security fixes > test failures > regressions > bug fixes > features > polish. Write a status summary to orchestrator/analysis/producer-status.md."
+      }
+    },
+    {
+      "id": "architect",
+      "name": "Architect",
+      "type": "continuous",
+      "role": "architect",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/architecture-*.md"],
+      "tasks": {
+        "primary": "Review system architecture and agent work. Identify structural issues, coupling violations, missing abstractions, and opportunities for improvement. Write architecture notes to orchestrator/analysis/architecture-round-N.md. Propose structural changes for other agents to implement."
+      }
+    },
+    {
+      "id": "engine-dev",
+      "name": "Engine Developer",
+      "type": "continuous",
+      "role": "engine-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/*.ts"],
+      "tasks": {
+        "primary": "Implement engine features, fix bugs, and optimize performance. Follow tasks from the backlog. All constants in config files, all types in types files. Run tests before handoff."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/*.test.ts"],
+      "tasks": {
+        "primary": "Each round: pick ONE untested area and write 5-10 new tests for it. Focus on boundary conditions, edge cases, and regression coverage. Run full suite to verify no regressions. Fix broken test assertions caused by other agents' changes."
+      }
+    },
+    {
+      "id": "ui-dev",
+      "name": "UI Developer",
+      "type": "continuous",
+      "role": "ui-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/ui/*.tsx", "src/App.tsx", "src/App.css"],
+      "tasks": {
+        "primary": "Each round: pick ONE UI improvement from the backlog. Implement with clean React + TypeScript. Run tests before handoff."
+      }
+    },
+    {
+      "id": "reviewer",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["src/engine/types.ts", "CLAUDE.md"],
+      "tasks": {
+        "primary": "Each round: review changes made by other agents. Read their handoffs and modified files. Check for: type safety issues, hardcoded magic numbers, broken patterns, missing error handling. Write review report to orchestrator/analysis/review-round-N.md."
+      }
+    },
+    {
+      "id": "security",
+      "name": "Security Auditor",
+      "type": "continuous",
+      "role": "security-auditor",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/security-*.md"],
+      "tasks": {
+        "primary": "Each round: scan recently changed files for security vulnerabilities. Check for: injection, XSS, hardcoded secrets, unsafe eval, command injection, path traversal. Write findings to orchestrator/analysis/security-round-N.md with severity and remediation steps."
+      }
+    },
+    {
+      "id": "test-gen",
+      "name": "Test Generator",
+      "type": "continuous",
+      "role": "test-generator",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/engine/*.test.ts"],
+      "tasks": {
+        "primary": "Systematically expand test coverage. Each round: analyze a source file for untested code paths, boundary conditions, and edge cases. Write 5-10 focused tests. Run full suite to verify no conflicts with qa agent's tests."
+      }
+    }
+  ]
+}
