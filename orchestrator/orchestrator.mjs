@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 // ============================================================
-// Jousting MVP — Multi-Agent Orchestrator v17
+// Jousting MVP — Multi-Agent Orchestrator v18
 // ============================================================
+// v18 additions (S56 — early test start, all-done exit code):
+// - Early test start: tests begin as soon as code agents finish, while coord agents still run
+// - runAgentPool groupIds/groupDone: fires when a subset of agents (code group) completes
+// - Tests + post-sims now overlap with coordination agent runtime (~1-2min savings per round)
+// - All-done exit code (42): orchestrator exits with code 42 when all work is complete
+// - Overnight runner (v8): detects exit code 42 and stops gracefully (no more restart loop)
+// - Version strings updated to v18
+//
 // v17 additions (S55 — unified agent pool, cost enforcement, session health):
 // - Unified agent pool: code + coordination agents run in a single pool (eliminates Phase A→B barrier)
 // - Coordination agents now overlap with code agents (~3min savings per round)
@@ -2628,10 +2636,18 @@ class ProgressDashboard {
 // fires onAgentComplete callback immediately and launches the next queued agent.
 // Results are in completion order (not submission order).
 // v15: accepts optional dashboard for live progress updates.
-async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard) {
-  if (!agents.length) return [];
+async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard, opts = {}) {
+  if (!agents.length) return { allDone: Promise.resolve(), groupDone: Promise.resolve(), results: Promise.resolve([]) };
   const limit = (!maxConcurrency || maxConcurrency >= agents.length)
     ? agents.length : maxConcurrency;
+
+  // v18: Group completion tracking — fires when all agents in groupIds have finished
+  const groupIds = opts.groupIds;  // Set<string> of agent IDs
+  let groupRemaining = groupIds ? agents.filter(a => groupIds.has(a.id)).length : 0;
+  let resolveGroup;
+  const groupDone = groupIds && groupRemaining > 0
+    ? new Promise(r => { resolveGroup = r; })
+    : Promise.resolve();
 
   const results = [];
   const queue = [...agents];
@@ -2654,6 +2670,11 @@ async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dash
           dashboard.updateAgent(result.agentId, dStatus, { elapsed: result.elapsed });
         }
         if (onAgentComplete) onAgentComplete(result);
+        // v18: Check group completion
+        if (groupIds && groupIds.has(result.agentId)) {
+          groupRemaining--;
+          if (groupRemaining === 0 && resolveGroup) resolveGroup();
+        }
         if (active === 0 && queue.length === 0) resolveAll();
         else tryLaunch();
       });
@@ -2662,8 +2683,7 @@ async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dash
   }
 
   tryLaunch();
-  await allDone;
-  return results;
+  return { allDone, groupDone, results: allDone.then(() => results) };
 }
 
 // ============================================================
@@ -2990,7 +3010,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v17');
+  log('  JOUSTING MVP — MULTI-AGENT ORCHESTRATOR v18');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -3439,8 +3459,9 @@ async function main() {
       const dashboard = new ProgressDashboard(activeAgents, `Round ${round}`);
       dashboard.start();
 
-      // v17: Single pool — code + coord agents run together, results classified in callback
-      const poolPromise = runAgentPool(activeAgents, round, roundConcurrency, (result) => {
+      // v18: Single pool with early test start — tests begin when code agents finish,
+      // while coord agents may still be running
+      const pool = runAgentPool(activeAgents, round, roundConcurrency, (result) => {
         const { filesModified, balanceConfigChanged } = processAgentResult(result, round, roundAgents, costLog, trackingCtx);
         if (codeAgentIds.has(result.agentId)) {
           codeResults.push(result);
@@ -3451,17 +3472,18 @@ async function main() {
         } else {
           coordResults.push(result);
         }
-      }, dashboard);
+      }, dashboard, {
+        groupIds: hasCodeAgents ? codeAgentIds : undefined,
+      });
 
-      const [preSimRes, allResults] = await Promise.all([preSimPromise, poolPromise]);
-      dashboard.stop();
+      // Phase 1: Wait for pre-sims + code agents (NOT full pool)
+      const [preSimRes] = await Promise.all([preSimPromise, pool.groupDone]);
       if (preSimRes) {
         preSimResults = preSimRes;
         roundTiming.preSim = preSimRes.elapsedMs || 0;
       }
-      roundTiming.agents = Date.now() - agentsStart;
 
-      // Post-pool: process code agent results (changelog, tasks, ownership, escalation)
+      // Process code agent results immediately (coord agents may still be running)
       if (codeResults.length) {
         appendSessionChangelog(round, codeResults);
         handleCompletedTasks(codeResults);
@@ -3470,7 +3492,8 @@ async function main() {
         handleModelEscalation(codeResults, round);
       }
 
-      // Tests + post-sims (only when code agents ran — they're the ones that modify source)
+      // Phase 2: Start tests + post-sims (overlapping with coord agents still in pool)
+      let testAndSimPromise = Promise.resolve(null);
       if (hasCodeAgents) {
         const testStart = Date.now();
         const postSimShouldRun = CONFIG.balanceConfig?.runPostSim !== false && CONFIG.balanceConfig?.sims?.length;
@@ -3486,12 +3509,22 @@ async function main() {
           ? (() => { log(`  (post-sim running concurrently with tests)`); return runBalanceSims(round, 'post'); })()
           : Promise.resolve(null);
 
-        const [testRes, postSimOptimistic] = await Promise.all([testPromise, postSimPromise]);
-        testResult = testRes;
-        roundTiming.tests = Date.now() - testStart;
-        if (postSimOptimistic) {
-          roundTiming.postSim = postSimOptimistic.elapsedMs || 0;
-        }
+        testAndSimPromise = Promise.all([testPromise, postSimPromise]).then(([testRes, postSimOpt]) => {
+          roundTiming.tests = Date.now() - testStart;
+          if (postSimOpt) roundTiming.postSim = postSimOpt.elapsedMs || 0;
+          return { testRes, postSimOpt };
+        });
+      }
+
+      // Phase 3: Wait for full pool + tests to complete
+      const [, testSimResult] = await Promise.all([pool.allDone, testAndSimPromise]);
+      dashboard.stop();
+      roundTiming.agents = Date.now() - agentsStart;
+
+      // Handle test regression + revert
+      if (testSimResult && hasCodeAgents) {
+        testResult = testSimResult.testRes;
+        const postSimOptimistic = testSimResult.postSimOpt;
 
         // v8: Smart per-agent revert on test regression
         if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
@@ -3861,6 +3894,16 @@ async function main() {
   // Generate Overnight Report
   // ============================================================
   generateOvernightReport(globalStart, roundLog, stopReason, finalTests, escalationCounts, costLog, roundDecisions);
+
+  // v18: Signal to overnight runner — exit code 42 means "all work complete, no restart needed"
+  const doneReasons = [
+    'all agents exhausted their task lists',
+    'all missions in sequence completed',
+  ];
+  if (doneReasons.includes(stopReason) || stopReason.startsWith('balance converged') || stopReason.startsWith('circuit breaker')) {
+    log(`\nExit code 42: orchestration complete (${stopReason}) — no restart needed.`);
+    process.exit(42);
+  }
 }
 
 // ============================================================
@@ -3930,7 +3973,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v17
+> Orchestrator: v18
 
 ## Summary
 - **Started**: ${startTime}

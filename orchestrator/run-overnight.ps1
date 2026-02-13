@@ -1,4 +1,4 @@
-# Jousting MVP - Overnight Runner with Restart Loop (v7)
+# Jousting MVP - Overnight Runner with Restart Loop (v8)
 # Includes: crash counter, exponential backoff, pre-restart validation, file logging
 # Supports: regular missions and sequence missions (type: "sequence")
 # Usage: powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1
@@ -30,7 +30,7 @@ function Log($msg) {
 }
 
 Log "============================================================"
-Log "  Jousting MVP - Overnight Runner (v7)"
+Log "  Jousting MVP - Overnight Runner (v8)"
 Log "  Started: $startTime"
 Log ('  Will run until: {0} ({1} hours)' -f $endTime, $MaxHours)
 Log "  Mission: $Mission"
@@ -83,6 +83,12 @@ while ((Get-Date) -lt $endTime) {
     # Check if we still have time
     if ((Get-Date) -ge $endTime) {
         Log "Time limit reached. Stopping."
+        break
+    }
+
+    # v8: Exit code 42 = all work complete, no restart needed
+    if ($exitCode -eq 42) {
+        Log "Orchestrator reports all work complete (exit code 42). Stopping gracefully."
         break
     }
 

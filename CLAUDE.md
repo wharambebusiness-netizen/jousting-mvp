@@ -45,7 +45,7 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
-orchestrator/         Multi-agent development system (v17)
+orchestrator/         Multi-agent development system (v18)
   orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
@@ -169,7 +169,7 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v17
+## Orchestrator v18
 
 **Primary project focus**: Orchestrator throughput and efficiency — more tasks completed per run without sacrificing quality. Balance tuning runs come after the orchestrator is optimized.
 
@@ -191,7 +191,9 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 - Params: `-MaxHours 10 -Mission "orchestrator\missions\overnight.json"`
 
 ### Execution Model
-- **v17: Unified agent pool** — all agents (code + coordination) run in a single pool. Code and coord agents overlap, eliminating the Phase A→B barrier. Tests run after code agents complete. Coord results discarded on revert.
+- **v17: Unified agent pool** — all agents (code + coordination) run in a single pool. Code and coord agents overlap, eliminating the Phase A→B barrier. Coord results discarded on revert.
+- **v18: Early test start** — tests begin as soon as code agents finish, overlapping with remaining coord agents (~1-2min savings/round)
+- **v18: All-done exit code (42)** — orchestrator exits with code 42 when all work complete; overnight runner detects this and stops gracefully
 - **Model tiering**: per-agent `model` field; 3-tier escalation (haiku → sonnet → opus) with `maxModel` cap and de-escalation on success
 - **v17: Cost budget enforcement** — agents exceeding `maxBudgetUsd` are skipped in pre-flight checks
 - **v17: Stale session invalidation** — sessions proactively invalidated after 5+ empty rounds or 10+ round session age
