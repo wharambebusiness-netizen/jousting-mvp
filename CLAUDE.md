@@ -21,6 +21,7 @@ npx tsx src/tools/param-search.ts <config.json> --dry-run          # Preview sea
 npx tsx src/tools/param-search.ts <config.json> --matches 500      # Override matches per matchup
 npm run dev                                 # Dev server
 npm run deploy                              # Deploy to gh-pages (currently disabled)
+node orchestrator/project-detect.mjs --emit-config .           # Generate project-config.json
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
 node orchestrator/orchestrator.mjs orchestrator/missions/X.json  # Launch with mission config
 powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1  # Overnight runner (restart loop)
@@ -45,7 +46,7 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
-orchestrator/         Multi-agent development system (v19, general-purpose)
+orchestrator/         Multi-agent development system (v20, general-purpose)
   orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
@@ -54,9 +55,10 @@ orchestrator/         Multi-agent development system (v19, general-purpose)
   handoffs/*.md       Agent state files (structured META sections)
   analysis/*.md       Balance/quality/security/architecture reports
   run-overnight.ps1   PowerShell restart loop for overnight runs
-  project-detect.mjs  Auto-detect project language, framework, test runner
+  project-detect.mjs  Auto-detect project language, framework, test runner, emit config
   quality-gates.mjs   Pluggable quality gate chain (lint → typecheck → test → security)
   role-registry.mjs   Discoverable role registry from roles/*.md templates
+  project-config.json Auto-generated project config (test mapping, ownership, gates)
 
 .claude/skills/       Custom Claude Code skills (slash commands)
   orchestrator-status/ Quick orchestrator health check
@@ -179,11 +181,19 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v19
+## Orchestrator v20
 
 **General-purpose multi-agent orchestrator** — works with any project. Auto-detects language, framework, and test runner. Pluggable quality gates and discoverable role registry.
 
-### New in v19
+### New in v20
+- **Project config generation**: `node orchestrator/project-detect.mjs --emit-config .` generates `project-config.json`
+- **Config-driven test pipeline**: Test commands, filter flags, source-to-test mappings loaded from config (legacy fallback preserved)
+- **Quality gate integration**: `runTests()` uses quality gate chain when available, falls back to direct spawn
+- **Auto-populated quality gates**: If no mission config gates, auto-detects from project stack
+- **Dynamic file ownership**: Set `"fileOwnership": "auto"` in mission config — resolved from project config patterns
+- **11 ownership roles**: Auto-detected role-to-file mappings for engine-dev, ui-dev, qa, architect, etc.
+
+### v19 Features (retained)
 - **Project auto-detection**: `node orchestrator/project-detect.mjs` scans for language, framework, test runner
 - **Role registry**: `node orchestrator/role-registry.mjs` lists all 15 available roles with capabilities
 - **Quality gate chain**: `node orchestrator/quality-gates.mjs --run typescript vitest` runs pluggable checks

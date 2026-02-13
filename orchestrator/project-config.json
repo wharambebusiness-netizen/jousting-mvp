@@ -1,0 +1,128 @@
+{
+  "projectName": "jousting-mvp",
+  "generatedAt": "2026-02-13T05:48:58.202Z",
+  "generatedBy": "project-detect.mjs",
+  "language": "typescript",
+  "ecosystem": "node",
+  "packageManager": "npm",
+  "framework": "React",
+  "testing": {
+    "runner": "vitest",
+    "command": "npm test",
+    "filterFlag": "--testPathPattern",
+    "sourceToTests": {
+      "calculator.ts": [
+        "calculator.test.ts"
+      ],
+      "gear-variants.ts": [
+        "gear-variants.test.ts"
+      ],
+      "gigling-gear.ts": [
+        "gigling-gear.test.ts"
+      ],
+      "match.ts": [
+        "match.test.ts"
+      ],
+      "player-gear.ts": [
+        "player-gear.test.ts"
+      ]
+    },
+    "fullSuiteTriggers": [
+      "types.ts",
+      "index.ts"
+    ],
+    "aiSourcePattern": "^src/ai/",
+    "aiTestFile": "ai.test.ts",
+    "timeoutMs": 180000
+  },
+  "qualityGates": [
+    {
+      "name": "lint-eslint",
+      "command": "npx eslint .",
+      "severity": "warning"
+    },
+    {
+      "name": "typecheck",
+      "command": "npx tsc --noEmit",
+      "severity": "blocking"
+    },
+    {
+      "name": "test",
+      "command": "npm test",
+      "severity": "blocking"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "severity": "blocking"
+    }
+  ],
+  "structure": {
+    "sourceDir": "src",
+    "testDir": "src",
+    "testPattern": "*.test.*",
+    "configDir": null,
+    "docsDir": null,
+    "entryPoints": [
+      "src/main.tsx",
+      "src/App.tsx"
+    ],
+    "directories": {
+      "ai": "src/ai/",
+      "assets": "src/assets/",
+      "engine": "src/engine/",
+      "tools": "src/tools/",
+      "ui": "src/ui/"
+    }
+  },
+  "ownershipPatterns": {
+    "engine-dev": [
+      "src/engine/*.ts",
+      "!src/engine/*.test.*"
+    ],
+    "ui-dev": [
+      "src/ui/*.tsx",
+      "src/App.tsx",
+      "src/App.css"
+    ],
+    "qa-engineer": [
+      "src/ai/*.test.*",
+      "src/assets/*.test.*",
+      "src/engine/*.test.*",
+      "src/tools/*.test.*",
+      "src/ui/*.test.*"
+    ],
+    "architect": [
+      "orchestrator/analysis/architecture-*.md"
+    ],
+    "security-auditor": [
+      "orchestrator/analysis/security-*.md"
+    ],
+    "producer": [
+      "orchestrator/backlog.json",
+      "orchestrator/analysis/producer-status.md"
+    ],
+    "tech-lead": [
+      "src/engine/types.ts",
+      "CLAUDE.md"
+    ],
+    "test-generator": [
+      "src/ai/*.test.*",
+      "src/assets/*.test.*",
+      "src/engine/*.test.*",
+      "src/tools/*.test.*",
+      "src/ui/*.test.*"
+    ],
+    "css-artist": [
+      "src/ui/*.css",
+      "src/App.css",
+      "src/index.css"
+    ],
+    "research-agent": [
+      "src/ai/*"
+    ],
+    "devops": [
+      "src/tools/*"
+    ]
+  }
+}

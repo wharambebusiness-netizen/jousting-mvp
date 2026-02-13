@@ -16,7 +16,7 @@
 //   node orchestrator/project-detect.mjs [path]
 // ============================================================
 
-import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, basename, extname } from 'path';
 
 // ── Detection Signatures ────────────────────────────────────
@@ -549,8 +549,159 @@ export async function detectProject(dir) {
   // Add derived suggestions
   detection.qualityGates = suggestQualityGates(detection);
   detection.suggestedAgents = suggestAgentTeam(detection);
+  detection.testMapping = suggestTestMapping(detection, dir);
+  detection.ownershipPatterns = suggestFileOwnership(detection);
 
   return detection;
+}
+
+// ── Test Mapping Suggestions ────────────────────────────────
+
+function suggestTestMapping(detection, dir) {
+  const mapping = {
+    sourceToTests: {},
+    fullSuiteTriggers: ['types.ts', 'index.ts'],
+    aiSourcePattern: null,
+    aiTestFile: null,
+    filterFlag: null,
+  };
+
+  // Determine filter flag based on test runner
+  const filterFlags = {
+    vitest: '--testPathPattern',
+    jest: '--testPathPattern',
+    mocha: '--grep',
+    pytest: '-k',
+    'cargo-test': '--test',
+    'go-test': '-run',
+  };
+  mapping.filterFlag = filterFlags[detection.testRunner?.name] || null;
+
+  const sourceDir = detection.structure.sourceDir;
+  if (!sourceDir) return mapping;
+
+  try {
+    const testFiles = findFiles(join(dir, sourceDir), /\.(test|spec)\.(ts|js|tsx|jsx|py|rs)$/);
+    const sourceFiles = findFiles(join(dir, sourceDir), /\.(ts|js|tsx|jsx|py|rs)$/)
+      .filter(f => !f.match(/\.(test|spec)\./));
+
+    // Build mapping: for each source file, find matching test files by name convention
+    for (const srcFile of sourceFiles) {
+      const srcBasename = srcFile.split('/').pop().split('\\').pop();
+      const srcName = srcBasename.replace(/\.(ts|js|tsx|jsx|py|rs)$/, '');
+
+      const matchedTests = testFiles.filter(tf => {
+        const testBasename = tf.split('/').pop().split('\\').pop();
+        return testBasename.startsWith(srcName + '.test.') || testBasename.startsWith(srcName + '.spec.');
+      }).map(tf => tf.split('/').pop().split('\\').pop());
+
+      if (matchedTests.length > 0) {
+        mapping.sourceToTests[srcBasename] = matchedTests;
+      }
+    }
+
+    // Detect AI source pattern (if src/ai/ directory exists)
+    if (detection.structure.directories['ai']) {
+      mapping.aiSourcePattern = `^${sourceDir}/ai/`;
+      const aiTests = testFiles.filter(f => f.includes('/ai/') || f.includes('\\ai\\'));
+      if (aiTests.length > 0) {
+        mapping.aiTestFile = aiTests[0].split('/').pop().split('\\').pop();
+      }
+    }
+  } catch { /* ignore scan errors */ }
+
+  return mapping;
+}
+
+// ── File Ownership Suggestions ──────────────────────────────
+
+function suggestFileOwnership(detection) {
+  const patterns = {};
+  const srcDir = detection.structure.sourceDir || 'src';
+  const dirs = detection.structure.directories;
+
+  // engine-dev: owns engine/backend source (not tests)
+  if (dirs.engine) patterns['engine-dev'] = [`${dirs.engine}*.ts`, `!${dirs.engine}*.test.*`];
+
+  // ui-dev: owns UI components
+  if (dirs.ui) patterns['ui-dev'] = [`${dirs.ui}*.tsx`, `${srcDir}/App.tsx`, `${srcDir}/App.css`];
+  if (dirs.components) patterns['ui-dev'] = [`${dirs.components}*.tsx`, `${srcDir}/App.tsx`];
+
+  // qa-engineer: owns test files
+  const testGlobs = [];
+  for (const [, path] of Object.entries(dirs)) {
+    testGlobs.push(`${path}*.test.*`);
+  }
+  if (testGlobs.length > 0) patterns['qa-engineer'] = testGlobs;
+
+  // Coordination roles — analysis/config files
+  patterns['architect'] = ['orchestrator/analysis/architecture-*.md'];
+  patterns['security-auditor'] = ['orchestrator/analysis/security-*.md'];
+  patterns['producer'] = ['orchestrator/backlog.json', 'orchestrator/analysis/producer-status.md'];
+  patterns['tech-lead'] = [`${srcDir}/engine/types.ts`, 'CLAUDE.md'];
+
+  // test-generator: same as qa (test files)
+  if (testGlobs.length > 0) patterns['test-generator'] = [...testGlobs];
+
+  // css-artist: CSS/SCSS files
+  if (dirs.ui) patterns['css-artist'] = [`${dirs.ui}*.css`, `${srcDir}/App.css`, `${srcDir}/index.css`];
+
+  // research-agent: AI source files
+  if (dirs.ai) patterns['research-agent'] = [`${dirs.ai}*`];
+
+  // devops: tools/scripts
+  if (dirs.tools) patterns['devops'] = [`${dirs.tools}*`];
+
+  return patterns;
+}
+
+// ── Generate Project Config ─────────────────────────────────
+
+/**
+ * Generate a project-config.json-compatible object from detection results.
+ * Used when no project-config.json file exists — auto-populates config from detection.
+ */
+export function generateProjectConfig(detection, dir) {
+  const testMapping = suggestTestMapping(detection, dir);
+  const ownershipPatterns = suggestFileOwnership(detection);
+
+  return {
+    // Metadata
+    projectName: detection.projectName,
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'project-detect.mjs',
+
+    // Stack
+    language: detection.language,
+    ecosystem: detection.ecosystem,
+    packageManager: detection.packageManager,
+    framework: detection.frameworks[0]?.name || null,
+
+    // Testing
+    testing: {
+      runner: detection.testRunner?.name || null,
+      command: detection.testRunner?.command || null,
+      filterFlag: testMapping.filterFlag,
+      sourceToTests: testMapping.sourceToTests,
+      fullSuiteTriggers: testMapping.fullSuiteTriggers,
+      aiSourcePattern: testMapping.aiSourcePattern,
+      aiTestFile: testMapping.aiTestFile,
+      timeoutMs: 180000,
+    },
+
+    // Quality gates (from detection)
+    qualityGates: detection.qualityGates.map(g => ({
+      name: g.name,
+      command: g.command,
+      severity: g.severity,
+    })),
+
+    // Project structure
+    structure: detection.structure,
+
+    // File ownership patterns per role
+    ownershipPatterns,
+  };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
@@ -569,9 +720,27 @@ Scans a project directory and detects:
   - Suggested quality gates and agent team
 
 Options:
-  --json    Output as JSON (default: human-readable)
-  --help    Show this help
+  --json          Output as JSON (default: human-readable)
+  --emit-config   Generate orchestrator/project-config.json
+  --help          Show this help
 `);
+  process.exit(0);
+}
+
+if (args.includes('--emit-config')) {
+  const emitDirRaw = args.find(a => !a.startsWith('-')) || process.cwd();
+  const emitDir = join(process.cwd(), emitDirRaw);  // resolve relative paths
+  const emitResult = await detectProject(emitDir);
+  const config = generateProjectConfig(emitResult, emitDir);
+
+  const outputPath = join(emitDir, 'orchestrator', 'project-config.json');
+  writeFileSync(outputPath, JSON.stringify(config, null, 2) + '\n');
+  console.log(`Project config written to: ${outputPath}`);
+  console.log(`  Language: ${config.language}`);
+  console.log(`  Test runner: ${config.testing.runner}`);
+  console.log(`  Quality gates: ${config.qualityGates.length}`);
+  console.log(`  Ownership roles: ${Object.keys(config.ownershipPatterns).length}`);
+  console.log(`  Source-to-test mappings: ${Object.keys(config.testing.sourceToTests).length}`);
   process.exit(0);
 }
 

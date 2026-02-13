@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v19
+// Multi-Agent Orchestrator v20
 // ============================================================
+// v20 additions (config-driven testing & quality gates):
+// - Project config: load from project-config.json or auto-generate from detection
+// - Config-driven test mapping: SOURCE_TO_TESTS, AI patterns, filter flags from config
+// - Quality gate chain auto-populated from project detection when not in mission config
+// - getTestCommand(): replaces hardcoded 'npx vitest run' everywhere
+// - runTests() uses quality gate chain with legacy fallback
+// - Dynamic file ownership: agents with fileOwnership='auto' get patterns from project config
+// - generateProjectConfig(): new export from project-detect.mjs
+//
 // v19 additions (S57 — general-purpose expansion):
 // - Project auto-detection: auto-detect language, framework, test runner at startup
 // - Role registry: discoverable, composable agent roles from roles/*.md templates
@@ -11,7 +20,6 @@
 // - 5 custom skills: orchestrator-status, code-review, security-scan, project-detect, agent-report
 // - General-purpose mission template (general-dev.json): 8-agent team for any project
 // - Removed "Jousting MVP" branding — orchestrator is now project-agnostic
-// - Version strings updated to v19
 //
 // v18 additions (S56 — early test start, all-done exit code):
 // - Early test start: tests begin as soon as code agents finish, while coord agents still run
@@ -159,7 +167,7 @@ import { randomUUID } from 'crypto';
 import { runConsistencyCheck } from './consistency-check.mjs';
 import { RoleRegistry } from './role-registry.mjs';
 import { QualityGateChain, createGateChainFromDetection } from './quality-gates.mjs';
-import { detectProject } from './project-detect.mjs';
+import { detectProject, generateProjectConfig } from './project-detect.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -170,6 +178,9 @@ const ANALYSIS_DIR = join(ORCH_DIR, 'analysis');
 const ROLES_DIR = join(ORCH_DIR, 'roles');
 const BALANCE_DATA_DIR = join(ORCH_DIR, 'balance-data');
 const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
+
+// v20: Module-scope quality gate chain (populated in main(), used by runTests())
+let qualityGateChain = null;
 
 // ============================================================
 // Active Process Tracking & Graceful Shutdown (Windows)
@@ -249,6 +260,35 @@ function resetConfigToDefaults() {
   for (const key of Object.keys(CONFIG)) {
     CONFIG[key] = CONFIG_DEFAULTS[key];
   }
+}
+
+// ============================================================
+// Project Config (v20 — auto-detect or load from file)
+// ============================================================
+let projectConfig = null;
+
+function loadProjectConfig(projectDir) {
+  const configPath = join(projectDir, 'orchestrator', 'project-config.json');
+
+  // Try loading existing config
+  if (existsSync(configPath)) {
+    try {
+      const raw = readFileSync(configPath, 'utf-8');
+      projectConfig = JSON.parse(raw);
+      log(`Project config loaded from: ${configPath}`);
+      return projectConfig;
+    } catch (err) {
+      log(`WARNING: Failed to parse project-config.json: ${err.message}`);
+    }
+  }
+
+  // Fall back to auto-detection
+  log('No project-config.json found — auto-detecting...');
+  return null;  // Will be populated from detection in main()
+}
+
+function getTestCommand() {
+  return projectConfig?.testing?.command || 'npx vitest run';
 }
 
 // ============================================================
@@ -477,6 +517,22 @@ function loadMission(missionPath) {
     maxBudgetUsd: a.maxBudgetUsd || null,          // v6: per-agent cost cap
   }));
 
+  // v20: Dynamic file ownership from project config
+  for (let i = 0; i < mission.agents.length; i++) {
+    const agentDef = mission.agents[i];
+    const agent = agents[i];
+    if (agentDef.fileOwnership === 'auto' && projectConfig?.ownershipPatterns) {
+      const rolePatterns = projectConfig.ownershipPatterns[agentDef.role];
+      if (rolePatterns) {
+        agent.fileOwnership = rolePatterns;
+        log(`  ${agent.id}: auto file ownership from project config (${rolePatterns.length} patterns)`);
+      } else {
+        agent.fileOwnership = [];
+        log(`  ${agent.id}: no auto ownership patterns for role "${agentDef.role}"`);
+      }
+    }
+  }
+
   // Generate initial handoff files for agents that don't have one yet
   for (const agent of mission.agents) {
     const handoffPath = join(HANDOFF_DIR, `${agent.id}.md`);
@@ -511,7 +567,7 @@ function loadMission(missionPath) {
         '- Only edit files in your File Ownership list',
         '- Do NOT run git commands (orchestrator handles commits)',
         '- Do NOT edit orchestrator/task-board.md (auto-generated)',
-        '- Run tests (`npx vitest run`) before writing your final handoff',
+        `- Run tests (\`${getTestCommand()}\`) before writing your final handoff`,
         '- For App.tsx changes: note them in handoff under "Deferred App.tsx Changes"',
         '',
       );
@@ -834,7 +890,7 @@ ${agentStatuses.filter(a => a.meta.notes).map(a => `- **${a.id}**: ${a.meta.note
 2. If you need to edit App.tsx (shared), note the change in your handoff under "Deferred App.tsx Changes" — the orchestrator will coordinate
 3. Do NOT run git commands — the orchestrator handles all commits
 4. Do NOT edit this task board — it is auto-generated
-5. Run \`npx vitest run\` before writing your final handoff to confirm tests pass
+5. Run \`${getTestCommand()}\` before writing your final handoff to confirm tests pass
 6. Write your updated handoff with the ## META section at the top
 
 ## Reference
@@ -2766,33 +2822,61 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   return { status, isEmptyWork, filesModified, balanceConfigChanged };
 }
 
+// Incremental Testing (v10→v20: config-driven test mapping)
 // ============================================================
-// Incremental Testing (v10 — only run affected test suites)
-// ============================================================
-// Maps source files to the test suites that exercise them.
+// v10: Maps source files to the test suites that exercise them.
+// v20: Loaded from project-config.json if available, falls back to hardcoded defaults.
 // Any file not in the map triggers a full test run (conservative fallback).
-const SOURCE_TO_TESTS = {
-  'calculator.ts':       ['calculator.test.ts', 'gear-variants.test.ts'],
-  'balance-config.ts':   ['calculator.test.ts', 'playtest.test.ts', 'gear-variants.test.ts'],
-  'phase-joust.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
-  'phase-melee.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
-  'match.ts':            ['match.test.ts'],
-  'gigling-gear.ts':     ['gigling-gear.test.ts', 'gear-variants.test.ts'],
-  'player-gear.ts':      ['player-gear.test.ts', 'gear-variants.test.ts'],
-  'archetypes.ts':       ['playtest.test.ts', 'match.test.ts', 'gear-variants.test.ts'],
-  'attacks.ts':          ['calculator.test.ts', 'phase-resolution.test.ts', 'match.test.ts'],
-};
-// AI source files → ai.test.ts
-const AI_SOURCE_PATTERN = /^src\/ai\//;
-// Files that always trigger full suite (types, config, shared infrastructure)
-const FULL_SUITE_TRIGGERS = ['types.ts', 'index.ts'];
+
+function getSourceToTests() {
+  if (projectConfig?.testing?.sourceToTests) {
+    return projectConfig.testing.sourceToTests;
+  }
+  // Legacy fallback (jousting-specific)
+  return {
+    'calculator.ts':       ['calculator.test.ts', 'gear-variants.test.ts'],
+    'balance-config.ts':   ['calculator.test.ts', 'playtest.test.ts', 'gear-variants.test.ts'],
+    'phase-joust.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
+    'phase-melee.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
+    'match.ts':            ['match.test.ts'],
+    'gigling-gear.ts':     ['gigling-gear.test.ts', 'gear-variants.test.ts'],
+    'player-gear.ts':      ['player-gear.test.ts', 'gear-variants.test.ts'],
+    'archetypes.ts':       ['playtest.test.ts', 'match.test.ts', 'gear-variants.test.ts'],
+    'attacks.ts':          ['calculator.test.ts', 'phase-resolution.test.ts', 'match.test.ts'],
+  };
+}
+
+function getAiSourcePattern() {
+  if (projectConfig?.testing?.aiSourcePattern) {
+    return new RegExp(projectConfig.testing.aiSourcePattern);
+  }
+  return /^src\/ai\//;  // Legacy fallback
+}
+
+function getAiTestFile() {
+  return projectConfig?.testing?.aiTestFile || 'ai.test.ts';
+}
+
+function getFullSuiteTriggers() {
+  return projectConfig?.testing?.fullSuiteTriggers || ['types.ts', 'index.ts'];
+}
+
+function getTestFilterFlag() {
+  return projectConfig?.testing?.filterFlag || '--testPathPattern';
+}
 
 /**
  * Given a list of modified file paths (from agent handoffs), return
- * the vitest --testPathPattern regex string, or null for full suite.
+ * the test filter string, or null for full suite.
+ * v20: Uses config-driven mappings instead of hardcoded constants.
  */
 function getTestFilter(modifiedFiles) {
   if (!modifiedFiles || !modifiedFiles.length) return null; // no info → full suite
+
+  const SOURCE_TO_TESTS = getSourceToTests();
+  const AI_SOURCE_PATTERN = getAiSourcePattern();
+  const FULL_SUITE_TRIGGERS = getFullSuiteTriggers();
+  const aiTestFile = getAiTestFile();
 
   const affectedTests = new Set();
   let needFullSuite = false;
@@ -2811,7 +2895,7 @@ function getTestFilter(modifiedFiles) {
 
     // AI files
     if (AI_SOURCE_PATTERN.test(filePath)) {
-      affectedTests.add('ai.test.ts');
+      affectedTests.add(aiTestFile);
       continue;
     }
 
@@ -2834,28 +2918,55 @@ function getTestFilter(modifiedFiles) {
 }
 
 // ============================================================
-// Run Tests
+// Run Tests (v20: quality gate chain with legacy fallback)
 // ============================================================
-// testFilter: null → full suite, '' → skip, string → --testPathPattern
-function runTests(testFilter = null) {
+// testFilter: null → full suite, '' → skip, string → filtered
+async function runTests(testFilter = null) {
+  // v10: Skip tests if no source files were modified
+  if (testFilter === '') {
+    log('Running test suite... SKIPPED (no source files modified)');
+    return { passed: true, count: 'skipped', failCount: '0', output: 'skipped — no source changes', skipped: true };
+  }
+
+  const isIncremental = testFilter !== null;
+  if (isIncremental) {
+    log(`Running tests (incremental: ${testFilter.split('|').length} suite(s))...`);
+  } else {
+    log('Running test suite (full)...');
+  }
+
+  // v20: Use quality gate chain if available
+  if (qualityGateChain) {
+    try {
+      const filterArg = isIncremental ? `${getTestFilterFlag()} ${testFilter}` : null;
+      const results = await qualityGateChain.runTests(filterArg);
+
+      // Extract test metrics from results
+      const testResult = results.passed[0] || results.blocking[0];
+      const passed = results.blockingPassed;
+      const count = testResult?.metrics?.testCount?.toString() || '?';
+      const failCount = testResult?.metrics?.failCount?.toString() || '0';
+      const details = testResult?.details || '';
+
+      log(`Tests: ${passed ? 'PASSED' : 'FAILED'} — ${count} passed, ${failCount} failed`);
+      appendFileSync(join(LOG_DIR, 'test-results.log'),
+        `[${timestamp()}] ${passed ? 'PASS' : 'FAIL'} — ${count} passed, ${failCount} failed\n`);
+
+      return { passed, count, failCount, output: details };
+    } catch (err) {
+      log(`Quality gate chain error: ${err.message} — falling back to direct test run`);
+    }
+  }
+
+  // Legacy fallback: direct vitest spawn
   return new Promise((resolvePromise) => {
-    // v10: Skip tests if no source files were modified
-    if (testFilter === '') {
-      log('Running test suite... SKIPPED (no source files modified)');
-      resolvePromise({ passed: true, count: 'skipped', failCount: '0', output: 'skipped — no source changes', skipped: true });
-      return;
-    }
+    const testCommand = getTestCommand();
+    const parts = testCommand.split(/\s+/);
+    const cmd = parts[0];
+    const args = parts.slice(1);
+    if (isIncremental) args.push(getTestFilterFlag(), testFilter);
 
-    const isIncremental = testFilter !== null;
-    if (isIncremental) {
-      log(`Running tests (incremental: ${testFilter.split('|').length} suite(s))...`);
-    } else {
-      log('Running test suite (full)...');
-    }
-
-    const vitestArgs = ['vitest', 'run'];
-    if (isIncremental) vitestArgs.push('--testPathPattern', testFilter);
-    const proc = spawn('npx', vitestArgs, {
+    const proc = spawn(cmd, args, {
       cwd: MVP_DIR,
       shell: true,
       stdio: 'pipe',
@@ -3030,11 +3141,18 @@ async function main() {
   try { rotateAnalysisFiles(5); }
   catch (err) { log(`Analysis rotation error: ${err.message}`); }
 
-  // v19: Project auto-detection (informational — logged at startup)
+  // v20: Load project config (from file or auto-detect)
+  loadProjectConfig(MVP_DIR);
   let projectDetection = null;
   try {
     projectDetection = await detectProject(MVP_DIR);
     log(`Project detected: ${projectDetection.language}/${projectDetection.frameworks.map(f => f.name).join('+') || 'no-framework'} (${projectDetection.testRunner?.name || 'no-test-runner'})`);
+
+    // If no project config was loaded from file, populate from detection
+    if (!projectConfig) {
+      projectConfig = generateProjectConfig(projectDetection, MVP_DIR);
+      log(`Project config generated from auto-detection (${Object.keys(projectConfig.testing.sourceToTests).length} test mappings)`);
+    }
   } catch (err) { log(`Project detection skipped: ${err.message}`); }
 
   // v19: Role registry — validate agent roles at startup
@@ -3051,8 +3169,15 @@ async function main() {
     log(`Role registry: ${roleRegistry.roles.size} roles loaded (${roleRegistry.getCodeAgents().length} code, ${roleRegistry.getCoordinationAgents().length} coordination)`);
   } catch (err) { log(`Role registry skipped: ${err.message}`); }
 
-  // v19: Quality gate chain (optional — enabled via mission qualityGates config)
-  let qualityGateChain = null;
+  // v20: Quality gate chain (auto-populated from detection if not in mission config)
+  if (!CONFIG.qualityGates && projectDetection) {
+    const autoGates = createGateChainFromDetection(projectDetection);
+    if (autoGates.length > 0) {
+      CONFIG.qualityGates = autoGates;
+      log(`Quality gates auto-populated from detection: ${autoGates.map(g => g.name).join(', ')}`);
+    }
+  }
+  qualityGateChain = null;
   if (CONFIG.qualityGates && CONFIG.qualityGates.length > 0) {
     try {
       qualityGateChain = new QualityGateChain(CONFIG.qualityGates, { cwd: MVP_DIR, verbose: true });
@@ -3062,7 +3187,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  MULTI-AGENT ORCHESTRATOR v19');
+  log('  MULTI-AGENT ORCHESTRATOR v20');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
@@ -4029,7 +4154,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v19
+> Orchestrator: v20
 
 ## Summary
 - **Started**: ${startTime}
@@ -4269,7 +4394,7 @@ ${analysisFiles.length
 2. Read analysis reports: \`orchestrator/analysis/\`
 3. Check git log for per-round commits: \`git log --oneline\`
 4. To revert to before the run: \`git log --oneline\` and find the pre-orchestrator commit
-5. Run tests: \`npx vitest run\`
+5. Run tests: \`${getTestCommand()}\`
 `;
 
   writeFileSync(CONFIG.reportFile, report);
