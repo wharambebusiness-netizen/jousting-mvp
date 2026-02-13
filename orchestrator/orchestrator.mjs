@@ -1,7 +1,22 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v20
+// Multi-Agent Orchestrator v21
 // ============================================================
+// v21 additions (Phase 3 Scale — worktree isolation + dynamic agent spawning):
+// - Git worktree isolation: each code agent runs in its own worktree/branch
+// - Zero cross-agent file conflicts during parallel execution
+// - createWorktree/mergeWorktreeBranch/removeWorktree/cleanupAllWorktrees lifecycle
+// - gitExec() helper centralizes git command spawning
+// - smartRevertWorktrees(): merge-based revert (reset to pre-merge, selective re-merge)
+// - parseHandoffMeta/readHandoffContent: check worktree path before main tree
+// - CONFIG.useWorktrees: feature flag (default: true, set false for legacy behavior)
+// - Dynamic agent spawning: agents write spawn requests to orchestrator/spawns/
+// - detectAndSpawnAgents(): scans worktrees + main for spawn requests, runs helpers
+// - Spawn constraints: max 3/round, 1/agent, budget cap, role allowlist
+// - Spawn notifications: parent agents see child results in next round prompt
+// - Spawned agents are one-shot (run once, merge, retire) with own worktrees
+// - archiveSpawnRequest(): processed requests moved to spawns/archive/
+//
 // v20 additions (config-driven testing & quality gates):
 // - Project config: load from project-config.json or auto-generate from detection
 // - Config-driven test mapping: SOURCE_TO_TESTS, AI patterns, filter flags from config
@@ -168,6 +183,7 @@ import { runConsistencyCheck } from './consistency-check.mjs';
 import { RoleRegistry } from './role-registry.mjs';
 import { QualityGateChain, createGateChainFromDetection } from './quality-gates.mjs';
 import { detectProject, generateProjectConfig } from './project-detect.mjs';
+import { executeWorkflow } from './workflow-engine.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -181,6 +197,22 @@ const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
 
 // v20: Module-scope quality gate chain (populated in main(), used by runTests())
 let qualityGateChain = null;
+
+// v21: Git worktree isolation — each code agent gets its own worktree/branch
+const WORKTREE_DIR = join(ORCH_DIR, '.worktrees');
+const agentWorktrees = {}; // agentId → { path, branch, round }
+
+// v21: Dynamic agent spawning — agents request helpers via spawn request files
+const SPAWNS_DIR = join(ORCH_DIR, 'spawns');
+const SPAWN_CONSTRAINTS = {
+  maxSpawnsPerRound: 3,
+  maxSpawnsPerAgent: 1,
+  maxConcurrentSpawns: 2,
+  maxBudgetPerSpawn: 2.0,
+  defaultModel: 'haiku',
+  defaultTimeoutMs: 10 * 60 * 1000, // 10 min
+  blockedRoles: new Set(['producer', 'tech-lead', 'game-designer']),
+};
 
 // ============================================================
 // Active Process Tracking & Graceful Shutdown (Windows)
@@ -223,6 +255,10 @@ const CONFIG = {
   allowedTools: 'Edit,Read,Write,Glob,Grep,Bash',
   maxConcurrency: 0,                     // 0 = unlimited; >0 = max parallel agents per phase
   reportFile: join(ORCH_DIR, 'overnight-report.md'),
+  // v21: Git worktree isolation — each code agent runs in its own worktree/branch.
+  // Prevents cross-agent file conflicts during parallel execution.
+  // Set to false to disable (agents edit main working tree directly, legacy behavior).
+  useWorktrees: true,
   // Balance sim config (enabled via mission balanceConfig or set here)
   // When null, no automated sims are run. Set to an object to enable.
   balanceConfig: null,
@@ -671,7 +707,11 @@ function parseHandoffMeta(agentId) {
     status: 'not-started', filesModified: [], testsPassing: null, notes: '',
     testCount: null, notesForOthers: '', testsHealthy: null, fileCount: 0,
   };
-  const path = join(HANDOFF_DIR, `${agentId}.md`);
+  // v21: Check worktree path first (agent may have written handoff there, not yet merged to main)
+  const wt = agentWorktrees[agentId];
+  const wtHandoffPath = wt ? join(wt.path, 'orchestrator', 'handoffs', `${agentId}.md`) : null;
+  const mainHandoffPath = join(HANDOFF_DIR, `${agentId}.md`);
+  const path = (wtHandoffPath && existsSync(wtHandoffPath)) ? wtHandoffPath : mainHandoffPath;
   if (!existsSync(path)) return { ...defaults };
 
   let content;
@@ -911,10 +951,14 @@ function runAgent(agent, round) {
     // Load role template if available
     const roleTemplate = loadRoleTemplate(agent.role);
 
+    // v21: Worktree lookup — used for cwd, prompt paths, and handoff reads
+    const worktree = agentWorktrees[agent.id];
+
     // Build prompt — CLAUDE.md provides project context (auto-loaded by Claude Code)
     // so we only need coordination info + role guidelines + task reference
-    // v12: When using claudeMdPath (temp cwd), prefix paths with absolute project dir
-    const p = (relPath) => agent.claudeMdPath ? join(MVP_DIR, relPath).replace(/\\/g, '/') : relPath;
+    // v12/v21: When using claudeMdPath (temp cwd), prefix paths with absolute project dir (or worktree)
+    const projectBase = worktree ? worktree.path : MVP_DIR;
+    const p = (relPath) => agent.claudeMdPath ? join(projectBase, relPath).replace(/\\/g, '/') : relPath;
 
     // v16: Session continuity — determine if this agent can resume a previous session
     const existingSession = agentSessions[agent.id];
@@ -1092,6 +1136,40 @@ function runAgent(agent, round) {
       }
     }
 
+    // v21: Spawn notifications (previous round's spawned agent results)
+    if (round > 1) {
+      const spawnNotif = getSpawnNotifications(agent.id, round - 1);
+      if (spawnNotif) {
+        promptParts.push(``, `--- SPAWNED AGENT RESULTS (from previous round) ---`, spawnNotif);
+      }
+    }
+
+    // v21: Spawn instructions for code agents (not spawned agents themselves)
+    if (agent.type !== 'spawned' && !isResuming) {
+      promptParts.push(
+        ``,
+        `--- AGENT SPAWNING (optional) ---`,
+        `Need a helper for a complex subtask? Write a JSON file to orchestrator/spawns/:`,
+        `  File: orchestrator/spawns/spawn-${agent.id}-{any-unique-suffix}.json`,
+        `  Format: { "parentId": "${agent.id}", "role": "<role>", "name": "<name>",`,
+        `    "task": "<detailed description>", "fileOwnership": ["<files>"],`,
+        `    "model": "haiku", "maxBudgetUsd": 1.0 }`,
+        `  Roles: qa-engineer, engine-dev, ui-dev, css-artist, test-generator, security-auditor.`,
+        `  Helper runs this round only. Max 1 spawn per agent per round.`,
+      );
+    }
+
+    // v21: Spawned agent gets its task as the primary prompt directive
+    if (agent._spawnTask) {
+      promptParts.push(
+        ``,
+        `--- YOUR TASK (spawned by ${agent._spawnedBy}) ---`,
+        agent._spawnTask,
+        agent._spawnContext ? `Context: ${JSON.stringify(agent._spawnContext)}` : '',
+        `You are a one-shot helper agent. Complete this task, run tests, and write your handoff.`,
+      );
+    }
+
     // v16: Shared rules and role template — skip for resumed sessions.
     // Returning agents already have these from their initial session.
     if (!isResuming) {
@@ -1111,12 +1189,15 @@ function runAgent(agent, round) {
     log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'}, session=${sessionMode})`);
     const startTime = Date.now();
 
+    // v21: worktreeBase = worktree path (for code agents) or MVP_DIR (for coord agents / no worktree)
+    const worktreeBase = worktree ? worktree.path : MVP_DIR;
+
     // v12: Per-agent CLAUDE.md override — create temp dir with trimmed CLAUDE.md
     // so the CLI auto-loads the lite version. Use --add-dir for project file access.
-    let agentCwd = MVP_DIR;
+    let agentCwd = worktreeBase;
     let tempDir = null;
     if (agent.claudeMdPath) {
-      const litePath = join(MVP_DIR, agent.claudeMdPath);
+      const litePath = join(worktreeBase, agent.claudeMdPath);
       if (existsSync(litePath)) {
         tempDir = mkdtempSync(join(tmpdir(), `orch-${agent.id}-`));
         copyFileSync(litePath, join(tempDir, 'CLAUDE.md'));
@@ -1125,14 +1206,18 @@ function runAgent(agent, round) {
       }
     }
 
+    if (worktree) {
+      log(`    worktree: ${worktree.branch} → ${worktree.path}`);
+    }
+
     // v5/v6: Build CLI args with optional per-agent model + budget
     // v19: Per-agent allowedTools override (falls back to CONFIG.allowedTools)
     const agentTools = agent.allowedTools || CONFIG.allowedTools;
     const cliArgs = ['-p', '--allowedTools', agentTools, '--output-format', 'text'];
     if (agent.model) cliArgs.push('--model', agent.model);
     if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
-    // v12: When using temp dir for lite CLAUDE.md, grant access to actual project
-    if (tempDir) cliArgs.push('--add-dir', MVP_DIR);
+    // v12/v21: When using temp dir, grant access to actual project (worktree or MVP_DIR)
+    if (tempDir) cliArgs.push('--add-dir', worktreeBase);
 
     // v16: Session continuity — resume existing session or establish new one
     if (isResuming) {
@@ -1388,6 +1473,435 @@ function invalidateRevertedSessions(revertedAgents) {
   for (const agentId of revertedAgents) {
     invalidateAgentSession(agentId, 'files reverted');
   }
+}
+
+// ============================================================
+// Git Worktree Isolation (v21 — Phase 3: Scale)
+// ============================================================
+// Each code agent gets its own git worktree + branch, preventing cross-agent
+// file conflicts during parallel execution. After the pool completes, worktree
+// branches are merged back into main sequentially before testing.
+// Coordination agents stay in MVP_DIR (they only edit orchestrator/ files).
+
+/**
+ * Execute a git command and return { ok, stdout, stderr }.
+ * Centralizes the spawn('cmd', ['/c', ...]) pattern used throughout.
+ */
+function gitExec(cmd, cwd = MVP_DIR) {
+  return new Promise((resolve) => {
+    const proc = spawn('cmd', ['/c', cmd], { cwd, shell: true, stdio: 'pipe' });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('close', (code) => resolve({ ok: code === 0, code, stdout: stdout.trim(), stderr: stderr.trim() }));
+    proc.on('error', (err) => resolve({ ok: false, code: -1, stdout: '', stderr: err.message }));
+  });
+}
+
+/**
+ * Create a git worktree for an agent.
+ * Branch: agent-{agentId}-r{round}, path: orchestrator/.worktrees/{agentId}
+ * @returns {Promise<boolean>} Whether the worktree was created successfully
+ */
+async function createWorktree(agentId, round) {
+  const branch = `agent-${agentId}-r${round}`;
+  const wtPath = join(WORKTREE_DIR, agentId);
+
+  // Clean up any leftover worktree from a previous round
+  if (agentWorktrees[agentId]) {
+    await removeWorktree(agentId);
+  }
+
+  // Ensure worktree parent dir exists
+  mkdirSync(WORKTREE_DIR, { recursive: true });
+
+  // Remove stale worktree directory if it exists (e.g. from a crash)
+  if (existsSync(wtPath)) {
+    await gitExec(`git worktree remove "${wtPath}" --force`);
+    // Fallback: if git worktree remove fails, force-delete the directory
+    if (existsSync(wtPath)) {
+      try { rmSync(wtPath, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+    }
+  }
+
+  // Delete branch if leftover from previous round
+  await gitExec(`git branch -D "${branch}" 2>nul`);
+
+  // Create worktree with new branch from current HEAD
+  const result = await gitExec(`git worktree add "${wtPath}" -b "${branch}"`);
+  if (!result.ok) {
+    log(`  ⚠ Worktree creation failed for ${agentId}: ${result.stderr.slice(0, 200)}`);
+    return false;
+  }
+
+  agentWorktrees[agentId] = { path: wtPath, branch, round };
+  log(`  Worktree created: ${agentId} → ${branch}`);
+  return true;
+}
+
+/**
+ * Merge an agent's worktree branch back into the main branch.
+ * Must be called from the main working tree (MVP_DIR).
+ * @returns {Promise<{ok: boolean, conflicted: boolean, mergeCommit?: string}>}
+ */
+async function mergeWorktreeBranch(agentId) {
+  const wt = agentWorktrees[agentId];
+  if (!wt) return { ok: false, conflicted: false };
+
+  const result = await gitExec(`git merge "${wt.branch}" --no-edit -m "worktree merge: ${agentId} (round ${wt.round})"`);
+  if (result.ok) {
+    // Get the merge commit SHA
+    const head = await gitExec('git rev-parse HEAD');
+    return { ok: true, conflicted: false, mergeCommit: head.stdout };
+  }
+
+  // Merge conflict — abort and report
+  if (result.stderr.includes('CONFLICT') || result.stderr.includes('Merge conflict')) {
+    log(`  ⚠ Merge conflict for ${agentId} — aborting merge`);
+    await gitExec('git merge --abort');
+    return { ok: false, conflicted: true };
+  }
+
+  // Other merge failure
+  log(`  ⚠ Merge failed for ${agentId}: ${result.stderr.slice(0, 200)}`);
+  await gitExec('git merge --abort');
+  return { ok: false, conflicted: false };
+}
+
+/**
+ * Remove a single agent's worktree and delete its branch.
+ */
+async function removeWorktree(agentId) {
+  const wt = agentWorktrees[agentId];
+  if (!wt) return;
+
+  await gitExec(`git worktree remove "${wt.path}" --force`);
+  // Fallback cleanup if git worktree remove doesn't fully clean up
+  if (existsSync(wt.path)) {
+    try { rmSync(wt.path, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+  }
+  await gitExec(`git branch -D "${wt.branch}" 2>nul`);
+  delete agentWorktrees[agentId];
+}
+
+/**
+ * Remove all active worktrees (round-end cleanup).
+ */
+async function cleanupAllWorktrees() {
+  const ids = Object.keys(agentWorktrees);
+  if (!ids.length) return;
+
+  log(`  Cleaning up ${ids.length} worktree(s)...`);
+  for (const agentId of ids) {
+    await removeWorktree(agentId);
+  }
+
+  // Prune stale worktree references
+  await gitExec('git worktree prune');
+}
+
+/**
+ * Get the current HEAD commit SHA (used as checkpoint before merges).
+ */
+async function getHeadSha() {
+  const result = await gitExec('git rev-parse HEAD');
+  return result.ok ? result.stdout : null;
+}
+
+/**
+ * Smart revert for worktree-based rounds.
+ * After merging all agent branches, if tests fail:
+ * 1. Reset to preMergeHead (undo all merges)
+ * 2. Re-merge agents one at a time, testing after each (up to cap)
+ * 3. Agents whose merges break tests are excluded (reverted)
+ *
+ * @param {number} round
+ * @param {Array} codeResults - Agent results with merge tracking
+ * @param {string} preMergeHead - Commit SHA before any merges
+ * @param {Array<{agentId: string, ok: boolean}>} mergeResults - Which agents were merged
+ * @returns {Promise<{reverted: boolean, strategy: string, revertedAgents: string[]}>}
+ */
+async function smartRevertWorktrees(round, codeResults, preMergeHead, mergeResults) {
+  const mergedAgents = mergeResults.filter(m => m.ok).map(m => m.agentId);
+
+  if (mergedAgents.length === 0) {
+    log(`  Worktree revert: no agents were merged — nothing to revert`);
+    return { reverted: false, strategy: 'none', revertedAgents: [] };
+  }
+
+  // Reset to pre-merge state
+  log(`  Worktree revert: resetting to pre-merge HEAD (${preMergeHead.slice(0, 8)})`);
+  const resetResult = await gitExec(`git reset --hard "${preMergeHead}"`);
+  if (!resetResult.ok) {
+    log(`  ⚠ Reset failed: ${resetResult.stderr.slice(0, 200)} — falling back to tag revert`);
+    await gitRevertFiles(round, ['src/']);
+    return { reverted: true, strategy: 'full-tag-fallback', revertedAgents: mergedAgents };
+  }
+
+  if (mergedAgents.length === 1) {
+    // Only one agent — already reset, done
+    log(`  Worktree revert: single agent (${mergedAgents[0]}) — reset complete`);
+    return { reverted: true, strategy: 'full-reset', revertedAgents: mergedAgents };
+  }
+
+  // Multiple agents: re-merge one at a time, test after each to find the culprit
+  const MAX_REMERGE_TESTS = 2;
+  const revertedAgents = [];
+  const keptAgents = [];
+
+  log(`  Worktree revert: ${mergedAgents.length} agents — re-merging individually (max ${MAX_REMERGE_TESTS} tests)...`);
+
+  for (const agentId of mergedAgents) {
+    if (keptAgents.length >= MAX_REMERGE_TESTS) {
+      // Hit the cap — skip remaining agents (treat as reverted)
+      log(`  Worktree revert: hit re-merge cap (${MAX_REMERGE_TESTS}) — skipping remaining agents`);
+      revertedAgents.push(agentId);
+      continue;
+    }
+
+    const wt = agentWorktrees[agentId];
+    if (!wt) {
+      revertedAgents.push(agentId);
+      continue;
+    }
+
+    // Try merging this agent
+    const mergeResult = await mergeWorktreeBranch(agentId);
+    if (!mergeResult.ok) {
+      log(`    ${agentId}: merge failed on re-merge — skipping`);
+      revertedAgents.push(agentId);
+      continue;
+    }
+
+    // Test after this merge
+    const testResult = await runTests();
+    if (testResult.passed) {
+      log(`    ${agentId}: tests pass after re-merge — keeping`);
+      keptAgents.push(agentId);
+    } else {
+      // This agent's code broke tests — undo its merge
+      log(`    ${agentId}: tests fail after re-merge — reverting`);
+      const currentHead = await getHeadSha();
+      // Reset to before this merge (one commit back)
+      await gitExec(`git reset --hard HEAD~1`);
+      revertedAgents.push(agentId);
+    }
+  }
+
+  const strategy = revertedAgents.length === mergedAgents.length ? 'full-reset' : 'selective-remerge';
+  log(`  Worktree revert: kept ${keptAgents.length}, reverted ${revertedAgents.length} (strategy: ${strategy})`);
+  return { reverted: true, strategy, revertedAgents };
+}
+
+// ============================================================
+// Dynamic Agent Spawning (v21 — Phase 3: Scale)
+// ============================================================
+// Agents can request helper sub-agents by writing spawn request files.
+// Spawn requests are detected after the code agent pool completes,
+// spawned agents run (with worktrees), then all get merged before testing.
+
+/**
+ * Scan for spawn requests — checks worktrees first (agents write there),
+ * then the main spawns directory.
+ * @returns {Array} Array of parsed spawn request objects
+ */
+function detectSpawnRequests() {
+  const requests = [];
+  const seen = new Set();
+
+  // Check agent worktrees for spawn requests (pre-merge)
+  for (const [agentId, wt] of Object.entries(agentWorktrees)) {
+    const wtSpawns = join(wt.path, 'orchestrator', 'spawns');
+    if (!existsSync(wtSpawns)) continue;
+    for (const file of readdirSync(wtSpawns)) {
+      if (!file.startsWith('spawn-') || !file.endsWith('.json') || seen.has(file)) continue;
+      try {
+        const content = readFileSync(join(wtSpawns, file), 'utf-8');
+        const req = JSON.parse(content);
+        req._filename = file;
+        req._sourcePath = join(wtSpawns, file);
+        requests.push(req);
+        seen.add(file);
+      } catch (err) {
+        log(`  ⚠ Invalid spawn request ${file} in ${agentId} worktree: ${err.message}`);
+      }
+    }
+  }
+
+  // Check main spawns dir (fallback for non-worktree agents)
+  if (existsSync(SPAWNS_DIR)) {
+    for (const file of readdirSync(SPAWNS_DIR)) {
+      if (!file.startsWith('spawn-') || !file.endsWith('.json') || seen.has(file)) continue;
+      // Skip archive directory
+      if (file === 'archive') continue;
+      try {
+        const content = readFileSync(join(SPAWNS_DIR, file), 'utf-8');
+        const req = JSON.parse(content);
+        req._filename = file;
+        req._sourcePath = join(SPAWNS_DIR, file);
+        requests.push(req);
+        seen.add(file);
+      } catch (err) {
+        log(`  ⚠ Invalid spawn request ${file}: ${err.message}`);
+      }
+    }
+  }
+
+  return requests;
+}
+
+/**
+ * Validate a spawn request against constraints.
+ * @returns {{valid: boolean, reason?: string}}
+ */
+function validateSpawnRequest(request, spawnCountThisRound, parentSpawnCount) {
+  if (spawnCountThisRound >= SPAWN_CONSTRAINTS.maxSpawnsPerRound) {
+    return { valid: false, reason: `round limit (${SPAWN_CONSTRAINTS.maxSpawnsPerRound})` };
+  }
+  if (parentSpawnCount >= SPAWN_CONSTRAINTS.maxSpawnsPerAgent) {
+    return { valid: false, reason: `per-agent limit (${SPAWN_CONSTRAINTS.maxSpawnsPerAgent})` };
+  }
+  if (SPAWN_CONSTRAINTS.blockedRoles.has(request.role)) {
+    return { valid: false, reason: `role '${request.role}' blocked` };
+  }
+  if (!request.parentId || !request.role || !request.task) {
+    return { valid: false, reason: 'missing required fields (parentId, role, task)' };
+  }
+  if ((request.maxBudgetUsd || 0) > SPAWN_CONSTRAINTS.maxBudgetPerSpawn) {
+    return { valid: false, reason: `budget $${request.maxBudgetUsd} > max $${SPAWN_CONSTRAINTS.maxBudgetPerSpawn}` };
+  }
+  return { valid: true };
+}
+
+/**
+ * Archive a processed spawn request (move to spawns/archive/).
+ */
+function archiveSpawnRequest(sourcePath, filename) {
+  const archiveDir = join(SPAWNS_DIR, 'archive');
+  mkdirSync(archiveDir, { recursive: true });
+  try {
+    // Copy to archive (source may be in worktree that gets cleaned up)
+    const content = readFileSync(sourcePath, 'utf-8');
+    writeFileSync(join(archiveDir, filename), content);
+    // Remove original if in main tree
+    if (sourcePath.startsWith(SPAWNS_DIR)) {
+      try { rmSync(sourcePath); } catch (_) { /* ok */ }
+    }
+  } catch (_) { /* best-effort */ }
+}
+
+/**
+ * Detect spawn requests and execute spawned agents.
+ * Called after code agents complete, before worktree merge.
+ * Spawned agents get their own worktrees and run inline.
+ *
+ * @param {number} round
+ * @param {Array} codeResults - Parent agent results
+ * @param {Object} costLog - Cost tracking
+ * @param {Object} trackingCtx - Tracking context
+ * @returns {Promise<Array>} Results from spawned agents
+ */
+async function detectAndSpawnAgents(round, codeResults, costLog, trackingCtx) {
+  const requests = detectSpawnRequests();
+  if (!requests.length) return [];
+
+  log(`\n  Spawn requests: ${requests.length} detected`);
+
+  // Validate and filter
+  const validRequests = [];
+  const parentCounts = {};
+
+  for (const req of requests) {
+    parentCounts[req.parentId] = (parentCounts[req.parentId] || 0);
+    const validation = validateSpawnRequest(req, validRequests.length, parentCounts[req.parentId]);
+    if (!validation.valid) {
+      log(`    ✗ ${req.parentId} → ${req.name || req.role}: ${validation.reason}`);
+      archiveSpawnRequest(req._sourcePath, req._filename);
+      continue;
+    }
+    parentCounts[req.parentId]++;
+    validRequests.push(req);
+  }
+
+  if (!validRequests.length) return [];
+
+  // Build and run spawned agents
+  const spawnedResults = [];
+  const limit = SPAWN_CONSTRAINTS.maxConcurrentSpawns;
+
+  for (let i = 0; i < validRequests.length; i += limit) {
+    const batch = validRequests.slice(i, i + limit);
+    const names = batch.map(r => `${r.name || r.role}(by:${r.parentId})`);
+    log(`  Spawning ${batch.length} agent(s): [${names.join(', ')}]`);
+
+    const promises = batch.map(async (req) => {
+      const spawnId = `spawn-${randomUUID().slice(0, 8)}`;
+      const agent = {
+        id: spawnId,
+        name: req.name || `${req.role} helper`,
+        role: req.role,
+        type: 'spawned',
+        model: req.model || SPAWN_CONSTRAINTS.defaultModel,
+        timeoutMs: Math.min(req.timeoutMs || SPAWN_CONSTRAINTS.defaultTimeoutMs, SPAWN_CONSTRAINTS.defaultTimeoutMs),
+        maxBudgetUsd: Math.min(req.maxBudgetUsd || SPAWN_CONSTRAINTS.maxBudgetPerSpawn, SPAWN_CONSTRAINTS.maxBudgetPerSpawn),
+        fileOwnership: req.fileOwnership || [],
+        dependsOn: [],
+        _spawnedBy: req.parentId,
+        _spawnedRound: round,
+        // Override the task prompt
+        _spawnTask: req.task,
+        _spawnContext: req.context,
+      };
+
+      // Create worktree for spawned agent
+      if (CONFIG.useWorktrees) {
+        await createWorktree(agent.id, round);
+      }
+
+      const result = await runAgent(agent, round);
+      archiveSpawnRequest(req._sourcePath, req._filename);
+      return { agent, result };
+    });
+
+    const results = await Promise.all(promises);
+    for (const { agent, result } of results) {
+      const status = result.timedOut ? 'TIMEOUT' : result.code === 0 ? 'OK' : `ERROR(${result.code})`;
+      log(`    ${agent.id} (${agent.name}): ${status} in ${(result.elapsed / 60).toFixed(1)}min`);
+      spawnedResults.push(result);
+    }
+  }
+
+  return spawnedResults;
+}
+
+/**
+ * Get spawn result notifications for a parent agent (injected into next round prompt).
+ * @param {string} parentId - Parent agent ID
+ * @param {number} prevRound - Previous round number
+ * @returns {string|null}
+ */
+function getSpawnNotifications(parentId, prevRound) {
+  const archiveDir = join(SPAWNS_DIR, 'archive');
+  if (!existsSync(archiveDir)) return null;
+
+  const notifications = [];
+  for (const file of readdirSync(archiveDir)) {
+    if (!file.startsWith('spawn-') || !file.endsWith('.json')) continue;
+    try {
+      const req = JSON.parse(readFileSync(join(archiveDir, file), 'utf-8'));
+      if (req.parentId !== parentId) continue;
+      // Check if from recent round (within 2 rounds)
+      if (req.round && req.round < prevRound - 1) continue;
+
+      notifications.push(
+        `Your spawned agent "${req.name || req.role}" completed (round ${req.round || '?'}).`,
+        `Task: ${(req.task || '').slice(0, 120)}`,
+      );
+    } catch (_) { /* skip */ }
+  }
+
+  return notifications.length ? notifications.join('\n') : null;
 }
 
 // ============================================================
@@ -2560,7 +3074,11 @@ const agentSessions = {};  // agentId → { sessionId, lastRound, resumeCount, f
  * Returns the full file content or null if unavailable.
  */
 function readHandoffContent(agentId) {
-  const handoffPath = join(HANDOFF_DIR, `${agentId}.md`);
+  // v21: Check worktree path first (agent may have updated handoff there)
+  const wt = agentWorktrees[agentId];
+  const wtPath = wt ? join(wt.path, 'orchestrator', 'handoffs', `${agentId}.md`) : null;
+  const mainPath = join(HANDOFF_DIR, `${agentId}.md`);
+  const handoffPath = (wtPath && existsSync(wtPath)) ? wtPath : mainPath;
   if (!existsSync(handoffPath)) return null;
   try {
     const content = readFileSync(handoffPath, 'utf-8');
@@ -3094,6 +3612,7 @@ function tryTransitionMission(reason) {
     handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
   }));
   missionDesignDoc = mission.designDoc;
+  missionWorkflow = mission.workflow || null;
 
   // Reset agent-specific tracking for the new team
   return true;
@@ -3105,6 +3624,7 @@ function tryTransitionMission(reason) {
 // Module-level variables set by loadMission, used by runAgent and report generation
 let missionDesignDoc = null;
 let missionConfigPath = null;
+let missionWorkflow = null;  // v21: Composable workflow definition from mission config
 
 async function main() {
   ensureDirs();
@@ -3119,6 +3639,7 @@ async function main() {
       handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
     }));
     missionDesignDoc = mission.designDoc;
+    missionWorkflow = mission.workflow || null;  // v21: Composable workflow
   }
 
   // Reset any backlog tasks stuck in "assigned" from a previous crash
@@ -3618,9 +4139,62 @@ async function main() {
     let balanceChangeAgent = null;
     const codeResults = [];
     const coordResults = [];
+    let worktreesActive = false;
+    let preMergeHead = null;
 
     // v17: Refresh task board at round start so all agents see latest state
     generateTaskBoard(round, lastTestStatus || 'pending', consecutiveTestFailures);
+
+    // v21: Workflow execution branch — if mission defines a workflow, use the workflow engine.
+    // Workflow engine manages its own worktree lifecycle, agent execution, and test boundaries.
+    // After workflow completes, skip the standard pool and jump to round tracking/cleanup.
+    if (missionWorkflow && activeAgents.length) {
+      const agentsStart = Date.now();
+      log(`\nWorkflow mode: ${missionWorkflow.type} (${activeAgents.length} agents available)`);
+
+      const workflowCtx = {
+        runAgent, runAgentPool, runTests, processResult: (result, r) => {
+          return processAgentResult(result, r, roundAgents, costLog, trackingCtx);
+        },
+        smartRevert: (r, results) => smartRevert(r, results),
+        createWorktree, mergeWorktree: mergeWorktreeBranch,
+        gitExec, getWorktree: (id) => agentWorktrees[id],
+        parseHandoffMeta,
+        log, allAgents: AGENTS, round,
+        maxConcurrency: getDynamicConcurrency(),
+        useWorktrees: !!CONFIG.useWorktrees,
+      };
+
+      const workflowResult = await executeWorkflow(missionWorkflow, workflowCtx);
+      roundTiming.agents = Date.now() - agentsStart;
+
+      testResult = workflowResult.testResult || null;
+      if (workflowResult.reverted) didRevert = true;
+
+      await cleanupAllWorktrees();
+
+      // Skip the standard pool block — jump to round tracking below
+    }
+
+    // --- Standard round-based execution (when no workflow is defined) ---
+    if (!missionWorkflow) {
+
+    // v21: Create worktrees for code agents (isolation for parallel editing)
+    if (CONFIG.useWorktrees && hasCodeAgents) {
+      const codeAgentsToWorktree = activeAgents.filter(a => codeAgentIds.has(a.id));
+      let worktreeCount = 0;
+      for (const agent of codeAgentsToWorktree) {
+        const ok = await createWorktree(agent.id, round);
+        if (ok) worktreeCount++;
+      }
+      if (worktreeCount > 0) {
+        worktreesActive = true;
+        preMergeHead = await getHeadSha();
+        log(`  Worktrees created: ${worktreeCount}/${codeAgentsToWorktree.length} code agents isolated (checkpoint: ${preMergeHead?.slice(0, 8)})`);
+      } else {
+        log(`  ⚠ Worktree creation failed for all agents — falling back to shared working tree`);
+      }
+    }
 
     // v17: Unified agent pool — all agents in one pool
     if (activeAgents.length) {
@@ -3673,6 +4247,49 @@ async function main() {
         handleModelEscalation(codeResults, round);
       }
 
+      // v21: Detect and run spawned agents (before merge — spawns get their own worktrees)
+      if (codeResults.length) {
+        const spawnedResults = await detectAndSpawnAgents(round, codeResults, costLog, trackingCtx);
+        if (spawnedResults.length) {
+          // Treat spawned agents as additional code results (they get merged too)
+          codeResults.push(...spawnedResults);
+          roundAgents.push(...spawnedResults.map(r => ({
+            id: r.agentId, status: r.code === 0 ? 'OK' : `ERROR(${r.code})`, elapsed: r.elapsed,
+          })));
+          const spawnedFiles = spawnedResults.flatMap(r => {
+            const meta = parseHandoffMeta(r.agentId);
+            return meta.filesModified || [];
+          });
+          roundModifiedFiles.push(...spawnedFiles);
+        }
+      }
+
+      // v21: Merge worktree branches into main before testing.
+      // Each code agent's branch is merged sequentially (priority order).
+      // Failed merges (conflicts) are skipped — the agent's changes are lost for this round.
+      const mergeResults = [];
+      if (worktreesActive && codeResults.length) {
+        log(`  Merging ${codeResults.length} worktree branch(es) into main...`);
+        for (const result of codeResults) {
+          if (!agentWorktrees[result.agentId]) continue;
+          // Stage the worktree changes (agents may have created untracked files)
+          await gitExec('git add -A', agentWorktrees[result.agentId].path);
+          await gitExec(
+            `git -C "${agentWorktrees[result.agentId].path}" commit -m "agent work: ${result.agentId} round ${round}" --allow-empty`,
+            agentWorktrees[result.agentId].path,
+          );
+          const mergeResult = await mergeWorktreeBranch(result.agentId);
+          mergeResults.push({ agentId: result.agentId, ...mergeResult });
+          if (!mergeResult.ok) {
+            log(`  ⚠ ${result.agentId}: merge ${mergeResult.conflicted ? 'CONFLICT' : 'FAILED'} — changes lost this round`);
+            invalidateAgentSession(result.agentId, `merge ${mergeResult.conflicted ? 'conflict' : 'failure'}`);
+          }
+        }
+        const merged = mergeResults.filter(m => m.ok).length;
+        const failed = mergeResults.filter(m => !m.ok).length;
+        log(`  Merge complete: ${merged} merged, ${failed} failed`);
+      }
+
       // Phase 2: Start tests + post-sims (overlapping with coord agents still in pool)
       let testAndSimPromise = Promise.resolve(null);
       if (hasCodeAgents) {
@@ -3707,10 +4324,17 @@ async function main() {
         testResult = testSimResult.testRes;
         const postSimOptimistic = testSimResult.postSimOpt;
 
-        // v8: Smart per-agent revert on test regression
+        // v8/v21: Smart per-agent revert on test regression
         if (!testResult.passed && lastTestStatus?.includes('PASSING')) {
-          log(`  ⚠ Tests regressed this round! Attempting smart per-agent revert...`);
-          const revertResult = await smartRevert(round, codeResults);
+          log(`  ⚠ Tests regressed this round! Attempting smart revert...`);
+          let revertResult;
+          if (worktreesActive && preMergeHead && mergeResults.length) {
+            // v21: Worktree-based revert — reset to pre-merge, re-merge selectively
+            revertResult = await smartRevertWorktrees(round, codeResults, preMergeHead, mergeResults);
+          } else {
+            // Legacy: file-level revert using git tags
+            revertResult = await smartRevert(round, codeResults);
+          }
           if (revertResult.reverted) {
             log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
             invalidateRevertedSessions(revertResult.revertedAgents);
@@ -3777,6 +4401,8 @@ async function main() {
         generateBalanceBacklog(round, postSimResults.results, regressionResult);
       }
     }
+
+    } // end if (!missionWorkflow) — standard round-based execution
 
     // v17: Compute overhead = total - agents - tests (sims are concurrent, subsumed)
     const roundTotal = Date.now() - roundTiming.roundStart;
@@ -3883,6 +4509,11 @@ async function main() {
       }
       resetAgentTracking();
       // Transitioned — continue to next mission's rounds
+    }
+
+    // --- v21: Worktree cleanup (remove worktrees + branches after merges/reverts) ---
+    if (worktreesActive) {
+      await cleanupAllWorktrees();
     }
 
     // --- v5: Smart git backup (skip when only orchestrator internals changed) ---

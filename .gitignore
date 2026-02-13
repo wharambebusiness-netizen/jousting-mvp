@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 nul
+
+# Orchestrator worktrees (v21 — git worktree isolation)
+orchestrator/.worktrees/
+
+# Orchestrator spawn requests (v21 — transient, archived after processing)
+orchestrator/spawns/

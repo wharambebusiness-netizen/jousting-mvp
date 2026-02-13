@@ -46,8 +46,9 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
-orchestrator/         Multi-agent development system (v20, general-purpose)
-  orchestrator.mjs    Main orchestration script (backlog system, continuous agents)
+orchestrator/         Multi-agent development system (v21, general-purpose)
+  orchestrator.mjs    Main orchestration script (backlog, worktrees, spawning)
+  workflow-engine.mjs Composable workflow patterns (sequential, parallel, fan-out-in, etc.)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
   missions/*.json     Mission configs (agent teams + file ownership)
   roles/*.md          15 role templates (professional agent briefs)
@@ -181,11 +182,28 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v20
+## Orchestrator v21
 
 **General-purpose multi-agent orchestrator** — works with any project. Auto-detects language, framework, and test runner. Pluggable quality gates and discoverable role registry.
 
-### New in v20
+### New in v21 (Phase 3: Scale — Worktree Isolation + Dynamic Spawning)
+- **Git worktree isolation**: Each code agent runs in its own worktree + branch (`agent-{id}-r{round}`), preventing cross-agent file conflicts during parallel execution
+- **Worktree lifecycle**: `createWorktree()` → agents work → `mergeWorktreeBranch()` → test → `cleanupAllWorktrees()`
+- **gitExec() helper**: Centralized git command execution (replaces repeated spawn patterns)
+- **smartRevertWorktrees()**: Merge-based revert — resets to pre-merge checkpoint, selectively re-merges good agents
+- **Worktree-aware handoff reads**: `parseHandoffMeta()` and `readHandoffContent()` check worktree path before main tree
+- **CONFIG.useWorktrees**: Feature flag (default: `true`). Set `false` in mission config for legacy shared-tree behavior
+- **Coord agents stay in main tree**: Only code agents (engine-dev, balance-analyst, qa-engineer, etc.) get worktrees
+- **Dynamic agent spawning**: Agents request helpers by writing JSON to `orchestrator/spawns/spawn-{id}-{uuid}.json`
+- **Spawn protocol**: `{ parentId, role, name, task, fileOwnership, model, maxBudgetUsd }` — helper runs once, merges, retires
+- **Spawn constraints**: Max 3/round, 1/agent, $2 budget cap, coordination roles blocked
+- **Spawn notifications**: Parent agents see child results in their next round prompt
+- **Composable workflows** (`workflow-engine.mjs`): Declarative workflow patterns replace fixed round-based execution
+- **5 workflow patterns**: sequential, parallel, fan-out-in, generator-critic, pipeline
+- **Mission config `workflow` field**: `{ "type": "sequential", "agents": ["a", "b"] }` — backward compatible (absent = legacy rounds)
+- **Test boundaries**: `stage` (test after each step) or `workflow` (test once at end, default)
+
+### v20 Features (retained)
 - **Project config generation**: `node orchestrator/project-detect.mjs --emit-config .` generates `project-config.json`
 - **Config-driven test pipeline**: Test commands, filter flags, source-to-test mappings loaded from config (legacy fallback preserved)
 - **Quality gate integration**: `runTests()` uses quality gate chain when available, falls back to direct spawn
@@ -220,6 +238,7 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 - Params: `-MaxHours 10 -Mission "orchestrator\missions\overnight.json"`
 
 ### Execution Model
+- **v21: Worktree isolation** — code agents get their own git worktree/branch; merged back after completion, before testing. Prevents parallel file conflicts. Coord agents stay in main tree.
 - **v17: Unified agent pool** — all agents (code + coordination) run in a single pool. Code and coord agents overlap, eliminating the Phase A→B barrier. Coord results discarded on revert.
 - **v18: Early test start** — tests begin as soon as code agents finish, overlapping with remaining coord agents (~1-2min savings/round)
 - **v18: All-done exit code (42)** — orchestrator exits with code 42 when all work complete; overnight runner detects this and stops gracefully
@@ -231,7 +250,8 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 - **v8: Multi-mission sequencing** — chain missions in order (e.g., balance → polish). See `missions/overnight-sequence.json`
 
 ### Resilience
-- Pre-round git tags, **v8: smart per-agent revert** on test regression (reverts only the failing agent's files, preserves other agents' work)
+- **v21: Worktree-based revert** — on test regression, resets to pre-merge checkpoint and selectively re-merges non-breaking agents
+- Pre-round git tags, **v8: smart per-agent revert** as legacy fallback (file-level checkout when worktrees disabled)
 - Crash counter with exponential backoff, pre-restart validation
 
 ### 15 Role Templates (`orchestrator/roles/`)
