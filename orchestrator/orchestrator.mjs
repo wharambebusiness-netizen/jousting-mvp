@@ -250,15 +250,22 @@ function saveBacklog(tasks) {
   writeFileSync(BACKLOG_FILE, JSON.stringify(tasks, null, 2));
 }
 
-function getNextTask(role) {
-  return getNextTasks(role, 1)[0] || null;
+function getNextTask(role, agentId = null) {
+  return getNextTasks(role, 1, agentId)[0] || null;
 }
 
-function getNextTasks(role, maxTasks = 1) {
+// v17: Match backlog task role against agent role OR agent id.
+// Producer agents sometimes write agent IDs (e.g., "balance-tuner") instead of role names
+// (e.g., "balance-analyst"). Matching both prevents tasks from stalling.
+function taskMatchesAgent(task, role, agentId) {
+  return task.role === role || (agentId && task.role === agentId);
+}
+
+function getNextTasks(role, maxTasks = 1, agentId = null) {
   const backlog = loadBacklog();
   const tasks = backlog
     .filter(t =>
-      t.status === 'pending' && t.role === role &&
+      t.status === 'pending' && taskMatchesAgent(t, role, agentId) &&
       (!t.dependsOn?.length || t.dependsOn.every(depId => {
         const dep = backlog.find(d => d.id === depId);
         // If dep not found in active backlog, treat as satisfied (already archived)
@@ -314,15 +321,15 @@ function completeSubtask(taskId, subtaskId) {
 
 // v15: Get highest-priority pending task priority for an agent's role (from cache).
 // Returns numeric priority (1=P1, 2=P2, ... 99=none). Used to sort agents for pool launch order.
-function getAgentTaskPriority(role, backlogCache) {
-  const pending = backlogCache.filter(t => t.status === 'pending' && t.role === role);
+function getAgentTaskPriority(role, backlogCache, agentId = null) {
+  const pending = backlogCache.filter(t => t.status === 'pending' && taskMatchesAgent(t, role, agentId));
   if (!pending.length) return 99;
   return Math.min(...pending.map(t => t.priority ?? 99));
 }
 
 // v15: Check if agent has a critical (P1) task waiting
-function agentHasCriticalTask(role, backlogCache) {
-  return backlogCache.some(t => t.status === 'pending' && t.role === role && (t.priority ?? 99) <= 1);
+function agentHasCriticalTask(role, backlogCache, agentId = null) {
+  return backlogCache.some(t => t.status === 'pending' && taskMatchesAgent(t, role, agentId) && (t.priority ?? 99) <= 1);
 }
 
 function resetStaleAssignments() {
@@ -924,7 +931,7 @@ function runAgent(agent, round) {
     // v5/v6: Inject batch backlog tasks if available
     // v12: Truncate descriptions to first sentence to reduce prompt bloat
     // v15: Subtask support — when a task has subtasks, assign only the next incomplete one
-    const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1);
+    const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1, agent.id);
     if (backlogTasks.length) {
       promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
       for (let i = 0; i < backlogTasks.length; i++) {
@@ -3138,7 +3145,7 @@ async function main() {
     for (const agent of AGENTS) {
       handoffCache[agent.id] = parseHandoffMeta(agent.id);
     }
-    const agentHasBacklogTask = (role) => backlogCache.some(t => t.status === 'pending' && t.role === role);
+    const agentHasBacklogTask = (role, agentId) => backlogCache.some(t => t.status === 'pending' && taskMatchesAgent(t, role, agentId));
 
     // v11: Producer overflow guard — skip producer when backlog already has enough pending tasks.
     // Prevents producer from flooding backlog faster than code agents can drain it.
@@ -3187,7 +3194,7 @@ async function main() {
         }
 
         // v5: Work-gated launching for continuous agents
-        const hasBacklogTask = agentHasBacklogTask(agent.role);
+        const hasBacklogTask = agentHasBacklogTask(agent.role, agent.id);
         const hasLeftoverWork = meta.status === 'in-progress';
         const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
         const minFreq = agent.minFrequencyRounds || Infinity;
@@ -3208,7 +3215,7 @@ async function main() {
 
       // v15: Critical task fast-path — agents with P1 tasks bypass all pre-flight checks.
       // This ensures regressions, test fixes, and other critical work is never delayed.
-      if (agentHasCriticalTask(agent.role, backlogCache)) {
+      if (agentHasCriticalTask(agent.role, backlogCache, agent.id)) {
         log(`  ${agent.id}: CRITICAL TASK (P1) — bypassing pre-flight checks`);
         const phase = meta.status === 'complete' ? 'stretch goals' : agent.type;
         thisRoundDecisions.push({
@@ -3222,7 +3229,7 @@ async function main() {
       // v8: Pre-flight check — skip agents that likely won't produce useful work
       // 1. Coordination agents with no new changes to react to
       if (COORD_AGENT_ROLES.has(agent.role) && round > 1) {
-        const hasBacklogTask = agentHasBacklogTask(agent.role);
+        const hasBacklogTask = agentHasBacklogTask(agent.role, agent.id);
         const roundsSinceLastRun = round - (lastRunRound[agent.id] || 0);
         const minFreq = agent.minFrequencyRounds || Infinity;
         const dueForPeriodicRun = roundsSinceLastRun >= minFreq;
@@ -3268,7 +3275,7 @@ async function main() {
 
       // 2. Agents with 2+ consecutive empty rounds AND no new backlog tasks
       if ((consecutiveEmptyRounds[agent.id] || 0) >= 2) {
-        if (!agentHasBacklogTask(agent.role)) {
+        if (!agentHasBacklogTask(agent.role, agent.id)) {
           log(`  ${agent.id}: PRE-FLIGHT SKIP (${consecutiveEmptyRounds[agent.id]} consecutive empty rounds, no new tasks)`);
           thisRoundDecisions.push({
             round, agentId: agent.id, decision: 'skipped',
@@ -3387,8 +3394,8 @@ async function main() {
     // v15: Priority-based scheduling — sort by task priority (P1 first)
     // Tie-break: code agents before coord (they take longer, should start first)
     activeAgents.sort((a, b) => {
-      const pA = getAgentTaskPriority(a.role, backlogCache);
-      const pB = getAgentTaskPriority(b.role, backlogCache);
+      const pA = getAgentTaskPriority(a.role, backlogCache, a.id);
+      const pB = getAgentTaskPriority(b.role, backlogCache, b.id);
       if (pA !== pB) return pA - pB;
       const aCode = CODE_AGENT_ROLES.has(a.role) ? 0 : 1;
       const bCode = CODE_AGENT_ROLES.has(b.role) ? 0 : 1;
@@ -3419,7 +3426,7 @@ async function main() {
       const agentsStart = Date.now();
       const priorities = activeAgents.map(a => {
         const tag = codeAgentIds.has(a.id) ? 'code' : 'coord';
-        return `${a.id}(P${getAgentTaskPriority(a.role, backlogCache)},${tag})`;
+        return `${a.id}(P${getAgentTaskPriority(a.role, backlogCache, a.id)},${tag})`;
       });
       log(`\nLaunching ${activeAgents.length} agent(s)... [${priorities.join(', ')}]`);
 

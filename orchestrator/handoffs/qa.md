@@ -1,7 +1,7 @@
 # QA Engineer — Handoff
 
 ## META
-- status: all-done
+- status: complete
 - files-modified: src/engine/gear-variants.test.ts, orchestrator/analysis/qa-round-6.md
 - tests-passing: true
 - test-count: 897

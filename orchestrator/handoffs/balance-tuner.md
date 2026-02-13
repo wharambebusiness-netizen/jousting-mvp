@@ -1,7 +1,7 @@
 # Balance Analyst — Handoff
 
 ## META
-- status: all-done
+- status: complete
 - files-modified: orchestrator/analysis/balance-tuner-round-7.md
 - tests-passing: true
 - test-count: 897
