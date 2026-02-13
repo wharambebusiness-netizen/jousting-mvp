@@ -1,7 +1,19 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v21
+// Multi-Agent Orchestrator v22
 // ============================================================
+// v22 additions (Phase 4 Ecosystem — modular architecture):
+// - SDK adapter: programmatic agent execution via @anthropic-ai/claude-agent-sdk (CLI fallback)
+// - Observability: structured logging (JSONL), metrics collector, event bus
+// - DAG scheduler: arbitrary dependency graphs beyond 5 fixed workflow patterns
+// - Plugin system: 6 plugin types (tool, gate, role, workflow, hook, transform), manifest-based
+// - Project scaffold: 7 templates (react-vite-ts, node-api-ts, next-ts, python-fastapi, python-flask, static-site, monorepo)
+// - CONFIG flags: useSDK, enableObservability, enablePlugins, enableDAG
+// - Observability events emitted at agent start/complete/error, round boundaries, test runs
+// - Metrics exported at process exit (orchestrator/metrics.json)
+// - Plugin hooks: pre-round, post-round, pre-agent, post-agent
+// - DAG execution as alternative to workflow engine (mission.dag config)
+//
 // v21 additions (Phase 3 Scale — worktree isolation + dynamic agent spawning):
 // - Git worktree isolation: each code agent runs in its own worktree/branch
 // - Zero cross-agent file conflicts during parallel execution
@@ -184,6 +196,11 @@ import { RoleRegistry } from './role-registry.mjs';
 import { QualityGateChain, createGateChainFromDetection } from './quality-gates.mjs';
 import { detectProject, generateProjectConfig } from './project-detect.mjs';
 import { executeWorkflow } from './workflow-engine.mjs';
+// v22: Ecosystem modules
+import { isSDKAvailable, getRunAgent, SDK_MODE, runAgentViaSDK, createAgentOptions, extractCostFromMessages } from './sdk-adapter.mjs';
+import { createObservability } from './observability.mjs';
+import { DAGScheduler, createDAGFromWorkflow, createDAGFromConfig } from './dag-scheduler.mjs';
+import { PluginManager } from './plugin-system.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -197,6 +214,12 @@ const TASK_BOARD = join(ORCH_DIR, 'task-board.md');
 
 // v20: Module-scope quality gate chain (populated in main(), used by runTests())
 let qualityGateChain = null;
+
+// v22: Module-scope observability (logger, metrics, events) — populated in main()
+let obs = null; // { logger, metrics, events }
+
+// v22: Module-scope plugin manager — populated in main()
+let pluginManager = null;
 
 // v21: Git worktree isolation — each code agent gets its own worktree/branch
 const WORKTREE_DIR = join(ORCH_DIR, '.worktrees');
@@ -259,6 +282,15 @@ const CONFIG = {
   // Prevents cross-agent file conflicts during parallel execution.
   // Set to false to disable (agents edit main working tree directly, legacy behavior).
   useWorktrees: true,
+  // v22: SDK adapter — use Agent SDK for programmatic agent execution when available.
+  // When true and SDK is installed, agents run via SDK instead of CLI spawn.
+  useSDK: false,
+  // v22: Observability — structured logging, metrics, event bus.
+  enableObservability: true,
+  // v22: Plugin system — discover and load plugins from orchestrator/plugins/.
+  enablePlugins: false,
+  // v22: DAG scheduler — allow mission configs to define arbitrary dependency DAGs.
+  enableDAG: true,
   // Balance sim config (enabled via mission balanceConfig or set here)
   // When null, no automated sims are run. Set to an object to enable.
   balanceConfig: null,
@@ -1187,6 +1219,8 @@ function runAgent(agent, round) {
     const estimatedTokens = Math.ceil(prompt.length / 4);
     const sessionMode = isResuming ? 'resume' : 'fresh';
     log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'}, session=${sessionMode})`);
+    // v22: Emit agent start event
+    if (obs) obs.events.emit('agent:start', { agentId: agent.id, round, model: agent.model || 'default', sessionMode, estimatedTokens });
     const startTime = Date.now();
 
     // v21: worktreeBase = worktree path (for code agents) or MVP_DIR (for coord agents / no worktree)
@@ -1284,6 +1318,12 @@ function runAgent(agent, round) {
       const elapsedMin = (elapsed / 60).toFixed(1);
       const status = timedOut ? 'TIMEOUT' : code === 0 ? 'OK' : `EXIT-${code}`;
       log(`  ${agent.id} finished: ${status} (${elapsedMin} min, session=${sessionMode})`);
+      // v22: Emit agent completion event + record metrics
+      if (obs) {
+        const eventName = (code === 0 && !timedOut) ? 'agent:complete' : 'agent:error';
+        obs.events.emit(eventName, { agentId: agent.id, round, status, elapsedMs: elapsed * 1000, sessionMode });
+        obs.metrics.recordAgentRun(agent.id, { elapsedMs: elapsed * 1000, model: agent.model || 'default', success: code === 0 && !timedOut, round });
+      }
 
       // v16: Update session tracking after agent completes
       if (code === 0 && !timedOut && agentSessions[agent.id]) {
@@ -3613,6 +3653,13 @@ function tryTransitionMission(reason) {
   }));
   missionDesignDoc = mission.designDoc;
   missionWorkflow = mission.workflow || null;
+  // v22: DAG config for mission transitions
+  if (CONFIG.enableDAG && mission.dag) {
+    try { missionDAG = createDAGFromConfig(mission); }
+    catch (_) { missionDAG = null; }
+  } else {
+    missionDAG = null;
+  }
 
   // Reset agent-specific tracking for the new team
   return true;
@@ -3625,6 +3672,7 @@ function tryTransitionMission(reason) {
 let missionDesignDoc = null;
 let missionConfigPath = null;
 let missionWorkflow = null;  // v21: Composable workflow definition from mission config
+let missionDAG = null;       // v22: DAG definition from mission config (alternative to workflow)
 
 async function main() {
   ensureDirs();
@@ -3640,6 +3688,17 @@ async function main() {
     }));
     missionDesignDoc = mission.designDoc;
     missionWorkflow = mission.workflow || null;  // v21: Composable workflow
+    // v22: DAG config (takes precedence over workflow if both defined)
+    if (CONFIG.enableDAG && mission.dag) {
+      try {
+        missionDAG = createDAGFromConfig(mission);
+        log(`DAG loaded: ${missionDAG.nodes.size} tasks, max concurrency ${missionDAG.maxConcurrency}`);
+        log(missionDAG.getExecutionPlan());
+      } catch (err) {
+        log(`DAG config invalid — falling back to workflow/standard: ${err.message}`);
+        missionDAG = null;
+      }
+    }
   }
 
   // Reset any backlog tasks stuck in "assigned" from a previous crash
@@ -3706,14 +3765,65 @@ async function main() {
     } catch (err) { log(`Quality gate setup failed: ${err.message}`); }
   }
 
+  // v22: Initialize observability (structured logging, metrics, events)
+  if (CONFIG.enableObservability) {
+    try {
+      obs = createObservability({
+        logDir: join(ORCH_DIR, 'logs'),
+        logLevel: 'info',
+        enableConsole: false, // Don't duplicate console output (orchestrator already logs)
+        enableFile: true,
+        metricsFile: join(ORCH_DIR, 'metrics.json'),
+      });
+      log(`Observability: structured logging + metrics enabled (logs → orchestrator/logs/)`);
+    } catch (err) { log(`Observability setup failed: ${err.message}`); }
+  }
+
+  // v22: Check SDK availability (non-blocking — falls back to CLI)
+  let sdkAvailable = false;
+  if (CONFIG.useSDK) {
+    try {
+      sdkAvailable = await isSDKAvailable();
+      log(`SDK adapter: ${sdkAvailable ? 'Agent SDK detected — will use programmatic execution' : 'SDK not installed — using CLI runner'}`);
+    } catch (err) { log(`SDK check failed: ${err.message}`); }
+  }
+
+  // v22: Initialize plugin system
+  if (CONFIG.enablePlugins) {
+    try {
+      pluginManager = new PluginManager({
+        pluginDir: join(ORCH_DIR, 'plugins'),
+        orchestratorCtx: { log, events: obs?.events, config: CONFIG },
+        log,
+      });
+      const discovered = pluginManager.discover();
+      if (discovered.length > 0) {
+        const loadResult = await pluginManager.loadAll();
+        log(`Plugins: ${loadResult.loaded} loaded, ${loadResult.failed} failed (${discovered.length} discovered)`);
+        if (loadResult.errors.length > 0) {
+          for (const err of loadResult.errors) log(`  Plugin error: ${err}`);
+        }
+      } else {
+        log(`Plugins: no plugins found in orchestrator/plugins/`);
+      }
+    } catch (err) { log(`Plugin system setup failed: ${err.message}`); }
+  }
+
   log('');
   log('='.repeat(60));
-  log('  MULTI-AGENT ORCHESTRATOR v20');
+  log('  MULTI-AGENT ORCHESTRATOR v22');
   log('='.repeat(60));
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
   log(`Config: ${CONFIG.maxRounds} max rounds, ${CONFIG.agentTimeoutMs / 60000}min/agent, ${CONFIG.maxRuntimeMs / 3600000}hr max runtime`);
   log(`Circuit breaker: stop after ${CONFIG.circuitBreakerThreshold} consecutive test failures`);
+  const features = [];
+  if (sdkAvailable) features.push('SDK');
+  if (obs) features.push('Observability');
+  if (pluginManager?.plugins.size > 0) features.push(`Plugins(${pluginManager.plugins.size})`);
+  if (CONFIG.enableDAG) features.push('DAG');
+  if (CONFIG.useWorktrees) features.push('Worktrees');
+  if (features.length) log(`Features: ${features.join(', ')}`);
   log('');
 
   let consecutiveTestFailures = 0;
@@ -3846,6 +3956,13 @@ async function main() {
     log(`\n${'━'.repeat(50)}`);
     log(`  ROUND ${round} of ${CONFIG.maxRounds}  (${remainingHrs}hr remaining)`);
     log(`${'━'.repeat(50)}`);
+
+    // v22: Emit round start event + execute plugin pre-round hooks
+    if (obs) obs.events.emit('round:start', { round, remainingHrs: parseFloat(remainingHrs) });
+    if (pluginManager) {
+      try { await pluginManager.executeHook('pre-round', { round }); }
+      catch (_) { /* non-fatal */ }
+    }
 
     // --- v7: Pre-round git tag ---
     await tagRoundStart(round);
@@ -4145,10 +4262,41 @@ async function main() {
     // v17: Refresh task board at round start so all agents see latest state
     generateTaskBoard(round, lastTestStatus || 'pending', consecutiveTestFailures);
 
+    // v22: DAG execution branch — if mission defines a dag section, use the DAG scheduler.
+    // DAG scheduler handles arbitrary dependency graphs with bounded concurrency.
+    // Takes precedence over workflow engine when both are defined.
+    let usedDAG = false;
+    if (missionDAG && activeAgents.length) {
+      const agentsStart = Date.now();
+      log(`\nDAG mode: ${missionDAG.nodes.size} tasks, max concurrency ${missionDAG.maxConcurrency}`);
+      missionDAG.reset();
+
+      const dagResult = await missionDAG.execute(async (node) => {
+        const agent = AGENTS.find(a => a.id === node.agentId);
+        if (!agent) throw new Error(`Agent "${node.agentId}" not found for DAG node "${node.id}"`);
+        const result = await runAgent(agent, round);
+        processAgentResult(result, round, roundAgents, costLog, trackingCtx);
+        if (result.code !== 0 && !result.timedOut) throw new Error(`Agent ${node.agentId} failed`);
+        return result;
+      });
+
+      roundTiming.agents = Date.now() - agentsStart;
+      const progress = missionDAG.getProgress();
+      log(`  DAG complete: ${progress.completed} done, ${progress.failed} failed, ${progress.skipped} skipped`);
+
+      if (progress.failed === 0) {
+        const testStart = Date.now();
+        testResult = await runTests();
+        roundTiming.tests = Date.now() - testStart;
+      }
+
+      usedDAG = true;
+    }
+
     // v21: Workflow execution branch — if mission defines a workflow, use the workflow engine.
     // Workflow engine manages its own worktree lifecycle, agent execution, and test boundaries.
     // After workflow completes, skip the standard pool and jump to round tracking/cleanup.
-    if (missionWorkflow && activeAgents.length) {
+    if (!usedDAG && missionWorkflow && activeAgents.length) {
       const agentsStart = Date.now();
       log(`\nWorkflow mode: ${missionWorkflow.type} (${activeAgents.length} agents available)`);
 
@@ -4176,8 +4324,8 @@ async function main() {
       // Skip the standard pool block — jump to round tracking below
     }
 
-    // --- Standard round-based execution (when no workflow is defined) ---
-    if (!missionWorkflow) {
+    // --- Standard round-based execution (when no workflow or DAG is defined) ---
+    if (!missionWorkflow && !usedDAG) {
 
     // v21: Create worktrees for code agents (isolation for parallel editing)
     if (CONFIG.useWorktrees && hasCodeAgents) {
@@ -4402,7 +4550,7 @@ async function main() {
       }
     }
 
-    } // end if (!missionWorkflow) — standard round-based execution
+    } // end if (!missionWorkflow && !usedDAG) — standard round-based execution
 
     // v17: Compute overhead = total - agents - tests (sims are concurrent, subsumed)
     const roundTotal = Date.now() - roundTiming.roundStart;
@@ -4414,6 +4562,11 @@ async function main() {
       log('  Skipping tests (no code-modifying agents ran this round)');
     }
     if (testResult) {
+      // v22: Emit test completion event
+      if (obs) {
+        obs.events.emit('test:complete', { round, passed: testResult.passed, count: testResult.count, failCount: testResult.failCount || 0 });
+        obs.metrics.recordTestRun({ passed: testResult.passed, testsRun: testResult.count, testsFailed: testResult.failCount || 0, round });
+      }
       if (testResult.passed) {
         consecutiveTestFailures = 0;
         lastTestStatus = `PASSING (${testResult.count} tests)`;
@@ -4471,6 +4624,16 @@ async function main() {
 
     // Log round quality summary
     log(`  Round quality: ${roundSuccessful} OK, ${roundFailed} failed, ${roundFilesModified} files, ${utilization}% utilization`);
+
+    // v22: Record round metrics + emit round complete event + plugin post-round hook
+    if (obs) {
+      obs.metrics.recordRound({ round, agentsRun: agentsActive, agentsFailed: roundFailed, testsPassed: testResult?.passed ?? null, elapsedMs: Date.now() - roundTiming.roundStart, cost: roundCost });
+      obs.events.emit('round:complete', { round, agentsRun: agentsActive, testsPassed: testResult?.passed ?? null, elapsedMs: Date.now() - roundTiming.roundStart });
+    }
+    if (pluginManager) {
+      try { await pluginManager.executeHook('post-round', { round, testsPassed: testResult?.passed ?? null }); }
+      catch (_) { /* non-fatal */ }
+    }
 
     roundLog.push({
       round,
@@ -4702,6 +4865,18 @@ async function main() {
     log(`WARNING: Could not write round-decisions.json: ${err.message}`);
   }
 
+  // v22: Export observability metrics + unload plugins
+  if (obs) {
+    try {
+      obs.metrics.exportMetrics(join(ORCH_DIR, 'metrics.json'));
+      log(`Observability metrics exported to: orchestrator/metrics.json`);
+    } catch (err) { log(`Metrics export failed: ${err.message}`); }
+  }
+  if (pluginManager) {
+    try { await pluginManager.unloadAll(); }
+    catch (_) { /* best-effort */ }
+  }
+
   // ============================================================
   // Generate Overnight Report
   // ============================================================
@@ -4785,7 +4960,7 @@ function generateOvernightReport(globalStart, roundLog, stopReason, finalTests, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v20
+> Orchestrator: v22
 
 ## Summary
 - **Started**: ${startTime}

@@ -24,6 +24,8 @@ npm run deploy                              # Deploy to gh-pages (currently disa
 node orchestrator/project-detect.mjs --emit-config .           # Generate project-config.json
 node orchestrator/orchestrator.mjs                              # Launch orchestrator (default agents)
 node orchestrator/orchestrator.mjs orchestrator/missions/X.json  # Launch with mission config
+node orchestrator/project-scaffold.mjs --list                   # List project templates (v22)
+node orchestrator/project-scaffold.mjs --template react-vite-ts --name my-app  # Scaffold new project (v22)
 powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1  # Overnight runner (restart loop)
 ```
 
@@ -46,11 +48,16 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking, reasoning
 src/tools/            simulate.ts CLI balance testing tool, param-search.ts parameter optimization
 
-orchestrator/         Multi-agent development system (v21, general-purpose)
-  orchestrator.mjs    Main orchestration script (backlog, worktrees, spawning)
+orchestrator/         Multi-agent development system (v22, general-purpose)
+  orchestrator.mjs    Main orchestration script (5213 lines — backlog, worktrees, spawning, SDK, observability, DAG, plugins)
   workflow-engine.mjs Composable workflow patterns (sequential, parallel, fan-out-in, etc.)
+  sdk-adapter.mjs     Agent SDK adapter — programmatic execution with CLI fallback (v22)
+  observability.mjs   Structured logging (JSONL), metrics collector, event bus (v22)
+  dag-scheduler.mjs   DAG task scheduler — arbitrary dependency graphs (v22)
+  project-scaffold.mjs 7 project templates with auto-configured orchestrator (v22)
+  plugin-system.mjs   6 plugin types (tool, gate, role, workflow, hook, transform) (v22)
   backlog.json        Dynamic task queue (producer writes, orchestrator injects into agents)
-  missions/*.json     Mission configs (agent teams + file ownership)
+  missions/*.json     Mission configs (agent teams + file ownership + dag)
   roles/*.md          15 role templates (professional agent briefs)
   search-configs/*.json  Parameter search configurations
   handoffs/*.md       Agent state files (structured META sections)
@@ -182,11 +189,21 @@ duelist:      60   60   60    60   60  = 300   Balanced generalist
 
 **ALL VARIANTS ZERO FLAGS** (S52). Variant choice = 3+ rarity tiers of impact (NOT cosmetic). Matchup-level swings: ±10-15pp.
 
-## Orchestrator v21
+## Orchestrator v22
 
-**General-purpose multi-agent orchestrator** — works with any project. Auto-detects language, framework, and test runner. Pluggable quality gates and discoverable role registry.
+**General-purpose multi-agent orchestrator** — works with any project. Auto-detects language, framework, and test runner. Pluggable quality gates, discoverable role registry, SDK adapter, observability, DAG scheduler, plugin system, project scaffolding.
 
-### New in v21 (Phase 3: Scale — Worktree Isolation + Dynamic Spawning)
+### New in v22 (Phase 4: Ecosystem — Modular Architecture)
+- **SDK adapter** (`sdk-adapter.mjs`): Programmatic agent execution via `@anthropic-ai/claude-agent-sdk`. Graceful CLI fallback when SDK not installed. `CONFIG.useSDK` flag.
+- **Observability** (`observability.mjs`): Structured JSONL logging, `MetricsCollector` (agent/test/round/workflow stats), `EventBus` with standard events. Metrics auto-exported to `orchestrator/metrics.json`.
+- **DAG scheduler** (`dag-scheduler.mjs`): Arbitrary dependency graphs via `DAGScheduler` class. Kahn's algorithm cycle detection, bounded concurrency, critical path analysis, ASCII execution plan visualization. Mission configs can define `dag` section as alternative to `workflow`.
+- **Plugin system** (`plugin-system.mjs`): 6 plugin types (tool, gate, role, workflow, hook, transform). Manifest-based discovery from `orchestrator/plugins/`. `PluginManager` with lifecycle (discover → load → activate → deactivate). Hook execution at pre-round/post-round boundaries.
+- **Project scaffold** (`project-scaffold.mjs`): 7 templates (react-vite-ts, node-api-ts, next-ts, python-fastapi, python-flask, static-site, monorepo). CLI and programmatic API. Auto-generates CLAUDE.md, mission config, project-config.json.
+- **CONFIG flags**: `useSDK`, `enableObservability`, `enablePlugins`, `enableDAG` — all feature-gated with graceful fallback
+- **Observability events**: agent:start/complete/error, round:start/complete, test:complete — wired into metrics recording
+- **v22 total**: 7544 lines across 7 modules (orchestrator 5213 + workflow-engine 315 + sdk-adapter 288 + observability 294 + dag-scheduler 418 + project-scaffold 545 + plugin-system 471)
+
+### v21 Features (retained — Worktree Isolation + Dynamic Spawning)
 - **Git worktree isolation**: Each code agent runs in its own worktree + branch (`agent-{id}-r{round}`), preventing cross-agent file conflicts during parallel execution
 - **Worktree lifecycle**: `createWorktree()` → agents work → `mergeWorktreeBranch()` → test → `cleanupAllWorktrees()`
 - **gitExec() helper**: Centralized git command execution (replaces repeated spawn patterns)
