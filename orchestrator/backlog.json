@@ -45,9 +45,10 @@
     "title": "Post-MVP Design Spec: Archetype Feel & Identity",
     "description": "Design specs for deepening archetype identity in Phase 2. For each archetype: define identity statement (what makes it special), identify 2-3 signature strategies (Charger unseats early, Bulwark turtles, etc.), propose teaching approach for each. Optional: propose new mechanics that reinforce identity (no balance impact). Acceptance: 6 archetype specs with identity+strategies+teaching, no balance changes proposed, document in orchestrator/analysis/bl-082-archetype-identity.md, ready for Phase 2 implementation.",
     "fileOwnership": [],
-    "status": "pending",
+    "status": "completed",
     "dependsOn": [],
-    "estimate": "3-4 hours"
+    "estimate": "3-4 hours",
+    "completedAt": "2026-02-13T00:47:03.802Z"
   },
   {
     "id": "BL-083",
