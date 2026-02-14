@@ -7,11 +7,11 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 908 tests, 8 suites
+npm test                                           # 908 tests, 8 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
-node orchestrator/orchestrator.mjs                 # Launch orchestrator
+node orchestrator/orchestrator.mjs                 # Launch orchestrator (v24)
 node orchestrator/orchestrator.mjs missions/X.json # Launch with mission config
 ```
 
@@ -34,8 +34,8 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking
 src/tools/            simulate.ts (balance testing), param-search.ts (parameter optimization)
 
-orchestrator/         Multi-agent system (v23, 15 modules)
-  orchestrator.mjs    Main orchestrator (2718 lines)
+orchestrator/         Multi-agent system (v24, 19 modules)
+  orchestrator.mjs    Main orchestrator (2346 lines)
   balance-analyzer.mjs Balance sims, experiments, regression detection
   git-ops.mjs         Git backup, tagging, worktree isolation, smart revert
   reporter.mjs        Overnight report generation
@@ -50,6 +50,10 @@ orchestrator/         Multi-agent system (v23, 15 modules)
   dag-scheduler.mjs   DAG task scheduler
   project-scaffold.mjs Project templates (7 types)
   plugin-system.mjs   Plugin architecture (6 types)
+  agent-tracking.mjs  Runtime history, effectiveness, session continuity
+  mission-sequencer.mjs Multi-mission sequence support
+  progress-dashboard.mjs Live agent status display
+  agent-pool.mjs      Queue-drain concurrent agent pool
   roles/              15 role templates
   missions/           Mission configs
 ```

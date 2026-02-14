@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v23 (modular)
+// Multi-Agent Orchestrator v24 (modular)
 // ============================================================
 // See docs/orchestrator.md for architecture.
 // Extracted modules (S63): balance-analyzer, git-ops, reporter
 // Extracted modules (S65): backlog-system, cost-tracker, test-filter, handoff-parser, spawn-system
+// Extracted modules (S66): agent-tracking, mission-sequencer, progress-dashboard, agent-pool
 
 
 import { spawn, execSync } from 'child_process';
@@ -33,6 +34,11 @@ import { MODEL_PRICING, parseCostFromStderr, estimateCostFromTokens, ensureCostL
 import { initTestFilter, setProjectConfig as setTestFilterProjectConfig, getTestFilter, getTestFilterFlag, getSourceToTests, getAiSourcePattern, getAiTestFile, getFullSuiteTriggers } from './test-filter.mjs';
 import { initHandoffParser, parseHandoffMeta, validateFileOwnership, validateAgentOutput } from './handoff-parser.mjs';
 import { initSpawnSystem, SPAWN_CONSTRAINTS, detectSpawnRequests, validateSpawnRequest, archiveSpawnRequest, detectAndSpawnAgents, getSpawnNotifications } from './spawn-system.mjs';
+// Extracted modules (S66)
+import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessions, recordAgentRuntime, getAdaptiveTimeout, recordAgentEffectiveness, getDynamicConcurrency, readHandoffContent, getChangelogSinceRound, invalidateAgentSession, invalidateStaleSessions } from './agent-tracking.mjs';
+import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission } from './mission-sequencer.mjs';
+import { ProgressDashboard } from './progress-dashboard.mjs';
+import { initAgentPool, runAgentPool } from './agent-pool.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -138,20 +144,8 @@ const CONFIG = {
   // }
 };
 
-// v8 bugfix: Snapshot CONFIG defaults so we can restore between sub-missions.
-// Object.assign(CONFIG, mission.config) is additive — without this, mission 1's
-// config properties would leak into mission 2 if not explicitly overridden.
+// v8 bugfix: Snapshot CONFIG defaults for mission-sequencer module
 const CONFIG_DEFAULTS = { ...CONFIG };
-
-/**
- * Reset CONFIG to defaults, then apply overrides.
- * Used when transitioning between sub-missions in a sequence.
- */
-function resetConfigToDefaults() {
-  for (const key of Object.keys(CONFIG)) {
-    CONFIG[key] = CONFIG_DEFAULTS[key];
-  }
-}
 
 // ============================================================
 // Project Config (v20 — auto-detect or load from file)
@@ -915,303 +909,9 @@ function rotateAnalysisFiles(keepRounds = 5) {
 
 // Cost Tracking — managed by cost-tracker.mjs
 
-// ============================================================
-// Adaptive Timeouts (v10 — track per-agent runtime history)
-// ============================================================
-// Tracks the last N runtimes per agent (in seconds). Used to compute
-// a timeout of max(2 * avg, configTimeout * 0.25, 120000ms).
-// Capped at agent.timeoutMs. Falls back to configured timeout on first run.
-const RUNTIME_HISTORY_SIZE = 5;
-const agentRuntimeHistory = {};  // agentId → number[] (elapsed seconds, last N runs)
-
-function recordAgentRuntime(agentId, elapsedSeconds) {
-  if (!agentRuntimeHistory[agentId]) agentRuntimeHistory[agentId] = [];
-  agentRuntimeHistory[agentId].push(elapsedSeconds);
-  if (agentRuntimeHistory[agentId].length > RUNTIME_HISTORY_SIZE) {
-    agentRuntimeHistory[agentId].shift();
-  }
-}
-
-function getAdaptiveTimeout(agent) {
-  const configTimeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
-  const history = agentRuntimeHistory[agent.id];
-  if (!history || history.length === 0) return configTimeout; // first run — use configured
-
-  const avgSeconds = history.reduce((a, b) => a + b, 0) / history.length;
-  const avgMs = avgSeconds * 1000;
-  const adaptedMs = Math.max(2 * avgMs, configTimeout * 0.25, 120000);
-  return Math.min(adaptedMs, configTimeout); // never exceed configured max
-}
-
-// ============================================================
-// Agent Effectiveness Tracking (v14 — per-agent productivity metrics)
-// ============================================================
-// Tracks cumulative per-agent metrics across rounds for the overnight report.
-// Updated from processAgentResult() after each agent completes.
-const agentEffectiveness = {};  // agentId → { tasksCompleted, totalFiles, totalTokens, totalCost, totalSeconds, rounds }
-
-function recordAgentEffectiveness(agentId, { filesModified, costEntry, elapsedSeconds, isEmptyWork }) {
-  if (!agentEffectiveness[agentId]) {
-    agentEffectiveness[agentId] = { tasksCompleted: 0, totalFiles: 0, totalTokens: 0, totalCost: 0, totalSeconds: 0, rounds: 0 };
-  }
-  const eff = agentEffectiveness[agentId];
-  eff.rounds++;
-  eff.totalSeconds += elapsedSeconds || 0;
-  eff.totalFiles += (filesModified?.length || 0);
-  if (costEntry) {
-    eff.totalTokens += (costEntry.inputTokens || 0) + (costEntry.outputTokens || 0);
-    eff.totalCost += costEntry.totalCost || 0;
-  }
-  if (!isEmptyWork && filesModified?.length > 0) {
-    eff.tasksCompleted++;
-  }
-}
-
-// v14: Dynamic concurrency — adjust pool size based on agent speed mix
-function getDynamicConcurrency() {
-  const configured = CONFIG.maxConcurrency;
-  if (!configured || configured <= 0) return 0; // unlimited
-
-  const histories = Object.values(agentRuntimeHistory);
-  if (histories.length < 2) return configured; // not enough data yet
-
-  const allAvgs = histories.map(h => h.reduce((a, b) => a + b, 0) / h.length);
-  const fastest = Math.min(...allAvgs);
-  const slowest = Math.max(...allAvgs);
-
-  // If slowest agent is 3x+ slower than fastest, increase concurrency by 1
-  // so fast agents aren't bottlenecked waiting for slow ones in the pool
-  if (slowest > fastest * 3 && fastest > 0) {
-    const bumped = Math.min(configured + 1, AGENTS.length);
-    if (bumped > configured) {
-      log(`  Dynamic concurrency: ${configured} → ${bumped} (speed ratio ${(slowest/fastest).toFixed(1)}x)`);
-    }
-    return bumped;
-  }
-  return configured;
-}
-
-// ============================================================
-// Agent Session Continuity (v16 — persist sessions across rounds)
-// ============================================================
-// Tracks Claude CLI session IDs per agent so subsequent rounds can --resume
-// the conversation instead of starting fresh. Returning agents keep their full
-// context from prior rounds (file reads, codebase understanding, decisions)
-// and receive a compact delta prompt instead of the full initial prompt.
-const agentSessions = {};  // agentId → { sessionId, lastRound, resumeCount, freshCount, invalidations }
-
-/**
- * Read an agent's handoff file content for inline injection into prompts.
- * Returns the full file content or null if unavailable.
- */
-function readHandoffContent(agentId) {
-  // v21: Check worktree path first (agent may have updated handoff there)
-  const wt = agentWorktrees[agentId];
-  const wtPath = wt ? join(wt.path, 'orchestrator', 'handoffs', `${agentId}.md`) : null;
-  const mainPath = join(HANDOFF_DIR, `${agentId}.md`);
-  const handoffPath = (wtPath && existsSync(wtPath)) ? wtPath : mainPath;
-  if (!existsSync(handoffPath)) return null;
-  try {
-    const content = readFileSync(handoffPath, 'utf-8');
-    return content.trim() || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
- * Extract session changelog entries since a given round.
- * Parses the changelog file looking for "## Round N" headers and returns
- * only entries from rounds > sinceRound.
- */
-function getChangelogSinceRound(sinceRound) {
-  if (!existsSync(CHANGELOG_FILE)) return null;
-  try {
-    const content = readFileSync(CHANGELOG_FILE, 'utf-8');
-    const lines = content.split('\n');
-    const relevantLines = [];
-    let capturing = false;
-    for (const line of lines) {
-      const roundMatch = line.match(/^## Round (\d+)/);
-      if (roundMatch) {
-        capturing = parseInt(roundMatch[1]) > sinceRound;
-      }
-      if (capturing) {
-        relevantLines.push(line);
-      }
-    }
-    return relevantLines.length > 0 ? relevantLines.join('\n').trim() : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
- * Invalidate an agent's session (e.g., after revert or mission transition).
- * The agent will start a fresh session on its next run.
- */
-function invalidateAgentSession(agentId, reason) {
-  if (agentSessions[agentId]) {
-    agentSessions[agentId].invalidations = (agentSessions[agentId].invalidations || 0) + 1;
-    log(`  Session invalidated for ${agentId} (${reason})`);
-    delete agentSessions[agentId];
-  }
-}
-
-/**
- * v17: Invalidate stale sessions — agents that haven't been productive for too long
- * get a fresh session to avoid accumulated context drift.
- * @param {number} round - Current round
- * @param {Object} consecutiveEmptyRounds - Map of agentId → consecutive empty round count
- */
-function invalidateStaleSessions(round, consecutiveEmptyRounds) {
-  const STALE_EMPTY_THRESHOLD = 5;  // Invalidate after 5 consecutive empty rounds
-  const STALE_AGE_THRESHOLD = 10;   // Invalidate if session is 10+ rounds old without productive run
-
-  for (const [agentId, session] of Object.entries(agentSessions)) {
-    // Check consecutive empty rounds
-    if ((consecutiveEmptyRounds[agentId] || 0) >= STALE_EMPTY_THRESHOLD) {
-      invalidateAgentSession(agentId, `stale: ${consecutiveEmptyRounds[agentId]} consecutive empty rounds`);
-      continue;
-    }
-    // Check session age vs productivity
-    const sessionAge = round - (session.lastRound || 0);
-    if (sessionAge >= STALE_AGE_THRESHOLD) {
-      invalidateAgentSession(agentId, `stale: session ${sessionAge} rounds old (last active round ${session.lastRound})`);
-    }
-  }
-}
-
-// ============================================================
-// Live Progress Dashboard (v15 — real-time agent status)
-// ============================================================
-// Shows running/queued/done/failed status for each agent with elapsed time.
-// Updates in-place using ANSI cursor control. Falls back to simple logging
-// when output is not a TTY (e.g., piped to file).
-class ProgressDashboard {
-  constructor(agents, phase) {
-    this.agents = agents.map(a => ({
-      id: a.id, status: 'queued', elapsed: 0, startTime: null, task: null
-    }));
-    this.phase = phase || 'Agents';
-    this.isTTY = process.stdout.isTTY || false;
-    this.lineCount = 0;
-    this.interval = null;
-    this.stopped = false;
-  }
-
-  start() {
-    if (!this.isTTY || this.agents.length === 0) return;
-    this.render();
-    // Refresh elapsed times every 5 seconds
-    this.interval = setInterval(() => {
-      if (!this.stopped) this.render();
-    }, 5000);
-  }
-
-  updateAgent(agentId, status, extra) {
-    const agent = this.agents.find(a => a.id === agentId);
-    if (!agent) return;
-    agent.status = status;
-    if (status === 'running' && !agent.startTime) {
-      agent.startTime = Date.now();
-    }
-    if (extra?.elapsed) agent.elapsed = extra.elapsed;
-    if (extra?.task) agent.task = extra.task;
-    if (this.isTTY && !this.stopped) this.render();
-  }
-
-  render() {
-    // Clear previous output
-    if (this.lineCount > 0) {
-      process.stdout.write(`\x1b[${this.lineCount}A\x1b[J`);
-    }
-    const lines = [];
-    lines.push(`  ┌─ ${this.phase} Dashboard ─────────────────────────────┐`);
-    for (const agent of this.agents) {
-      const elapsed = agent.status === 'running' && agent.startTime
-        ? ((Date.now() - agent.startTime) / 60000).toFixed(1)
-        : agent.elapsed ? (agent.elapsed / 60).toFixed(1) : '0.0';
-      const icon = agent.status === 'running' ? '▶' :
-                   agent.status === 'done' ? '✓' :
-                   agent.status === 'failed' ? '✗' :
-                   agent.status === 'timeout' ? '⏱' : '·';
-      const statusStr = agent.status.toUpperCase().padEnd(7);
-      const taskStr = agent.task ? ` [${agent.task}]` : '';
-      lines.push(`  │ ${icon} ${agent.id.padEnd(20)} ${statusStr} ${elapsed}min${taskStr}`);
-    }
-    lines.push(`  └───────────────────────────────────────────────────┘`);
-    process.stdout.write(lines.join('\n') + '\n');
-    this.lineCount = lines.length;
-  }
-
-  stop() {
-    this.stopped = true;
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
-    // Final render to show completed state
-    if (this.isTTY) this.render();
-  }
-}
-
-// ============================================================
-// Agent Pool (v9 — streaming pipeline, replaces batch concurrency)
-// ============================================================
-// Queue-drain pool: launches up to maxConcurrency agents. As each finishes,
-// fires onAgentComplete callback immediately and launches the next queued agent.
-// Results are in completion order (not submission order).
-// v15: accepts optional dashboard for live progress updates.
-async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard, opts = {}) {
-  if (!agents.length) return { allDone: Promise.resolve(), groupDone: Promise.resolve(), results: Promise.resolve([]) };
-  const limit = (!maxConcurrency || maxConcurrency >= agents.length)
-    ? agents.length : maxConcurrency;
-
-  // v18: Group completion tracking — fires when all agents in groupIds have finished
-  const groupIds = opts.groupIds;  // Set<string> of agent IDs
-  let groupRemaining = groupIds ? agents.filter(a => groupIds.has(a.id)).length : 0;
-  let resolveGroup;
-  const groupDone = groupIds && groupRemaining > 0
-    ? new Promise(r => { resolveGroup = r; })
-    : Promise.resolve();
-
-  const results = [];
-  const queue = [...agents];
-  let active = 0;
-  let resolveAll;
-  const allDone = new Promise(r => { resolveAll = r; });
-
-  function tryLaunch() {
-    while (active < limit && queue.length > 0) {
-      const agent = queue.shift();
-      active++;
-      // v15: Notify dashboard of agent launch
-      if (dashboard) dashboard.updateAgent(agent.id, 'running');
-      runAgent(agent, round).then(result => {
-        active--;
-        results.push(result);
-        // v15: Notify dashboard of agent completion
-        if (dashboard) {
-          const dStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'done' : 'failed';
-          dashboard.updateAgent(result.agentId, dStatus, { elapsed: result.elapsed });
-        }
-        if (onAgentComplete) onAgentComplete(result);
-        // v18: Check group completion
-        if (groupIds && groupIds.has(result.agentId)) {
-          groupRemaining--;
-          if (groupRemaining === 0 && resolveGroup) resolveGroup();
-        }
-        if (active === 0 && queue.length === 0) resolveAll();
-        else tryLaunch();
-      });
-    }
-    if (active === 0 && queue.length === 0) resolveAll();
-  }
-
-  tryLaunch();
-  return { allDone, groupDone, results: allDone.then(() => results) };
-}
+// Agent Tracking — managed by agent-tracking.mjs
+// Progress Dashboard — managed by progress-dashboard.mjs
+// Agent Pool — managed by agent-pool.mjs
 
 // ============================================================
 // Process Agent Result (v9 — extracted from Phase A/B duplicated blocks)
@@ -1355,111 +1055,30 @@ async function runTests(testFilter = null) {
   });
 }
 
-// ============================================================
-// Mission Sequence Support (v8)
-// ============================================================
-// A sequence mission chains multiple sub-missions in order.
-// Format: { "type": "sequence", "missions": [{ "path": "...", "maxRounds": N }, ...] }
-// When a sub-mission completes (agents retired, rounds exhausted, convergence),
-// the orchestrator loads the next sub-mission and continues.
-
-let missionSequence = null;     // Array of { path, maxRounds } or null
-let currentMissionIndex = 0;    // Index into missionSequence
-let currentMissionRoundsUsed = 0; // Rounds consumed by current sub-mission
-let currentMissionMaxRounds = Infinity; // Round budget for current sub-mission
+// Mission Sequence — managed by mission-sequencer.mjs
 
 /**
- * Load a mission, detecting sequence missions and expanding them.
- * Returns the first (or only) mission's data.
- */
-function loadMissionOrSequence(missionPath) {
-  const absPath = resolve(missionPath);
-  if (!existsSync(absPath)) {
-    console.error(`Mission file not found: ${absPath}`);
-    process.exit(1);
-  }
-
-  const raw = JSON.parse(readFileSync(absPath, 'utf-8'));
-
-  if (raw.type === 'sequence') {
-    log(`Detected mission sequence: ${raw.name} (${raw.missions.length} sub-missions)`);
-
-    // Apply top-level config (global overrides like maxRuntimeMs)
-    if (raw.config) {
-      Object.assign(CONFIG, raw.config);
-      log(`  Sequence config: ${JSON.stringify(raw.config)}`);
-    }
-
-    missionSequence = raw.missions;
-    currentMissionIndex = 0;
-
-    // Load the first sub-mission
-    return loadSubMission(0);
-  }
-
-  // Regular mission — no sequence
-  missionSequence = null;
-  return loadMission(missionPath);
-}
-
-/**
- * Load a sub-mission from the sequence by index.
- * Resets agent-specific state but preserves global state (tests, costs, round log).
- */
-function loadSubMission(index) {
-  const entry = missionSequence[index];
-  const subPath = resolve(ORCH_DIR, '..', entry.path);
-  currentMissionMaxRounds = entry.maxRounds || Infinity;
-  currentMissionRoundsUsed = 0;
-
-  log(`\n${'═'.repeat(50)}`);
-  log(`  MISSION ${index + 1}/${missionSequence.length}: ${entry.path} (max ${currentMissionMaxRounds} rounds)`);
-  log(`${'═'.repeat(50)}`);
-
-  // v8 bugfix: Reset CONFIG to defaults before loading sub-mission.
-  // Without this, mission 1's config properties leak into mission 2.
-  resetConfigToDefaults();
-
-  // v8 bugfix: Update missionConfigPath so hot-reload reads the correct sub-mission file.
-  missionConfigPath = subPath;
-
-  const mission = loadMission(subPath);
-
-  return mission;
-}
-
-/**
- * Check if current sub-mission is done and transition to next if available.
+ * Handle mission transition: delegates to mission-sequencer, applies result to orchestrator state.
  * @param {string} reason - Why the current mission ended
- * @returns {boolean} True if transitioned to a new mission, false if no more missions
+ * @returns {boolean} True if transitioned to a new mission
  */
-function tryTransitionMission(reason) {
-  if (!missionSequence) return false;
-
-  log(`  Mission ${currentMissionIndex + 1} complete: ${reason}`);
-
-  currentMissionIndex++;
-  if (currentMissionIndex >= missionSequence.length) {
-    log(`  All ${missionSequence.length} missions in sequence completed.`);
-    return false;
-  }
-
-  const mission = loadSubMission(currentMissionIndex);
+function handleMissionTransition(reason) {
+  const result = tryTransitionMission(reason);
+  if (!result.transitioned) return false;
+  const mission = result.mission;
   AGENTS = mission.agents.map(a => ({
     ...a,
     handoff: a.handoff || join(HANDOFF_DIR, `${a.id}.md`),
   }));
   missionDesignDoc = mission.designDoc;
   missionWorkflow = mission.workflow || null;
-  // v22: DAG config for mission transitions
   if (CONFIG.enableDAG && mission.dag) {
     try { missionDAG = createDAGFromConfig(mission); }
     catch (_) { missionDAG = null; }
   } else {
     missionDAG = null;
   }
-
-  // Reset agent-specific tracking for the new team
+  missionConfigPath = missionState.configPath;
   return true;
 }
 
@@ -1476,7 +1095,7 @@ async function main() {
   ensureDirs();
   const globalStart = Date.now();
 
-  // Initialize extracted modules (S63)
+  // Initialize extracted modules (S63-S66)
   initBacklogSystem({ orchDir: ORCH_DIR, log });
   initHandoffParser({ handoffDir: HANDOFF_DIR, logDir: LOG_DIR, agentWorktrees, log, timestamp });
   initTestFilter({ projectConfig });
@@ -1494,6 +1113,15 @@ async function main() {
     log, ANALYSIS_DIR, CONFIG, parseHandoffMeta, getTestCommand,
     agentEffectiveness, agentSessions,
   });
+  initAgentTracking({
+    config: CONFIG, agentWorktrees, handoffDir: HANDOFF_DIR,
+    changelogFile: CHANGELOG_FILE, log,
+  });
+  initMissionSequencer({
+    config: CONFIG, configDefaults: CONFIG_DEFAULTS, orchDir: ORCH_DIR,
+    log, loadMission,
+  });
+  initAgentPool({ runAgent });
 
   // --- Load mission config if provided as CLI argument ---
   missionConfigPath = process.argv[2] || null;
@@ -1993,10 +1621,10 @@ async function main() {
       const allRetired = AGENTS.every(a => handoffCache[a.id]?.status === 'all-done');
       if (allRetired) {
         // v8: Try transitioning to next mission in sequence before stopping
-        if (tryTransitionMission('all agents retired')) {
+        if (handleMissionTransition('all agents retired')) {
           resetAgentTracking();
           roundDecisions.push(...thisRoundDecisions);
-          currentMissionRoundsUsed = 0;
+          missionState.roundsUsed = 0;
           continue; // Start next mission's first round
         }
         stopReason = 'all agents exhausted their task lists';
@@ -2069,7 +1697,7 @@ async function main() {
 
     // v17: Simplified timing — "agents" replaces separate phaseA/phaseB
     const roundTiming = { roundStart: Date.now(), agents: 0, tests: 0, preSim: 0, postSim: 0, overhead: 0 };
-    const roundConcurrency = getDynamicConcurrency();
+    const roundConcurrency = getDynamicConcurrency(AGENTS.length);
     const roundModifiedFiles = [];
     let balanceChangeAgent = null;
     const codeResults = [];
@@ -2127,7 +1755,7 @@ async function main() {
         gitExec, getWorktree: (id) => agentWorktrees[id],
         parseHandoffMeta,
         log, allAgents: AGENTS, round,
-        maxConcurrency: getDynamicConcurrency(),
+        maxConcurrency: getDynamicConcurrency(AGENTS.length),
         useWorktrees: !!CONFIG.useWorktrees,
       };
 
@@ -2485,7 +2113,7 @@ async function main() {
     // --- v7 Phase 2: Convergence stop (after all agents have run) ---
     if (convergenceResult?.converged) {
       // v8: Try transitioning to next mission before stopping
-      if (!tryTransitionMission('balance converged')) {
+      if (!handleMissionTransition('balance converged')) {
         break; // stopReason already set above
       }
       resetAgentTracking();
@@ -2511,10 +2139,10 @@ async function main() {
     }
 
     // --- v8: Check sub-mission round budget ---
-    if (missionSequence) {
-      currentMissionRoundsUsed++;
-      if (currentMissionRoundsUsed >= currentMissionMaxRounds) {
-        if (!tryTransitionMission(`round budget exhausted (${currentMissionMaxRounds} rounds)`)) {
+    if (missionState.sequence) {
+      missionState.roundsUsed++;
+      if (missionState.roundsUsed >= missionState.maxRounds) {
+        if (!handleMissionTransition(`round budget exhausted (${missionState.maxRounds} rounds)`)) {
           stopReason = 'all missions in sequence completed';
           log('\nAll missions in sequence completed.');
           break;
@@ -2528,7 +2156,7 @@ async function main() {
     const allRetired = AGENTS.every(a => parseHandoffMeta(a.id).status === 'all-done');
     if (allRetired) {
       // v8: Try transitioning to next mission before stopping
-      if (!tryTransitionMission('all agents retired')) {
+      if (!handleMissionTransition('all agents retired')) {
         stopReason = 'all agents exhausted their task lists';
         log('\nAll agents have exhausted their task lists. Orchestration finished.');
         break;
