@@ -34,11 +34,16 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking
 src/tools/            simulate.ts (balance testing), param-search.ts (parameter optimization)
 
-orchestrator/         Multi-agent system (v22, 10 modules)
-  orchestrator.mjs    Main orchestrator (3421 lines)
+orchestrator/         Multi-agent system (v23, 15 modules)
+  orchestrator.mjs    Main orchestrator (2718 lines)
   balance-analyzer.mjs Balance sims, experiments, regression detection
   git-ops.mjs         Git backup, tagging, worktree isolation, smart revert
   reporter.mjs        Overnight report generation
+  backlog-system.mjs  Task queue, subtasks, priority, archive
+  cost-tracker.mjs    API cost parsing & accumulation
+  test-filter.mjs     Incremental test mapping & filtering
+  handoff-parser.mjs  Handoff META parsing & validation
+  spawn-system.mjs    Dynamic agent spawning subsystem
   workflow-engine.mjs Composable workflow patterns
   sdk-adapter.mjs     Agent SDK adapter (CLI fallback)
   observability.mjs   Structured logging, metrics, event bus

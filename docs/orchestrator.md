@@ -1,6 +1,6 @@
 # Multi-Agent Orchestrator
 
-General-purpose multi-agent orchestrator (v22, 10 modules). Auto-detects language, framework, and test runner. Pluggable quality gates, discoverable role registry, SDK adapter, observability, DAG scheduler, plugin system, project scaffolding.
+General-purpose multi-agent orchestrator (v23, 15 modules). Auto-detects language, framework, and test runner. Pluggable quality gates, discoverable role registry, SDK adapter, observability, DAG scheduler, plugin system, project scaffolding.
 
 ## Quick Start
 
@@ -17,10 +17,15 @@ powershell -ExecutionPolicy Bypass -File orchestrator\run-overnight.ps1
 
 ```
 orchestrator/
-  orchestrator.mjs      3,421 lines   Main orchestration engine
-  balance-analyzer.mjs    780 lines   Balance sims, experiments, regressions
-  git-ops.mjs             310 lines   Git backup, tagging, worktree isolation
-  reporter.mjs            280 lines   Overnight report generation
+  orchestrator.mjs      2,718 lines   Main orchestration engine
+  balance-analyzer.mjs    857 lines   Balance sims, experiments, regressions
+  git-ops.mjs             413 lines   Git backup, tagging, worktree isolation
+  reporter.mjs            353 lines   Overnight report generation
+  backlog-system.mjs      151 lines   Task queue, subtasks, priority, archive
+  cost-tracker.mjs        104 lines   API cost parsing & accumulation
+  test-filter.mjs         109 lines   Incremental test mapping & filtering
+  handoff-parser.mjs      176 lines   Handoff META parsing & validation
+  spawn-system.mjs        243 lines   Dynamic agent spawning subsystem
   workflow-engine.mjs     315 lines   Composable workflow patterns
   sdk-adapter.mjs         288 lines   Agent SDK adapter (CLI fallback)
   observability.mjs       294 lines   Structured logging + metrics + events
@@ -28,7 +33,7 @@ orchestrator/
   project-scaffold.mjs    545 lines   Project templates (7 types)
   plugin-system.mjs       471 lines   Plugin architecture (6 types)
   ─────────────────────────────────
-  Total               ~7,122 lines
+  Total               ~7,455 lines
 ```
 
 Supporting infrastructure:

@@ -62,3 +62,4 @@ Compact table of all sessions. For full details, see `docs/archive/jousting-hand
 | S61 | Phase 4 complete: project-scaffold 7 templates, plugin-system 6 types, all integrated |
 | S62 | Comprehensive developer guide created, project documentation complete |
 | S63 | Infrastructure overhaul: docs split into 6 files, CLAUDE.md 301→89 lines, orchestrator.mjs 5213→3421 lines (3 modules extracted) |
+| S65 | Orchestrator v23: 5 more modules extracted (3421→2718 lines, 10→15 modules), stale artifact cleanup, log rotation |

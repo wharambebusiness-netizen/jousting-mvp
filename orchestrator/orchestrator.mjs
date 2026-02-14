@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v22 (modular)
+// Multi-Agent Orchestrator v23 (modular)
 // ============================================================
 // See docs/orchestrator.md for architecture.
-// Extracted modules: balance-analyzer.mjs, git-ops.mjs, reporter.mjs
+// Extracted modules (S63): balance-analyzer, git-ops, reporter
+// Extracted modules (S65): backlog-system, cost-tracker, test-filter, handoff-parser, spawn-system
 
 
 import { spawn, execSync } from 'child_process';
@@ -22,10 +23,16 @@ import { isSDKAvailable, getRunAgent, SDK_MODE, runAgentViaSDK, createAgentOptio
 import { createObservability } from './observability.mjs';
 import { DAGScheduler, createDAGFromWorkflow, createDAGFromConfig } from './dag-scheduler.mjs';
 import { PluginManager } from './plugin-system.mjs';
-// Extracted modules
+// Extracted modules (S63)
 import { initBalanceAnalyzer, getParamSearchResults, setParamSearchResults, runBalanceSim, runBalanceSims, loadBalanceState, saveBalanceState, updateBalanceState, loadExperimentLog, saveExperimentLog, parseBalanceConfigDiff, logExperiment, buildExperimentContext, detectBalanceRegressions, checkConvergence, buildBalanceContext, generateBalanceBacklog, getNextBacklogId, runParameterSearch, buildParamSearchContext } from './balance-analyzer.mjs';
 import { initGitOps, gitBackup, tagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert, invalidateRevertedSessions, gitExec, createWorktree, mergeWorktreeBranch, removeWorktree, cleanupAllWorktrees, getHeadSha, smartRevertWorktrees } from './git-ops.mjs';
 import { initReporter, generateOvernightReport } from './reporter.mjs';
+// Extracted modules (S65)
+import { initBacklogSystem, loadBacklog, saveBacklog, getNextTask, getNextTasks, taskMatchesAgent, completeBacklogTask, getNextSubtask, completeSubtask, getAgentTaskPriority, agentHasCriticalTask, resetStaleAssignments, archiveCompletedTasks } from './backlog-system.mjs';
+import { MODEL_PRICING, parseCostFromStderr, estimateCostFromTokens, ensureCostLogEntry, accumulateAgentCost } from './cost-tracker.mjs';
+import { initTestFilter, setProjectConfig as setTestFilterProjectConfig, getTestFilter, getTestFilterFlag, getSourceToTests, getAiSourcePattern, getAiTestFile, getFullSuiteTriggers } from './test-filter.mjs';
+import { initHandoffParser, parseHandoffMeta, validateFileOwnership, validateAgentOutput } from './handoff-parser.mjs';
+import { initSpawnSystem, SPAWN_CONSTRAINTS, detectSpawnRequests, validateSpawnRequest, archiveSpawnRequest, detectAndSpawnAgents, getSpawnNotifications } from './spawn-system.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -50,17 +57,8 @@ let pluginManager = null;
 const WORKTREE_DIR = join(ORCH_DIR, '.worktrees');
 const agentWorktrees = {}; // agentId → { path, branch, round }
 
-// v21: Dynamic agent spawning — agents request helpers via spawn request files
+// v21: Dynamic agent spawning — managed by spawn-system.mjs (SPAWNS_DIR, SPAWN_CONSTRAINTS)
 const SPAWNS_DIR = join(ORCH_DIR, 'spawns');
-const SPAWN_CONSTRAINTS = {
-  maxSpawnsPerRound: 3,
-  maxSpawnsPerAgent: 1,
-  maxConcurrentSpawns: 2,
-  maxBudgetPerSpawn: 2.0,
-  defaultModel: 'haiku',
-  defaultTimeoutMs: 10 * 60 * 1000, // 10 min
-  blockedRoles: new Set(['producer', 'tech-lead', 'game-designer']),
-};
 
 // ============================================================
 // Active Process Tracking & Graceful Shutdown (Windows)
@@ -168,6 +166,7 @@ function loadProjectConfig(projectDir) {
     try {
       const raw = readFileSync(configPath, 'utf-8');
       projectConfig = JSON.parse(raw);
+      setTestFilterProjectConfig(projectConfig);
       log(`Project config loaded from: ${configPath}`);
       return projectConfig;
     } catch (err) {
@@ -189,140 +188,7 @@ function getTestCommand() {
 // ============================================================
 const MODEL_TIER = { haiku: 0, sonnet: 1, opus: 2 };
 
-// ============================================================
-// Backlog System (v4)
-// ============================================================
-const BACKLOG_FILE = join(ORCH_DIR, 'backlog.json');
-const BACKLOG_ARCHIVE_FILE = join(ORCH_DIR, 'backlog-archive.json');
-
-function loadBacklog() {
-  if (!existsSync(BACKLOG_FILE)) return [];
-  try { return JSON.parse(readFileSync(BACKLOG_FILE, 'utf-8')); }
-  catch (_) { return []; }
-}
-
-function saveBacklog(tasks) {
-  writeFileSync(BACKLOG_FILE, JSON.stringify(tasks, null, 2));
-}
-
-function getNextTask(role, agentId = null) {
-  return getNextTasks(role, 1, agentId)[0] || null;
-}
-
-// v17: Match backlog task role against agent role OR agent id.
-// Producer agents sometimes write agent IDs (e.g., "balance-tuner") instead of role names
-// (e.g., "balance-analyst"). Matching both prevents tasks from stalling.
-function taskMatchesAgent(task, role, agentId) {
-  return task.role === role || (agentId && task.role === agentId);
-}
-
-function getNextTasks(role, maxTasks = 1, agentId = null) {
-  const backlog = loadBacklog();
-  const tasks = backlog
-    .filter(t =>
-      t.status === 'pending' && taskMatchesAgent(t, role, agentId) &&
-      (!t.dependsOn?.length || t.dependsOn.every(depId => {
-        const dep = backlog.find(d => d.id === depId);
-        // If dep not found in active backlog, treat as satisfied (already archived)
-        return !dep || dep.status === 'completed' || dep.status === 'done';
-      }))
-    )
-    .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
-    .slice(0, maxTasks);
-
-  for (const task of tasks) { task.status = 'assigned'; }
-  if (tasks.length) saveBacklog(backlog);
-  return tasks;
-}
-
-function completeBacklogTask(taskId) {
-  const backlog = loadBacklog();
-  const task = backlog.find(t => t.id === taskId);
-  if (task) {
-    task.status = 'completed';
-    task.completedAt = new Date().toISOString();
-    saveBacklog(backlog);
-  }
-}
-
-// v15: Subtask support — break large tasks into focused units of work.
-// Tasks with a `subtasks` array get assigned one subtask at a time.
-// Format: { id: "BL-077-1", title: "...", status: "pending"|"completed" }
-function getNextSubtask(taskId) {
-  const backlog = loadBacklog();
-  const task = backlog.find(t => t.id === taskId);
-  if (!task?.subtasks?.length) return null;
-  return task.subtasks.find(st => st.status === 'pending') || null;
-}
-
-function completeSubtask(taskId, subtaskId) {
-  const backlog = loadBacklog();
-  const task = backlog.find(t => t.id === taskId);
-  if (!task?.subtasks) return;
-  const sub = task.subtasks.find(st => st.id === subtaskId);
-  if (sub) {
-    sub.status = 'completed';
-    sub.completedAt = new Date().toISOString();
-    // Auto-complete parent when all subtasks done
-    const allDone = task.subtasks.every(st => st.status === 'completed');
-    if (allDone) {
-      task.status = 'completed';
-      task.completedAt = new Date().toISOString();
-      log(`  Backlog: ${taskId} auto-completed (all ${task.subtasks.length} subtasks done)`);
-    }
-    saveBacklog(backlog);
-  }
-}
-
-// v15: Get highest-priority pending task priority for an agent's role (from cache).
-// Returns numeric priority (1=P1, 2=P2, ... 99=none). Used to sort agents for pool launch order.
-function getAgentTaskPriority(role, backlogCache, agentId = null) {
-  const pending = backlogCache.filter(t => t.status === 'pending' && taskMatchesAgent(t, role, agentId));
-  if (!pending.length) return 99;
-  return Math.min(...pending.map(t => t.priority ?? 99));
-}
-
-// v15: Check if agent has a critical (P1) task waiting
-function agentHasCriticalTask(role, backlogCache, agentId = null) {
-  return backlogCache.some(t => t.status === 'pending' && taskMatchesAgent(t, role, agentId) && (t.priority ?? 99) <= 1);
-}
-
-function resetStaleAssignments() {
-  const backlog = loadBacklog();
-  let resetCount = 0;
-  for (const task of backlog) {
-    if (task.status === 'assigned') {
-      task.status = 'pending';
-      resetCount++;
-    }
-  }
-  if (resetCount > 0) {
-    saveBacklog(backlog);
-    log(`Backlog: reset ${resetCount} stale "assigned" task(s) to "pending"`);
-  }
-}
-
-function archiveCompletedTasks() {
-  const backlog = loadBacklog();
-  const completed = backlog.filter(t => t.status === 'completed' || t.status === 'done');
-  if (!completed.length) return;
-
-  // Load existing archive or create new
-  let archive = [];
-  if (existsSync(BACKLOG_ARCHIVE_FILE)) {
-    try { archive = JSON.parse(readFileSync(BACKLOG_ARCHIVE_FILE, 'utf-8')); }
-    catch (_) { archive = []; }
-  }
-
-  // Move completed tasks to archive
-  archive.push(...completed);
-  writeFileSync(BACKLOG_ARCHIVE_FILE, JSON.stringify(archive, null, 2));
-
-  // Remove from active backlog
-  const active = backlog.filter(t => t.status !== 'completed' && t.status !== 'done');
-  saveBacklog(active);
-  log(`Backlog: archived ${completed.length} completed task(s) (${active.length} remaining)`);
-}
+// Backlog System — managed by backlog-system.mjs
 
 // ============================================================
 // Agent Definitions (default — overridden by mission config)
@@ -534,180 +400,7 @@ function ensureDirs() {
   }
 }
 
-// ============================================================
-// Handoff META Parsing
-// ============================================================
-// Agents write structured META at the top of their handoff:
-//   ## META
-//   - status: all-done | complete | in-progress | blocked
-//   - files-modified: file1.ts, file2.ts
-//   - tests-passing: true | false | true (794 all) | 794
-//   - notes-for-others: free text
-//
-// Status meanings:
-//   in-progress — working on primary milestone
-//   complete    — primary milestone done, satisfies dependencies, agent moves to stretch goals
-//   all-done    — all tasks exhausted (primary + stretch), agent is retired
-//   blocked     — waiting on dependency
-//
-// Parser is tolerant of:
-//   - Case variations (e.g., "Files-Modified", "STATUS", "Tests-Passing")
-//   - Extra whitespace and formatting variations
-//   - Missing fields (sensible defaults returned)
-//   - Non-standard values (logged as warnings, never crashes)
-//
-// Returns: { status, filesModified, testsPassing, notes,
-//            testCount, notesForOthers, testsHealthy, fileCount }
-//
-function parseHandoffMeta(agentId) {
-  const defaults = {
-    status: 'not-started', filesModified: [], testsPassing: null, notes: '',
-    testCount: null, notesForOthers: '', testsHealthy: null, fileCount: 0,
-  };
-  // v21: Check worktree path first (agent may have written handoff there, not yet merged to main)
-  const wt = agentWorktrees[agentId];
-  const wtHandoffPath = wt ? join(wt.path, 'orchestrator', 'handoffs', `${agentId}.md`) : null;
-  const mainHandoffPath = join(HANDOFF_DIR, `${agentId}.md`);
-  const path = (wtHandoffPath && existsSync(wtHandoffPath)) ? wtHandoffPath : mainHandoffPath;
-  if (!existsSync(path)) return { ...defaults };
-
-  let content;
-  try {
-    content = readFileSync(path, 'utf-8');
-  } catch (err) {
-    log(`  WARNING: Could not read handoff for ${agentId}: ${err.message}`);
-    return { ...defaults };
-  }
-
-  const meta = { ...defaults };
-
-  try {
-    // Case-insensitive matching with flexible whitespace (handles "Files-Modified", "files-modified", etc.)
-    const statusMatch = content.match(/^-\s*status\s*:\s*(.+)$/im);
-    if (statusMatch) meta.status = statusMatch[1].trim();
-
-    const filesMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*(.+)$/im);
-    if (filesMatch) {
-      meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
-    }
-
-    // tests-passing: handle "true", "false", "true (685 tests, 7 suites)", "true (667/667)", "794"
-    const testsMatch = content.match(/^-\s*tests[\s-]*passing\s*:\s*(.+)$/im);
-    if (testsMatch) {
-      const raw = testsMatch[1].trim();
-      // Determine boolean: starts with "true" → true, starts with "false" → false
-      if (/^true\b/i.test(raw)) {
-        meta.testsPassing = true;
-      } else if (/^false\b/i.test(raw)) {
-        meta.testsPassing = false;
-      } else if (/^\d+$/.test(raw)) {
-        // Bare number like "794" — assume passing
-        meta.testsPassing = true;
-      }
-      // Extract numeric test count from patterns like "true (685 tests...)" or "true (667/667)" or bare "794"
-      const countMatch = raw.match(/(\d+)/);
-      if (countMatch) {
-        meta.testCount = parseInt(countMatch[1], 10);
-      }
-    }
-
-    const notesMatch = content.match(/^-\s*notes[\s-]*for[\s-]*others\s*:\s*(.+)$/im);
-    if (notesMatch) {
-      meta.notes = notesMatch[1].trim();
-      meta.notesForOthers = meta.notes;
-    }
-
-    // v15: Parse completed-tasks from META for subtask completion tracking
-    const completedMatch = content.match(/^-\s*completed[\s-]*tasks\s*:\s*(.+)$/im);
-    if (completedMatch) {
-      meta.completedTasks = completedMatch[1].split(',').map(t => t.trim()).filter(Boolean);
-    } else {
-      meta.completedTasks = [];
-    }
-
-    // --- Quality signals ---
-    // testsHealthy: scan full handoff text for health indicators
-    const lowerContent = content.toLowerCase();
-    if (meta.testsPassing === true) {
-      meta.testsHealthy = true;
-    } else if (meta.testsPassing === false) {
-      meta.testsHealthy = false;
-    } else if (lowerContent.includes('all tests passing') || lowerContent.includes('all passing')) {
-      meta.testsHealthy = true;
-    } else if (lowerContent.includes('tests failing') || lowerContent.includes('test failure')) {
-      meta.testsHealthy = false;
-    }
-    // else testsHealthy stays null (unknown)
-
-    // fileCount: derived from filesModified
-    meta.fileCount = meta.filesModified.length;
-
-  } catch (err) {
-    log(`  WARNING: Malformed META in handoff for ${agentId}: ${err.message}`);
-    // Return what we have so far — meta has defaults for any unparsed fields
-  }
-
-  return meta;
-}
-
-// ============================================================
-// Validation Functions
-// ============================================================
-function validateFileOwnership(agentResults, agents) {
-  const violationLog = join(LOG_DIR, 'ownership-violations.log');
-  for (const result of agentResults) {
-    const agent = agents.find(a => a.id === result.agentId);
-    if (!agent?.fileOwnership?.length) continue;
-    const meta = parseHandoffMeta(result.agentId);
-    for (const file of meta.filesModified) {
-      // v6.1: Allow agents to write their own analysis/handoff files
-      const isOwnAnalysis = file.startsWith(`orchestrator/analysis/${result.agentId}-`);
-      const isOwnHandoff = file === `orchestrator/handoffs/${result.agentId}.md`;
-      if (isOwnAnalysis || isOwnHandoff) continue;
-
-      const owned = agent.fileOwnership.some(pattern => {
-        if (pattern.includes('*')) {
-          const prefix = pattern.split('*')[0];
-          return file.startsWith(prefix);
-        }
-        return file === pattern;
-      });
-      if (!owned) {
-        const msg = `[${timestamp()}] OWNERSHIP VIOLATION: ${result.agentId} modified ${file} (not in fileOwnership)`;
-        log(`  ⚠ ${msg}`);
-        appendFileSync(violationLog, msg + '\n');
-      }
-    }
-  }
-}
-
-function validateAgentOutput(agentId, round, result = null) {
-  const meta = parseHandoffMeta(agentId);
-  const warnings = [];
-
-  if (meta.status === 'not-started') {
-    warnings.push(`${agentId}: Handoff not updated (still "not-started")`);
-  }
-  if (!meta.filesModified.length && meta.status === 'in-progress') {
-    warnings.push(`${agentId}: Claims in-progress but no files modified`);
-  }
-  if (meta.testsPassing === false) {
-    warnings.push(`${agentId}: Reports tests FAILING`);
-  }
-
-  // v5B: Detect empty work — agent exited OK but modified zero files and didn't update handoff
-  let isEmptyWork = false;
-  if (result && result.code === 0 && !result.timedOut) {
-    const noFilesModified = !meta.filesModified.length || (meta.filesModified.length === 1 && meta.filesModified[0] === '(none yet)');
-    const handoffNotUpdated = meta.status === 'not-started';
-    if (noFilesModified && handoffNotUpdated) {
-      isEmptyWork = true;
-      warnings.push(`${agentId}: EMPTY WORK — exited OK but modified zero files and didn't update handoff (round ${round})`);
-    }
-  }
-
-  return { warnings, isEmptyWork };
-}
+// Handoff META Parsing & Validation — managed by handoff-parser.mjs
 
 // ============================================================
 // Session Changelog (auto-generated each round)
@@ -1178,215 +871,7 @@ function runAgent(agent, round) {
 }
 
 
-// ============================================================
-// Dynamic Agent Spawning (v21 — Phase 3: Scale)
-// ============================================================
-// Agents can request helper sub-agents by writing spawn request files.
-// Spawn requests are detected after the code agent pool completes,
-// spawned agents run (with worktrees), then all get merged before testing.
-
-/**
- * Scan for spawn requests — checks worktrees first (agents write there),
- * then the main spawns directory.
- * @returns {Array} Array of parsed spawn request objects
- */
-function detectSpawnRequests() {
-  const requests = [];
-  const seen = new Set();
-
-  // Check agent worktrees for spawn requests (pre-merge)
-  for (const [agentId, wt] of Object.entries(agentWorktrees)) {
-    const wtSpawns = join(wt.path, 'orchestrator', 'spawns');
-    if (!existsSync(wtSpawns)) continue;
-    for (const file of readdirSync(wtSpawns)) {
-      if (!file.startsWith('spawn-') || !file.endsWith('.json') || seen.has(file)) continue;
-      try {
-        const content = readFileSync(join(wtSpawns, file), 'utf-8');
-        const req = JSON.parse(content);
-        req._filename = file;
-        req._sourcePath = join(wtSpawns, file);
-        requests.push(req);
-        seen.add(file);
-      } catch (err) {
-        log(`  ⚠ Invalid spawn request ${file} in ${agentId} worktree: ${err.message}`);
-      }
-    }
-  }
-
-  // Check main spawns dir (fallback for non-worktree agents)
-  if (existsSync(SPAWNS_DIR)) {
-    for (const file of readdirSync(SPAWNS_DIR)) {
-      if (!file.startsWith('spawn-') || !file.endsWith('.json') || seen.has(file)) continue;
-      // Skip archive directory
-      if (file === 'archive') continue;
-      try {
-        const content = readFileSync(join(SPAWNS_DIR, file), 'utf-8');
-        const req = JSON.parse(content);
-        req._filename = file;
-        req._sourcePath = join(SPAWNS_DIR, file);
-        requests.push(req);
-        seen.add(file);
-      } catch (err) {
-        log(`  ⚠ Invalid spawn request ${file}: ${err.message}`);
-      }
-    }
-  }
-
-  return requests;
-}
-
-/**
- * Validate a spawn request against constraints.
- * @returns {{valid: boolean, reason?: string}}
- */
-function validateSpawnRequest(request, spawnCountThisRound, parentSpawnCount) {
-  if (spawnCountThisRound >= SPAWN_CONSTRAINTS.maxSpawnsPerRound) {
-    return { valid: false, reason: `round limit (${SPAWN_CONSTRAINTS.maxSpawnsPerRound})` };
-  }
-  if (parentSpawnCount >= SPAWN_CONSTRAINTS.maxSpawnsPerAgent) {
-    return { valid: false, reason: `per-agent limit (${SPAWN_CONSTRAINTS.maxSpawnsPerAgent})` };
-  }
-  if (SPAWN_CONSTRAINTS.blockedRoles.has(request.role)) {
-    return { valid: false, reason: `role '${request.role}' blocked` };
-  }
-  if (!request.parentId || !request.role || !request.task) {
-    return { valid: false, reason: 'missing required fields (parentId, role, task)' };
-  }
-  if ((request.maxBudgetUsd || 0) > SPAWN_CONSTRAINTS.maxBudgetPerSpawn) {
-    return { valid: false, reason: `budget $${request.maxBudgetUsd} > max $${SPAWN_CONSTRAINTS.maxBudgetPerSpawn}` };
-  }
-  return { valid: true };
-}
-
-/**
- * Archive a processed spawn request (move to spawns/archive/).
- */
-function archiveSpawnRequest(sourcePath, filename) {
-  const archiveDir = join(SPAWNS_DIR, 'archive');
-  mkdirSync(archiveDir, { recursive: true });
-  try {
-    // Copy to archive (source may be in worktree that gets cleaned up)
-    const content = readFileSync(sourcePath, 'utf-8');
-    writeFileSync(join(archiveDir, filename), content);
-    // Remove original if in main tree
-    if (sourcePath.startsWith(SPAWNS_DIR)) {
-      try { rmSync(sourcePath); } catch (_) { /* ok */ }
-    }
-  } catch (_) { /* best-effort */ }
-}
-
-/**
- * Detect spawn requests and execute spawned agents.
- * Called after code agents complete, before worktree merge.
- * Spawned agents get their own worktrees and run inline.
- *
- * @param {number} round
- * @param {Array} codeResults - Parent agent results
- * @param {Object} costLog - Cost tracking
- * @param {Object} trackingCtx - Tracking context
- * @returns {Promise<Array>} Results from spawned agents
- */
-async function detectAndSpawnAgents(round, codeResults, costLog, trackingCtx) {
-  const requests = detectSpawnRequests();
-  if (!requests.length) return [];
-
-  log(`\n  Spawn requests: ${requests.length} detected`);
-
-  // Validate and filter
-  const validRequests = [];
-  const parentCounts = {};
-
-  for (const req of requests) {
-    parentCounts[req.parentId] = (parentCounts[req.parentId] || 0);
-    const validation = validateSpawnRequest(req, validRequests.length, parentCounts[req.parentId]);
-    if (!validation.valid) {
-      log(`    ✗ ${req.parentId} → ${req.name || req.role}: ${validation.reason}`);
-      archiveSpawnRequest(req._sourcePath, req._filename);
-      continue;
-    }
-    parentCounts[req.parentId]++;
-    validRequests.push(req);
-  }
-
-  if (!validRequests.length) return [];
-
-  // Build and run spawned agents
-  const spawnedResults = [];
-  const limit = SPAWN_CONSTRAINTS.maxConcurrentSpawns;
-
-  for (let i = 0; i < validRequests.length; i += limit) {
-    const batch = validRequests.slice(i, i + limit);
-    const names = batch.map(r => `${r.name || r.role}(by:${r.parentId})`);
-    log(`  Spawning ${batch.length} agent(s): [${names.join(', ')}]`);
-
-    const promises = batch.map(async (req) => {
-      const spawnId = `spawn-${randomUUID().slice(0, 8)}`;
-      const agent = {
-        id: spawnId,
-        name: req.name || `${req.role} helper`,
-        role: req.role,
-        type: 'spawned',
-        model: req.model || SPAWN_CONSTRAINTS.defaultModel,
-        timeoutMs: Math.min(req.timeoutMs || SPAWN_CONSTRAINTS.defaultTimeoutMs, SPAWN_CONSTRAINTS.defaultTimeoutMs),
-        maxBudgetUsd: Math.min(req.maxBudgetUsd || SPAWN_CONSTRAINTS.maxBudgetPerSpawn, SPAWN_CONSTRAINTS.maxBudgetPerSpawn),
-        fileOwnership: req.fileOwnership || [],
-        dependsOn: [],
-        _spawnedBy: req.parentId,
-        _spawnedRound: round,
-        // Override the task prompt
-        _spawnTask: req.task,
-        _spawnContext: req.context,
-      };
-
-      // Create worktree for spawned agent
-      if (CONFIG.useWorktrees) {
-        await createWorktree(agent.id, round);
-      }
-
-      const result = await runAgent(agent, round);
-      archiveSpawnRequest(req._sourcePath, req._filename);
-      return { agent, result };
-    });
-
-    const results = await Promise.all(promises);
-    for (const { agent, result } of results) {
-      const status = result.timedOut ? 'TIMEOUT' : result.code === 0 ? 'OK' : `ERROR(${result.code})`;
-      log(`    ${agent.id} (${agent.name}): ${status} in ${(result.elapsed / 60).toFixed(1)}min`);
-      spawnedResults.push(result);
-    }
-  }
-
-  return spawnedResults;
-}
-
-/**
- * Get spawn result notifications for a parent agent (injected into next round prompt).
- * @param {string} parentId - Parent agent ID
- * @param {number} prevRound - Previous round number
- * @returns {string|null}
- */
-function getSpawnNotifications(parentId, prevRound) {
-  const archiveDir = join(SPAWNS_DIR, 'archive');
-  if (!existsSync(archiveDir)) return null;
-
-  const notifications = [];
-  for (const file of readdirSync(archiveDir)) {
-    if (!file.startsWith('spawn-') || !file.endsWith('.json')) continue;
-    try {
-      const req = JSON.parse(readFileSync(join(archiveDir, file), 'utf-8'));
-      if (req.parentId !== parentId) continue;
-      // Check if from recent round (within 2 rounds)
-      if (req.round && req.round < prevRound - 1) continue;
-
-      notifications.push(
-        `Your spawned agent "${req.name || req.role}" completed (round ${req.round || '?'}).`,
-        `Task: ${(req.task || '').slice(0, 120)}`,
-      );
-    } catch (_) { /* skip */ }
-  }
-
-  return notifications.length ? notifications.join('\n') : null;
-}
+// Dynamic Agent Spawning — managed by spawn-system.mjs
 
 // ============================================================
 // Analysis File Rotation (v5 Phase 5F)
@@ -1428,108 +913,7 @@ function rotateAnalysisFiles(keepRounds = 5) {
 }
 
 
-// ============================================================
-// Cost Tracking (v6 — Action 1.3)
-// ============================================================
-// Approximate pricing per 1M tokens (USD)
-const MODEL_PRICING = {
-  haiku:   { input: 0.25,  output: 1.25 },
-  sonnet:  { input: 3.00,  output: 15.00 },
-  opus:    { input: 15.00, output: 75.00 },
-  default: { input: 3.00,  output: 15.00 },  // assume sonnet if unknown
-};
-
-/**
- * Parse Claude CLI stderr output for cost/token information.
- * Claude Code CLI may output lines like:
- *   "Total cost: $X.XX"
- *   "Total tokens: input=N, output=N"
- *   or token/cost info in other formats
- * Returns { cost, inputTokens, outputTokens } with nulls for unparsed fields.
- */
-function parseCostFromStderr(stderr) {
-  const result = { cost: null, inputTokens: null, outputTokens: null };
-  if (!stderr) return result;
-
-  // Try to match "Total cost: $X.XX" or "cost: $X.XX"
-  const costMatch = stderr.match(/(?:total\s+)?cost:\s*\$?([\d.]+)/i);
-  if (costMatch) result.cost = parseFloat(costMatch[1]);
-
-  // Try to match "Total tokens: input=N, output=N"
-  const tokensMatch = stderr.match(/tokens?:?\s*input\s*=?\s*([\d,]+)\s*,?\s*output\s*=?\s*([\d,]+)/i);
-  if (tokensMatch) {
-    result.inputTokens = parseInt(tokensMatch[1].replace(/,/g, ''));
-    result.outputTokens = parseInt(tokensMatch[2].replace(/,/g, ''));
-  }
-
-  // Alternative: match individual token lines
-  if (result.inputTokens === null) {
-    const inputMatch = stderr.match(/input[\s_]tokens?:?\s*([\d,]+)/i);
-    if (inputMatch) result.inputTokens = parseInt(inputMatch[1].replace(/,/g, ''));
-  }
-  if (result.outputTokens === null) {
-    const outputMatch = stderr.match(/output[\s_]tokens?:?\s*([\d,]+)/i);
-    if (outputMatch) result.outputTokens = parseInt(outputMatch[1].replace(/,/g, ''));
-  }
-
-  return result;
-}
-
-/**
- * Estimate cost from token counts using model pricing.
- * Returns estimated USD cost.
- */
-function estimateCostFromTokens(inputTokens, outputTokens, model) {
-  const pricing = MODEL_PRICING[model] || MODEL_PRICING.default;
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return inputCost + outputCost;
-}
-
-/**
- * Initialize or return existing cost log entry for an agent.
- */
-function ensureCostLogEntry(costLog, agentId) {
-  if (!costLog[agentId]) {
-    costLog[agentId] = {
-      totalCost: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      rounds: 0,
-      escalations: 0,
-    };
-  }
-  return costLog[agentId];
-}
-
-/**
- * Accumulate cost data from an agent run result into the costLog.
- */
-function accumulateAgentCost(costLog, result, agents) {
-  const agent = agents.find(a => a.id === result.agentId);
-  const entry = ensureCostLogEntry(costLog, result.agentId);
-  entry.rounds++;
-
-  const parsed = parseCostFromStderr(result.stderr);
-
-  if (parsed.cost !== null) {
-    // Direct cost from CLI output
-    entry.totalCost += parsed.cost;
-  }
-
-  if (parsed.inputTokens !== null) {
-    entry.inputTokens += parsed.inputTokens;
-  }
-  if (parsed.outputTokens !== null) {
-    entry.outputTokens += parsed.outputTokens;
-  }
-
-  // If we got tokens but no direct cost, estimate from pricing
-  if (parsed.cost === null && parsed.inputTokens !== null && parsed.outputTokens !== null) {
-    const model = agent?.model || 'default';
-    entry.totalCost += estimateCostFromTokens(parsed.inputTokens, parsed.outputTokens, model);
-  }
-}
+// Cost Tracking — managed by cost-tracker.mjs
 
 // ============================================================
 // Adaptive Timeouts (v10 — track per-agent runtime history)
@@ -1887,100 +1271,7 @@ function processAgentResult(result, round, roundAgents, costLog, ctx) {
   return { status, isEmptyWork, filesModified, balanceConfigChanged };
 }
 
-// Incremental Testing (v10→v20: config-driven test mapping)
-// ============================================================
-// v10: Maps source files to the test suites that exercise them.
-// v20: Loaded from project-config.json if available, falls back to hardcoded defaults.
-// Any file not in the map triggers a full test run (conservative fallback).
-
-function getSourceToTests() {
-  if (projectConfig?.testing?.sourceToTests) {
-    return projectConfig.testing.sourceToTests;
-  }
-  // Legacy fallback (jousting-specific)
-  return {
-    'calculator.ts':       ['calculator.test.ts', 'gear-variants.test.ts'],
-    'balance-config.ts':   ['calculator.test.ts', 'playtest.test.ts', 'gear-variants.test.ts'],
-    'phase-joust.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
-    'phase-melee.ts':      ['phase-resolution.test.ts', 'match.test.ts'],
-    'match.ts':            ['match.test.ts'],
-    'gigling-gear.ts':     ['gigling-gear.test.ts', 'gear-variants.test.ts'],
-    'player-gear.ts':      ['player-gear.test.ts', 'gear-variants.test.ts'],
-    'archetypes.ts':       ['playtest.test.ts', 'match.test.ts', 'gear-variants.test.ts'],
-    'attacks.ts':          ['calculator.test.ts', 'phase-resolution.test.ts', 'match.test.ts'],
-  };
-}
-
-function getAiSourcePattern() {
-  if (projectConfig?.testing?.aiSourcePattern) {
-    return new RegExp(projectConfig.testing.aiSourcePattern);
-  }
-  return /^src\/ai\//;  // Legacy fallback
-}
-
-function getAiTestFile() {
-  return projectConfig?.testing?.aiTestFile || 'ai.test.ts';
-}
-
-function getFullSuiteTriggers() {
-  return projectConfig?.testing?.fullSuiteTriggers || ['types.ts', 'index.ts'];
-}
-
-function getTestFilterFlag() {
-  return projectConfig?.testing?.filterFlag || '--testPathPattern';
-}
-
-/**
- * Given a list of modified file paths (from agent handoffs), return
- * the test filter string, or null for full suite.
- * v20: Uses config-driven mappings instead of hardcoded constants.
- */
-function getTestFilter(modifiedFiles) {
-  if (!modifiedFiles || !modifiedFiles.length) return null; // no info → full suite
-
-  const SOURCE_TO_TESTS = getSourceToTests();
-  const AI_SOURCE_PATTERN = getAiSourcePattern();
-  const FULL_SUITE_TRIGGERS = getFullSuiteTriggers();
-  const aiTestFile = getAiTestFile();
-
-  const affectedTests = new Set();
-  let needFullSuite = false;
-
-  for (const filePath of modifiedFiles) {
-    const basename = filePath.split('/').pop().split('\\').pop();
-
-    // Non-source files (CSS, MD, JSON, orchestrator, etc.) — no tests needed
-    if (!filePath.includes('src/')) continue;
-
-    // Full suite triggers
-    if (FULL_SUITE_TRIGGERS.includes(basename)) {
-      needFullSuite = true;
-      break;
-    }
-
-    // AI files
-    if (AI_SOURCE_PATTERN.test(filePath)) {
-      affectedTests.add(aiTestFile);
-      continue;
-    }
-
-    // Check the mapping
-    const mapped = SOURCE_TO_TESTS[basename];
-    if (mapped) {
-      for (const t of mapped) affectedTests.add(t);
-    } else if (filePath.includes('src/engine/') || filePath.includes('src/ui/')) {
-      // Unknown engine/ui file — be conservative
-      needFullSuite = true;
-      break;
-    }
-    // Other files (non-src) are ignored — no tests needed
-  }
-
-  if (needFullSuite) return null;
-  if (affectedTests.size === 0) return ''; // empty string → skip tests entirely (no src changes)
-  // Build regex: match any of the test file names
-  return [...affectedTests].join('|');
-}
+// Incremental Testing — managed by test-filter.mjs
 
 // ============================================================
 // Run Tests (v20: quality gate chain with legacy fallback)
@@ -2185,10 +1476,15 @@ async function main() {
   ensureDirs();
   const globalStart = Date.now();
 
-  // Initialize extracted modules
+  // Initialize extracted modules (S63)
+  initBacklogSystem({ orchDir: ORCH_DIR, log });
+  initHandoffParser({ handoffDir: HANDOFF_DIR, logDir: LOG_DIR, agentWorktrees, log, timestamp });
+  initTestFilter({ projectConfig });
+  initSpawnSystem({ spawnsDir: SPAWNS_DIR, config: CONFIG, agentWorktrees, log, runAgent, createWorktree });
   initBalanceAnalyzer({
     log, CONFIG, MVP_DIR, ORCH_DIR, BALANCE_DATA_DIR,
-    BACKLOG_ARCHIVE_FILE, loadBacklog, saveBacklog,
+    BACKLOG_ARCHIVE_FILE: join(ORCH_DIR, 'backlog-archive.json'),
+    loadBacklog, saveBacklog,
   });
   initGitOps({
     log, MVP_DIR, WORKTREE_DIR, agentWorktrees,
@@ -2252,6 +1548,7 @@ async function main() {
     // If no project config was loaded from file, populate from detection
     if (!projectConfig) {
       projectConfig = generateProjectConfig(projectDetection, MVP_DIR);
+      setTestFilterProjectConfig(projectConfig);
       log(`Project config generated from auto-detection (${Object.keys(projectConfig.testing.sourceToTests).length} test mappings)`);
     }
   } catch (err) { log(`Project detection skipped: ${err.message}`); }
