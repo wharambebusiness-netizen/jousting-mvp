@@ -124,3 +124,50 @@ export function tryTransitionMission(reason) {
   const mission = loadSubMission(missionState.currentIndex);
   return { transitioned: true, mission };
 }
+
+/**
+ * Hot-reload tunable fields from mission config each round.
+ * Modifies agent objects and CONFIG in place. Safe to call every round.
+ * @param {string} configPath - Path to mission config file
+ * @param {Array} agents - Current AGENTS array (elements modified in place)
+ */
+export function hotReloadMissionConfig(configPath, agents) {
+  try {
+    const absPath = resolve(configPath);
+    const freshMission = JSON.parse(readFileSync(absPath, 'utf-8'));
+    for (const freshAgent of (freshMission.agents || [])) {
+      const existing = agents.find(a => a.id === freshAgent.id);
+      if (!existing) continue;
+      // Only update live-tunable fields; preserve runtime state (_originalModel, etc.)
+      const TUNABLE_FIELDS = ['model', 'timeoutMs', 'maxBudgetUsd', 'maxModel', 'minFrequencyRounds', 'maxTasksPerRound'];
+      for (const field of TUNABLE_FIELDS) {
+        const newVal = freshAgent[field] ?? (field === 'maxTasksPerRound' ? 1 : field === 'minFrequencyRounds' ? 0 : null);
+        const oldVal = existing[field];
+        if (newVal !== oldVal) {
+          logFn(`Hot-reload: ${existing.id} ${field} changed ${oldVal}->${newVal}`);
+          existing[field] = newVal;
+        }
+      }
+    }
+    // v7 Phase 2: Hot-reload balanceConfig (convergence criteria, thresholds)
+    if (freshMission.balanceConfig) {
+      const oldCC = JSON.stringify(CONFIG.balanceConfig?.convergenceCriteria || null);
+      const newCC = JSON.stringify(freshMission.balanceConfig.convergenceCriteria || null);
+      if (oldCC !== newCC) {
+        logFn(`Hot-reload: convergenceCriteria changed`);
+      }
+      const oldThreshold = CONFIG.balanceConfig?.regressionThresholdPp;
+      const newThreshold = freshMission.balanceConfig.regressionThresholdPp;
+      if (oldThreshold !== newThreshold && newThreshold !== undefined) {
+        logFn(`Hot-reload: regressionThresholdPp changed ${oldThreshold}->${newThreshold}`);
+      }
+      CONFIG.balanceConfig = freshMission.balanceConfig;
+    }
+    // v19: Hot-reload quality gates
+    if (freshMission.qualityGates) {
+      CONFIG.qualityGates = freshMission.qualityGates;
+    }
+  } catch (err) {
+    logFn(`Hot-reload WARNING: Could not re-read mission config (${err.message}). Keeping existing config.`);
+  }
+}

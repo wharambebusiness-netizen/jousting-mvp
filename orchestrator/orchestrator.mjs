@@ -1,19 +1,18 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v24 (modular)
+// Multi-Agent Orchestrator v25 (modular)
 // ============================================================
 // See docs/orchestrator.md for architecture.
 // Extracted modules (S63): balance-analyzer, git-ops, reporter
 // Extracted modules (S65): backlog-system, cost-tracker, test-filter, handoff-parser, spawn-system
 // Extracted modules (S66): agent-tracking, mission-sequencer, progress-dashboard, agent-pool
+// Extracted modules (S67): agent-runner, task-board, hot-reload (into mission-sequencer)
 
 
-import { spawn, execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync, mkdtempSync, rmSync, copyFileSync } from 'fs';
+import { spawn } from 'child_process';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { join, resolve } from 'path';
-import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
 import { runConsistencyCheck } from './consistency-check.mjs';
 import { RoleRegistry } from './role-registry.mjs';
 import { QualityGateChain, createGateChainFromDetection } from './quality-gates.mjs';
@@ -36,9 +35,12 @@ import { initHandoffParser, parseHandoffMeta, validateFileOwnership, validateAge
 import { initSpawnSystem, SPAWN_CONSTRAINTS, detectSpawnRequests, validateSpawnRequest, archiveSpawnRequest, detectAndSpawnAgents, getSpawnNotifications } from './spawn-system.mjs';
 // Extracted modules (S66)
 import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessions, recordAgentRuntime, getAdaptiveTimeout, recordAgentEffectiveness, getDynamicConcurrency, readHandoffContent, getChangelogSinceRound, invalidateAgentSession, invalidateStaleSessions } from './agent-tracking.mjs';
-import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission } from './mission-sequencer.mjs';
+import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission, hotReloadMissionConfig } from './mission-sequencer.mjs';
 import { ProgressDashboard } from './progress-dashboard.mjs';
 import { initAgentPool, runAgentPool } from './agent-pool.mjs';
+// Extracted modules (S67)
+import { initAgentRunner, runAgent, processAgentResult, loadCommonRules } from './agent-runner.mjs';
+import { initTaskBoard, generateTaskBoard, isDepSatisfied } from './task-board.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -347,33 +349,7 @@ function loadMission(missionPath) {
   return { agents, missionName: mission.name, designDoc: mission.designDoc || null };
 }
 
-// ============================================================
-// Role Template Loading
-// ============================================================
-let commonRulesContent = '';
-
-function loadCommonRules() {
-  const rulesPath = join(ROLES_DIR, '_common-rules.md');
-  if (existsSync(rulesPath)) {
-    commonRulesContent = readFileSync(rulesPath, 'utf-8');
-    log(`Loaded shared rules: ${commonRulesContent.split('\n').length} lines`);
-  }
-}
-
-// v11: Role template cache — avoids re-reading the same template from disk every agent spawn
-const roleTemplateCache = {};
-
-function loadRoleTemplate(roleName) {
-  if (!roleName) return '';
-  if (roleTemplateCache[roleName] !== undefined) return roleTemplateCache[roleName];
-  const rolePath = join(ROLES_DIR, `${roleName}.md`);
-  if (!existsSync(rolePath)) {
-    roleTemplateCache[roleName] = '';
-    return '';
-  }
-  roleTemplateCache[roleName] = readFileSync(rolePath, 'utf-8');
-  return roleTemplateCache[roleName];
-}
+// Role Template Loading — managed by agent-runner.mjs
 
 // ============================================================
 // Utilities
@@ -420,452 +396,9 @@ function appendSessionChangelog(round, agentResults) {
   }
 }
 
-// ============================================================
-// Task Board Generation (orchestrator-owned, agents only READ)
-// ============================================================
-function isDepSatisfied(status) {
-  return status === 'complete' || status === 'all-done';
-}
+// Task Board Generation — managed by task-board.mjs
 
-function generateTaskBoard(round, testStatus, consecutiveFailures) {
-  const agentStatuses = AGENTS.map(agent => {
-    const meta = parseHandoffMeta(agent.id);
-    const depsMet = agent.dependsOn.every(depId => {
-      const depMeta = parseHandoffMeta(depId);
-      return isDepSatisfied(depMeta.status);
-    });
-    const effectiveStatus = meta.status === 'all-done' ? 'all-done'
-      : meta.status === 'complete' ? 'complete (stretch goals)'
-      : !depsMet ? `blocked (waiting for ${agent.dependsOn.join(', ')})`
-      : meta.status;
-
-    return { ...agent, meta, effectiveStatus, depsMet };
-  });
-
-  const allFilesModified = agentStatuses.flatMap(a =>
-    a.meta.filesModified.map(f => `${f} (${a.id})`)
-  );
-
-  let board = `# Jousting MVP — Shared Task Board
-> Generated by orchestrator. Round ${round}. Agents: READ ONLY (do not edit this file).
-> Last updated: ${timestamp()}
-
-## System Status
-- **Round**: ${round} of ${CONFIG.maxRounds}
-- **Tests**: ${testStatus ?? 'not yet run'}
-- **Consecutive test failures**: ${consecutiveFailures}
-${consecutiveFailures >= 2 ? '- **WARNING**: Tests have been failing. Focus on fixing test failures before new features!' : ''}
-
-## Agent Status
-| Agent | Type | Status | Dependencies |
-|-------|------|--------|-------------|
-${agentStatuses.map(a =>
-  `| ${a.id} | ${a.type} | ${a.effectiveStatus} | ${a.dependsOn.length ? a.dependsOn.join(', ') : 'none'} |`
-).join('\n')}
-
-## Files Modified This Session
-${allFilesModified.length ? allFilesModified.map(f => `- ${f}`).join('\n') : '(none yet)'}
-
-## Messages Between Agents
-${agentStatuses.filter(a => a.meta.notes).map(a => `- **${a.id}**: ${a.meta.notes}`).join('\n') || '(none)'}
-
-## Coordination Rules
-1. Only edit files assigned to you (see your handoff for file ownership)
-2. If you need to edit App.tsx (shared), note the change in your handoff under "Deferred App.tsx Changes" — the orchestrator will coordinate
-3. Do NOT run git commands — the orchestrator handles all commits
-4. Do NOT edit this task board — it is auto-generated
-5. Run \`${getTestCommand()}\` before writing your final handoff to confirm tests pass
-6. Write your updated handoff with the ## META section at the top
-
-## Reference
-See CLAUDE.md for file locations and architecture.
-`;
-
-  writeFileSync(TASK_BOARD, board);
-  return board;
-}
-
-// ============================================================
-// Run a Single Agent
-// ============================================================
-function runAgent(agent, round) {
-  return new Promise((resolvePromise) => {
-    const logFile = join(LOG_DIR, `${agent.id}-round-${round}.log`);
-
-    // Load role template if available
-    const roleTemplate = loadRoleTemplate(agent.role);
-
-    // v21: Worktree lookup — used for cwd, prompt paths, and handoff reads
-    const worktree = agentWorktrees[agent.id];
-
-    // Build prompt — CLAUDE.md provides project context (auto-loaded by Claude Code)
-    // so we only need coordination info + role guidelines + task reference
-    // v12/v21: When using claudeMdPath (temp cwd), prefix paths with absolute project dir (or worktree)
-    const projectBase = worktree ? worktree.path : MVP_DIR;
-    const p = (relPath) => agent.claudeMdPath ? join(projectBase, relPath).replace(/\\/g, '/') : relPath;
-
-    // v16: Session continuity — determine if this agent can resume a previous session
-    const existingSession = agentSessions[agent.id];
-    const isResuming = !!existingSession;
-
-    let promptParts;
-    if (isResuming) {
-      // --- RESUME PROMPT: compact delta for returning agents ---
-      // Agent retains full context from prior rounds (CLAUDE.md, role template, codebase understanding).
-      // We only inject what's NEW: round number, changelog delta, current handoff, new tasks.
-      promptParts = [
-        `--- ROUND ${round} (resumed session) ---`,
-        `You are "${agent.name}". Round ${round} (last ran round ${existingSession.lastRound}).`,
-        `You have full context from your prior session — do NOT re-read CLAUDE.md or role guidelines.`,
-        ``,
-      ];
-
-      // Inject changes by other agents since this agent's last round
-      const changesSince = getChangelogSinceRound(existingSession.lastRound);
-      if (changesSince) {
-        promptParts.push(`--- CHANGES SINCE ROUND ${existingSession.lastRound} ---`, changesSince, ``);
-      } else {
-        promptParts.push(`No other agents made changes since your last round.`, ``);
-      }
-
-      // Inline current handoff (may have been updated by orchestrator since agent's last write)
-      const handoffContent = readHandoffContent(agent.id);
-      if (handoffContent) {
-        promptParts.push(`--- YOUR CURRENT HANDOFF ---`, handoffContent, ``);
-      }
-
-      promptParts.push(
-        `Do your work. Update handoff: ${p(`orchestrator/handoffs/${agent.id}.md`)}`,
-        `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
-        agent.type === 'continuous'
-          ? `Write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
-          : `Mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
-      );
-
-    } else {
-      // --- FRESH PROMPT: full context for first-run agents ---
-      promptParts = [
-        `You are "${agent.name}", part of a multi-agent team. Round ${round}.`,
-        `Project context is in CLAUDE.md (auto-loaded).`,
-        agent.claudeMdPath ? `Project files are at: ${MVP_DIR.replace(/\\/g, '/')}` : null,
-        ``,
-        `READ FIRST:`,
-        `1. ${p('orchestrator/session-changelog.md')} (what changed this session so far)`,
-        `2. ${p('orchestrator/task-board.md')} (coordination status — DO NOT edit)`,
-      ].filter(Boolean);
-
-      // Add design doc reference if mission specifies one
-      if (missionDesignDoc) {
-        promptParts.push(`3. ${p(missionDesignDoc)} (design reference)`);
-      }
-
-      // v16: Inline handoff content (saves a Read tool call on agent startup)
-      const handoffContent = readHandoffContent(agent.id);
-      if (handoffContent) {
-        promptParts.push(``, `--- YOUR CURRENT HANDOFF (${p(`orchestrator/handoffs/${agent.id}.md`)}) ---`, handoffContent);
-      } else {
-        promptParts.push(`3. ${p(`orchestrator/handoffs/${agent.id}.md`)} (your tasks and progress)`);
-      }
-
-      promptParts.push(
-        ``,
-        `Then do your work. When done, write updated handoff to ${p(`orchestrator/handoffs/${agent.id}.md`)}.`,
-        ``,
-        `HANDOFF FORMAT (top of file):`,
-        `## META`,
-        `- status: in-progress | complete | all-done`,
-        `- files-modified: comma-separated list`,
-        `- tests-passing: true | false`,
-        `- notes-for-others: messages for other agents`,
-        ``,
-        `Status: in-progress (working) → complete (primary done, unblocks others, do stretch goals) → all-done (everything done, retired)`,
-        `Include: ## What Was Done, ## What's Left, ## Issues`,
-        ``,
-        `RULES: No git. No editing task-board.md. No editing other agents' files. Run tests before handoff.`,
-        agent.type === 'continuous'
-          ? `You are CONTINUOUS — write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
-          : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
-      );
-    }
-
-    // v12: Inject runtime stats for continuous agents (helps agents self-regulate pacing)
-    if (agent.type === 'continuous') {
-      const history = agentRuntimeHistory[agent.id];
-      if (history?.length) {
-        const avgSec = history.reduce((a, b) => a + b, 0) / history.length;
-        const timeoutMs = getAdaptiveTimeout(agent);
-        promptParts.push(
-          `Your recent performance: avg ${(avgSec / 60).toFixed(1)}min over ${history.length} run(s), timeout ${(timeoutMs / 60000).toFixed(1)}min. Stay focused to finish within budget.`,
-        );
-      }
-    }
-
-    // v5/v6: Inject batch backlog tasks if available
-    // v12: Truncate descriptions to first sentence to reduce prompt bloat
-    // v15: Subtask support — when a task has subtasks, assign only the next incomplete one
-    const backlogTasks = getNextTasks(agent.role, agent.maxTasksPerRound || 1, agent.id);
-    if (backlogTasks.length) {
-      promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
-      for (let i = 0; i < backlogTasks.length; i++) {
-        const bt = backlogTasks[i];
-        // v15: Check for subtasks — assign only the next incomplete subtask
-        const nextSub = getNextSubtask(bt.id);
-        if (nextSub) {
-          const totalSubs = bt.subtasks.length;
-          const completedSubs = bt.subtasks.filter(s => s.status === 'completed').length;
-          promptParts.push(
-            `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
-            `  SUBTASK ${completedSubs + 1}/${totalSubs}: ${nextSub.id} — ${nextSub.title}`,
-            `  Description: ${nextSub.description || ''}`,
-            `  Focus ONLY on this subtask. Note subtask ID ${nextSub.id} in handoff META under completed-tasks.`,
-            `Files: ${(bt.fileOwnership || []).join(', ')}`,
-          );
-        } else {
-          // v12: First sentence only (up to first period+space or newline)
-          const shortDesc = bt.description
-            ? bt.description.split(/(?<=\.)\s|\n/)[0]
-            : '';
-          promptParts.push(
-            `Task ${i + 1} of ${backlogTasks.length}: ${bt.id} (P${bt.priority}) — ${bt.title}`,
-            `Description: ${shortDesc}`,
-            `Files: ${(bt.fileOwnership || []).join(', ')}`,
-          );
-        }
-      }
-      promptParts.push(`Work through these in order. See ${p('orchestrator/backlog.json')} for full task details. Note completed task IDs in handoff META under completed-tasks.`);
-    }
-
-    // v12: Balance context — full injection only for balance-analyst and qa-engineer.
-    // Other roles get a 1-line pointer to avoid prompt bloat.
-    const BALANCE_FULL_ROLES = ['balance-analyst', 'qa-engineer'];
-    if (CONFIG.balanceConfig && BALANCE_FULL_ROLES.includes(agent.role)) {
-      const balanceCtx = buildBalanceContext();
-      if (balanceCtx) {
-        promptParts.push(
-          ``,
-          `--- BALANCE CONTEXT (auto-generated from orchestrator sims — DO NOT run your own sims) ---`,
-          balanceCtx,
-          `Use this data for analysis. The orchestrator runs sims before/after each round automatically.`,
-        );
-      }
-    } else if (CONFIG.balanceConfig) {
-      promptParts.push(
-        ``,
-        `Balance data available in ${p('orchestrator/balance-state.json')} if needed (run \`cat ${p('orchestrator/balance-state.json')}\` to read).`,
-      );
-    }
-
-    // v7 Phase 4: Inject parameter search results (if available)
-    if (getParamSearchResults() && agent.role === 'balance-analyst') {
-      const searchCtx = buildParamSearchContext();
-      if (searchCtx) {
-        promptParts.push(
-          ``,
-          `--- PARAMETER SEARCH RESULTS (auto-generated — use for informed parameter changes) ---`,
-          searchCtx,
-          `Use these results to prioritize which parameters to adjust. Prefer changes the search identifies as improvements.`,
-        );
-      }
-    }
-
-    // v13: Inject experiment history (what has been tried and outcomes)
-    if (agent.role === 'balance-analyst') {
-      const experimentCtx = buildExperimentContext();
-      if (experimentCtx) {
-        promptParts.push(
-          ``,
-          `--- EXPERIMENT HISTORY (auto-generated — what previous rounds tried and the outcomes) ---`,
-          experimentCtx,
-        );
-      }
-    }
-
-    // v21: Spawn notifications (previous round's spawned agent results)
-    if (round > 1) {
-      const spawnNotif = getSpawnNotifications(agent.id, round - 1);
-      if (spawnNotif) {
-        promptParts.push(``, `--- SPAWNED AGENT RESULTS (from previous round) ---`, spawnNotif);
-      }
-    }
-
-    // v21: Spawn instructions for code agents (not spawned agents themselves)
-    if (agent.type !== 'spawned' && !isResuming) {
-      promptParts.push(
-        ``,
-        `--- AGENT SPAWNING (optional) ---`,
-        `Need a helper for a complex subtask? Write a JSON file to orchestrator/spawns/:`,
-        `  File: orchestrator/spawns/spawn-${agent.id}-{any-unique-suffix}.json`,
-        `  Format: { "parentId": "${agent.id}", "role": "<role>", "name": "<name>",`,
-        `    "task": "<detailed description>", "fileOwnership": ["<files>"],`,
-        `    "model": "haiku", "maxBudgetUsd": 1.0 }`,
-        `  Roles: qa-engineer, engine-dev, ui-dev, css-artist, test-generator, security-auditor.`,
-        `  Helper runs this round only. Max 1 spawn per agent per round.`,
-      );
-    }
-
-    // v21: Spawned agent gets its task as the primary prompt directive
-    if (agent._spawnTask) {
-      promptParts.push(
-        ``,
-        `--- YOUR TASK (spawned by ${agent._spawnedBy}) ---`,
-        agent._spawnTask,
-        agent._spawnContext ? `Context: ${JSON.stringify(agent._spawnContext)}` : '',
-        `You are a one-shot helper agent. Complete this task, run tests, and write your handoff.`,
-      );
-    }
-
-    // v16: Shared rules and role template — skip for resumed sessions.
-    // Returning agents already have these from their initial session.
-    if (!isResuming) {
-      if (commonRulesContent) {
-        promptParts.push(``, `--- SHARED RULES ---`, commonRulesContent);
-      }
-      if (roleTemplate) {
-        promptParts.push(``, `--- ROLE GUIDELINES ---`, roleTemplate);
-      }
-    }
-
-    const prompt = promptParts.join('\n');
-
-    // v6.1: Log estimated prompt tokens for Phase 4 cost analysis
-    const estimatedTokens = Math.ceil(prompt.length / 4);
-    const sessionMode = isResuming ? 'resume' : 'fresh';
-    log(`  Starting ${agent.id}... (~${estimatedTokens} prompt tokens, model=${agent.model || 'default'}, session=${sessionMode})`);
-    // v22: Emit agent start event
-    if (obs) obs.events.emit('agent:start', { agentId: agent.id, round, model: agent.model || 'default', sessionMode, estimatedTokens });
-    const startTime = Date.now();
-
-    // v21: worktreeBase = worktree path (for code agents) or MVP_DIR (for coord agents / no worktree)
-    const worktreeBase = worktree ? worktree.path : MVP_DIR;
-
-    // v12: Per-agent CLAUDE.md override — create temp dir with trimmed CLAUDE.md
-    // so the CLI auto-loads the lite version. Use --add-dir for project file access.
-    let agentCwd = worktreeBase;
-    let tempDir = null;
-    if (agent.claudeMdPath) {
-      const litePath = join(worktreeBase, agent.claudeMdPath);
-      if (existsSync(litePath)) {
-        tempDir = mkdtempSync(join(tmpdir(), `orch-${agent.id}-`));
-        copyFileSync(litePath, join(tempDir, 'CLAUDE.md'));
-        agentCwd = tempDir;
-        log(`    using ${agent.claudeMdPath} (temp dir: ${tempDir})`);
-      }
-    }
-
-    if (worktree) {
-      log(`    worktree: ${worktree.branch} → ${worktree.path}`);
-    }
-
-    // v5/v6: Build CLI args with optional per-agent model + budget
-    // v19: Per-agent allowedTools override (falls back to CONFIG.allowedTools)
-    const agentTools = agent.allowedTools || CONFIG.allowedTools;
-    const cliArgs = ['-p', '--allowedTools', agentTools, '--output-format', 'text'];
-    if (agent.model) cliArgs.push('--model', agent.model);
-    if (agent.maxBudgetUsd) cliArgs.push('--max-budget-usd', String(agent.maxBudgetUsd));
-    // v12/v21: When using temp dir, grant access to actual project (worktree or MVP_DIR)
-    if (tempDir) cliArgs.push('--add-dir', worktreeBase);
-
-    // v16: Session continuity — resume existing session or establish new one
-    if (isResuming) {
-      cliArgs.push('--resume', existingSession.sessionId);
-    } else {
-      const sessionId = randomUUID();
-      agentSessions[agent.id] = { sessionId, lastRound: round, resumeCount: 0, freshCount: 1, invalidations: 0 };
-      cliArgs.push('--session-id', sessionId);
-    }
-
-    // Spawn claude with prompt piped via stdin (avoids Windows cmd length limit)
-    const proc = spawn('claude', cliArgs, {
-      cwd: agentCwd,
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    activeProcs.add(proc.pid);
-
-    // v10: Adaptive timeout — 2x average runtime, capped at configured max
-    const timeout = getAdaptiveTimeout(agent);
-    const configTimeout = agent.timeoutMs || CONFIG.agentTimeoutMs;
-    const isAdapted = timeout < configTimeout;
-    if (isAdapted) {
-      const history = agentRuntimeHistory[agent.id] || [];
-      const avgMin = history.length ? ((history.reduce((a, b) => a + b, 0) / history.length) / 60).toFixed(1) : '?';
-      log(`    adaptive timeout: ${(timeout / 60000).toFixed(1)}min (avg ${avgMin}min, max ${(configTimeout / 60000).toFixed(0)}min)`);
-    }
-    const timer = setTimeout(() => {
-      timedOut = true;
-      log(`  ${agent.id} TIMED OUT after ${(timeout / 60000).toFixed(1)} minutes — killing process tree (PID ${proc.pid})`);
-      killProcessTree(proc.pid);
-    }, timeout);
-
-    proc.stdout.on('data', (data) => {
-      const text = data.toString();
-      stdout += text;
-      appendFileSync(logFile, text);
-    });
-
-    proc.stderr.on('data', (data) => {
-      const text = data.toString();
-      stderr += text;
-      appendFileSync(logFile, `[STDERR] ${text}`);
-    });
-
-    // v12: Helper to clean up temp dir after agent finishes
-    const cleanupTempDir = () => {
-      if (tempDir) {
-        try { rmSync(tempDir, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
-      }
-    };
-
-    proc.on('close', (code) => {
-      clearTimeout(timer);
-      activeProcs.delete(proc.pid);
-      cleanupTempDir();
-      const elapsed = Math.round((Date.now() - startTime) / 1000);
-      const elapsedMin = (elapsed / 60).toFixed(1);
-      const status = timedOut ? 'TIMEOUT' : code === 0 ? 'OK' : `EXIT-${code}`;
-      log(`  ${agent.id} finished: ${status} (${elapsedMin} min, session=${sessionMode})`);
-      // v22: Emit agent completion event + record metrics
-      if (obs) {
-        const eventName = (code === 0 && !timedOut) ? 'agent:complete' : 'agent:error';
-        obs.events.emit(eventName, { agentId: agent.id, round, status, elapsedMs: elapsed * 1000, sessionMode });
-        obs.metrics.recordAgentRun(agent.id, { elapsedMs: elapsed * 1000, model: agent.model || 'default', success: code === 0 && !timedOut, round });
-      }
-
-      // v16: Update session tracking after agent completes
-      if (code === 0 && !timedOut && agentSessions[agent.id]) {
-        // Success — update last round for next resume
-        agentSessions[agent.id].lastRound = round;
-        if (isResuming) agentSessions[agent.id].resumeCount++;
-      } else if (isResuming && elapsed < 30 && code !== 0) {
-        // Very short failure during resume — likely session issue (expired, corrupted)
-        invalidateAgentSession(agent.id, `resume failure (${elapsed}s, code=${code})`);
-      }
-
-      resolvePromise({ agentId: agent.id, code, timedOut, elapsed, stdout, stderr, wasResumed: isResuming });
-    });
-
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      activeProcs.delete(proc.pid);
-      cleanupTempDir();
-      log(`  ${agent.id} SPAWN ERROR: ${err.message}`);
-      resolvePromise({ agentId: agent.id, code: -1, timedOut: false, elapsed: 0, stdout: '', stderr: err.message });
-    });
-
-    // Pipe prompt via stdin (bypasses Windows command line length limit)
-    proc.stdin.write(prompt, 'utf-8');
-    proc.stdin.end();
-  });
-}
-
-
-// Dynamic Agent Spawning — managed by spawn-system.mjs
+// Run Agent + Dynamic Agent Spawning — managed by agent-runner.mjs + spawn-system.mjs
 
 // ============================================================
 // Analysis File Rotation (v5 Phase 5F)
@@ -913,63 +446,7 @@ function rotateAnalysisFiles(keepRounds = 5) {
 // Progress Dashboard — managed by progress-dashboard.mjs
 // Agent Pool — managed by agent-pool.mjs
 
-// ============================================================
-// Process Agent Result (v9 — extracted from Phase A/B duplicated blocks)
-// ============================================================
-// ctx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures }
-// These are main()-scoped tracking objects passed by reference.
-function processAgentResult(result, round, roundAgents, costLog, ctx) {
-  const status = result.timedOut ? 'TIMEOUT' : result.code === 0 ? 'OK' : `ERROR(${result.code})`;
-  log(`  ${result.agentId}: ${status} in ${(result.elapsed / 60).toFixed(1)}min`);
-  roundAgents.push({ id: result.agentId, status, elapsed: result.elapsed });
-  ctx.lastRunRound[result.agentId] = round;
-  accumulateAgentCost(costLog, result, AGENTS);
-
-  // v10: Record runtime for adaptive timeout (only successful non-timeout runs)
-  if (!result.timedOut && result.elapsed > 0) {
-    recordAgentRuntime(result.agentId, result.elapsed);
-  }
-
-  const { warnings, isEmptyWork } = validateAgentOutput(result.agentId, round, result);
-  for (const w of warnings) log(`  ⚠ ${w}`);
-
-  if (isEmptyWork) {
-    ctx.consecutiveEmptyRounds[result.agentId] = (ctx.consecutiveEmptyRounds[result.agentId] || 0) + 1;
-    if (ctx.consecutiveEmptyRounds[result.agentId] >= 3) {
-      // v11: Smarter escalation guard — don't escalate if agent has no backlog tasks.
-      // Empty work from "nothing to do" shouldn't burn cost on a bigger model.
-      const agent = AGENTS.find(a => a.id === result.agentId);
-      const backlog = loadBacklog();
-      const hasBacklogTask = agent && backlog.some(t => t.status === 'pending' && t.role === agent.role);
-      if (!hasBacklogTask) {
-        log(`  ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds but no pending tasks — skipping escalation`);
-      } else {
-        log(`  ⚠ ${result.agentId}: ${ctx.consecutiveEmptyRounds[result.agentId]} consecutive empty rounds — auto-escalating model`);
-        if (agent) ctx.consecutiveAgentFailures[result.agentId] = 2;
-      }
-    }
-  } else if (result.code === 0 && !result.timedOut) {
-    ctx.consecutiveEmptyRounds[result.agentId] = 0;
-  }
-  // v10: Collect modified files from handoff for incremental testing
-  const meta = parseHandoffMeta(result.agentId);
-  // v13: Flag if balance-config.ts was modified (for experiment logging)
-  const filesModified = meta.filesModified || [];
-  const balanceConfigChanged = filesModified.some(f =>
-    f.includes('balance-config') || f.includes('archetypes')
-  );
-
-  // v14: Record agent effectiveness metrics
-  const costEntry = costLog[result.agentId];
-  recordAgentEffectiveness(result.agentId, {
-    filesModified,
-    costEntry,
-    elapsedSeconds: result.elapsed,
-    isEmptyWork,
-  });
-
-  return { status, isEmptyWork, filesModified, balanceConfigChanged };
-}
+// Process Agent Result — managed by agent-runner.mjs
 
 // Incremental Testing — managed by test-filter.mjs
 
@@ -1095,10 +572,27 @@ async function main() {
   ensureDirs();
   const globalStart = Date.now();
 
-  // Initialize extracted modules (S63-S66)
+  // Initialize extracted modules (S63-S67)
   initBacklogSystem({ orchDir: ORCH_DIR, log });
   initHandoffParser({ handoffDir: HANDOFF_DIR, logDir: LOG_DIR, agentWorktrees, log, timestamp });
   initTestFilter({ projectConfig });
+  initAgentRunner({
+    log, logDir: LOG_DIR, mvpDir: MVP_DIR, rolesDir: ROLES_DIR,
+    config: CONFIG, getAgents: () => AGENTS, activeProcs, agentWorktrees,
+    agentSessions, agentRuntimeHistory,
+    getObs: () => obs, getMissionDesignDoc: () => missionDesignDoc,
+    killProcessTree,
+    getChangelogSinceRound, readHandoffContent, getAdaptiveTimeout,
+    invalidateAgentSession, recordAgentRuntime, recordAgentEffectiveness,
+    getNextTasks, getNextSubtask, loadBacklog,
+    buildBalanceContext, getParamSearchResults, buildParamSearchContext, buildExperimentContext,
+    getSpawnNotifications, accumulateAgentCost,
+    validateAgentOutput, parseHandoffMeta,
+  });
+  initTaskBoard({
+    getAgents: () => AGENTS, config: CONFIG, taskBoardPath: TASK_BOARD,
+    timestamp, getTestCommand, parseHandoffMeta,
+  });
   initSpawnSystem({ spawnsDir: SPAWNS_DIR, config: CONFIG, agentWorktrees, log, runAgent, createWorktree });
   initBalanceAnalyzer({
     log, CONFIG, MVP_DIR, ORCH_DIR, BALANCE_DATA_DIR,
@@ -1357,46 +851,9 @@ async function main() {
     }
     const remainingHrs = ((CONFIG.maxRuntimeMs - elapsed) / 3600000).toFixed(1);
 
-    // --- Feature 5E: Hot-reload mission config each round ---
+    // --- Feature 5E: Hot-reload mission config each round (managed by mission-sequencer.mjs) ---
     if (missionConfigPath) {
-      try {
-        const absPath = resolve(missionConfigPath);
-        const freshMission = JSON.parse(readFileSync(absPath, 'utf-8'));
-        for (const freshAgent of (freshMission.agents || [])) {
-          const existing = AGENTS.find(a => a.id === freshAgent.id);
-          if (!existing) continue;
-          // Only update live-tunable fields; preserve runtime state (_originalModel, etc.)
-          const TUNABLE_FIELDS = ['model', 'timeoutMs', 'maxBudgetUsd', 'maxModel', 'minFrequencyRounds', 'maxTasksPerRound'];
-          for (const field of TUNABLE_FIELDS) {
-            const newVal = freshAgent[field] ?? (field === 'maxTasksPerRound' ? 1 : field === 'minFrequencyRounds' ? 0 : null);
-            const oldVal = existing[field];
-            if (newVal !== oldVal) {
-              log(`Hot-reload: ${existing.id} ${field} changed ${oldVal}->${newVal}`);
-              existing[field] = newVal;
-            }
-          }
-        }
-        // v7 Phase 2: Hot-reload balanceConfig (convergence criteria, thresholds)
-        if (freshMission.balanceConfig) {
-          const oldCC = JSON.stringify(CONFIG.balanceConfig?.convergenceCriteria || null);
-          const newCC = JSON.stringify(freshMission.balanceConfig.convergenceCriteria || null);
-          if (oldCC !== newCC) {
-            log(`Hot-reload: convergenceCriteria changed`);
-          }
-          const oldThreshold = CONFIG.balanceConfig?.regressionThresholdPp;
-          const newThreshold = freshMission.balanceConfig.regressionThresholdPp;
-          if (oldThreshold !== newThreshold && newThreshold !== undefined) {
-            log(`Hot-reload: regressionThresholdPp changed ${oldThreshold}->${newThreshold}`);
-          }
-          CONFIG.balanceConfig = freshMission.balanceConfig;
-        }
-        // v19: Hot-reload quality gates
-        if (freshMission.qualityGates) {
-          CONFIG.qualityGates = freshMission.qualityGates;
-        }
-      } catch (err) {
-        log(`Hot-reload WARNING: Could not re-read mission config (${err.message}). Keeping existing config.`);
-      }
+      hotReloadMissionConfig(missionConfigPath, AGENTS);
     }
 
     log(`\n${'━'.repeat(50)}`);
