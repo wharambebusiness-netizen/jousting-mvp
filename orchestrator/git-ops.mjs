@@ -411,3 +411,68 @@ export async function smartRevertWorktrees(round, codeResults, preMergeHead, mer
   log(`  Worktree revert: kept ${keptAgents.length}, reverted ${revertedAgents.length} (strategy: ${strategy})`);
   return { reverted: true, strategy, revertedAgents };
 }
+
+// ============================================================
+// v26/M2: Agent Output Cross-Verification
+// ============================================================
+// Compare git status --porcelain against self-reported filesModified.
+// Log discrepancies as warnings — observability, not enforcement.
+
+/**
+ * Verify an agent's self-reported file modifications against actual git status.
+ * Must be called while the agent's worktree is still alive.
+ * @param {string} agentId
+ * @param {string[]} reportedFiles — from parseHandoffMeta().filesModified
+ * @param {string} worktreePath — agent's worktree directory
+ * @returns {Promise<{ warnings: string[] }>}
+ */
+export async function verifyAgentOutput(agentId, reportedFiles, worktreePath) {
+  const warnings = [];
+
+  // Run git status --porcelain in the worktree to get actual changed files
+  const result = await gitExec('git status --porcelain', worktreePath);
+  if (!result.ok) {
+    warnings.push(`${agentId}: cross-verify skipped — git status failed: ${result.stderr.slice(0, 100)}`);
+    return { warnings };
+  }
+
+  // Parse porcelain output: each line is "XY filename" or "XY old -> new" for renames
+  const actualFiles = new Set();
+  for (const line of result.stdout.split('\n')) {
+    if (!line.trim()) continue;
+    // Porcelain format: 2-char status + space + path (or path -> path for renames)
+    let filePath = line.slice(3).trim();
+    // Handle renames: "R  old -> new"
+    const arrowIdx = filePath.indexOf(' -> ');
+    if (arrowIdx !== -1) filePath = filePath.slice(arrowIdx + 4);
+    // Normalize Windows backslashes
+    filePath = filePath.replace(/\\/g, '/');
+    // Exclude orchestrator/** paths (agents always touch handoff files)
+    if (filePath.startsWith('orchestrator/')) continue;
+    actualFiles.add(filePath);
+  }
+
+  // Normalize reported files for comparison
+  const reportedSet = new Set(
+    reportedFiles
+      .map(f => f.replace(/\\/g, '/').trim())
+      .filter(f => !f.startsWith('orchestrator/') && f !== '(none yet)')
+  );
+
+  // Check BOTH directions:
+  // 1. Files agent changed but didn't report
+  for (const actual of actualFiles) {
+    if (!reportedSet.has(actual)) {
+      warnings.push(`${agentId}: UNREPORTED file change: ${actual} (modified but not in files-modified)`);
+    }
+  }
+
+  // 2. Files agent claimed but didn't actually change
+  for (const reported of reportedSet) {
+    if (!actualFiles.has(reported)) {
+      warnings.push(`${agentId}: PHANTOM file claim: ${reported} (in files-modified but not actually changed)`);
+    }
+  }
+
+  return { warnings };
+}

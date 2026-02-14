@@ -1,0 +1,11 @@
+{
+  "name": "notify",
+  "version": "1.0.0",
+  "type": "hook",
+  "description": "Sends webhook notifications on round completion and orchestration finish",
+  "entry": "index.mjs",
+  "config": {
+    "retryDelayMs": 5000,
+    "maxRetries": 1
+  }
+}

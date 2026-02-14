@@ -19,6 +19,8 @@ let activeProcs = null;
 let agentWorktrees = {};
 let agentSessions = {};
 let agentRuntimeHistory = {};
+let lastFailureDetails = {};
+let consecutiveEmptyRounds = {};
 let getObs = () => null;
 let getMissionDesignDoc = () => null;
 let killProcessTreeFn = () => {};
@@ -45,6 +47,14 @@ let accumulateAgentCostFn = () => {};
 // From handoff-parser
 let validateAgentOutputFn = () => ({});
 let parseHandoffMetaFn = () => ({});
+// From lessons
+let queryLessonsFn = () => [];
+let formatLessonsForPromptFn = () => null;
+
+// v26/M1: Strip ANSI escape codes for clean failure context injection
+function stripAnsiCodes(str) {
+  return str.replace(/\x1b\[[0-9;]*m/g, '');
+}
 
 // Role template loading (only used by runAgent — moved from orchestrator)
 let commonRulesContent = '';
@@ -65,6 +75,8 @@ export function initAgentRunner(ctx) {
   agentWorktrees = ctx.agentWorktrees;
   agentSessions = ctx.agentSessions;
   agentRuntimeHistory = ctx.agentRuntimeHistory;
+  lastFailureDetails = ctx.lastFailureDetails || {};
+  consecutiveEmptyRounds = ctx.consecutiveEmptyRounds || {};
   getObs = ctx.getObs;
   getMissionDesignDoc = ctx.getMissionDesignDoc;
   killProcessTreeFn = ctx.killProcessTree;
@@ -91,6 +103,9 @@ export function initAgentRunner(ctx) {
   // From handoff-parser
   validateAgentOutputFn = ctx.validateAgentOutput;
   parseHandoffMetaFn = ctx.parseHandoffMeta;
+  // From lessons
+  queryLessonsFn = ctx.queryLessons || (() => []);
+  formatLessonsForPromptFn = ctx.formatLessonsForPrompt || (() => null);
 }
 
 /**
@@ -219,6 +234,32 @@ export function runAgent(agent, round) {
           ? `You are CONTINUOUS — write analysis to ${p(`orchestrator/analysis/${agent.id}-round-${round}.md`)}`
           : `You are FEATURE — mark "complete" when primary milestone done, "all-done" when stretch goals done too.`,
       );
+    }
+
+    // v26/M1: Inject failure context from previous run (both fresh and resume paths)
+    const failDetail = lastFailureDetails[agent.id];
+    if (failDetail) {
+      promptParts.push(``, `--- PREVIOUS RUN FAILURE (round ${failDetail.round}) ---`);
+      if (failDetail.timedOut) {
+        promptParts.push(`Your previous run TIMED OUT. You must work faster and more focused this round.`);
+      } else if (failDetail.isEmptyWork) {
+        promptParts.push(`Your previous run produced EMPTY WORK — you exited OK but modified zero files and didn't update your handoff. You must make meaningful progress this round.`);
+      } else {
+        promptParts.push(`Your previous run CRASHED with exit code ${failDetail.code}. Avoid repeating the same approach that caused this failure.`);
+      }
+      if (failDetail.stderrSummary) {
+        promptParts.push(`Stderr (last 500 chars): ${failDetail.stderrSummary}`);
+      }
+      promptParts.push(`Consecutive failures: ${(consecutiveEmptyRounds[agent.id] || 0) + 1}. Adapt your approach.`);
+    }
+
+    // v26/M4: Inject cross-session lessons (max 3, matched by role + files-in-common)
+    if (!isResuming) {
+      const lessons = queryLessonsFn(agent.role, agent.fileOwnership || []);
+      const lessonsText = formatLessonsForPromptFn(lessons);
+      if (lessonsText) {
+        promptParts.push(``, lessonsText);
+      }
     }
 
     // v12: Inject runtime stats for continuous agents (helps agents self-regulate pacing)
@@ -501,7 +542,7 @@ export function runAgent(agent, round) {
 // ============================================================
 // Process Agent Result (v9 — extracted from Phase A/B duplicated blocks)
 // ============================================================
-// ctx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures }
+// ctx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures, lastFailureDetails }
 // These are main()-scoped tracking objects passed by reference.
 export function processAgentResult(result, round, roundAgents, costLog, ctx) {
   const AGENTS = getAgents();
@@ -537,6 +578,25 @@ export function processAgentResult(result, round, roundAgents, costLog, ctx) {
   } else if (result.code === 0 && !result.timedOut) {
     ctx.consecutiveEmptyRounds[result.agentId] = 0;
   }
+
+  // v26/M1: Record failure details for context injection into next run's prompt
+  if (ctx.lastFailureDetails) {
+    const failed = result.timedOut || result.code !== 0;
+    if (failed || isEmptyWork) {
+      const rawStderr = (result.stderr || '').slice(-500);
+      ctx.lastFailureDetails[result.agentId] = {
+        code: result.code,
+        timedOut: result.timedOut,
+        stderrSummary: stripAnsiCodes(rawStderr),
+        round,
+        isEmptyWork,
+      };
+    } else {
+      // Success — clear failure details
+      delete ctx.lastFailureDetails[result.agentId];
+    }
+  }
+
   // v10: Collect modified files from handoff for incremental testing
   const meta = parseHandoffMetaFn(result.agentId);
   // v13: Flag if balance-config.ts was modified (for experiment logging)

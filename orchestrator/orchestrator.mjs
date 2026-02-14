@@ -25,7 +25,7 @@ import { DAGScheduler, createDAGFromWorkflow, createDAGFromConfig } from './dag-
 import { PluginManager } from './plugin-system.mjs';
 // Extracted modules (S63)
 import { initBalanceAnalyzer, getParamSearchResults, setParamSearchResults, runBalanceSim, runBalanceSims, loadBalanceState, saveBalanceState, updateBalanceState, loadExperimentLog, saveExperimentLog, parseBalanceConfigDiff, logExperiment, buildExperimentContext, detectBalanceRegressions, checkConvergence, buildBalanceContext, generateBalanceBacklog, getNextBacklogId, runParameterSearch, buildParamSearchContext } from './balance-analyzer.mjs';
-import { initGitOps, gitBackup, tagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert, invalidateRevertedSessions, gitExec, createWorktree, mergeWorktreeBranch, removeWorktree, cleanupAllWorktrees, getHeadSha, smartRevertWorktrees } from './git-ops.mjs';
+import { initGitOps, gitBackup, tagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert, invalidateRevertedSessions, gitExec, createWorktree, mergeWorktreeBranch, removeWorktree, cleanupAllWorktrees, getHeadSha, smartRevertWorktrees, verifyAgentOutput } from './git-ops.mjs';
 import { initReporter, generateOvernightReport } from './reporter.mjs';
 // Extracted modules (S65)
 import { initBacklogSystem, loadBacklog, saveBacklog, getNextTask, getNextTasks, taskMatchesAgent, completeBacklogTask, getNextSubtask, completeSubtask, getAgentTaskPriority, agentHasCriticalTask, resetStaleAssignments, archiveCompletedTasks } from './backlog-system.mjs';
@@ -38,6 +38,7 @@ import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessio
 import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission, hotReloadMissionConfig } from './mission-sequencer.mjs';
 import { ProgressDashboard } from './progress-dashboard.mjs';
 import { initAgentPool, runAgentPool } from './agent-pool.mjs';
+import { initLessons, loadLessons, recordLesson, queryLessons, formatLessonsForPrompt } from './lessons.mjs';
 // Extracted modules (S67)
 import { initAgentRunner, runAgent, processAgentResult, loadCommonRules } from './agent-runner.mjs';
 import { initTaskBoard, generateTaskBoard, isDepSatisfied } from './task-board.mjs';
@@ -119,7 +120,7 @@ const CONFIG = {
   // v22: Observability — structured logging, metrics, event bus.
   enableObservability: true,
   // v22: Plugin system — discover and load plugins from orchestrator/plugins/.
-  enablePlugins: false,
+  enablePlugins: true,
   // v22: DAG scheduler — allow mission configs to define arbitrary dependency DAGs.
   enableDAG: true,
   // Balance sim config (enabled via mission balanceConfig or set here)
@@ -579,7 +580,7 @@ async function main() {
   initAgentRunner({
     log, logDir: LOG_DIR, mvpDir: MVP_DIR, rolesDir: ROLES_DIR,
     config: CONFIG, getAgents: () => AGENTS, activeProcs, agentWorktrees,
-    agentSessions, agentRuntimeHistory,
+    agentSessions, agentRuntimeHistory, lastFailureDetails, consecutiveEmptyRounds,
     getObs: () => obs, getMissionDesignDoc: () => missionDesignDoc,
     killProcessTree,
     getChangelogSinceRound, readHandoffContent, getAdaptiveTimeout,
@@ -588,6 +589,7 @@ async function main() {
     buildBalanceContext, getParamSearchResults, buildParamSearchContext, buildExperimentContext,
     getSpawnNotifications, accumulateAgentCost,
     validateAgentOutput, parseHandoffMeta,
+    queryLessons, formatLessonsForPrompt,
   });
   initTaskBoard({
     getAgents: () => AGENTS, config: CONFIG, taskBoardPath: TASK_BOARD,
@@ -616,6 +618,11 @@ async function main() {
     log, loadMission,
   });
   initAgentPool({ runAgent });
+  initLessons({ orchDir: ORCH_DIR, log });
+  const lessonsData = loadLessons();
+  if (lessonsData.lessons.length) {
+    log(`Lessons loaded: ${lessonsData.lessons.length} cross-session lesson(s)`);
+  }
 
   // --- Load mission config if provided as CLI argument ---
   missionConfigPath = process.argv[2] || null;
@@ -778,8 +785,11 @@ async function main() {
   // v5B: Track per-agent empty rounds (ran OK but modified zero files)
   const consecutiveEmptyRounds = {};    // agentId → consecutive empty-work count
 
+  // v26/M1: Last failure details for context injection into agent prompts
+  const lastFailureDetails = {};        // agentId → { code, timedOut, stderrSummary, round, isEmptyWork }
+
   // v9: Context object for processAgentResult (passes main-scoped tracking by reference)
-  const trackingCtx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures };
+  const trackingCtx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures, lastFailureDetails };
 
   // v5C: Track per-agent failure cooldown
   const lastFailedRound = {};           // agentId → round number of last failure
@@ -800,6 +810,7 @@ async function main() {
     for (const key of Object.keys(lastFailedRound)) delete lastFailedRound[key];
     for (const key of Object.keys(lastEscalatedRound)) delete lastEscalatedRound[key];
     for (const key of Object.keys(successesAfterEscalation)) delete successesAfterEscalation[key];
+    for (const key of Object.keys(lastFailureDetails)) delete lastFailureDetails[key];
     // v8 bugfix: Reset test state so mission 2 doesn't inherit mission 1's failure count
     consecutiveTestFailures = 0;
     lastTestStatus = null;
@@ -1062,6 +1073,24 @@ async function main() {
         return false;
       }
 
+      // v26/M3: File-existence pre-flight — skip if ALL literal fileOwnership files are missing
+      if (agent.fileOwnership?.length) {
+        const literalFiles = agent.fileOwnership.filter(f => !/[*?{]/.test(f));
+        if (literalFiles.length > 0) {
+          const existingCount = literalFiles.filter(f => existsSync(join(MVP_DIR, f))).length;
+          if (existingCount === 0) {
+            log(`  ${agent.id}: PRE-FLIGHT SKIP (all ${literalFiles.length} fileOwnership files missing from disk)`);
+            thisRoundDecisions.push({
+              round, agentId: agent.id, decision: 'skipped',
+              reason: `pre-flight: all ${literalFiles.length} fileOwnership files missing`,
+              model: agent.model || 'default',
+              escalated: false, succeeded: null, elapsed: null,
+            });
+            return false;
+          }
+        }
+      }
+
       const phase = meta.status === 'complete' ? 'stretch goals' : agent.type;
       log(`  ${agent.id}: ACTIVE (${phase})`);
       // Record as included — succeeded/elapsed will be updated after execution
@@ -1315,6 +1344,17 @@ async function main() {
         }
       }
 
+      // v26/M2: Cross-verify agent output before merging (worktrees still alive)
+      if (worktreesActive && codeResults.length) {
+        for (const result of codeResults) {
+          const wt = agentWorktrees[result.agentId];
+          if (!wt) continue;
+          const meta = parseHandoffMeta(result.agentId);
+          const verification = await verifyAgentOutput(result.agentId, meta.filesModified, wt.path);
+          for (const w of verification.warnings) log(`  ⚠ ${w}`);
+        }
+      }
+
       // v21: Merge worktree branches into main before testing.
       // Each code agent's branch is merged sequentially (priority order).
       // Failed merges (conflicts) are skipped — the agent's changes are lost for this round.
@@ -1389,6 +1429,12 @@ async function main() {
           if (revertResult.reverted) {
             log(`  Revert strategy: ${revertResult.strategy}, agents reverted: [${revertResult.revertedAgents.join(', ')}]`);
             invalidateRevertedSessions(revertResult.revertedAgents);
+            // v26/M4: Record lesson from revert for cross-session learning
+            recordLesson({
+              round, strategy: revertResult.strategy,
+              revertedAgents: revertResult.revertedAgents,
+              agents: AGENTS, codeResults, parseHandoffMeta,
+            });
             testResult = await runTests();
           }
           didRevert = true;
@@ -1790,6 +1836,17 @@ async function main() {
     'all agents exhausted their task lists',
     'all missions in sequence completed',
   ];
+  // v26/M5: Fire orchestration-complete hook before exit
+  if (pluginManager) {
+    try {
+      await pluginManager.executeHook('orchestration-complete', {
+        stopReason,
+        totalRounds: round - 1,
+        elapsedMs: Date.now() - globalStart,
+      });
+    } catch (_) { /* non-fatal */ }
+  }
+
   if (doneReasons.includes(stopReason) || stopReason.startsWith('balance converged') || stopReason.startsWith('circuit breaker')) {
     log(`\nExit code 42: orchestration complete (${stopReason}) — no restart needed.`);
     process.exit(42);
@@ -1799,5 +1856,11 @@ async function main() {
 
 main().catch(err => {
   log(`FATAL ERROR: ${err.message}\n${err.stack}`);
+  if (pluginManager) {
+    pluginManager.executeHook('orchestration-complete', {
+      stopReason: 'fatal-error',
+      error: err.message,
+    }).catch(() => {});
+  }
   process.exit(1);
 });

@@ -67,6 +67,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 | Topic | File |
 |-------|------|
 | Orchestrator architecture | `docs/orchestrator.md` |
+| Orchestrator reliability plan | `docs/orchestrator-reliability-plan.md` |
 | Game engine & combat | `docs/engine-guide.md` |
 | Balance data & win rates | `docs/balance-reference.md` |
 | Gear system (12 slots) | `docs/gear-system.md` |
