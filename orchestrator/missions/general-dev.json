@@ -140,6 +140,23 @@
       "tasks": {
         "primary": "Systematically expand test coverage. Each round: analyze a source file for untested code paths, boundary conditions, and edge cases. Write 5-10 focused tests. Run full suite to verify no conflicts with qa agent's tests."
       }
+    },
+    {
+      "id": "self-reviewer",
+      "name": "Self-Reviewer",
+      "type": "continuous",
+      "role": "self-reviewer",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 0,
+      "minFrequencyRounds": 5,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/self-review-round-*.md"],
+      "tasks": {
+        "primary": "Analyze orchestrator health. Read round-decisions.json, session-changelog.md, backlog.json, and recent agent handoffs. Identify stuck agents, blocked tasks, role imbalance, rising failure rates, and empty-work patterns. Write findings with CRITICAL/WARNING/NOTE severity to orchestrator/analysis/self-review-round-{N}.md. Never modify operational files — read-only analysis only."
+      }
     }
   ]
 }

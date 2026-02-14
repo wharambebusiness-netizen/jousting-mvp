@@ -64,3 +64,5 @@ Compact table of all sessions. For full details, see `docs/archive/jousting-hand
 | S63 | Infrastructure overhaul: docs split into 6 files, CLAUDE.md 301→89 lines, orchestrator.mjs 5213→3421 lines (3 modules extracted) |
 | S65 | Orchestrator v23: 5 more modules extracted (3421→2718 lines, 10→15 modules), stale artifact cleanup, log rotation |
 | S68 | Orchestrator reliability plan: 8-milestone plan from autonomous agent lessons analysis, deep code audit by 5 agents |
+| S69 | Reliability M1-M5: failure context injection, output cross-verification, file pre-flight, cross-session lessons, notification plugin |
+| S70 | Reliability M6-M8 COMPLETE: env sanitization, self-review role, checkpoint/resume. M1 bug fix. All 8 milestones done. v27 |

@@ -11,7 +11,7 @@ npm test                                           # 908 tests, 8 suites (all pa
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
-node orchestrator/orchestrator.mjs                 # Launch orchestrator (v25)
+node orchestrator/orchestrator.mjs                 # Launch orchestrator (v27)
 node orchestrator/orchestrator.mjs missions/X.json # Launch with mission config
 ```
 
@@ -34,8 +34,8 @@ src/ui/               15 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking
 src/tools/            simulate.ts (balance testing), param-search.ts (parameter optimization)
 
-orchestrator/         Multi-agent system (v25, 21 modules)
-  orchestrator.mjs    Main orchestrator (1803 lines)
+orchestrator/         Multi-agent system (v27, 22 modules)
+  orchestrator.mjs    Main orchestrator (1922 lines)
   agent-runner.mjs    Agent spawner: prompt building, CLI args, process management
   task-board.mjs      Task board markdown generation
   balance-analyzer.mjs Balance sims, experiments, regression detection
@@ -56,7 +56,8 @@ orchestrator/         Multi-agent system (v25, 21 modules)
   mission-sequencer.mjs Multi-mission sequence + hot-reload
   progress-dashboard.mjs Live agent status display
   agent-pool.mjs      Queue-drain concurrent agent pool
-  roles/              15 role templates
+  checkpoint.mjs      Checkpoint/resume for crash recovery (M8)
+  roles/              16 role templates
   missions/           Mission configs
 ```
 

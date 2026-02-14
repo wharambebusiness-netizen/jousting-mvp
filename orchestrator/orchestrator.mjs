@@ -39,8 +39,9 @@ import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitio
 import { ProgressDashboard } from './progress-dashboard.mjs';
 import { initAgentPool, runAgentPool } from './agent-pool.mjs';
 import { initLessons, loadLessons, recordLesson, queryLessons, formatLessonsForPrompt } from './lessons.mjs';
+import { initCheckpoint, loadCheckpoint, writeCheckpoint, clearCheckpoint, validateCheckpoint, collectCheckpointState, restoreCheckpointState } from './checkpoint.mjs';
 // Extracted modules (S67)
-import { initAgentRunner, runAgent, processAgentResult, loadCommonRules } from './agent-runner.mjs';
+import { initAgentRunner, runAgent, processAgentResult, loadCommonRules, sanitizeEnv } from './agent-runner.mjs';
 import { initTaskBoard, generateTaskBoard, isDepSatisfied } from './task-board.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -268,7 +269,7 @@ function loadMission(missionPath) {
     model: a.model || null,                        // v5: per-agent model (sonnet, haiku, etc.)
     maxModel: a.maxModel || null,                  // v6: max model tier for escalation (haiku/sonnet/opus)
     timeoutMs: a.timeoutMs || null,                // v5: per-agent timeout override
-    maxTasksPerRound: a.maxTasksPerRound || 1,     // v6: batch task injection
+    maxTasksPerRound: a.maxTasksPerRound ?? 1,     // v6: batch task injection (0 = no backlog tasks)
     minFrequencyRounds: a.minFrequencyRounds || 0, // v5: periodic run frequency (0 = work-gated only)
     maxBudgetUsd: a.maxBudgetUsd || null,          // v6: per-agent cost cap
   }));
@@ -504,6 +505,7 @@ async function runTests(testFilter = null) {
       cwd: MVP_DIR,
       shell: true,
       stdio: 'pipe',
+      env: sanitizeEnv(),
     });
 
     let output = '';
@@ -571,7 +573,7 @@ let missionDAG = null;       // v22: DAG definition from mission config (alterna
 
 async function main() {
   ensureDirs();
-  const globalStart = Date.now();
+  let globalStart = Date.now();
 
   // Initialize extracted modules (S63-S67)
   initBacklogSystem({ orchDir: ORCH_DIR, log });
@@ -623,6 +625,7 @@ async function main() {
   if (lessonsData.lessons.length) {
     log(`Lessons loaded: ${lessonsData.lessons.length} cross-session lesson(s)`);
   }
+  initCheckpoint({ orchDir: ORCH_DIR, log });
 
   // --- Load mission config if provided as CLI argument ---
   missionConfigPath = process.argv[2] || null;
@@ -852,7 +855,45 @@ async function main() {
   // v8: Generate initial task board before round 1 (one-time; per-round refresh is post-Phase-A only)
   generateTaskBoard(0, null, 0);
 
-  for (let round = 1; round <= CONFIG.maxRounds; round++) {
+  // v26/M8: Checkpoint resume — detect and restore from previous crash
+  let startRound = 1;
+  const checkpoint = loadCheckpoint();
+  if (checkpoint) {
+    const currentHead = (await getHeadSha()) || '';
+    const validation = validateCheckpoint(checkpoint, currentHead);
+    if (validation.valid) {
+      log(`\n--- RESUMING FROM CHECKPOINT (round ${checkpoint.round}) ---`);
+      log(`  Checkpoint from: ${checkpoint.timestamp}`);
+      startRound = checkpoint.round + 1;
+      // Restore serializable state
+      consecutiveTestFailures = checkpoint.consecutiveTestFailures ?? 0;
+      lastTestStatus = checkpoint.lastTestStatus ?? null;
+      stopReason = checkpoint.stopReason ?? 'max rounds reached';
+      // Restore elapsed time so max-runtime check accounts for pre-crash time
+      if (checkpoint.globalElapsedMs) {
+        globalStart = Date.now() - checkpoint.globalElapsedMs;
+      }
+      restoreCheckpointState(checkpoint, {
+        lastRunRound, consecutiveAgentFailures, escalationCounts,
+        consecutiveEmptyRounds, lastFailedRound, lastEscalatedRound,
+        successesAfterEscalation, lastFailureDetails,
+        costLog, roundLog, roundDecisions,
+        agentSessions, agentRuntimeHistory, agentEffectiveness,
+        missionState, agents: AGENTS,
+      });
+      // Cleanup stale state from crash
+      resetStaleAssignments();
+      await cleanupAllWorktrees();
+      invalidateStaleSessions(startRound, consecutiveEmptyRounds);
+      log(`  Resuming from round ${startRound}`);
+      log('');
+    } else {
+      log(`\nCheckpoint found but invalid: ${validation.reason} — starting fresh`);
+      clearCheckpoint();
+    }
+  }
+
+  for (let round = startRound; round <= CONFIG.maxRounds; round++) {
     // --- Check max runtime ---
     const elapsed = Date.now() - globalStart;
     if (elapsed >= CONFIG.maxRuntimeMs) {
@@ -1666,6 +1707,23 @@ async function main() {
       }
       resetAgentTracking();
     }
+
+    // v26/M8: Write checkpoint at end of each round (crash recovery)
+    try {
+      const headSha = (await getHeadSha()) || '';
+      const agentModels = AGENTS.map(a => ({ id: a.id, model: a.model, _originalModel: a._originalModel || null }));
+      writeCheckpoint(collectCheckpointState({
+        round, globalElapsedMs: Date.now() - globalStart,
+        consecutiveTestFailures, lastTestStatus, stopReason,
+        lastRunRound, consecutiveAgentFailures, escalationCounts, consecutiveEmptyRounds,
+        lastFailedRound, lastEscalatedRound, successesAfterEscalation, lastFailureDetails,
+        costLog, roundLog, roundDecisions,
+        agentSessions, agentRuntimeHistory, agentEffectiveness,
+        missionState, headSha, agentModels,
+      }));
+    } catch (err) {
+      log(`  WARNING: Checkpoint write failed: ${err.message}`);
+    }
   }
 
   // --- v5: Helper for failed task reassignment ---
@@ -1799,6 +1857,9 @@ async function main() {
   log(`Logs: ${LOG_DIR}`);
   log(`Analysis: ${ANALYSIS_DIR}`);
   log(`Task board: ${TASK_BOARD}`);
+
+  // v26/M8: Clear checkpoint on successful completion (no crash recovery needed)
+  clearCheckpoint();
 
   // ============================================================
   // v5F: Write round-decisions.json

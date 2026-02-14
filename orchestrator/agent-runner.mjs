@@ -8,6 +8,29 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
+// ── M6: Environment Sanitization ────────────────────────────
+// Whitelist-based env filtering for agent/command spawns.
+// Prevents leaking secrets, tokens, or unrelated config into agent processes.
+const ENV_WHITELIST = new Set([
+  'PATH', 'SYSTEMROOT', 'COMSPEC', 'TEMP', 'TMP',
+  'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+  'NODE_ENV', 'NODE_PATH', 'NODE_OPTIONS',
+  'PROGRAMFILES', 'PROGRAMFILES(X86)',
+  'NOTIFY_WEBHOOK_URL',
+]);
+const ENV_PREFIX_WHITELIST = ['ANTHROPIC_', 'CLAUDE_'];
+
+export function sanitizeEnv() {
+  const env = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    const upper = key.toUpperCase();
+    if (ENV_WHITELIST.has(upper) || ENV_PREFIX_WHITELIST.some(p => upper.startsWith(p))) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
 // Module-level dependencies (set via init)
 let logFn = () => {};
 let LOG_DIR = '';
@@ -250,7 +273,10 @@ export function runAgent(agent, round) {
       if (failDetail.stderrSummary) {
         promptParts.push(`Stderr (last 500 chars): ${failDetail.stderrSummary}`);
       }
-      promptParts.push(`Consecutive failures: ${(consecutiveEmptyRounds[agent.id] || 0) + 1}. Adapt your approach.`);
+      if (failDetail.isEmptyWork) {
+        promptParts.push(`Consecutive empty rounds: ${(consecutiveEmptyRounds[agent.id] || 0)}. Make meaningful progress this round.`);
+      }
+      promptParts.push(`Adapt your approach — do not repeat what failed.`);
     }
 
     // v26/M4: Inject cross-session lessons (max 3, matched by role + files-in-common)
@@ -277,7 +303,7 @@ export function runAgent(agent, round) {
     // v5/v6: Inject batch backlog tasks if available
     // v12: Truncate descriptions to first sentence to reduce prompt bloat
     // v15: Subtask support — when a task has subtasks, assign only the next incomplete one
-    const backlogTasks = getNextTasksFn(agent.role, agent.maxTasksPerRound || 1, agent.id);
+    const backlogTasks = getNextTasksFn(agent.role, agent.maxTasksPerRound ?? 1, agent.id);
     if (backlogTasks.length) {
       promptParts.push(``, `--- BACKLOG TASKS (from producer) ---`);
       for (let i = 0; i < backlogTasks.length; i++) {
@@ -450,11 +476,12 @@ export function runAgent(agent, round) {
     }
 
     // Spawn claude with prompt piped via stdin (avoids Windows cmd length limit)
+    // M6: sanitized env — whitelist-only to prevent secret leakage
     const proc = spawn('claude', cliArgs, {
       cwd: agentCwd,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: sanitizeEnv(),
     });
 
     let stdout = '';

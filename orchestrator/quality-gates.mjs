@@ -25,6 +25,7 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { sanitizeEnv } from './agent-runner.mjs';
 
 // ── Built-in Gate Parsers ───────────────────────────────────
 
@@ -192,11 +193,12 @@ function runCommand(command, opts = {}) {
     const timeout = opts.timeout || 120000;
     const cwd = opts.cwd || process.cwd();
 
+    // M6: sanitized env — whitelist-only to prevent secret leakage
     const proc = spawn(command, {
       cwd,
       shell: true,
       stdio: 'pipe',
-      env: { ...process.env },
+      env: sanitizeEnv(),
     });
 
     let stdout = '';
