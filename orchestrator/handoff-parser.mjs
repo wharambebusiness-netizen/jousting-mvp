@@ -25,6 +25,90 @@ export function initHandoffParser(ctx) {
   timestampFn = ctx.timestamp || timestampFn;
 }
 
+/**
+ * Parse META fields from handoff markdown content string.
+ * Pure function — no I/O, fully unit-testable.
+ * @param {string} content - Raw handoff markdown text
+ * @returns {Object} Parsed meta fields
+ */
+export function parseMetaContent(content) {
+  const meta = {
+    status: 'not-started', filesModified: [], testsPassing: null, notes: '',
+    testCount: null, notesForOthers: '', testsHealthy: null, fileCount: 0,
+    completedTasks: [],
+  };
+
+  if (!content) return meta;
+
+  // Case-insensitive matching with flexible whitespace (handles "Files-Modified", "files-modified", etc.)
+  const statusMatch = content.match(/^-\s*status\s*:\s*(.+)$/im);
+  if (statusMatch) meta.status = statusMatch[1].trim();
+
+  const filesMatch = content.match(/^-\s*files[\s-]*modified\s*:[ \t]*(.+)$/im);
+  if (filesMatch) {
+    meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
+  }
+  // v28: Fallback for multiline bulleted list format
+  if (meta.filesModified.length === 0) {
+    const multilineMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*\n((?:\s+-\s*.+\n?)+)/im);
+    if (multilineMatch) {
+      meta.filesModified = multilineMatch[1].match(/^\s+-\s*(.+)$/gm)
+        ?.map(l => l.replace(/^\s+-\s*/, '').trim()).filter(Boolean) || [];
+    }
+  }
+
+  // tests-passing: handle "true", "false", "true (685 tests, 7 suites)", "true (667/667)", "794"
+  const testsMatch = content.match(/^-\s*tests[\s-]*passing\s*:\s*(.+)$/im);
+  if (testsMatch) {
+    const raw = testsMatch[1].trim();
+    // Determine boolean: starts with "true" → true, starts with "false" → false
+    if (/^true\b/i.test(raw)) {
+      meta.testsPassing = true;
+    } else if (/^false\b/i.test(raw)) {
+      meta.testsPassing = false;
+    } else if (/^\d+$/.test(raw)) {
+      // Bare number like "794" — assume passing
+      meta.testsPassing = true;
+    }
+    // Extract numeric test count from patterns like "true (685 tests...)" or "true (667/667)" or bare "794"
+    const countMatch = raw.match(/(\d+)/);
+    if (countMatch) {
+      meta.testCount = parseInt(countMatch[1], 10);
+    }
+  }
+
+  const notesMatch = content.match(/^-\s*notes[\s-]*for[\s-]*others\s*:\s*(.+)$/im);
+  if (notesMatch) {
+    meta.notes = notesMatch[1].trim();
+    meta.notesForOthers = meta.notes;
+  }
+
+  // v15: Parse completed-tasks from META for subtask completion tracking
+  const completedMatch = content.match(/^-\s*completed[\s-]*tasks\s*:\s*(.+)$/im);
+  if (completedMatch) {
+    meta.completedTasks = completedMatch[1].split(',').map(t => t.trim()).filter(Boolean);
+  }
+
+  // --- Quality signals ---
+  // testsHealthy: scan full handoff text for health indicators
+  const lowerContent = content.toLowerCase();
+  if (meta.testsPassing === true) {
+    meta.testsHealthy = true;
+  } else if (meta.testsPassing === false) {
+    meta.testsHealthy = false;
+  } else if (lowerContent.includes('all tests passing') || lowerContent.includes('all passing')) {
+    meta.testsHealthy = true;
+  } else if (lowerContent.includes('tests failing') || lowerContent.includes('test failure')) {
+    meta.testsHealthy = false;
+  }
+  // else testsHealthy stays null (unknown)
+
+  // fileCount: derived from filesModified
+  meta.fileCount = meta.filesModified.length;
+
+  return meta;
+}
+
 export function parseHandoffMeta(agentId) {
   const defaults = {
     status: 'not-started', filesModified: [], testsPassing: null, notes: '',
@@ -45,83 +129,12 @@ export function parseHandoffMeta(agentId) {
     return { ...defaults };
   }
 
-  const meta = { ...defaults };
-
   try {
-    // Case-insensitive matching with flexible whitespace (handles "Files-Modified", "files-modified", etc.)
-    const statusMatch = content.match(/^-\s*status\s*:\s*(.+)$/im);
-    if (statusMatch) meta.status = statusMatch[1].trim();
-
-    const filesMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*(.+)$/im);
-    if (filesMatch) {
-      meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
-    }
-    // v28: Fallback for multiline bulleted list format
-    if (meta.filesModified.length === 0) {
-      const multilineMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*\n((?:\s+-\s*.+\n?)+)/im);
-      if (multilineMatch) {
-        meta.filesModified = multilineMatch[1].match(/^\s+-\s*(.+)$/gm)
-          ?.map(l => l.replace(/^\s+-\s*/, '').trim()).filter(Boolean) || [];
-      }
-    }
-
-    // tests-passing: handle "true", "false", "true (685 tests, 7 suites)", "true (667/667)", "794"
-    const testsMatch = content.match(/^-\s*tests[\s-]*passing\s*:\s*(.+)$/im);
-    if (testsMatch) {
-      const raw = testsMatch[1].trim();
-      // Determine boolean: starts with "true" → true, starts with "false" → false
-      if (/^true\b/i.test(raw)) {
-        meta.testsPassing = true;
-      } else if (/^false\b/i.test(raw)) {
-        meta.testsPassing = false;
-      } else if (/^\d+$/.test(raw)) {
-        // Bare number like "794" — assume passing
-        meta.testsPassing = true;
-      }
-      // Extract numeric test count from patterns like "true (685 tests...)" or "true (667/667)" or bare "794"
-      const countMatch = raw.match(/(\d+)/);
-      if (countMatch) {
-        meta.testCount = parseInt(countMatch[1], 10);
-      }
-    }
-
-    const notesMatch = content.match(/^-\s*notes[\s-]*for[\s-]*others\s*:\s*(.+)$/im);
-    if (notesMatch) {
-      meta.notes = notesMatch[1].trim();
-      meta.notesForOthers = meta.notes;
-    }
-
-    // v15: Parse completed-tasks from META for subtask completion tracking
-    const completedMatch = content.match(/^-\s*completed[\s-]*tasks\s*:\s*(.+)$/im);
-    if (completedMatch) {
-      meta.completedTasks = completedMatch[1].split(',').map(t => t.trim()).filter(Boolean);
-    } else {
-      meta.completedTasks = [];
-    }
-
-    // --- Quality signals ---
-    // testsHealthy: scan full handoff text for health indicators
-    const lowerContent = content.toLowerCase();
-    if (meta.testsPassing === true) {
-      meta.testsHealthy = true;
-    } else if (meta.testsPassing === false) {
-      meta.testsHealthy = false;
-    } else if (lowerContent.includes('all tests passing') || lowerContent.includes('all passing')) {
-      meta.testsHealthy = true;
-    } else if (lowerContent.includes('tests failing') || lowerContent.includes('test failure')) {
-      meta.testsHealthy = false;
-    }
-    // else testsHealthy stays null (unknown)
-
-    // fileCount: derived from filesModified
-    meta.fileCount = meta.filesModified.length;
-
+    return parseMetaContent(content);
   } catch (err) {
     logFn(`  WARNING: Malformed META in handoff for ${agentId}: ${err.message}`);
-    // Return what we have so far — meta has defaults for any unparsed fields
+    return { ...defaults };
   }
-
-  return meta;
 }
 
 // ============================================================
