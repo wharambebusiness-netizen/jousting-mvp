@@ -29,3 +29,7 @@ orchestrator/.worktrees/
 
 # Orchestrator spawn requests (v21 — transient, archived after processing)
 orchestrator/spawns/
+
+# Orchestrator runtime artifacts
+orchestrator/metrics.json
+orchestrator/session-changelog.md
