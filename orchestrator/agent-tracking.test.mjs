@@ -177,12 +177,12 @@ describe('getDynamicConcurrency', () => {
     expect(getDynamicConcurrency(3)).toBe(3);
   });
 
-  it('returns capped value when agentCount < configured', () => {
+  it('never reduces below configured when agentCount < configured', () => {
     recordAgentRuntime('fast', 10);
     recordAgentRuntime('slow', 100);
-    // agentCount=2, configured=3 → bumped=min(4,2)=2
-    // Function returns bumped (2) even though < configured
-    expect(getDynamicConcurrency(2)).toBe(2);
+    // agentCount=2, configured=3 → min(4,2)=2, but max(2,3)=3
+    // Bump should never reduce concurrency below configured
+    expect(getDynamicConcurrency(2)).toBe(3);
   });
 });
 

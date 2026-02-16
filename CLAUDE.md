@@ -7,12 +7,13 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1123 tests, 16 suites (all passing)
+npm test                                           # 1186 tests, 18 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
-node orchestrator/orchestrator.mjs                 # Launch orchestrator (v27)
+node orchestrator/orchestrator.mjs                 # Launch orchestrator (v28)
 node orchestrator/orchestrator.mjs missions/X.json # Launch with mission config
+node orchestrator/orchestrator.mjs --dry-run       # Smoke test (mock agents, no API credits)
 ```
 
 ## Architecture
@@ -57,6 +58,7 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   progress-dashboard.mjs Live agent status display
   agent-pool.mjs      Queue-drain concurrent agent pool
   checkpoint.mjs      Checkpoint/resume for crash recovery (M8)
+  mock-runner.mjs     Dry-run mock agent/test/git execution
   roles/              16 role templates
   missions/           Mission configs
 ```
@@ -92,7 +94,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1123 tests across 16 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), test-filter (21), backlog-system (18), checkpoint (10). Run `npm test` to verify.
+1186 tests across 18 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (43), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (20), test-filter (21), backlog-system (18), checkpoint (10). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

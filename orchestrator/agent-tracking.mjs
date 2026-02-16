@@ -93,7 +93,7 @@ export function getDynamicConcurrency(agentCount) {
   // If slowest agent is 3x+ slower than fastest, increase concurrency by 1
   // so fast agents aren't bottlenecked waiting for slow ones in the pool
   if (slowest > fastest * 3 && fastest > 0) {
-    const bumped = Math.min(configured + 1, agentCount);
+    const bumped = Math.max(Math.min(configured + 1, agentCount), configured);
     if (bumped > configured) {
       logFn(`  Dynamic concurrency: ${configured} → ${bumped} (speed ratio ${(slowest/fastest).toFixed(1)}x)`);
     }

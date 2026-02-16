@@ -12,6 +12,177 @@ let ORCH_DIR = null;
 let loadMissionFn = null;
 
 // ============================================================
+// Mission Config Validation (v28)
+// ============================================================
+const VALID_AGENT_TYPES = new Set(['feature', 'continuous', 'spawned']);
+const VALID_MODELS = new Set(['haiku', 'sonnet', 'opus']);
+
+/**
+ * Validate a mission config object. Returns { valid, errors }.
+ * Pure function — no side effects, easily testable.
+ * @param {object} config - Parsed mission config JSON
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateMissionConfig(config) {
+  const errors = [];
+
+  if (!config || typeof config !== 'object') {
+    return { valid: false, errors: ['Mission config must be a non-null object'] };
+  }
+
+  // Sequence missions have different validation
+  if (config.type === 'sequence') {
+    return validateSequenceConfig(config);
+  }
+
+  // --- Required fields ---
+  if (!config.name || typeof config.name !== 'string') {
+    errors.push('Missing or invalid "name" field (must be a non-empty string)');
+  }
+
+  if (!Array.isArray(config.agents) || config.agents.length === 0) {
+    errors.push('Missing or empty "agents" array (must have at least one agent)');
+  }
+
+  // --- Config overrides validation ---
+  if (config.config !== undefined) {
+    if (typeof config.config !== 'object' || config.config === null || Array.isArray(config.config)) {
+      errors.push('"config" must be a plain object');
+    } else {
+      if (config.config.maxRounds !== undefined && (typeof config.config.maxRounds !== 'number' || config.config.maxRounds < 1)) {
+        errors.push('"config.maxRounds" must be a positive number');
+      }
+      if (config.config.maxConcurrency !== undefined && (typeof config.config.maxConcurrency !== 'number' || config.config.maxConcurrency < 0)) {
+        errors.push('"config.maxConcurrency" must be a non-negative number');
+      }
+      if (config.config.agentTimeoutMs !== undefined && (typeof config.config.agentTimeoutMs !== 'number' || config.config.agentTimeoutMs < 1000)) {
+        errors.push('"config.agentTimeoutMs" must be a number >= 1000');
+      }
+      if (config.config.maxRuntimeMs !== undefined && (typeof config.config.maxRuntimeMs !== 'number' || config.config.maxRuntimeMs < 1000)) {
+        errors.push('"config.maxRuntimeMs" must be a number >= 1000');
+      }
+    }
+  }
+
+  // --- Agent validation ---
+  if (Array.isArray(config.agents)) {
+    const agentIds = new Set();
+
+    for (let i = 0; i < config.agents.length; i++) {
+      const agent = config.agents[i];
+      const prefix = `agents[${i}]`;
+
+      if (!agent || typeof agent !== 'object') {
+        errors.push(`${prefix}: must be a non-null object`);
+        continue;
+      }
+
+      // Required agent fields
+      if (!agent.id || typeof agent.id !== 'string') {
+        errors.push(`${prefix}: missing or invalid "id" (must be a non-empty string)`);
+      } else if (agentIds.has(agent.id)) {
+        errors.push(`${prefix}: duplicate agent id "${agent.id}"`);
+      } else {
+        agentIds.add(agent.id);
+      }
+
+      if (!agent.name || typeof agent.name !== 'string') {
+        errors.push(`${prefix} (${agent.id || '?'}): missing or invalid "name"`);
+      }
+
+      // Optional but validated fields
+      if (agent.type !== undefined && !VALID_AGENT_TYPES.has(agent.type)) {
+        errors.push(`${prefix} (${agent.id || '?'}): invalid "type" "${agent.type}" (must be one of: ${[...VALID_AGENT_TYPES].join(', ')})`);
+      }
+
+      if (agent.model !== undefined && agent.model !== null && !VALID_MODELS.has(agent.model)) {
+        errors.push(`${prefix} (${agent.id || '?'}): invalid "model" "${agent.model}" (must be one of: ${[...VALID_MODELS].join(', ')})`);
+      }
+
+      if (agent.maxModel !== undefined && agent.maxModel !== null && !VALID_MODELS.has(agent.maxModel)) {
+        errors.push(`${prefix} (${agent.id || '?'}): invalid "maxModel" "${agent.maxModel}" (must be one of: ${[...VALID_MODELS].join(', ')})`);
+      }
+
+      if (agent.dependsOn !== undefined && !Array.isArray(agent.dependsOn)) {
+        errors.push(`${prefix} (${agent.id || '?'}): "dependsOn" must be an array`);
+      }
+
+      if (agent.fileOwnership !== undefined && !Array.isArray(agent.fileOwnership) && agent.fileOwnership !== 'auto') {
+        errors.push(`${prefix} (${agent.id || '?'}): "fileOwnership" must be an array or "auto"`);
+      }
+
+      if (agent.timeoutMs !== undefined && agent.timeoutMs !== null && (typeof agent.timeoutMs !== 'number' || agent.timeoutMs < 1000)) {
+        errors.push(`${prefix} (${agent.id || '?'}): "timeoutMs" must be a number >= 1000`);
+      }
+
+      if (agent.maxBudgetUsd !== undefined && agent.maxBudgetUsd !== null && (typeof agent.maxBudgetUsd !== 'number' || agent.maxBudgetUsd <= 0)) {
+        errors.push(`${prefix} (${agent.id || '?'}): "maxBudgetUsd" must be a positive number`);
+      }
+
+      if (agent.maxTasksPerRound !== undefined && (typeof agent.maxTasksPerRound !== 'number' || agent.maxTasksPerRound < 0)) {
+        errors.push(`${prefix} (${agent.id || '?'}): "maxTasksPerRound" must be a non-negative number`);
+      }
+
+      if (agent.minFrequencyRounds !== undefined && (typeof agent.minFrequencyRounds !== 'number' || agent.minFrequencyRounds < 0)) {
+        errors.push(`${prefix} (${agent.id || '?'}): "minFrequencyRounds" must be a non-negative number`);
+      }
+    }
+
+    // --- Cross-agent validation: dependsOn references ---
+    for (const agent of config.agents) {
+      if (!agent || !Array.isArray(agent.dependsOn)) continue;
+      for (const dep of agent.dependsOn) {
+        if (!agentIds.has(dep)) {
+          errors.push(`${agent.id}: dependsOn "${dep}" references non-existent agent`);
+        }
+        if (dep === agent.id) {
+          errors.push(`${agent.id}: dependsOn references self (circular dependency)`);
+        }
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate a sequence mission config.
+ */
+function validateSequenceConfig(config) {
+  const errors = [];
+
+  if (!config.name || typeof config.name !== 'string') {
+    errors.push('Missing or invalid "name" field');
+  }
+
+  if (!Array.isArray(config.missions) || config.missions.length === 0) {
+    errors.push('Missing or empty "missions" array (must have at least one sub-mission)');
+  } else {
+    for (let i = 0; i < config.missions.length; i++) {
+      const entry = config.missions[i];
+      if (!entry || typeof entry !== 'object') {
+        errors.push(`missions[${i}]: must be a non-null object`);
+        continue;
+      }
+      if (!entry.path || typeof entry.path !== 'string') {
+        errors.push(`missions[${i}]: missing or invalid "path"`);
+      }
+      if (entry.maxRounds !== undefined && (typeof entry.maxRounds !== 'number' || entry.maxRounds < 1)) {
+        errors.push(`missions[${i}]: "maxRounds" must be a positive number`);
+      }
+    }
+  }
+
+  if (config.config !== undefined) {
+    if (typeof config.config !== 'object' || config.config === null || Array.isArray(config.config)) {
+      errors.push('"config" must be a plain object');
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ============================================================
 // Mission Sequence State
 // ============================================================
 export const missionState = {
@@ -56,6 +227,16 @@ export function loadMissionOrSequence(missionPath) {
   }
 
   const raw = JSON.parse(readFileSync(absPath, 'utf-8'));
+
+  // v28: Validate mission config before loading
+  const validation = validateMissionConfig(raw);
+  if (!validation.valid) {
+    console.error(`\nMission config validation failed: ${absPath}`);
+    for (const err of validation.errors) {
+      console.error(`  - ${err}`);
+    }
+    process.exit(1);
+  }
 
   if (raw.type === 'sequence') {
     logFn(`Detected mission sequence: ${raw.name} (${raw.missions.length} sub-missions)`);

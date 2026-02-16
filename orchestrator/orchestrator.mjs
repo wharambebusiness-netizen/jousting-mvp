@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v25 (modular)
+// Multi-Agent Orchestrator v28 (modular)
 // ============================================================
 // See docs/orchestrator.md for architecture.
 // Extracted modules (S63): balance-analyzer, git-ops, reporter
@@ -25,7 +25,7 @@ import { DAGScheduler, createDAGFromWorkflow, createDAGFromConfig } from './dag-
 import { PluginManager } from './plugin-system.mjs';
 // Extracted modules (S63)
 import { initBalanceAnalyzer, getParamSearchResults, setParamSearchResults, runBalanceSim, runBalanceSims, loadBalanceState, saveBalanceState, updateBalanceState, loadExperimentLog, saveExperimentLog, parseBalanceConfigDiff, logExperiment, buildExperimentContext, detectBalanceRegressions, checkConvergence, buildBalanceContext, generateBalanceBacklog, getNextBacklogId, runParameterSearch, buildParamSearchContext } from './balance-analyzer.mjs';
-import { initGitOps, gitBackup, tagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert, invalidateRevertedSessions, gitExec, createWorktree, mergeWorktreeBranch, removeWorktree, cleanupAllWorktrees, getHeadSha, smartRevertWorktrees, verifyAgentOutput } from './git-ops.mjs';
+import { initGitOps, gitBackup as realGitBackup, tagRoundStart as realTagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert as realSmartRevert, invalidateRevertedSessions as realInvalidateRevertedSessions, gitExec as realGitExec, createWorktree as realCreateWorktree, mergeWorktreeBranch as realMergeWorktreeBranch, removeWorktree, cleanupAllWorktrees as realCleanupAllWorktrees, getHeadSha as realGetHeadSha, smartRevertWorktrees as realSmartRevertWorktrees, verifyAgentOutput as realVerifyAgentOutput } from './git-ops.mjs';
 import { initReporter, generateOvernightReport } from './reporter.mjs';
 // Extracted modules (S65)
 import { initBacklogSystem, loadBacklog, saveBacklog, getNextTask, getNextTasks, taskMatchesAgent, completeBacklogTask, getNextSubtask, completeSubtask, getAgentTaskPriority, agentHasCriticalTask, resetStaleAssignments, archiveCompletedTasks } from './backlog-system.mjs';
@@ -35,14 +35,16 @@ import { initHandoffParser, parseHandoffMeta, validateFileOwnership, validateAge
 import { initSpawnSystem, SPAWN_CONSTRAINTS, detectSpawnRequests, validateSpawnRequest, archiveSpawnRequest, detectAndSpawnAgents, getSpawnNotifications } from './spawn-system.mjs';
 // Extracted modules (S66)
 import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessions, recordAgentRuntime, getAdaptiveTimeout, recordAgentEffectiveness, getDynamicConcurrency, readHandoffContent, getChangelogSinceRound, invalidateAgentSession, invalidateStaleSessions } from './agent-tracking.mjs';
-import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission, hotReloadMissionConfig } from './mission-sequencer.mjs';
+import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission, hotReloadMissionConfig, validateMissionConfig } from './mission-sequencer.mjs';
 import { ProgressDashboard } from './progress-dashboard.mjs';
 import { initAgentPool, runAgentPool } from './agent-pool.mjs';
 import { initLessons, loadLessons, recordLesson, queryLessons, formatLessonsForPrompt } from './lessons.mjs';
 import { initCheckpoint, loadCheckpoint, writeCheckpoint, clearCheckpoint, validateCheckpoint, collectCheckpointState, restoreCheckpointState } from './checkpoint.mjs';
 // Extracted modules (S67)
-import { initAgentRunner, runAgent, processAgentResult, loadCommonRules, sanitizeEnv } from './agent-runner.mjs';
+import { initAgentRunner, runAgent as realRunAgent, processAgentResult, loadCommonRules, sanitizeEnv } from './agent-runner.mjs';
 import { initTaskBoard, generateTaskBoard, isDepSatisfied } from './task-board.mjs';
+// v28: Dry-run / smoke test mode — mock agent execution
+import { initMockRunner, mockRunAgent, mockRunTests, dryRunGitOps } from './mock-runner.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -148,6 +150,25 @@ const CONFIG = {
   // }
 };
 
+// v28: Dry-run flag — exercise full loop with mock agents, no API credits needed
+const DRY_RUN = process.argv.includes('--dry-run');
+
+// v28: runAgent dispatcher — real or mock depending on --dry-run flag
+const runAgent = DRY_RUN ? mockRunAgent : realRunAgent;
+
+// v28: Git operation dispatchers — no-ops in dry-run mode
+const tagRoundStart = DRY_RUN ? dryRunGitOps.tagRoundStart : realTagRoundStart;
+const gitBackup = DRY_RUN ? dryRunGitOps.gitBackup : realGitBackup;
+const createWorktree = DRY_RUN ? dryRunGitOps.createWorktree : realCreateWorktree;
+const mergeWorktreeBranch = DRY_RUN ? dryRunGitOps.mergeWorktreeBranch : realMergeWorktreeBranch;
+const cleanupAllWorktrees = DRY_RUN ? dryRunGitOps.cleanupAllWorktrees : realCleanupAllWorktrees;
+const getHeadSha = DRY_RUN ? dryRunGitOps.getHeadSha : realGetHeadSha;
+const smartRevert = DRY_RUN ? dryRunGitOps.smartRevert : realSmartRevert;
+const smartRevertWorktrees = DRY_RUN ? dryRunGitOps.smartRevertWorktrees : realSmartRevertWorktrees;
+const invalidateRevertedSessions = DRY_RUN ? dryRunGitOps.invalidateRevertedSessions : realInvalidateRevertedSessions;
+const verifyAgentOutput = DRY_RUN ? dryRunGitOps.verifyAgentOutput : realVerifyAgentOutput;
+const gitExec = DRY_RUN ? dryRunGitOps.gitExec : realGitExec;
+
 // v8 bugfix: Snapshot CONFIG defaults for mission-sequencer module
 const CONFIG_DEFAULTS = { ...CONFIG };
 
@@ -248,6 +269,17 @@ function loadMission(missionPath) {
   }
 
   const mission = JSON.parse(readFileSync(absPath, 'utf-8'));
+
+  // v28: Validate mission config
+  const validation = validateMissionConfig(mission);
+  if (!validation.valid) {
+    console.error(`\nMission config validation failed: ${absPath}`);
+    for (const err of validation.errors) {
+      console.error(`  - ${err}`);
+    }
+    process.exit(1);
+  }
+
   log(`Loading mission: ${mission.name}`);
   if (mission.description) log(`  ${mission.description}`);
 
@@ -456,7 +488,9 @@ function rotateAnalysisFiles(keepRounds = 5) {
 // Run Tests (v20: quality gate chain with legacy fallback)
 // ============================================================
 // testFilter: null → full suite, '' → skip, string → filtered
+// v28: In dry-run mode, delegate to mockRunTests
 async function runTests(testFilter = null) {
+  if (DRY_RUN) return mockRunTests(testFilter);
   // v10: Skip tests if no source files were modified
   if (testFilter === '') {
     log('Running test suite... SKIPPED (no source files modified)');
@@ -625,6 +659,10 @@ async function main() {
     log, loadMission,
   });
   initAgentPool({ runAgent });
+  // v28: Initialize mock runner when in dry-run mode
+  if (DRY_RUN) {
+    initMockRunner({ handoffDir: HANDOFF_DIR, log });
+  }
   initLessons({ orchDir: ORCH_DIR, log });
   const lessonsData = loadLessons();
   if (lessonsData.lessons.length) {
@@ -633,7 +671,8 @@ async function main() {
   initCheckpoint({ orchDir: ORCH_DIR, log });
 
   // --- Load mission config if provided as CLI argument ---
-  missionConfigPath = process.argv[2] || null;
+  // v28: Skip --dry-run flag when looking for mission config path
+  missionConfigPath = process.argv.slice(2).find(a => !a.startsWith('--')) || null;
   if (missionConfigPath) {
     const mission = loadMissionOrSequence(missionConfigPath);
     AGENTS = mission.agents.map(a => ({
@@ -767,8 +806,16 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log('  MULTI-AGENT ORCHESTRATOR v22');
+  log(`  MULTI-AGENT ORCHESTRATOR v28${DRY_RUN ? ' [DRY-RUN MODE]' : ''}`);
   log('='.repeat(60));
+  if (DRY_RUN) {
+    log('  *** DRY-RUN: Mock agents, no API credits, no git ops ***');
+    // v28: Limit rounds in dry-run unless mission explicitly set maxRounds
+    if (!missionConfigPath && CONFIG.maxRounds > 3) {
+      CONFIG.maxRounds = 3;
+      log(`  Dry-run default: maxRounds capped to ${CONFIG.maxRounds}`);
+    }
+  }
   if (missionConfigPath) log(`Mission: ${missionConfigPath}`);
   log(`Agents: ${AGENTS.map(a => `${a.id} (${a.type}${a.role ? `, ${a.role}` : ''})`).join(', ')}`);
   log(`Config: ${CONFIG.maxRounds} max rounds, ${CONFIG.agentTimeoutMs / 60000}min/agent, ${CONFIG.maxRuntimeMs / 3600000}hr max runtime`);

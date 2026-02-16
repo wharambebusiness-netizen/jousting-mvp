@@ -68,3 +68,4 @@ Compact table of all sessions. For full details, see `docs/archive/jousting-hand
 | S70 | Reliability M6-M8 COMPLETE: env sanitization, self-review role, checkpoint/resume. M1 bug fix. All 8 milestones done. v27 |
 | S71 | Audit session: verified no damage from crashed session, 4-agent infrastructure investigation, documented agent communication channels and module health |
 | S72 | First orchestrator test coverage: 215 tests across 8 modules, extracted parseMetaContent pure function, fixed multiline files-modified regex bug. 908→1123 tests, 8→16 suites |
+| S73 | Orchestrator v28: --dry-run smoke test mode (mock agents/tests/git), mission config validation (43 tests), getDynamicConcurrency edge case fix. 1123→1186 tests, 16→18 suites |
