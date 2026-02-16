@@ -66,3 +66,4 @@ Compact table of all sessions. For full details, see `docs/archive/jousting-hand
 | S68 | Orchestrator reliability plan: 8-milestone plan from autonomous agent lessons analysis, deep code audit by 5 agents |
 | S69 | Reliability M1-M5: failure context injection, output cross-verification, file pre-flight, cross-session lessons, notification plugin |
 | S70 | Reliability M6-M8 COMPLETE: env sanitization, self-review role, checkpoint/resume. M1 bug fix. All 8 milestones done. v27 |
+| S71 | Audit session: verified no damage from crashed session, 4-agent infrastructure investigation, documented agent communication channels and module health |
