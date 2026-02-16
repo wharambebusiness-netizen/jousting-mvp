@@ -32,7 +32,7 @@ export function generateTaskBoard(round, testStatus, consecutiveFailures) {
   const AGENTS = getAgents();
   const agentStatuses = AGENTS.map(agent => {
     const meta = parseHandoffMetaFn(agent.id);
-    const depsMet = agent.dependsOn.every(depId => {
+    const depsMet = (agent.dependsOn || []).every(depId => {
       const depMeta = parseHandoffMetaFn(depId);
       return isDepSatisfied(depMeta.status);
     });
@@ -62,7 +62,7 @@ ${consecutiveFailures >= 2 ? '- **WARNING**: Tests have been failing. Focus on f
 | Agent | Type | Status | Dependencies |
 |-------|------|--------|-------------|
 ${agentStatuses.map(a =>
-  `| ${a.id} | ${a.type} | ${a.effectiveStatus} | ${a.dependsOn.length ? a.dependsOn.join(', ') : 'none'} |`
+  `| ${a.id} | ${a.type} | ${a.effectiveStatus} | ${(a.dependsOn || []).length ? a.dependsOn.join(', ') : 'none'} |`
 ).join('\n')}
 
 ## Files Modified This Session

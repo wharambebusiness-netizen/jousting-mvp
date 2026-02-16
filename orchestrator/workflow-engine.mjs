@@ -159,7 +159,9 @@ async function executeParallel(workflow, ctx) {
     }
   }
 
-  return { success: true, results };
+  // v28: Check if any parallel agent failed
+  const anyFailed = results.some(r => r.timedOut || (r.code !== 0 && r.code !== undefined));
+  return { success: !anyFailed, results };
 }
 
 /**
@@ -279,10 +281,10 @@ async function executePipeline(workflow, ctx) {
   const results = [];
 
   for (const stage of stages) {
-    ctx.log(`  Pipeline stage: ${stage.stage || 'unnamed'} (${stage.agents.length} agent(s))`);
+    ctx.log(`  Pipeline stage: ${stage.stage || 'unnamed'} (${(stage.agents || []).length} agent(s))`);
 
     const stageResult = await executeParallel({
-      agents: stage.agents,
+      agents: stage.agents || [],
       testBoundary: 'none', // Test at pipeline level
     }, ctx);
     results.push(...stageResult.results);

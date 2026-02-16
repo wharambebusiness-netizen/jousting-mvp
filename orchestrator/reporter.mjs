@@ -42,8 +42,9 @@ export function initReporter(ctx) {
  * @param {Array} roundDecisions - Decision log entries
  */
 export function generateOvernightReport(AGENTS, missionConfigPath, globalStart, roundLog, stopReason, finalTests, escalationCounts = {}, costLog = {}, roundDecisions = []) {
-  const totalMin = ((Date.now() - globalStart) / 60000).toFixed(1);
-  const totalHrs = (totalMin / 60).toFixed(1);
+  const totalMinNum = (Date.now() - globalStart) / 60000;
+  const totalMin = totalMinNum.toFixed(1);
+  const totalHrs = (totalMinNum / 60).toFixed(1);
   const totalRounds = roundLog.length;
   const startTime = new Date(globalStart).toISOString().replace('T', ' ').slice(0, 19);
   const endTime = timestamp();
@@ -105,7 +106,7 @@ export function generateOvernightReport(AGENTS, missionConfigPath, globalStart, 
   // Build report
   let report = `# Overnight Orchestrator Report
 > Generated: ${endTime}
-> Orchestrator: v22
+> Orchestrator: v28
 
 ## Summary
 - **Started**: ${startTime}

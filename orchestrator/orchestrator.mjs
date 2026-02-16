@@ -575,6 +575,11 @@ async function main() {
   ensureDirs();
   let globalStart = Date.now();
 
+  // v28: Declare tracking maps here (before initAgentRunner) to avoid TDZ errors.
+  // These were previously declared ~200 lines below, after initAgentRunner referenced them.
+  const consecutiveEmptyRounds = {};    // agentId → consecutive empty-work count
+  const lastFailureDetails = {};        // agentId → { code, timedOut, stderrSummary, round, isEmptyWork }
+
   // Initialize extracted modules (S63-S67)
   initBacklogSystem({ orchDir: ORCH_DIR, log });
   initHandoffParser({ handoffDir: HANDOFF_DIR, logDir: LOG_DIR, agentWorktrees, log, timestamp });
@@ -656,8 +661,9 @@ async function main() {
   // Archive completed tasks to keep backlog lean
   archiveCompletedTasks();
 
-  // Reset session changelog
-  resetSessionChangelog();
+  // v28: Defer session changelog reset — checkpoint resume needs the existing changelog.
+  // Moved to after checkpoint detection block; reset is skipped when resuming.
+  let shouldResetChangelog = true;
 
   // Load shared rules for agent prompts
   loadCommonRules();
@@ -785,11 +791,7 @@ async function main() {
   const consecutiveAgentFailures = {};  // agentId → consecutive failure count
   const escalationCounts = {};          // agentId → total escalation count (for reporting)
 
-  // v5B: Track per-agent empty rounds (ran OK but modified zero files)
-  const consecutiveEmptyRounds = {};    // agentId → consecutive empty-work count
-
-  // v26/M1: Last failure details for context injection into agent prompts
-  const lastFailureDetails = {};        // agentId → { code, timedOut, stderrSummary, round, isEmptyWork }
+  // v5B/v28: consecutiveEmptyRounds and lastFailureDetails declared at top of main() (before initAgentRunner)
 
   // v9: Context object for processAgentResult (passes main-scoped tracking by reference)
   const trackingCtx = { lastRunRound, consecutiveEmptyRounds, consecutiveAgentFailures, lastFailureDetails };
@@ -887,10 +889,18 @@ async function main() {
       invalidateStaleSessions(startRound, consecutiveEmptyRounds);
       log(`  Resuming from round ${startRound}`);
       log('');
+      shouldResetChangelog = false; // v28: Preserve changelog for resumed agents
     } else {
       log(`\nCheckpoint found but invalid: ${validation.reason} — starting fresh`);
       clearCheckpoint();
     }
+  }
+
+  // v28: Reset session changelog only if not resuming from checkpoint
+  if (shouldResetChangelog) {
+    resetSessionChangelog();
+  } else {
+    log(`  Preserving session changelog for resumed agents`);
   }
 
   for (let round = startRound; round <= CONFIG.maxRounds; round++) {

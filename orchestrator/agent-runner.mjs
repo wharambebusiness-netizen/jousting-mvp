@@ -388,6 +388,20 @@ export function runAgent(agent, round) {
       }
     }
 
+    // v28: Inject notes-for-others from other agents' handoffs
+    const allAgents = getAgents();
+    const otherNotes = [];
+    for (const other of allAgents) {
+      if (other.id === agent.id) continue;
+      const otherMeta = parseHandoffMetaFn(other.id);
+      if (otherMeta.notesForOthers && otherMeta.notesForOthers !== '(none)' && otherMeta.notesForOthers !== '') {
+        otherNotes.push(`- **${other.id}** (${otherMeta.status}): ${otherMeta.notesForOthers}`);
+      }
+    }
+    if (otherNotes.length) {
+      promptParts.push(``, `--- MESSAGES FROM OTHER AGENTS ---`, ...otherNotes);
+    }
+
     // v21: Spawn instructions for code agents (not spawned agents themselves)
     if (agent.type !== 'spawned' && !isResuming) {
       promptParts.push(

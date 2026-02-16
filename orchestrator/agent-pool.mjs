@@ -60,6 +60,25 @@ export async function runAgentPool(agents, round, maxConcurrency, onAgentComplet
         }
         if (active === 0 && queue.length === 0) resolveAll();
         else tryLaunch();
+      }).catch(error => {
+        // v28: Prevent unhandled rejection deadlock — synthesize error result
+        active--;
+        const errorResult = {
+          agentId: agent.id,
+          code: -1,
+          timedOut: false,
+          elapsed: 0,
+          error: error.message || String(error),
+        };
+        results.push(errorResult);
+        if (dashboard) dashboard.updateAgent(agent.id, 'failed', {});
+        if (onAgentComplete) onAgentComplete(errorResult);
+        if (groupIds && groupIds.has(agent.id)) {
+          groupRemaining--;
+          if (groupRemaining === 0 && resolveGroup) resolveGroup();
+        }
+        if (active === 0 && queue.length === 0) resolveAll();
+        else tryLaunch();
       });
     }
     if (active === 0 && queue.length === 0) resolveAll();

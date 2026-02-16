@@ -27,5 +27,15 @@ Write to `orchestrator/handoffs/{your-id}.md`:
 
 **Quality**: Be specific ("Technician MOM 58→61 in archetypes.ts:20"). Reference exact values, not vague descriptions. Flag cascading breakage. If BALANCE CONTEXT was provided and is relevant, cite exact numbers from it.
 
+## Inter-Agent Communication
+- Check the `--- MESSAGES FROM OTHER AGENTS ---` section in your prompt for notes from peers
+- Use `notes-for-others` in META to send messages: `@target-agent: your message`
+- Use tags to help recipients find relevant notes:
+  - `[BALANCE CHANGE]` — any change to stats or balance constants
+  - `[API CHANGE]` — any change to function signatures
+  - `[NEEDS TESTS]` — change that needs QA coverage
+  - `[BLOCKED]` — you are blocked on another agent's work
+- When modifying a shared file, flag it: `@co-owner-agent: modified [file] — [what changed]`
+
 ## If BALANCE CONTEXT is Missing
 Some rounds may not inject BALANCE CONTEXT into your prompt. If your task requires balance data and none is present, either: (a) read the latest analysis file in `orchestrator/analysis/`, or (b) skip the balance-dependent task and work on non-balance backlog items instead.

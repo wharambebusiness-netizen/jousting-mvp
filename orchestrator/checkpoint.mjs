@@ -45,19 +45,40 @@ export function writeCheckpoint(state) {
  * Load checkpoint from disk. Returns null if no checkpoint, invalid, or version mismatch.
  */
 export function loadCheckpoint() {
-  if (!existsSync(CHECKPOINT_FILE)) return null;
+  const tmpFile = CHECKPOINT_FILE + '.tmp';
 
-  try {
-    const data = JSON.parse(readFileSync(CHECKPOINT_FILE, 'utf-8'));
-    if (!data || data.version !== CHECKPOINT_VERSION) {
-      logFn(`  Checkpoint version mismatch (expected ${CHECKPOINT_VERSION}, got ${data?.version}) — ignoring`);
-      return null;
+  // Try primary checkpoint file first
+  if (existsSync(CHECKPOINT_FILE)) {
+    try {
+      const data = JSON.parse(readFileSync(CHECKPOINT_FILE, 'utf-8'));
+      if (!data || data.version !== CHECKPOINT_VERSION) {
+        logFn(`  Checkpoint version mismatch (expected ${CHECKPOINT_VERSION}, got ${data?.version}) — ignoring`);
+        return null;
+      }
+      // Clean up stale tmp if it exists
+      if (existsSync(tmpFile)) try { unlinkSync(tmpFile); } catch (_) {}
+      return data;
+    } catch (err) {
+      logFn(`  WARNING: Checkpoint parse failed: ${err.message}`);
     }
-    return data;
-  } catch (err) {
-    logFn(`  WARNING: Checkpoint parse failed: ${err.message} — ignoring`);
-    return null;
   }
+
+  // v28: Fallback — recover from incomplete atomic write (.tmp left behind)
+  if (existsSync(tmpFile)) {
+    try {
+      const data = JSON.parse(readFileSync(tmpFile, 'utf-8'));
+      if (data && data.version === CHECKPOINT_VERSION) {
+        logFn(`  Recovered checkpoint from .tmp file`);
+        try { renameSync(tmpFile, CHECKPOINT_FILE); } catch (_) {}
+        return data;
+      }
+    } catch (err) {
+      logFn(`  WARNING: Tmp checkpoint also corrupt: ${err.message}`);
+    }
+    try { unlinkSync(tmpFile); } catch (_) {}
+  }
+
+  return null;
 }
 
 /**
@@ -65,9 +86,12 @@ export function loadCheckpoint() {
  */
 export function clearCheckpoint() {
   try {
-    if (existsSync(CHECKPOINT_FILE)) {
-      unlinkSync(CHECKPOINT_FILE);
-    }
+    if (existsSync(CHECKPOINT_FILE)) unlinkSync(CHECKPOINT_FILE);
+  } catch (_) { /* best-effort */ }
+  // v28: Also clean up stale .tmp file
+  try {
+    const tmpFile = CHECKPOINT_FILE + '.tmp';
+    if (existsSync(tmpFile)) unlinkSync(tmpFile);
   } catch (_) { /* best-effort */ }
 }
 
@@ -81,7 +105,7 @@ export function validateCheckpoint(checkpoint, currentHeadSha) {
   if (checkpoint.headSha !== currentHeadSha) {
     return {
       valid: false,
-      reason: `HEAD mismatch: checkpoint=${checkpoint.headSha.slice(0, 8)}, current=${currentHeadSha.slice(0, 8)}`,
+      reason: `HEAD mismatch: checkpoint=${checkpoint.headSha?.slice(0, 8) ?? '?'}, current=${currentHeadSha?.slice(0, 8) ?? '?'}`,
     };
   }
   return { valid: true, reason: null };
@@ -122,7 +146,7 @@ export function collectCheckpointState({
     agentEffectiveness: JSON.parse(JSON.stringify(agentEffectiveness)),
     missionState: JSON.parse(JSON.stringify(missionState)),
     headSha,
-    agentModels,
+    agentModels: agentModels ? JSON.parse(JSON.stringify(agentModels)) : null,
   };
 }
 
@@ -139,7 +163,7 @@ export function restoreCheckpointState(checkpoint, targets) {
   ];
 
   for (const key of maps) {
-    if (checkpoint[key] && targets[key]) {
+    if (checkpoint[key] && targets[key] && typeof checkpoint[key] === 'object' && typeof targets[key] === 'object') {
       // Clear existing keys
       for (const k of Object.keys(targets[key])) delete targets[key][k];
       // Copy from checkpoint

@@ -40,20 +40,26 @@ export function runConsistencyCheck() {
       softCapK: extractConstant(balanceConfig, /softCap:.*?K:\s*([\d.]+)/s)
     };
 
-    // Check archetype stats in CLAUDE.md
-    const expectedStats = {
-      charger: 'MOM=75, CTL=55, GRD=50, INIT=55, STA=65',
-      technician: 'MOM=64, CTL=70, GRD=55, INIT=59, STA=55',
-      bulwark: 'MOM=58, CTL=52, GRD=65, INIT=53, STA=62',
-      tactician: 'MOM=55, CTL=65, GRD=50, INIT=75, STA=55',
-      breaker: 'MOM=62, CTL=60, GRD=55, INIT=55, STA=60',
-      duelist: 'MOM=60, CTL=60, GRD=60, INIT=60, STA=60'
-    };
+    // v28: Parse expected stats dynamically from CLAUDE.md instead of hardcoding
+    const expectedStats = {};
+    const claudeStatMatches = claudeMd.matchAll(/(\w+):\s*MOM=(\d+),\s*CTL=(\d+),\s*GRD=(\d+),\s*INIT=(\d+),\s*STA=(\d+)/g);
+    for (const m of claudeStatMatches) {
+      expectedStats[m[1]] = `MOM=${m[2]}, CTL=${m[3]}, GRD=${m[4]}, INIT=${m[5]}, STA=${m[6]}`;
+    }
 
     Object.entries(expectedStats).forEach(([arch, expected]) => {
       const actual = stats[arch];
-      if (actual !== expected) {
+      if (!actual) {
+        warnings.push(`${arch} in CLAUDE.md but not found in archetypes.ts`);
+      } else if (actual !== expected) {
         warnings.push(`${arch} stats mismatch: CLAUDE.md expects "${expected}", archetypes.ts has "${actual}"`);
+      }
+    });
+
+    // Also check for archetypes in code but missing from CLAUDE.md
+    Object.entries(stats).forEach(([arch, actual]) => {
+      if (actual !== 'NOT FOUND' && !expectedStats[arch]) {
+        warnings.push(`${arch} found in archetypes.ts but missing from CLAUDE.md stats`);
       }
     });
 

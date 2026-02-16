@@ -5,7 +5,7 @@
 // prompts to prevent repeat mistakes.
 // ============================================================
 
-import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 
@@ -45,6 +45,10 @@ function saveLessons(data) {
   const tmpFile = LESSONS_FILE + '.tmp';
   try {
     writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+    // v28: On Windows, renameSync cannot overwrite — delete target first
+    if (existsSync(LESSONS_FILE)) {
+      try { unlinkSync(LESSONS_FILE); } catch (_) { /* best-effort */ }
+    }
     renameSync(tmpFile, LESSONS_FILE);
   } catch (err) {
     logFn(`  WARNING: Could not save lessons: ${err.message}`);
@@ -119,9 +123,12 @@ export function queryLessons(role, fileOwnership = []) {
     let score = 0;
     // Role match
     if (lesson.relevance.includes(role)) score += 2;
-    // Files-in-common match
+    // Files-in-common match (literal + glob prefix)
     const literalFiles = fileOwnership.filter(f => !/[*?{]/.test(f));
-    const filesInCommon = lesson.files.filter(f => literalFiles.includes(f));
+    const globPrefixes = fileOwnership.filter(f => /[*?{]/.test(f)).map(f => f.split('*')[0]);
+    const filesInCommon = lesson.files.filter(f =>
+      literalFiles.includes(f) || globPrefixes.some(p => f.startsWith(p))
+    );
     score += filesInCommon.length;
     return { lesson, score };
   });

@@ -45,6 +45,7 @@ export function initSpawnSystem(ctx) {
  * @returns {Array} Array of parsed spawn request objects
  */
 export function detectSpawnRequests() {
+  if (!SPAWNS_DIR) return [];
   const requests = [];
   const seen = new Set();
 
@@ -198,6 +199,10 @@ export async function detectAndSpawnAgents(round, codeResults, costLog, tracking
       }
 
       const result = await runAgentFn(agent, round);
+      // v28: Stamp round and spawnId on request before archiving (for notifications)
+      req.round = round;
+      req._spawnId = spawnId;
+      try { writeFileSync(req._sourcePath, JSON.stringify(req, null, 2)); } catch (_) {}
       archiveSpawnRequest(req._sourcePath, req._filename);
       return { agent, result };
     });

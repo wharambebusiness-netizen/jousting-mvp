@@ -56,6 +56,14 @@ export function parseHandoffMeta(agentId) {
     if (filesMatch) {
       meta.filesModified = filesMatch[1].split(',').map(f => f.trim()).filter(Boolean);
     }
+    // v28: Fallback for multiline bulleted list format
+    if (meta.filesModified.length === 0) {
+      const multilineMatch = content.match(/^-\s*files[\s-]*modified\s*:\s*\n((?:\s+-\s*.+\n?)+)/im);
+      if (multilineMatch) {
+        meta.filesModified = multilineMatch[1].match(/^\s+-\s*(.+)$/gm)
+          ?.map(l => l.replace(/^\s+-\s*/, '').trim()).filter(Boolean) || [];
+      }
+    }
 
     // tests-passing: handle "true", "false", "true (685 tests, 7 suites)", "true (667/667)", "794"
     const testsMatch = content.match(/^-\s*tests[\s-]*passing\s*:\s*(.+)$/im);
@@ -117,6 +125,24 @@ export function parseHandoffMeta(agentId) {
 }
 
 // ============================================================
+// v28: Targeted message routing — parse @agent-id: messages
+// ============================================================
+export function getNotesTargetingAgent(targetAgentId, agents) {
+  const messages = [];
+  for (const agent of agents) {
+    if (agent.id === targetAgentId) continue;
+    const meta = parseHandoffMeta(agent.id);
+    if (!meta.notesForOthers) continue;
+    const regex = new RegExp(`@${targetAgentId}\\s*:\\s*(.+)`, 'gi');
+    let match;
+    while ((match = regex.exec(meta.notesForOthers)) !== null) {
+      messages.push({ from: agent.id, message: match[1].trim() });
+    }
+  }
+  return messages;
+}
+
+// ============================================================
 // Validation Functions
 // ============================================================
 export function validateFileOwnership(agentResults, agents) {
@@ -134,7 +160,8 @@ export function validateFileOwnership(agentResults, agents) {
       const owned = agent.fileOwnership.some(pattern => {
         if (pattern.includes('*')) {
           const prefix = pattern.split('*')[0];
-          return file.startsWith(prefix);
+          const suffix = pattern.split('*').pop(); // e.g., ".ts"
+          return file.startsWith(prefix) && (suffix === '' || file.endsWith(suffix));
         }
         return file === pattern;
       });
