@@ -1,7 +1,7 @@
 # Operator System — Architecture & Milestone Plan
 
 Created: S78 (2026-02-17)
-Status: M1 COMPLETE (S77), M2-M6 planned
+Status: M1 COMPLETE (S77), M2 COMPLETE (S79), M3-M6 planned
 
 ## Context
 
@@ -586,3 +586,4 @@ Sessions A and B can be combined if context allows. Sessions D and E can be comb
 ## Changelog
 
 - S78: Initial plan created (reviewed and revised from S76 planning session)
+- S79: M2 IMPLEMENTED — registry.mjs, errors.mjs, operator.mjs rewritten. 51 tests. Multi-project support via --project-dir + projectDir in registry.
