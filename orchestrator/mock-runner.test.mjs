@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
-  initMockRunner, mockRunAgent, mockRunTests,
+  initMockRunner, mockRunAgent, mockRunTests, mockRunTestsRegression,
   setMockBehavior, setMockScenario, clearMockBehaviors,
-  dryRunGitOps,
+  dryRunGitOps, applyPreset, PRESET_NAMES,
 } from './mock-runner.mjs';
 
 const TEST_DIR = join(tmpdir(), 'mock-runner-test-' + Date.now());
@@ -48,7 +48,7 @@ describe('mockRunAgent', () => {
     expect(existsSync(handoffPath)).toBe(true);
     const content = readFileSync(handoffPath, 'utf-8');
     expect(content).toContain('## META');
-    expect(content).toContain('status: complete');
+    expect(content).toContain('status: all-done');
     expect(content).toContain('src/engine/foo.ts');
     expect(content).toContain('tests-passing: true');
   });
@@ -143,6 +143,61 @@ describe('mockRunTests', () => {
     expect(result.passed).toBe(true);
     expect(result.count).toBe('skipped');
     expect(result.skipped).toBe(true);
+  });
+});
+
+// ── mockRunTestsRegression ────────────────────────────────
+
+describe('mockRunTestsRegression', () => {
+  it('returns failing result for full suite', async () => {
+    const result = await mockRunTestsRegression();
+    expect(result.passed).toBe(false);
+    expect(result.failCount).toBe('3');
+  });
+
+  it('returns skipped for empty filter', async () => {
+    const result = await mockRunTestsRegression('');
+    expect(result.passed).toBe(true);
+    expect(result.skipped).toBe(true);
+  });
+});
+
+// ── applyPreset ──────────────────────────────────────────
+
+describe('applyPreset', () => {
+  const agents = [
+    { id: 'dev', fileOwnership: ['src/dev.ts'] },
+    { id: 'qa', fileOwnership: ['src/qa.ts'] },
+  ];
+
+  it('chaos preset sets behaviors for all agents', async () => {
+    applyPreset('chaos', agents);
+    // Both agents should now have configured behaviors (any outcome)
+    const result1 = await mockRunAgent(agents[0], 1);
+    const result2 = await mockRunAgent(agents[1], 1);
+    expect(result1.agentId).toBe('dev');
+    expect(result2.agentId).toBe('qa');
+  });
+
+  it('regression preset: first agent succeeds, rest fail', async () => {
+    applyPreset('regression', agents);
+    const result1 = await mockRunAgent(agents[0], 1);
+    const result2 = await mockRunAgent(agents[1], 1);
+    expect(result1.code).toBe(0); // first succeeds
+    expect(result2.code).toBe(1); // second fails
+  });
+});
+
+// ── PRESET_NAMES ─────────────────────────────────────────
+
+describe('PRESET_NAMES', () => {
+  it('contains chaos and regression', () => {
+    expect(PRESET_NAMES.has('chaos')).toBe(true);
+    expect(PRESET_NAMES.has('regression')).toBe(true);
+  });
+
+  it('does not contain unknown presets', () => {
+    expect(PRESET_NAMES.has('unknown')).toBe(false);
   });
 });
 

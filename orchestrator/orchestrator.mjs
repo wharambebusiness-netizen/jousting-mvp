@@ -44,7 +44,7 @@ import { initCheckpoint, loadCheckpoint, writeCheckpoint, clearCheckpoint, valid
 import { initAgentRunner, runAgent as realRunAgent, processAgentResult, loadCommonRules, sanitizeEnv } from './agent-runner.mjs';
 import { initTaskBoard, generateTaskBoard, isDepSatisfied } from './task-board.mjs';
 // v28: Dry-run / smoke test mode — mock agent execution
-import { initMockRunner, mockRunAgent, mockRunTests, dryRunGitOps } from './mock-runner.mjs';
+import { initMockRunner, mockRunAgent, mockRunTests, mockRunTestsRegression, dryRunGitOps, applyPreset, PRESET_NAMES } from './mock-runner.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
@@ -151,7 +151,14 @@ const CONFIG = {
 };
 
 // v28: Dry-run flag — exercise full loop with mock agents, no API credits needed
-const DRY_RUN = process.argv.includes('--dry-run');
+// v29: Supports --dry-run=<preset> (chaos, regression)
+const dryRunArg = process.argv.find(a => a === '--dry-run' || a.startsWith('--dry-run='));
+const DRY_RUN = !!dryRunArg;
+const DRY_RUN_PRESET = dryRunArg?.includes('=') ? dryRunArg.split('=')[1] : null;
+if (DRY_RUN_PRESET && !PRESET_NAMES.has(DRY_RUN_PRESET)) {
+  console.error(`Unknown dry-run preset: "${DRY_RUN_PRESET}" (available: ${[...PRESET_NAMES].join(', ')})`);
+  process.exit(1);
+}
 
 // v28: runAgent dispatcher — real or mock depending on --dry-run flag
 const runAgent = DRY_RUN ? mockRunAgent : realRunAgent;
@@ -490,7 +497,7 @@ function rotateAnalysisFiles(keepRounds = 5) {
 // testFilter: null → full suite, '' → skip, string → filtered
 // v28: In dry-run mode, delegate to mockRunTests
 async function runTests(testFilter = null) {
-  if (DRY_RUN) return mockRunTests(testFilter);
+  if (DRY_RUN) return DRY_RUN_PRESET === 'regression' ? mockRunTestsRegression(testFilter) : mockRunTests(testFilter);
   // v10: Skip tests if no source files were modified
   if (testFilter === '') {
     log('Running test suite... SKIPPED (no source files modified)');
@@ -694,6 +701,11 @@ async function main() {
     }
   }
 
+  // v29: Apply dry-run preset after agents are loaded
+  if (DRY_RUN && DRY_RUN_PRESET && AGENTS.length > 0) {
+    applyPreset(DRY_RUN_PRESET, AGENTS);
+  }
+
   // Reset any backlog tasks stuck in "assigned" from a previous crash
   resetStaleAssignments();
 
@@ -806,10 +818,10 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log(`  MULTI-AGENT ORCHESTRATOR v28${DRY_RUN ? ' [DRY-RUN MODE]' : ''}`);
+  log(`  MULTI-AGENT ORCHESTRATOR v28${DRY_RUN ? ` [DRY-RUN MODE${DRY_RUN_PRESET ? `: ${DRY_RUN_PRESET}` : ''}]` : ''}`);
   log('='.repeat(60));
   if (DRY_RUN) {
-    log('  *** DRY-RUN: Mock agents, no API credits, no git ops ***');
+    log(`  *** DRY-RUN: Mock agents, no API credits, no git ops${DRY_RUN_PRESET ? ` (preset: ${DRY_RUN_PRESET})` : ''} ***`);
     // v28: Limit rounds in dry-run unless mission explicitly set maxRounds
     if (!missionConfigPath && CONFIG.maxRounds > 3) {
       CONFIG.maxRounds = 3;

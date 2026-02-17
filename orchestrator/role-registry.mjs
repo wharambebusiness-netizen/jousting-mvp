@@ -16,7 +16,8 @@
 // ============================================================
 
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 // ── Role Metadata ───────────────────────────────────────────
 
@@ -302,12 +303,15 @@ export class RoleRegistry {
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
+// Only runs when this file is executed directly (not when imported)
 
-const args = process.argv.slice(2);
-const rolesDir = args.find(a => !a.startsWith('-')) || join(process.cwd(), 'orchestrator', 'roles');
+const __roleRegistryFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && resolve(process.argv[1]) === __roleRegistryFile) {
+  const args = process.argv.slice(2);
+  const rolesDir = args.find(a => !a.startsWith('-')) || join(process.cwd(), 'orchestrator', 'roles');
 
-if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
 Role Registry
 =============
 Usage: node orchestrator/role-registry.mjs [roles-dir] [options]
@@ -320,54 +324,55 @@ Options:
   --suggest       Suggest a team for the current project
   --help          Show this help
 `);
-  process.exit(0);
-}
+    process.exit(0);
+  }
 
-const registry = new RoleRegistry(rolesDir);
-await registry.load();
+  const registry = new RoleRegistry(rolesDir);
+  await registry.load();
 
-if (args.includes('--json')) {
-  console.log(JSON.stringify(registry.list(), null, 2));
-} else if (args.includes('--categories')) {
-  const byCategory = registry.listByCategory();
-  for (const [cat, info] of Object.entries(byCategory)) {
-    console.log(`\n${cat.toUpperCase()}: ${info.description}`);
-    for (const role of info.roles) {
-      console.log(`  ${role.name.padEnd(22)} ${role.title}`);
-      console.log(`    ${role.description.substring(0, 80)}${role.description.length > 80 ? '...' : ''}`);
-      console.log(`    Capabilities: ${role.capabilities.join(', ') || 'none detected'}`);
-      console.log(`    Model: ${role.defaultModel} | Writes code: ${role.canWrite} | Runs tests: ${role.canTest}`);
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(registry.list(), null, 2));
+  } else if (args.includes('--categories')) {
+    const byCategory = registry.listByCategory();
+    for (const [cat, info] of Object.entries(byCategory)) {
+      console.log(`\n${cat.toUpperCase()}: ${info.description}`);
+      for (const role of info.roles) {
+        console.log(`  ${role.name.padEnd(22)} ${role.title}`);
+        console.log(`    ${role.description.substring(0, 80)}${role.description.length > 80 ? '...' : ''}`);
+        console.log(`    Capabilities: ${role.capabilities.join(', ') || 'none detected'}`);
+        console.log(`    Model: ${role.defaultModel} | Writes code: ${role.canWrite} | Runs tests: ${role.canTest}`);
+      }
     }
-  }
-} else if (args.includes('--capabilities')) {
-  const caps = new Map();
-  for (const role of registry.list()) {
-    for (const cap of role.capabilities) {
-      if (!caps.has(cap)) caps.set(cap, []);
-      caps.get(cap).push(role.name);
+  } else if (args.includes('--capabilities')) {
+    const caps = new Map();
+    for (const role of registry.list()) {
+      for (const cap of role.capabilities) {
+        if (!caps.has(cap)) caps.set(cap, []);
+        caps.get(cap).push(role.name);
+      }
     }
-  }
-  console.log('\nCapability Matrix:');
-  for (const [cap, roles] of [...caps.entries()].sort()) {
-    console.log(`  ${cap.padEnd(20)} ${roles.join(', ')}`);
-  }
-} else if (args.includes('--suggest')) {
-  const team = registry.suggestTeam({});
-  console.log('\nSuggested Team:');
-  for (const t of team) {
-    console.log(`  [${t.priority.padEnd(11)}] ${t.role.padEnd(22)} — ${t.reason}`);
-  }
-} else {
-  // Default: list all roles
-  console.log(`\nRole Registry (${registry.roles.size} roles):`);
-  console.log('='.repeat(60));
-  for (const role of registry.list()) {
-    console.log(`\n  ${role.name} — ${role.title}`);
-    console.log(`    Category:       ${role.category}`);
-    console.log(`    Model:          ${role.defaultModel}`);
-    console.log(`    Capabilities:   ${role.capabilities.join(', ') || 'none'}`);
-    console.log(`    Code agent:     ${role.isCodeAgent}`);
-    console.log(`    Responsibilities: ${role.responsibilities.length}`);
-    console.log(`    Restrictions:     ${role.restrictions.length}`);
+    console.log('\nCapability Matrix:');
+    for (const [cap, roles] of [...caps.entries()].sort()) {
+      console.log(`  ${cap.padEnd(20)} ${roles.join(', ')}`);
+    }
+  } else if (args.includes('--suggest')) {
+    const team = registry.suggestTeam({});
+    console.log('\nSuggested Team:');
+    for (const t of team) {
+      console.log(`  [${t.priority.padEnd(11)}] ${t.role.padEnd(22)} — ${t.reason}`);
+    }
+  } else {
+    // Default: list all roles
+    console.log(`\nRole Registry (${registry.roles.size} roles):`);
+    console.log('='.repeat(60));
+    for (const role of registry.list()) {
+      console.log(`\n  ${role.name} — ${role.title}`);
+      console.log(`    Category:       ${role.category}`);
+      console.log(`    Model:          ${role.defaultModel}`);
+      console.log(`    Capabilities:   ${role.capabilities.join(', ') || 'none'}`);
+      console.log(`    Code agent:     ${role.isCodeAgent}`);
+      console.log(`    Responsibilities: ${role.responsibilities.length}`);
+      console.log(`    Restrictions:     ${role.restrictions.length}`);
+    }
   }
 }

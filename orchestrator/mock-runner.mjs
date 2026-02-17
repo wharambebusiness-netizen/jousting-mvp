@@ -112,7 +112,8 @@ export function mockRunAgent(agent, round) {
 
       // Default: success
       logFn(`  [dry-run] ${agent.id}: OK (mock, ${filesModified.length} files)`);
-      const status = agent.type === 'continuous' ? 'in-progress' : 'complete';
+      // Feature agents → all-done (retire after one round); continuous → in-progress (keep running)
+      const status = agent.type === 'continuous' ? 'in-progress' : 'all-done';
       writeMockHandoff(agent.id, status, filesModified, round);
 
       // Generate mock cost stderr (matches claude CLI output format)
@@ -179,6 +180,57 @@ export function mockRunTests(testFilter = null) {
   return Promise.resolve({
     passed: true, count: '1123', failCount: '0',
     output: 'Tests  1123 passed (dry-run mock)',
+  });
+}
+
+// ── Dry-Run Scenario Presets ──────────────────────────────
+
+/**
+ * Available preset names for --dry-run=<preset>.
+ * @type {Set<string>}
+ */
+export const PRESET_NAMES = new Set(['chaos', 'regression']);
+
+/**
+ * Apply a named preset scenario. Called after agents are loaded so
+ * behaviors attach to actual agent IDs.
+ * @param {string} preset - Preset name ('chaos' | 'regression')
+ * @param {Array<{id: string}>} agents - Agent list from mission config
+ */
+export function applyPreset(preset, agents) {
+  if (preset === 'chaos') {
+    // Random mix of failures, timeouts, empty work, and successes
+    const outcomes = ['success', 'failure', 'timeout', 'empty'];
+    for (const agent of agents) {
+      const outcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+      const delay = outcome === 'timeout' ? 200 : 50 + Math.floor(Math.random() * 150);
+      mockBehaviors[agent.id] = { outcome, delay };
+    }
+    logFn(`  [dry-run] Preset 'chaos': randomized outcomes for ${agents.length} agents`);
+  } else if (preset === 'regression') {
+    // First agent succeeds, rest fail (simulates test regression after a change)
+    for (let i = 0; i < agents.length; i++) {
+      mockBehaviors[agents[i].id] = { outcome: i === 0 ? 'success' : 'failure' };
+    }
+    logFn(`  [dry-run] Preset 'regression': agent 0 succeeds, others fail`);
+  }
+}
+
+/**
+ * Apply 'regression' preset to mockRunTests — returns a failing test result.
+ * @param {string|null} testFilter
+ * @returns {Promise<object>}
+ */
+export function mockRunTestsRegression(testFilter = null) {
+  if (testFilter === '') {
+    return Promise.resolve({
+      passed: true, count: 'skipped', failCount: '0',
+      output: 'skipped — no source changes (dry-run)', skipped: true,
+    });
+  }
+  return Promise.resolve({
+    passed: false, count: '1123', failCount: '3',
+    output: 'Tests  3 failed, 1120 passed (dry-run mock regression)',
   });
 }
 

@@ -351,6 +351,188 @@ describe('validateMissionConfig — sequence missions', () => {
   });
 });
 
+// ── Multi-hop cycle detection (v29) ──────────────────────
+
+describe('validateMissionConfig — cycle detection', () => {
+  it('detects 2-hop cycle (A→B→A)', () => {
+    const result = validateMissionConfig({
+      name: 'Test',
+      agents: [
+        { id: 'a', name: 'A', dependsOn: ['b'] },
+        { id: 'b', name: 'B', dependsOn: ['a'] },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('cycle') || e.includes('Cycle'))).toBe(true);
+  });
+
+  it('detects 3-hop cycle (A→B→C→A)', () => {
+    const result = validateMissionConfig({
+      name: 'Test',
+      agents: [
+        { id: 'a', name: 'A', dependsOn: ['c'] },
+        { id: 'b', name: 'B', dependsOn: ['a'] },
+        { id: 'c', name: 'C', dependsOn: ['b'] },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('cycle') || e.includes('Cycle'))).toBe(true);
+    expect(result.errors.some(e => e.includes('a') && e.includes('b') && e.includes('c'))).toBe(true);
+  });
+
+  it('detects cycle in subset (A→B→C→B with D independent)', () => {
+    const result = validateMissionConfig({
+      name: 'Test',
+      agents: [
+        { id: 'a', name: 'A', dependsOn: ['b'] },
+        { id: 'b', name: 'B', dependsOn: ['c'] },
+        { id: 'c', name: 'C', dependsOn: ['b'] },
+        { id: 'd', name: 'D', dependsOn: [] },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('cycle') || e.includes('Cycle'))).toBe(true);
+  });
+
+  it('accepts valid DAG (no cycles)', () => {
+    const result = validateMissionConfig({
+      name: 'Test',
+      agents: [
+        { id: 'a', name: 'A', dependsOn: [] },
+        { id: 'b', name: 'B', dependsOn: ['a'] },
+        { id: 'c', name: 'C', dependsOn: ['a'] },
+        { id: 'd', name: 'D', dependsOn: ['b', 'c'] },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts linear chain (A→B→C→D)', () => {
+    const result = validateMissionConfig({
+      name: 'Test',
+      agents: [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B', dependsOn: ['a'] },
+        { id: 'c', name: 'C', dependsOn: ['b'] },
+        { id: 'd', name: 'D', dependsOn: ['c'] },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
+// ── Balance config validation (v29) ─────────────────────
+
+describe('validateMissionConfig — balanceConfig', () => {
+  const withBalance = (bc) => ({
+    name: 'Test', agents: [{ id: 'dev', name: 'Dev' }], balanceConfig: bc,
+  });
+
+  it('accepts valid balanceConfig', () => {
+    const result = validateMissionConfig(withBalance({
+      sims: [{ tier: 'bare', variant: 'balanced' }, { tier: 'epic', variant: 'balanced' }],
+      matchesPerMatchup: 200,
+      simTimeoutMs: 60000,
+      runPreSim: true,
+      runPostSim: true,
+      regressionThresholdPp: 3,
+      convergenceCriteria: {
+        maxSpreadPp: { bare: 15, epic: 5 },
+        maxFlags: 0,
+        requiredTiers: ['epic/balanced'],
+        minRounds: 3,
+      },
+      parameterSearch: {
+        configPath: 'search-configs/quick.json',
+        timeoutMs: 300000,
+      },
+    }));
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts mission without balanceConfig', () => {
+    const result = validateMissionConfig({
+      name: 'Test', agents: [{ id: 'dev', name: 'Dev' }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects non-object balanceConfig', () => {
+    expect(validateMissionConfig(withBalance('bad')).valid).toBe(false);
+    expect(validateMissionConfig(withBalance([])).valid).toBe(false);
+    expect(validateMissionConfig(withBalance(null)).valid).toBe(false);
+  });
+
+  it('rejects non-array sims', () => {
+    const result = validateMissionConfig(withBalance({ sims: 'not-array' }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('sims'))).toBe(true);
+  });
+
+  it('rejects sim entry without tier', () => {
+    const result = validateMissionConfig(withBalance({ sims: [{ variant: 'balanced' }] }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('tier'))).toBe(true);
+  });
+
+  it('rejects sim entry without variant', () => {
+    const result = validateMissionConfig(withBalance({ sims: [{ tier: 'bare' }] }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('variant'))).toBe(true);
+  });
+
+  it('rejects null sim entry', () => {
+    const result = validateMissionConfig(withBalance({ sims: [null] }));
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects invalid matchesPerMatchup', () => {
+    expect(validateMissionConfig(withBalance({ matchesPerMatchup: 0 })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ matchesPerMatchup: -1 })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ matchesPerMatchup: 'bad' })).valid).toBe(false);
+  });
+
+  it('rejects invalid simTimeoutMs', () => {
+    expect(validateMissionConfig(withBalance({ simTimeoutMs: 500 })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ simTimeoutMs: 'bad' })).valid).toBe(false);
+  });
+
+  it('rejects invalid regressionThresholdPp', () => {
+    expect(validateMissionConfig(withBalance({ regressionThresholdPp: -1 })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ regressionThresholdPp: 'bad' })).valid).toBe(false);
+  });
+
+  it('rejects non-boolean runPreSim/runPostSim', () => {
+    expect(validateMissionConfig(withBalance({ runPreSim: 1 })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ runPostSim: 'yes' })).valid).toBe(false);
+  });
+
+  it('rejects non-object convergenceCriteria', () => {
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: 'bad' })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: [] })).valid).toBe(false);
+  });
+
+  it('rejects invalid convergenceCriteria fields', () => {
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: { maxSpreadPp: 'bad' } })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: { maxFlags: -1 } })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: { requiredTiers: 'bad' } })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ convergenceCriteria: { minRounds: 0 } })).valid).toBe(false);
+  });
+
+  it('rejects non-object parameterSearch', () => {
+    expect(validateMissionConfig(withBalance({ parameterSearch: 'bad' })).valid).toBe(false);
+  });
+
+  it('rejects parameterSearch without configPath', () => {
+    expect(validateMissionConfig(withBalance({ parameterSearch: {} })).valid).toBe(false);
+    expect(validateMissionConfig(withBalance({ parameterSearch: { configPath: '' } })).valid).toBe(false);
+  });
+
+  it('rejects parameterSearch with invalid timeoutMs', () => {
+    expect(validateMissionConfig(withBalance({ parameterSearch: { configPath: 'x.json', timeoutMs: 100 } })).valid).toBe(false);
+  });
+});
+
 // ── Multiple errors ───────────────────────────────────────
 
 describe('validateMissionConfig — multiple errors', () => {

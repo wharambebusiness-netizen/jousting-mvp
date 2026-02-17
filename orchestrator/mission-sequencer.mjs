@@ -140,6 +140,138 @@ export function validateMissionConfig(config) {
         }
       }
     }
+
+    // --- Multi-hop cycle detection via Kahn's algorithm ---
+    // Only run if we have valid agents with dependsOn (skip if earlier errors would confuse it)
+    if (agentIds.size > 0) {
+      const inDegree = new Map();
+      for (const id of agentIds) inDegree.set(id, 0);
+      for (const agent of config.agents) {
+        if (!agent || !Array.isArray(agent.dependsOn)) continue;
+        for (const dep of agent.dependsOn) {
+          if (agentIds.has(dep) && dep !== agent.id) {
+            inDegree.set(agent.id, (inDegree.get(agent.id) || 0) + 1);
+          }
+        }
+      }
+
+      const queue = [];
+      for (const [id, degree] of inDegree) { if (degree === 0) queue.push(id); }
+
+      let visited = 0;
+      const sorted = [];
+      // Build reverse adjacency: dep → agents that depend on it
+      const dependents = new Map();
+      for (const id of agentIds) dependents.set(id, []);
+      for (const agent of config.agents) {
+        if (!agent || !Array.isArray(agent.dependsOn)) continue;
+        for (const dep of agent.dependsOn) {
+          if (agentIds.has(dep) && dep !== agent.id) {
+            dependents.get(dep).push(agent.id);
+          }
+        }
+      }
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        sorted.push(current);
+        visited++;
+        for (const dependent of dependents.get(current) || []) {
+          const newDeg = inDegree.get(dependent) - 1;
+          inDegree.set(dependent, newDeg);
+          if (newDeg === 0) queue.push(dependent);
+        }
+      }
+
+      if (visited !== agentIds.size) {
+        const cycleNodes = [...agentIds].filter(id => !sorted.includes(id));
+        errors.push(`Dependency cycle detected involving agents: ${cycleNodes.join(', ')}`);
+      }
+    }
+  }
+
+  // --- balanceConfig validation ---
+  if (config.balanceConfig !== undefined) {
+    const bc = config.balanceConfig;
+    if (typeof bc !== 'object' || bc === null || Array.isArray(bc)) {
+      errors.push('"balanceConfig" must be a plain object');
+    } else {
+      // sims array
+      if (bc.sims !== undefined) {
+        if (!Array.isArray(bc.sims)) {
+          errors.push('"balanceConfig.sims" must be an array');
+        } else {
+          for (let i = 0; i < bc.sims.length; i++) {
+            const sim = bc.sims[i];
+            if (!sim || typeof sim !== 'object') {
+              errors.push(`balanceConfig.sims[${i}]: must be a non-null object`);
+            } else {
+              if (!sim.tier || typeof sim.tier !== 'string') {
+                errors.push(`balanceConfig.sims[${i}]: missing or invalid "tier"`);
+              }
+              if (!sim.variant || typeof sim.variant !== 'string') {
+                errors.push(`balanceConfig.sims[${i}]: missing or invalid "variant"`);
+              }
+            }
+          }
+        }
+      }
+
+      // Numeric fields
+      if (bc.matchesPerMatchup !== undefined && (typeof bc.matchesPerMatchup !== 'number' || bc.matchesPerMatchup < 1)) {
+        errors.push('"balanceConfig.matchesPerMatchup" must be a positive number');
+      }
+      if (bc.simTimeoutMs !== undefined && (typeof bc.simTimeoutMs !== 'number' || bc.simTimeoutMs < 1000)) {
+        errors.push('"balanceConfig.simTimeoutMs" must be a number >= 1000');
+      }
+      if (bc.regressionThresholdPp !== undefined && (typeof bc.regressionThresholdPp !== 'number' || bc.regressionThresholdPp < 0)) {
+        errors.push('"balanceConfig.regressionThresholdPp" must be a non-negative number');
+      }
+
+      // Boolean fields
+      if (bc.runPreSim !== undefined && typeof bc.runPreSim !== 'boolean') {
+        errors.push('"balanceConfig.runPreSim" must be a boolean');
+      }
+      if (bc.runPostSim !== undefined && typeof bc.runPostSim !== 'boolean') {
+        errors.push('"balanceConfig.runPostSim" must be a boolean');
+      }
+
+      // convergenceCriteria
+      if (bc.convergenceCriteria !== undefined) {
+        const cc = bc.convergenceCriteria;
+        if (typeof cc !== 'object' || cc === null || Array.isArray(cc)) {
+          errors.push('"balanceConfig.convergenceCriteria" must be a plain object');
+        } else {
+          if (cc.maxSpreadPp !== undefined && (typeof cc.maxSpreadPp !== 'object' || cc.maxSpreadPp === null || Array.isArray(cc.maxSpreadPp))) {
+            errors.push('"balanceConfig.convergenceCriteria.maxSpreadPp" must be a plain object');
+          }
+          if (cc.maxFlags !== undefined && (typeof cc.maxFlags !== 'number' || cc.maxFlags < 0)) {
+            errors.push('"balanceConfig.convergenceCriteria.maxFlags" must be a non-negative number');
+          }
+          if (cc.requiredTiers !== undefined && !Array.isArray(cc.requiredTiers)) {
+            errors.push('"balanceConfig.convergenceCriteria.requiredTiers" must be an array');
+          }
+          if (cc.minRounds !== undefined && (typeof cc.minRounds !== 'number' || cc.minRounds < 1)) {
+            errors.push('"balanceConfig.convergenceCriteria.minRounds" must be a positive number');
+          }
+        }
+      }
+
+      // parameterSearch
+      if (bc.parameterSearch !== undefined) {
+        const ps = bc.parameterSearch;
+        if (typeof ps !== 'object' || ps === null || Array.isArray(ps)) {
+          errors.push('"balanceConfig.parameterSearch" must be a plain object');
+        } else {
+          if (!ps.configPath || typeof ps.configPath !== 'string') {
+            errors.push('"balanceConfig.parameterSearch.configPath" must be a non-empty string');
+          }
+          if (ps.timeoutMs !== undefined && (typeof ps.timeoutMs !== 'number' || ps.timeoutMs < 1000)) {
+            errors.push('"balanceConfig.parameterSearch.timeoutMs" must be a number >= 1000');
+          }
+        }
+      }
+    }
   }
 
   return { valid: errors.length === 0, errors };

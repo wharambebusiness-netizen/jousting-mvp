@@ -17,7 +17,8 @@
 // ============================================================
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 // ── Detection Signatures ────────────────────────────────────
 
@@ -705,10 +706,13 @@ export function generateProjectConfig(detection, dir) {
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
+// Only runs when this file is executed directly (not when imported)
 
-const args = process.argv.slice(2);
-if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
+const __projectDetectFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && resolve(process.argv[1]) === __projectDetectFile) {
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
 Project Auto-Detection Tool
 ============================
 Usage: node orchestrator/project-detect.mjs [path]
@@ -724,77 +728,78 @@ Options:
   --emit-config   Generate orchestrator/project-config.json
   --help          Show this help
 `);
-  process.exit(0);
-}
+    process.exit(0);
+  }
 
-if (args.includes('--emit-config')) {
-  const emitDirRaw = args.find(a => !a.startsWith('-')) || process.cwd();
-  const emitDir = join(process.cwd(), emitDirRaw);  // resolve relative paths
-  const emitResult = await detectProject(emitDir);
-  const config = generateProjectConfig(emitResult, emitDir);
+  if (args.includes('--emit-config')) {
+    const emitDirRaw = args.find(a => !a.startsWith('-')) || process.cwd();
+    const emitDir = join(process.cwd(), emitDirRaw);  // resolve relative paths
+    const emitResult = await detectProject(emitDir);
+    const config = generateProjectConfig(emitResult, emitDir);
 
-  const outputPath = join(emitDir, 'orchestrator', 'project-config.json');
-  writeFileSync(outputPath, JSON.stringify(config, null, 2) + '\n');
-  console.log(`Project config written to: ${outputPath}`);
-  console.log(`  Language: ${config.language}`);
-  console.log(`  Test runner: ${config.testing.runner}`);
-  console.log(`  Quality gates: ${config.qualityGates.length}`);
-  console.log(`  Ownership roles: ${Object.keys(config.ownershipPatterns).length}`);
-  console.log(`  Source-to-test mappings: ${Object.keys(config.testing.sourceToTests).length}`);
-  process.exit(0);
-}
+    const outputPath = join(emitDir, 'orchestrator', 'project-config.json');
+    writeFileSync(outputPath, JSON.stringify(config, null, 2) + '\n');
+    console.log(`Project config written to: ${outputPath}`);
+    console.log(`  Language: ${config.language}`);
+    console.log(`  Test runner: ${config.testing.runner}`);
+    console.log(`  Quality gates: ${config.qualityGates.length}`);
+    console.log(`  Ownership roles: ${Object.keys(config.ownershipPatterns).length}`);
+    console.log(`  Source-to-test mappings: ${Object.keys(config.testing.sourceToTests).length}`);
+    process.exit(0);
+  }
 
-const isJSON = args.includes('--json');
-const targetDir = args.find(a => !a.startsWith('-')) || process.cwd();
+  const isJSON = args.includes('--json');
+  const targetDir = args.find(a => !a.startsWith('-')) || process.cwd();
 
-const result = await detectProject(targetDir);
+  const result = await detectProject(targetDir);
 
-if (isJSON) {
-  console.log(JSON.stringify(result, null, 2));
-} else {
-  console.log(`\nProject Detection: ${result.projectName}`);
-  console.log('='.repeat(40));
-  console.log(`Language:         ${result.language}`);
-  console.log(`Ecosystem:        ${result.ecosystem}`);
-  console.log(`Package Manager:  ${result.packageManager || 'none detected'}`);
-  console.log(`Build Tool:       ${result.buildTool?.name || 'none detected'}`);
-  console.log(`Test Runner:      ${result.testRunner?.name || 'none detected'}`);
-  console.log(`Monorepo:         ${result.monorepo?.type || 'no'}`);
+  if (isJSON) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`\nProject Detection: ${result.projectName}`);
+    console.log('='.repeat(40));
+    console.log(`Language:         ${result.language}`);
+    console.log(`Ecosystem:        ${result.ecosystem}`);
+    console.log(`Package Manager:  ${result.packageManager || 'none detected'}`);
+    console.log(`Build Tool:       ${result.buildTool?.name || 'none detected'}`);
+    console.log(`Test Runner:      ${result.testRunner?.name || 'none detected'}`);
+    console.log(`Monorepo:         ${result.monorepo?.type || 'no'}`);
 
-  if (result.frameworks.length) {
-    console.log(`\nFrameworks:`);
-    for (const f of result.frameworks) {
-      console.log(`  - ${f.name} (${f.type}) ${f.version || ''}`);
+    if (result.frameworks.length) {
+      console.log(`\nFrameworks:`);
+      for (const f of result.frameworks) {
+        console.log(`  - ${f.name} (${f.type}) ${f.version || ''}`);
+      }
     }
-  }
 
-  if (result.linters.length) {
-    console.log(`\nLinters/Checkers:`);
-    for (const l of result.linters) {
-      console.log(`  - ${l.name}: ${l.command}`);
+    if (result.linters.length) {
+      console.log(`\nLinters/Checkers:`);
+      for (const l of result.linters) {
+        console.log(`  - ${l.name}: ${l.command}`);
+      }
     }
-  }
 
-  console.log(`\nProject Structure:`);
-  console.log(`  Source:     ${result.structure.sourceDir || 'root'}`);
-  console.log(`  Tests:      ${result.structure.testDir || 'not found'}`);
-  console.log(`  Test Pattern: ${result.structure.testPattern || 'not detected'}`);
-  if (result.structure.entryPoints.length) {
-    console.log(`  Entry Points: ${result.structure.entryPoints.join(', ')}`);
-  }
-  if (Object.keys(result.structure.directories).length) {
-    console.log(`  Subdirs:    ${Object.keys(result.structure.directories).join(', ')}`);
-  }
-
-  if (result.qualityGates.length) {
-    console.log(`\nSuggested Quality Gates:`);
-    for (const g of result.qualityGates) {
-      console.log(`  [${g.severity}] ${g.name}: ${g.command}`);
+    console.log(`\nProject Structure:`);
+    console.log(`  Source:     ${result.structure.sourceDir || 'root'}`);
+    console.log(`  Tests:      ${result.structure.testDir || 'not found'}`);
+    console.log(`  Test Pattern: ${result.structure.testPattern || 'not detected'}`);
+    if (result.structure.entryPoints.length) {
+      console.log(`  Entry Points: ${result.structure.entryPoints.join(', ')}`);
     }
-  }
+    if (Object.keys(result.structure.directories).length) {
+      console.log(`  Subdirs:    ${Object.keys(result.structure.directories).join(', ')}`);
+    }
 
-  console.log(`\nSuggested Agent Team:`);
-  for (const a of result.suggestedAgents) {
-    console.log(`  [${a.priority}] ${a.role} (${a.model}) — ${a.reason}`);
+    if (result.qualityGates.length) {
+      console.log(`\nSuggested Quality Gates:`);
+      for (const g of result.qualityGates) {
+        console.log(`  [${g.severity}] ${g.name}: ${g.command}`);
+      }
+    }
+
+    console.log(`\nSuggested Agent Team:`);
+    for (const a of result.suggestedAgents) {
+      console.log(`  [${a.priority}] ${a.role} (${a.model}) — ${a.reason}`);
+    }
   }
 }
