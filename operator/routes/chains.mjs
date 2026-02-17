@@ -1,0 +1,310 @@
+// ============================================================
+// Chain Routes (M4)
+// ============================================================
+// REST endpoints for chain CRUD, session detail, and cost
+// summaries. Imports registry.mjs directly for data access.
+//
+// Multi-project: POST body accepts projectDir, GET accepts
+// ?project= query param for filtering.
+// ============================================================
+
+import { Router } from 'express';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+import {
+  loadRegistry, saveRegistry,
+  createChain, updateChainStatus,
+  findChainById, getChainSummary,
+} from '../registry.mjs';
+
+/**
+ * Create chain routes.
+ * @param {object} ctx
+ * @param {string}   ctx.operatorDir
+ * @param {EventBus} ctx.events
+ * @param {Function} [ctx.runChainFn] - For combined mode chain creation
+ */
+export function createChainRoutes(ctx) {
+  const router = Router();
+
+  // ── GET /api/chains ─────────────────────────────────────
+  // List chains with optional filtering and pagination.
+  // Query params: ?project=, ?status=, ?limit=, ?offset=
+  router.get('/chains', (_req, res) => {
+    try {
+      const registry = loadRegistry();
+      let chains = registry.chains;
+
+      // Filter by project
+      const projectFilter = _req.query.project;
+      if (projectFilter) {
+        const normalizedFilter = resolve(projectFilter).replace(/\\/g, '/');
+        chains = chains.filter(c => {
+          if (!c.projectDir) return false;
+          return resolve(c.projectDir).replace(/\\/g, '/') === normalizedFilter;
+        });
+      }
+
+      // Filter by status
+      const statusFilter = _req.query.status;
+      if (statusFilter) {
+        chains = chains.filter(c => c.status === statusFilter);
+      }
+
+      // Sort by updatedAt descending (newest first)
+      chains.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+      // Pagination
+      const limit = Math.min(parseInt(_req.query.limit, 10) || 50, 100);
+      const offset = parseInt(_req.query.offset, 10) || 0;
+      const total = chains.length;
+      const paginated = chains.slice(offset, offset + limit);
+
+      res.json({
+        chains: paginated.map(getChainSummary),
+        total,
+        limit,
+        offset,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/chains/:id ─────────────────────────────────
+  // Full chain detail with all sessions.
+  router.get('/chains/:id', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.id);
+      if (!chain) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+      res.json(chain);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/chains ────────────────────────────────────
+  // Start a new chain. Requires combined mode (runChainFn).
+  // Body: { task, model?, maxTurns?, maxContinuations?, maxBudgetUsd?, projectDir? }
+  router.post('/chains', (req, res) => {
+    try {
+      const { task, model, maxTurns, maxContinuations, maxBudgetUsd, projectDir } = req.body;
+
+      if (!task || typeof task !== 'string' || task.trim().length === 0) {
+        return res.status(400).json({ error: 'task is required' });
+      }
+
+      const registry = loadRegistry();
+      const chain = createChain(registry, {
+        task: task.trim(),
+        config: {
+          model: model || 'sonnet',
+          maxTurns: maxTurns || 30,
+          maxContinuations: maxContinuations || 5,
+          maxBudgetUsd: maxBudgetUsd ?? 5.0,
+        },
+        projectDir: projectDir || null,
+      });
+      saveRegistry(registry);
+
+      ctx.events.emit('chain:started', {
+        chainId: chain.id,
+        task: chain.task,
+        projectDir: chain.projectDir,
+      });
+
+      // If combined mode, start the chain runner in background
+      if (ctx.runChainFn) {
+        ctx.runChainFn(chain).catch(err => {
+          ctx.events.emit('chain:error', { chainId: chain.id, error: err.message });
+        });
+      }
+
+      res.status(201).json(getChainSummary(chain));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/chains/:id/abort ──────────────────────────
+  // Abort a running chain.
+  router.post('/chains/:id/abort', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.id);
+      if (!chain) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+      if (chain.status !== 'running') {
+        return res.status(409).json({ error: `Chain is not running (status: ${chain.status})` });
+      }
+
+      updateChainStatus(chain, 'aborted');
+      saveRegistry(registry);
+
+      ctx.events.emit('chain:aborted', { chainId: chain.id });
+
+      res.json(getChainSummary(chain));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── DELETE /api/chains/:id ──────────────────────────────
+  // Remove a chain from the registry.
+  router.delete('/chains/:id', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const idx = registry.chains.findIndex(c => c.id === req.params.id);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+      if (registry.chains[idx].status === 'running') {
+        return res.status(409).json({ error: 'Cannot delete a running chain — abort it first' });
+      }
+
+      registry.chains.splice(idx, 1);
+      saveRegistry(registry);
+
+      res.json({ deleted: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/chains/:id/sessions/:idx ───────────────────
+  // Session detail including handoff file content.
+  router.get('/chains/:id/sessions/:idx', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.id);
+      if (!chain) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+
+      const idx = parseInt(req.params.idx, 10);
+      if (isNaN(idx) || idx < 0 || idx >= chain.sessions.length) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      const session = chain.sessions[idx];
+
+      // Read handoff file if it exists
+      let handoffContent = null;
+      if (session.handoffFile && existsSync(session.handoffFile)) {
+        try {
+          handoffContent = readFileSync(session.handoffFile, 'utf-8');
+        } catch (_) { /* noop */ }
+      }
+
+      res.json({
+        ...session,
+        handoffContent,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/costs ──────────────────────────────────────
+  // Cost summary across all chains, with optional project filter.
+  router.get('/costs', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      let chains = registry.chains;
+
+      // Filter by project
+      const projectFilter = req.query.project;
+      if (projectFilter) {
+        const normalizedFilter = resolve(projectFilter).replace(/\\/g, '/');
+        chains = chains.filter(c => {
+          if (!c.projectDir) return false;
+          return resolve(c.projectDir).replace(/\\/g, '/') === normalizedFilter;
+        });
+      }
+
+      const totalCost = chains.reduce((sum, c) => sum + (c.totalCostUsd || 0), 0);
+      const totalSessions = chains.reduce((sum, c) => sum + (c.sessions?.length || 0), 0);
+      const totalTurns = chains.reduce((sum, c) => sum + (c.totalTurns || 0), 0);
+
+      // Per-status breakdown
+      const byStatus = {};
+      for (const chain of chains) {
+        if (!byStatus[chain.status]) {
+          byStatus[chain.status] = { count: 0, costUsd: 0 };
+        }
+        byStatus[chain.status].count++;
+        byStatus[chain.status].costUsd += chain.totalCostUsd || 0;
+      }
+
+      // Per-project breakdown
+      const byProject = {};
+      for (const chain of chains) {
+        const proj = chain.projectDir || '(default)';
+        if (!byProject[proj]) {
+          byProject[proj] = { chains: 0, costUsd: 0, sessions: 0 };
+        }
+        byProject[proj].chains++;
+        byProject[proj].costUsd += chain.totalCostUsd || 0;
+        byProject[proj].sessions += chain.sessions?.length || 0;
+      }
+
+      res.json({
+        totalCostUsd: totalCost,
+        totalChains: chains.length,
+        totalSessions,
+        totalTurns,
+        byStatus,
+        byProject,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/projects ───────────────────────────────────
+  // List distinct projects with summary stats.
+  router.get('/projects', (_req, res) => {
+    try {
+      const registry = loadRegistry();
+      const projectMap = {};
+
+      for (const chain of registry.chains) {
+        const proj = chain.projectDir || '(default)';
+        if (!projectMap[proj]) {
+          projectMap[proj] = {
+            projectDir: chain.projectDir,
+            chains: 0,
+            running: 0,
+            completed: 0,
+            failed: 0,
+            totalCostUsd: 0,
+            lastActivity: null,
+          };
+        }
+        const entry = projectMap[proj];
+        entry.chains++;
+        if (chain.status === 'running') entry.running++;
+        if (chain.status === 'complete' || chain.status === 'assumed-complete') entry.completed++;
+        if (chain.status === 'failed' || chain.status === 'aborted') entry.failed++;
+        entry.totalCostUsd += chain.totalCostUsd || 0;
+
+        if (!entry.lastActivity || chain.updatedAt > entry.lastActivity) {
+          entry.lastActivity = chain.updatedAt;
+        }
+      }
+
+      const projects = Object.values(projectMap)
+        .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
+
+      res.json({ projects });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  return router;
+}

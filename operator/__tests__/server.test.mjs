@@ -1,0 +1,527 @@
+// Server tests (M4)
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { createApp } from '../server.mjs';
+import {
+  initRegistry, loadRegistry, saveRegistry,
+  createChain, recordSession, updateChainStatus,
+} from '../registry.mjs';
+import { EventBus } from '../../orchestrator/observability.mjs';
+import { matchesPattern, matchesAnyPattern } from '../ws.mjs';
+
+// ── Test Setup ──────────────────────────────────────────────
+
+const TEST_DIR = join(import.meta.dirname, '..', '__test_tmp_server');
+
+function setupTestDir() {
+  if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
+  mkdirSync(TEST_DIR, { recursive: true });
+}
+
+function teardownTestDir() {
+  if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
+}
+
+// Seed registry with sample chains for testing
+function seedRegistry() {
+  initRegistry({ operatorDir: TEST_DIR });
+  const reg = loadRegistry();
+
+  // Project A chains
+  const c1 = createChain(reg, {
+    task: 'build feature X',
+    config: { model: 'sonnet', maxTurns: 20, maxContinuations: 3, maxBudgetUsd: 2.0 },
+    projectDir: '/projects/alpha',
+  });
+  recordSession(c1, {
+    sessionId: 'sid-1',
+    turns: 5,
+    costUsd: 0.12,
+    durationMs: 10000,
+    hitMaxTurns: false,
+    preCompacted: false,
+    handoffComplete: false,
+    handoffFile: join(TEST_DIR, 'handoffs', 'c1-0.md'),
+  });
+  recordSession(c1, {
+    sessionId: 'sid-2',
+    turns: 8,
+    costUsd: 0.25,
+    durationMs: 15000,
+    handoffComplete: true,
+  });
+  updateChainStatus(c1, 'complete');
+
+  // Project B chain (running)
+  const c2 = createChain(reg, {
+    task: 'fix bug in module Y',
+    config: { model: 'opus' },
+    projectDir: '/projects/beta',
+  });
+  recordSession(c2, {
+    sessionId: 'sid-3',
+    turns: 3,
+    costUsd: 0.08,
+    durationMs: 5000,
+    handoffComplete: false,
+  });
+
+  // Project A chain (failed)
+  const c3 = createChain(reg, {
+    task: 'deploy to staging',
+    config: { model: 'haiku' },
+    projectDir: '/projects/alpha',
+  });
+  updateChainStatus(c3, 'failed');
+
+  // No project chain
+  const c4 = createChain(reg, {
+    task: 'misc cleanup',
+    config: {},
+  });
+  updateChainStatus(c4, 'complete');
+
+  saveRegistry(reg);
+
+  // Create a handoff file for session testing
+  mkdirSync(join(TEST_DIR, 'handoffs'), { recursive: true });
+  writeFileSync(join(TEST_DIR, 'handoffs', 'c1-0.md'), '# Session 1 Handoff\nDid some work.');
+
+  return { c1, c2, c3, c4 };
+}
+
+// ── Server Test Helpers ─────────────────────────────────────
+
+let server, baseUrl, events;
+
+function startServer() {
+  events = new EventBus();
+  const result = createApp({ operatorDir: TEST_DIR, events });
+  return new Promise((resolve) => {
+    result.server.listen(0, '127.0.0.1', () => {
+      const port = result.server.address().port;
+      server = result.server;
+      baseUrl = `http://127.0.0.1:${port}`;
+      resolve({ server: result.server, port, wss: result.wss });
+    });
+  });
+}
+
+function stopServer() {
+  return new Promise((resolve) => {
+    if (server) {
+      // Close all WebSocket connections first
+      for (const client of server._wss?.clients || []) {
+        client.close();
+      }
+      server.close(() => resolve());
+    } else {
+      resolve();
+    }
+  });
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(`${baseUrl}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  });
+  const body = await res.json();
+  return { status: res.status, body };
+}
+
+// ── Tests ───────────────────────────────────────────────────
+
+describe('Server — Health', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/health returns ok', async () => {
+    const { status, body } = await api('/api/health');
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.timestamp).toBeTruthy();
+    expect(typeof body.uptime).toBe('number');
+  });
+});
+
+describe('Server — Chain Endpoints', () => {
+  let chains;
+
+  beforeAll(async () => {
+    setupTestDir();
+    chains = seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/chains lists all chains', async () => {
+    const { status, body } = await api('/api/chains');
+    expect(status).toBe(200);
+    expect(body.chains.length).toBe(4);
+    expect(body.total).toBe(4);
+  });
+
+  it('GET /api/chains?project= filters by project', async () => {
+    const { status, body } = await api('/api/chains?project=/projects/alpha');
+    expect(status).toBe(200);
+    expect(body.chains.length).toBe(2);
+    expect(body.chains.every(c => c.projectDir === '/projects/alpha')).toBe(true);
+  });
+
+  it('GET /api/chains?status= filters by status', async () => {
+    const { status, body } = await api('/api/chains?status=running');
+    expect(status).toBe(200);
+    expect(body.chains.length).toBe(1);
+    expect(body.chains[0].status).toBe('running');
+  });
+
+  it('GET /api/chains supports pagination', async () => {
+    const { body: page1 } = await api('/api/chains?limit=2&offset=0');
+    expect(page1.chains.length).toBe(2);
+    expect(page1.total).toBe(4);
+    expect(page1.limit).toBe(2);
+    expect(page1.offset).toBe(0);
+
+    const { body: page2 } = await api('/api/chains?limit=2&offset=2');
+    expect(page2.chains.length).toBe(2);
+    expect(page2.offset).toBe(2);
+
+    // No overlap
+    const ids1 = page1.chains.map(c => c.id);
+    const ids2 = page2.chains.map(c => c.id);
+    expect(ids1.filter(id => ids2.includes(id))).toEqual([]);
+  });
+
+  it('GET /api/chains/:id returns chain detail', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c1.id}`);
+    expect(status).toBe(200);
+    expect(body.id).toBe(chains.c1.id);
+    expect(body.task).toBe('build feature X');
+    expect(body.sessions.length).toBe(2);
+    expect(body.projectDir).toBe('/projects/alpha');
+  });
+
+  it('GET /api/chains/:id returns 404 for unknown', async () => {
+    const { status } = await api('/api/chains/nonexistent');
+    expect(status).toBe(404);
+  });
+
+  it('POST /api/chains creates a new chain', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'new API task',
+        model: 'haiku',
+        projectDir: '/projects/gamma',
+      }),
+    });
+    expect(status).toBe(201);
+    expect(body.task).toBe('new API task');
+    expect(body.status).toBe('running');
+    expect(body.projectDir).toBe('/projects/gamma');
+    expect(body.id).toBeTruthy();
+  });
+
+  it('POST /api/chains rejects empty task', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: '' }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('task is required');
+  });
+
+  it('POST /api/chains/:id/abort aborts running chain', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c2.id}/abort`, {
+      method: 'POST',
+    });
+    expect(status).toBe(200);
+    expect(body.status).toBe('aborted');
+  });
+
+  it('POST /api/chains/:id/abort rejects non-running chain', async () => {
+    const { status } = await api(`/api/chains/${chains.c1.id}/abort`, {
+      method: 'POST',
+    });
+    expect(status).toBe(409);
+  });
+
+  it('DELETE /api/chains/:id removes chain', async () => {
+    // Delete the failed chain (c3)
+    const { status, body } = await api(`/api/chains/${chains.c3.id}`, {
+      method: 'DELETE',
+    });
+    expect(status).toBe(200);
+    expect(body.deleted).toBe(true);
+
+    // Verify it's gone
+    const { status: getStatus } = await api(`/api/chains/${chains.c3.id}`);
+    expect(getStatus).toBe(404);
+  });
+
+  it('DELETE /api/chains/:id rejects running chain', async () => {
+    // Create a running chain to try to delete
+    const reg = loadRegistry();
+    const running = createChain(reg, { task: 'cannot delete', config: {} });
+    saveRegistry(reg);
+
+    const { status } = await api(`/api/chains/${running.id}`, {
+      method: 'DELETE',
+    });
+    expect(status).toBe(409);
+  });
+});
+
+describe('Server — Session Endpoints', () => {
+  let chains;
+
+  beforeAll(async () => {
+    setupTestDir();
+    chains = seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/chains/:id/sessions/:idx returns session detail', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c1.id}/sessions/0`);
+    expect(status).toBe(200);
+    expect(body.index).toBe(0);
+    expect(body.sessionId).toBe('sid-1');
+    expect(body.costUsd).toBeCloseTo(0.12);
+    expect(body.handoffContent).toContain('Session 1 Handoff');
+  });
+
+  it('GET /api/chains/:id/sessions/:idx returns 404 for bad index', async () => {
+    const { status } = await api(`/api/chains/${chains.c1.id}/sessions/99`);
+    expect(status).toBe(404);
+  });
+
+  it('GET /api/chains/:id/sessions/:idx works without handoff file', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c1.id}/sessions/1`);
+    expect(status).toBe(200);
+    expect(body.index).toBe(1);
+    expect(body.handoffContent).toBeNull();
+  });
+});
+
+describe('Server — Cost Endpoints', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/costs returns cost summary', async () => {
+    const { status, body } = await api('/api/costs');
+    expect(status).toBe(200);
+    expect(typeof body.totalCostUsd).toBe('number');
+    expect(body.totalCostUsd).toBeGreaterThan(0);
+    expect(body.totalChains).toBeGreaterThan(0);
+    expect(body.byStatus).toBeTruthy();
+    expect(body.byProject).toBeTruthy();
+  });
+
+  it('GET /api/costs?project= filters by project', async () => {
+    const { body } = await api('/api/costs?project=/projects/alpha');
+    // Only alpha project costs
+    expect(body.totalChains).toBe(2);
+    const projectKeys = Object.keys(body.byProject);
+    expect(projectKeys.length).toBe(1);
+  });
+});
+
+describe('Server — Projects Endpoint', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/projects lists distinct projects', async () => {
+    const { status, body } = await api('/api/projects');
+    expect(status).toBe(200);
+    expect(body.projects.length).toBeGreaterThanOrEqual(2);
+
+    // Should have alpha and beta projects at minimum
+    const dirs = body.projects.map(p => p.projectDir);
+    expect(dirs).toContain('/projects/alpha');
+    expect(dirs).toContain('/projects/beta');
+  });
+
+  it('GET /api/projects includes summary stats', async () => {
+    const { body } = await api('/api/projects');
+    const alpha = body.projects.find(p => p.projectDir === '/projects/alpha');
+    expect(alpha).toBeTruthy();
+    expect(alpha.chains).toBeGreaterThanOrEqual(2);
+    expect(alpha.totalCostUsd).toBeGreaterThan(0);
+    expect(alpha.lastActivity).toBeTruthy();
+  });
+});
+
+describe('Server — Orchestrator Endpoints', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/status returns initial state', async () => {
+    const { status, body } = await api('/api/orchestrator/status');
+    expect(status).toBe(200);
+    expect(body.running).toBe(false);
+  });
+
+  it('POST /api/orchestrator/start starts orchestrator', async () => {
+    const { status, body } = await api('/api/orchestrator/start', {
+      method: 'POST',
+      body: JSON.stringify({ mission: 'test-mission', dryRun: true }),
+    });
+    expect(status).toBe(202);
+    expect(body.status.running).toBe(true);
+    expect(body.status.mission).toBe('test-mission');
+    expect(body.status.dryRun).toBe(true);
+  });
+
+  it('POST /api/orchestrator/start rejects when already running', async () => {
+    const { status } = await api('/api/orchestrator/start', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(status).toBe(409);
+  });
+
+  it('POST /api/orchestrator/stop stops orchestrator', async () => {
+    const { status, body } = await api('/api/orchestrator/stop', {
+      method: 'POST',
+    });
+    expect(status).toBe(200);
+    expect(body.status.running).toBe(false);
+  });
+
+  it('POST /api/orchestrator/stop rejects when not running', async () => {
+    const { status } = await api('/api/orchestrator/stop', {
+      method: 'POST',
+    });
+    expect(status).toBe(409);
+  });
+});
+
+describe('Server — CORS', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('allows localhost origin', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      headers: { Origin: 'http://localhost:3000' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+  });
+
+  it('allows 127.0.0.1 origin', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      headers: { Origin: 'http://127.0.0.1:5173' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:5173');
+  });
+
+  it('does not set CORS for external origins', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      headers: { Origin: 'https://evil.com' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('handles OPTIONS preflight', async () => {
+    const res = await fetch(`${baseUrl}/api/chains`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:3000' },
+    });
+    expect(res.status).toBe(204);
+  });
+});
+
+describe('Server — Events Integration', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/chains emits chain:started event', async () => {
+    let emitted = null;
+    events.on('chain:started', (data) => { emitted = data; });
+
+    await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'event test', projectDir: '/test' }),
+    });
+
+    expect(emitted).toBeTruthy();
+    expect(emitted.task).toBe('event test');
+    expect(emitted.projectDir).toBe('/test');
+  });
+});
+
+// ── WebSocket Pattern Matching Tests (Unit) ─────────────────
+
+describe('WebSocket — Pattern Matching', () => {
+  it('exact match', () => {
+    expect(matchesPattern('chain:started', 'chain:started')).toBe(true);
+    expect(matchesPattern('chain:started', 'chain:complete')).toBe(false);
+  });
+
+  it('wildcard match', () => {
+    expect(matchesPattern('chain:started', 'chain:*')).toBe(true);
+    expect(matchesPattern('chain:complete', 'chain:*')).toBe(true);
+    expect(matchesPattern('session:output', 'chain:*')).toBe(false);
+  });
+
+  it('global wildcard', () => {
+    expect(matchesPattern('anything', '*')).toBe(true);
+  });
+
+  it('matchesAnyPattern works with sets', () => {
+    const patterns = new Set(['chain:*', 'session:output']);
+    expect(matchesAnyPattern('chain:started', patterns)).toBe(true);
+    expect(matchesAnyPattern('session:output', patterns)).toBe(true);
+    expect(matchesAnyPattern('agent:error', patterns)).toBe(false);
+  });
+});

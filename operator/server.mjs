@@ -1,0 +1,181 @@
+#!/usr/bin/env node
+// ============================================================
+// Operator HTTP Server (M4)
+// ============================================================
+// Express + WebSocket server exposing operator and orchestrator
+// state via REST API and real-time events. Binds to 127.0.0.1
+// only (localhost single-user tool).
+//
+// Usage:
+//   node operator/server.mjs                    # API server (port 3100)
+//   node operator/server.mjs --port 8080        # Custom port
+//   node operator/server.mjs --operator         # Combined mode (API + operator)
+//
+// ============================================================
+
+import express from 'express';
+import http from 'http';
+import { resolve, join } from 'path';
+import { parseArgs } from 'util';
+
+import { initRegistry } from './registry.mjs';
+import { createChainRoutes } from './routes/chains.mjs';
+import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
+import { createWebSocketHandler } from './ws.mjs';
+import { EventBus } from '../orchestrator/observability.mjs';
+
+// ── Constants ───────────────────────────────────────────────
+
+const DEFAULT_PORT = 3100;
+const DEFAULT_HOST = '127.0.0.1';
+
+// ── CORS Middleware ─────────────────────────────────────────
+
+function corsMiddleware(req, res, next) {
+  const origin = req.headers.origin || '';
+  // Allow localhost on any port
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+}
+
+// ── App Factory ─────────────────────────────────────────────
+
+/**
+ * Create the Express app and HTTP server.
+ * @param {object} options
+ * @param {string}   options.operatorDir  - Path to operator/ directory
+ * @param {EventBus} [options.events]     - EventBus for real-time events
+ * @param {object}   [options.runChainFn] - Function to start a chain (combined mode)
+ * @param {object}   [options.orchestratorCtx] - Orchestrator context (combined mode)
+ * @returns {{ app: Express, server: http.Server, events: EventBus, wss: WebSocketServer }}
+ */
+export function createApp(options = {}) {
+  const operatorDir = options.operatorDir || resolve(import.meta.dirname || '.', '.');
+  const events = options.events || new EventBus();
+
+  // Initialize registry
+  initRegistry({ operatorDir, log: () => {} });
+
+  const app = express();
+
+  // Middleware
+  app.use(express.json());
+  app.use(corsMiddleware);
+
+  // Health endpoint
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      ok: true,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Routes
+  app.use('/api', createChainRoutes({
+    operatorDir,
+    events,
+    runChainFn: options.runChainFn || null,
+  }));
+  app.use('/api', createOrchestratorRoutes({
+    events,
+    orchestratorCtx: options.orchestratorCtx || null,
+  }));
+
+  // Create HTTP server (needed for WebSocket upgrade)
+  const server = http.createServer(app);
+
+  // WebSocket
+  const wss = createWebSocketHandler({ server, events });
+
+  // Graceful shutdown
+  let shutdownCalled = false;
+  function shutdown() {
+    if (shutdownCalled) return;
+    shutdownCalled = true;
+
+    // Close WebSocket connections
+    for (const client of wss.clients) {
+      client.close(1001, 'Server shutting down');
+    }
+
+    // Close HTTP server
+    server.close(() => {
+      process.exit(0);
+    });
+
+    // Force exit after 5s
+    setTimeout(() => process.exit(1), 5000).unref();
+  }
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  return { app, server, events, wss };
+}
+
+// ── CLI Entry Point ─────────────────────────────────────────
+
+function parseCliArgs() {
+  const { values } = parseArgs({
+    args: process.argv.slice(2),
+    options: {
+      port:     { type: 'string', default: String(DEFAULT_PORT) },
+      host:     { type: 'string', default: DEFAULT_HOST },
+      operator: { type: 'boolean', default: false },
+      help:     { type: 'boolean', short: 'h', default: false },
+    },
+    strict: true,
+  });
+
+  if (values.help) {
+    console.log(`
+Operator HTTP Server (M4)
+
+Usage:
+  node operator/server.mjs [options]
+
+Options:
+  --port N        Port to listen on (default: ${DEFAULT_PORT})
+  --host HOST     Host to bind to (default: ${DEFAULT_HOST})
+  --operator      Combined mode: also run operator daemon
+  -h, --help      Show this help
+`);
+    process.exit(0);
+  }
+
+  return {
+    port: parseInt(values.port, 10),
+    host: values.host,
+    operator: values.operator,
+  };
+}
+
+// Only run as CLI when executed directly
+const isMain = process.argv[1] &&
+  resolve(process.argv[1]).replace(/\\/g, '/').includes('operator/server');
+
+if (isMain) {
+  const args = parseCliArgs();
+  const operatorDir = resolve(import.meta.dirname || '.', '.');
+
+  const { server } = createApp({ operatorDir });
+
+  server.listen(args.port, args.host, () => {
+    console.log(`Operator API server listening on http://${args.host}:${args.port}`);
+    console.log(`WebSocket available at ws://${args.host}:${args.port}/ws`);
+    if (args.operator) {
+      console.log('Combined mode: operator daemon active');
+    }
+  });
+}
