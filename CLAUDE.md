@@ -16,6 +16,8 @@ node orchestrator/orchestrator.mjs missions/X.json # Launch with mission config
 node orchestrator/orchestrator.mjs --dry-run       # Smoke test (mock agents, no API credits)
 node orchestrator/orchestrator.mjs --dry-run=chaos # Dry-run with random failures/timeouts
 node orchestrator/orchestrator.mjs --dry-run=regression # Dry-run with test regression sim
+node operator/operator.mjs "task description"         # Auto-continuation operator (M1)
+node operator/operator.mjs --dry-run "task"            # Operator dry-run (print config only)
 ```
 
 ## Architecture
@@ -63,6 +65,9 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   mock-runner.mjs     Dry-run mock agent/test/git execution
   roles/              16 role templates
   missions/           Mission configs
+
+operator/             Auto-continuation system (M1 walking skeleton)
+  operator.mjs        CLI daemon: SDK query → context monitor → handoff → auto-commit → chain
 ```
 
 ## Detailed Documentation
