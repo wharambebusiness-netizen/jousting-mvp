@@ -243,36 +243,53 @@ async function runSession(config, chainIndex, previousHandoff) {
     }],
   };
 
+  const queryOptions = {
+    model: config.model,
+    maxTurns: config.maxTurns,
+    cwd: PROJECT_DIR,
+    permissionMode: config.permissionMode,
+    allowDangerouslySkipPermissions: config.permissionMode === 'bypassPermissions',
+    allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep', 'Task'],
+    hooks,
+    stderr: (data) => {
+      const line = data.toString().trim();
+      if (line) log(`  [stderr] ${line}`);
+    },
+  };
+
   try {
-    for await (const message of query({
-      prompt: systemPrompt,
-      options: {
-        model: config.model,
-        maxTurns: config.maxTurns,
-        cwd: PROJECT_DIR,
-        permissionMode: config.permissionMode,
-        allowDangerouslySkipPermissions: config.permissionMode === 'bypassPermissions',
-        allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep', 'Task'],
-        hooks,
-      },
-    })) {
-      // Capture session ID from init message
-      if (message.type === 'system' && message.subtype === 'init') {
-        sessionId = message.session_id;
-        log(`  Session ID: ${sessionId}`);
+    for await (const message of query({ prompt: systemPrompt, options: queryOptions })) {
+      // Log all message types for debugging
+      if (message.type === 'system') {
+        log(`  [${message.type}:${message.subtype}] ${message.session_id ? 'sid=' + message.session_id.slice(0, 8) : ''}`);
+        if (message.subtype === 'init') {
+          sessionId = message.session_id;
+        }
       }
 
       // Collect assistant output text
       if (message.type === 'assistant') {
         const content = message.message?.content || [];
         for (const block of Array.isArray(content) ? content : []) {
-          if (block.type === 'text') outputText += block.text;
+          if (block.type === 'text') {
+            outputText += block.text;
+            // Print a summary of what the agent is saying
+            const preview = block.text.slice(0, 120).replace(/\n/g, ' ');
+            if (preview.trim()) log(`  [assistant] ${preview}...`);
+          }
         }
+      }
+
+      // Tool use events
+      if (message.type === 'tool_use' || message.type === 'tool_result') {
+        const toolName = message.tool_name || message.name || '?';
+        log(`  [${message.type}] ${toolName}`);
       }
 
       // Capture result
       if (message.type === 'result') {
         resultData = message;
+        log(`  [result] subtype=${message.subtype}, turns=${message.num_turns}, cost=$${(message.total_cost_usd || 0).toFixed(4)}`);
         if (message.result?.text) outputText += message.result.text;
       }
 
@@ -281,6 +298,8 @@ async function runSession(config, chainIndex, previousHandoff) {
     }
   } catch (err) {
     log(`  Session error: ${err.message}`);
+    if (err.stderr) log(`  stderr: ${err.stderr.slice(0, 500)}`);
+    if (err.code) log(`  exit code: ${err.code}`);
     outputText += `\n[SESSION ERROR: ${err.message}]`;
   }
 

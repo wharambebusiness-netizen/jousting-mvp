@@ -1,0 +1,19 @@
+{
+  "task": "Create a file operator/test-output.txt with the text 'Hello from the operator test'. Then read it back to confirm it exists.",
+  "sessions": [
+    {
+      "index": 0,
+      "sessionId": null,
+      "turns": 0,
+      "costUsd": 0,
+      "durationMs": 322,
+      "hitMaxTurns": false,
+      "preCompacted": false,
+      "handoffComplete": false
+    }
+  ],
+  "totalCostUsd": 0,
+  "totalDurationMs": 322,
+  "totalTurns": 0,
+  "outcome": "assumed-complete"
+}
