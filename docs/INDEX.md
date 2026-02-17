@@ -10,6 +10,7 @@ Quick reference for finding the right documentation. Use `node docs/find-docs.mj
 | Gear system | [docs/gear-system.md](gear-system.md) | ~80 | Gear-related changes, loadouts |
 | API signatures | [docs/api-reference.md](api-reference.md) | ~90 | Need function signatures, usage examples |
 | Troubleshooting | [docs/troubleshooting.md](troubleshooting.md) | ~15 | Debugging unexpected behavior |
+| Operator plan (M2-M6) | [docs/operator-plan.md](operator-plan.md) | ~370 | Working on operator system, auto-continuation |
 | Session history | [docs/session-history.md](session-history.md) | ~70 | Understanding past work, decisions |
 | Game spec (v4.1) | [docs/joust-melee-v4.1.md](joust-melee-v4.1.md) | ~865 | Canonical game design spec |
 
