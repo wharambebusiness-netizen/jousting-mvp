@@ -70,3 +70,4 @@ Compact table of all sessions. For full details, see `docs/archive/jousting-hand
 | S72 | First orchestrator test coverage: 215 tests across 8 modules, extracted parseMetaContent pure function, fixed multiline files-modified regex bug. 908→1123 tests, 8→16 suites |
 | S73 | Orchestrator v28: --dry-run smoke test mode (mock agents/tests/git), mission config validation (43 tests), getDynamicConcurrency edge case fix. 1123→1186 tests, 16→18 suites |
 | S74 | Dry-run integration tests (subprocess e2e), multi-hop cycle detection (Kahn's), balanceConfig schema validation, dry-run presets (--dry-run=chaos/regression), CLI module guard fixes. 1186→1218 tests, 18→19 suites |
+| S75 | Orchestrator v29, critical agent pool async bugfix (runAgentPool was async but called without await — agents never properly awaited between rounds), handoff test isolation via ORCH_HANDOFF_DIR env var, coord agent lifecycle test. 1218→1219 tests |

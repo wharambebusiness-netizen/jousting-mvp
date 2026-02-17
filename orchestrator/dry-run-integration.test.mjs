@@ -8,12 +8,13 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCHESTRATOR = join(__dirname, 'orchestrator.mjs');
 const TEMP_DIR = join(tmpdir(), 'dry-run-integ-' + Date.now());
+const HANDOFF_DIR = join(TEMP_DIR, 'handoffs');
 
 function runOrchestrator(args = [], timeoutMs = 30000) {
   return new Promise((resolve) => {
     const proc = spawn('node', [ORCHESTRATOR, ...args], {
       cwd: join(__dirname, '..'),
-      env: { ...process.env, NODE_ENV: 'test' },
+      env: { ...process.env, NODE_ENV: 'test', ORCH_HANDOFF_DIR: HANDOFF_DIR },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -104,6 +105,25 @@ describe('dry-run integration (subprocess)', () => {
     expect(result.timedOut).toBe(false);
     // Regression preset: agent failures + test failures
     expect(result.stdout).toContain('DRY-RUN MODE: regression');
+  }, 35000);
+
+  it('retires coord-role feature agents correctly', async () => {
+    // Agents with roles NOT in CODE_AGENT_ROLES should still retire via handoff status
+    const missionPath = join(TEMP_DIR, 'coord-mission.json');
+    writeFileSync(missionPath, JSON.stringify({
+      name: 'Coord Agent Lifecycle Test',
+      config: { maxRounds: 3, maxConcurrency: 2 },
+      agents: [
+        { id: 'lead', name: 'Lead', type: 'feature', role: 'tech-lead', fileOwnership: ['src/engine/types.ts'] },
+        { id: 'dev', name: 'Dev', type: 'feature', role: 'engine-dev', fileOwnership: ['src/engine/match.ts'] },
+      ],
+    }));
+
+    const result = await runOrchestrator(['--dry-run', missionPath], 30000);
+    expect(result.timedOut).toBe(false);
+    // Both feature agents should retire after round 1 → exit 42
+    expect(result.code).toBe(42);
+    expect(result.stdout).toContain('all agents exhausted');
   }, 35000);
 
   it('rejects unknown preset', async () => {

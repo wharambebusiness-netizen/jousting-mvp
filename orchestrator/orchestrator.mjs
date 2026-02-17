@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// Multi-Agent Orchestrator v28 (modular)
+// Multi-Agent Orchestrator v29 (modular)
 // ============================================================
 // See docs/orchestrator.md for architecture.
 // Extracted modules (S63): balance-analyzer, git-ops, reporter
@@ -49,7 +49,7 @@ import { initMockRunner, mockRunAgent, mockRunTests, mockRunTestsRegression, dry
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ORCH_DIR = __dirname;
 const MVP_DIR = resolve(ORCH_DIR, '..'); // jousting-mvp/ (orchestrator lives inside it)
-const HANDOFF_DIR = join(ORCH_DIR, 'handoffs');
+const HANDOFF_DIR = process.env.ORCH_HANDOFF_DIR || join(ORCH_DIR, 'handoffs');
 const LOG_DIR = join(ORCH_DIR, 'logs');
 const ANALYSIS_DIR = join(ORCH_DIR, 'analysis');
 const ROLES_DIR = join(ORCH_DIR, 'roles');
@@ -818,7 +818,7 @@ async function main() {
 
   log('');
   log('='.repeat(60));
-  log(`  MULTI-AGENT ORCHESTRATOR v28${DRY_RUN ? ` [DRY-RUN MODE${DRY_RUN_PRESET ? `: ${DRY_RUN_PRESET}` : ''}]` : ''}`);
+  log(`  MULTI-AGENT ORCHESTRATOR v29${DRY_RUN ? ` [DRY-RUN MODE${DRY_RUN_PRESET ? `: ${DRY_RUN_PRESET}` : ''}]` : ''}`);
   log('='.repeat(60));
   if (DRY_RUN) {
     log(`  *** DRY-RUN: Mock agents, no API credits, no git ops${DRY_RUN_PRESET ? ` (preset: ${DRY_RUN_PRESET})` : ''} ***`);

@@ -19,7 +19,7 @@ export function initAgentPool(ctx) {
 // fires onAgentComplete callback immediately and launches the next queued agent.
 // Results are in completion order (not submission order).
 // v15: accepts optional dashboard for live progress updates.
-export async function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard, opts = {}) {
+export function runAgentPool(agents, round, maxConcurrency, onAgentComplete, dashboard, opts = {}) {
   if (!agents.length) return { allDone: Promise.resolve(), groupDone: Promise.resolve(), results: Promise.resolve([]) };
   const limit = (!maxConcurrency || maxConcurrency >= agents.length)
     ? agents.length : maxConcurrency;
