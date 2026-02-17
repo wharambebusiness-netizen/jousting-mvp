@@ -12,6 +12,7 @@
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.44",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
