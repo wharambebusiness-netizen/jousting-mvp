@@ -243,6 +243,10 @@ async function runSession(config, chainIndex, previousHandoff) {
     }],
   };
 
+  // Strip CLAUDECODE env var to allow nested SDK sessions
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.CLAUDECODE;
+
   const queryOptions = {
     model: config.model,
     maxTurns: config.maxTurns,
@@ -251,6 +255,7 @@ async function runSession(config, chainIndex, previousHandoff) {
     allowDangerouslySkipPermissions: config.permissionMode === 'bypassPermissions',
     allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep', 'Task'],
     hooks,
+    env: cleanEnv,
     stderr: (data) => {
       const line = data.toString().trim();
       if (line) log(`  [stderr] ${line}`);

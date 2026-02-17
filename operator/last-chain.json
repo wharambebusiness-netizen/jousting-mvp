@@ -6,14 +6,14 @@
       "sessionId": null,
       "turns": 0,
       "costUsd": 0,
-      "durationMs": 322,
+      "durationMs": 336,
       "hitMaxTurns": false,
       "preCompacted": false,
       "handoffComplete": false
     }
   ],
   "totalCostUsd": 0,
-  "totalDurationMs": 322,
+  "totalDurationMs": 336,
   "totalTurns": 0,
   "outcome": "assumed-complete"
 }
