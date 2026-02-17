@@ -149,6 +149,25 @@ export function getChangelogSinceRound(sinceRound) {
 }
 
 /**
+ * M3: Record a continuation event for an agent.
+ * Tracks how often agents chain internally — signals if tasks need to be
+ * broken into smaller pieces.
+ * @param {string} agentId
+ * @param {number} chainLength - Number of continuations (1 = one extra session)
+ */
+export function recordContinuation(agentId, chainLength) {
+  if (agentSessions[agentId]) {
+    agentSessions[agentId].lastContinuations = chainLength;
+    agentSessions[agentId].totalContinuations = (agentSessions[agentId].totalContinuations || 0) + chainLength;
+  }
+  // Log as effectiveness signal
+  if (!agentEffectiveness[agentId]) {
+    agentEffectiveness[agentId] = { tasksCompleted: 0, totalFiles: 0, totalTokens: 0, totalCost: 0, totalSeconds: 0, rounds: 0 };
+  }
+  agentEffectiveness[agentId].totalContinuations = (agentEffectiveness[agentId].totalContinuations || 0) + chainLength;
+}
+
+/**
  * Invalidate an agent's session (e.g., after revert or mission transition).
  * The agent will start a fresh session on its next run.
  */

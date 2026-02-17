@@ -1,5 +1,6 @@
-// Agent Runner Module (extracted from orchestrator.mjs in S67)
+// Agent Runner Module (extracted from orchestrator.mjs in S67, M3 continuation support)
 // Core agent spawner: prompt building, CLI args, process spawn, result collection
+// M3: SDK-based execution path with auto-continuation when context fills up
 // Also includes processAgentResult for status logging and cost/effectiveness tracking
 
 import { spawn } from 'child_process';
@@ -7,6 +8,7 @@ import { readFileSync, existsSync, appendFileSync, mkdtempSync, rmSync, copyFile
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import { SDK_MODE, runAgentWithContinuation } from './sdk-adapter.mjs';
 
 // ── M6: Environment Sanitization ────────────────────────────
 // Whitelist-based env filtering for agent/command spawns.
@@ -73,6 +75,8 @@ let parseHandoffMetaFn = () => ({});
 // From lessons
 let queryLessonsFn = () => [];
 let formatLessonsForPromptFn = () => null;
+// M3: Continuation tracking
+let recordContinuationFn = () => {};
 
 // v26/M1: Strip ANSI escape codes for clean failure context injection
 function stripAnsiCodes(str) {
@@ -129,6 +133,8 @@ export function initAgentRunner(ctx) {
   // From lessons
   queryLessonsFn = ctx.queryLessons || (() => []);
   formatLessonsForPromptFn = ctx.formatLessonsForPrompt || (() => null);
+  // M3: Continuation
+  recordContinuationFn = ctx.recordContinuation || (() => {});
 }
 
 /**
@@ -471,6 +477,105 @@ export function runAgent(agent, round) {
       logFn(`    worktree: ${worktree.branch} → ${worktree.path}`);
     }
 
+    // ── M3: SDK Continuation Path ──────────────────────────────
+    // When SDK is available and continuation is enabled, use the SDK-based
+    // execution with auto-continuation. This replaces the CLI spawn for
+    // agents that benefit from context-aware chaining.
+    if (SDK_MODE && CONFIG.useSDK) {
+      const agentTools = agent.allowedTools || CONFIG.allowedTools;
+      const timeout = getAdaptiveTimeoutFn(agent);
+      const sessionId = isResuming ? existingSession.sessionId : randomUUID();
+
+      if (!isResuming) {
+        agentSessions[agent.id] = { sessionId, lastRound: round, resumeCount: 0, freshCount: 1, invalidations: 0 };
+      }
+
+      const sdkOptions = {
+        cwd: agentCwd,
+        allowedTools: agentTools,
+        maxTurns: CONFIG.maxAgentTurns || 30,
+        timeoutMs: timeout,
+        permissionMode: 'bypassPermissions',
+        env: sanitizeEnv(),
+        // Session management
+        ...(isResuming ? { resumeSessionId: sessionId } : { sessionId }),
+        // M3: Continuation config
+        maxContinuations: CONFIG.maxAgentContinuations ?? 2,
+        maxChainCostUsd: CONFIG.maxAgentChainCostUsd ?? 2.0,
+        logFn,
+        onContinuation: (index, handoff, cost) => {
+          logFn(`  ${agent.id}: continuation ${index} (cost so far: $${cost.totalCost.toFixed(4)})`);
+          if (obs) obs.events.emit('agent:continuation', { agentId: agent.id, round, index, cost: cost.totalCost });
+        },
+      };
+
+      runAgentWithContinuation(agent, prompt, sdkOptions).then((sdkResult) => {
+        // Clean up temp dir
+        if (tempDir) {
+          try { rmSync(tempDir, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+        }
+
+        const elapsed = Math.round(sdkResult.elapsedMs / 1000);
+        const elapsedMin = (elapsed / 60).toFixed(1);
+        const status = sdkResult.success ? 'OK' : 'ERROR';
+        const contSuffix = sdkResult.continuations > 0 ? ` [${sdkResult.continuations} continuation(s)]` : '';
+        logFn(`  ${agent.id} finished: ${status} (${elapsedMin} min, session=${sessionMode})${contSuffix}`);
+
+        // Emit agent completion event
+        if (obs) {
+          const eventName = sdkResult.success ? 'agent:complete' : 'agent:error';
+          obs.events.emit(eventName, {
+            agentId: agent.id, round, status, elapsedMs: sdkResult.elapsedMs,
+            sessionMode, continuations: sdkResult.continuations,
+          });
+          obs.metrics.recordAgentRun(agent.id, {
+            elapsedMs: sdkResult.elapsedMs, model: agent.model || 'default',
+            success: sdkResult.success, round,
+          });
+        }
+
+        // Update session tracking with FINAL session ID from continuation chain
+        if (sdkResult.success && agentSessions[agent.id]) {
+          if (sdkResult.sessionId) {
+            agentSessions[agent.id].sessionId = sdkResult.sessionId;
+          }
+          agentSessions[agent.id].lastRound = round;
+          if (isResuming) agentSessions[agent.id].resumeCount++;
+        }
+
+        // M3: Record continuation for tracking
+        if (sdkResult.continuations > 0) {
+          recordContinuationFn(agent.id, sdkResult.continuations);
+        }
+
+        // Map SDK result to CLI-compatible shape
+        // Generate mock stderr with cost info (same format as Claude CLI)
+        const mockStderr = `Total cost: $${sdkResult.cost.totalCost.toFixed(4)}\nTotal input tokens: ${sdkResult.cost.inputTokens}\nTotal output tokens: ${sdkResult.cost.outputTokens}`;
+
+        resolvePromise({
+          agentId: agent.id,
+          code: sdkResult.success ? 0 : 1,
+          timedOut: false,
+          elapsed,
+          stdout: sdkResult.output,
+          stderr: mockStderr,
+          wasResumed: isResuming,
+          // M3 extra fields (used by continuation-aware callers)
+          continuations: sdkResult.continuations,
+          finalSessionId: sdkResult.sessionId,
+          preCompacted: sdkResult.preCompacted,
+        });
+      }).catch((err) => {
+        if (tempDir) {
+          try { rmSync(tempDir, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+        }
+        logFn(`  ${agent.id} SDK ERROR: ${err.message}`);
+        resolvePromise({ agentId: agent.id, code: -1, timedOut: false, elapsed: 0, stdout: '', stderr: err.message, wasResumed: isResuming });
+      });
+      return;
+    }
+
+    // ── CLI Spawn Path (original) ──────────────────────────────
     // v5/v6: Build CLI args with optional per-agent model + budget
     // v19: Per-agent allowedTools override (falls back to CONFIG.allowedTools)
     const agentTools = agent.allowedTools || CONFIG.allowedTools;

@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1270 tests, 21 suites (all passing)
+npm test                                           # 1298 tests, 22 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -55,7 +55,7 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   handoff-parser.mjs  Handoff META parsing & validation
   spawn-system.mjs    Dynamic agent spawning subsystem
   workflow-engine.mjs Composable workflow patterns
-  sdk-adapter.mjs     Agent SDK adapter (CLI fallback)
+  sdk-adapter.mjs     Agent SDK adapter (CLI fallback), M3 agent continuation
   observability.mjs   Structured logging, metrics, event bus
   dag-scheduler.mjs   DAG task scheduler
   project-scaffold.mjs Project templates (7 types)
@@ -108,7 +108,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1270 tests across 21 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6). Operator: registry (15), errors (36). Run `npm test` to verify.
+1298 tests across 22 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (28). Operator: registry (15), errors (36). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

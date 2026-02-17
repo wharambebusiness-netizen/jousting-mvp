@@ -34,7 +34,7 @@ import { initTestFilter, setProjectConfig as setTestFilterProjectConfig, getTest
 import { initHandoffParser, parseHandoffMeta, validateFileOwnership, validateAgentOutput } from './handoff-parser.mjs';
 import { initSpawnSystem, SPAWN_CONSTRAINTS, detectSpawnRequests, validateSpawnRequest, archiveSpawnRequest, detectAndSpawnAgents, getSpawnNotifications } from './spawn-system.mjs';
 // Extracted modules (S66)
-import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessions, recordAgentRuntime, getAdaptiveTimeout, recordAgentEffectiveness, getDynamicConcurrency, readHandoffContent, getChangelogSinceRound, invalidateAgentSession, invalidateStaleSessions } from './agent-tracking.mjs';
+import { initAgentTracking, agentRuntimeHistory, agentEffectiveness, agentSessions, recordAgentRuntime, getAdaptiveTimeout, recordAgentEffectiveness, getDynamicConcurrency, readHandoffContent, getChangelogSinceRound, invalidateAgentSession, invalidateStaleSessions, recordContinuation } from './agent-tracking.mjs';
 import { initMissionSequencer, missionState, loadMissionOrSequence, tryTransitionMission, hotReloadMissionConfig, validateMissionConfig } from './mission-sequencer.mjs';
 import { ProgressDashboard } from './progress-dashboard.mjs';
 import { initAgentPool, runAgentPool } from './agent-pool.mjs';
@@ -119,7 +119,12 @@ const CONFIG = {
   useWorktrees: true,
   // v22: SDK adapter — use Agent SDK for programmatic agent execution when available.
   // When true and SDK is installed, agents run via SDK instead of CLI spawn.
+  // M3: Also enables agent auto-continuation (transparent context chaining).
   useSDK: false,
+  // M3: Agent continuation limits (only active when useSDK is true).
+  maxAgentContinuations: 2,    // Max continuation sessions per agent per round (cap: 3)
+  maxAgentChainCostUsd: 2.0,   // Max cost across continuation chain per agent
+  maxAgentTurns: 30,           // Max turns per individual session within a chain
   // v22: Observability — structured logging, metrics, event bus.
   enableObservability: true,
   // v22: Plugin system — discover and load plugins from orchestrator/plugins/.
@@ -638,6 +643,8 @@ async function main() {
     getSpawnNotifications, accumulateAgentCost,
     validateAgentOutput, parseHandoffMeta,
     queryLessons, formatLessonsForPrompt,
+    // M3: Continuation support
+    recordContinuation,
   });
   initTaskBoard({
     getAgents: () => AGENTS, config: CONFIG, taskBoardPath: TASK_BOARD,
@@ -833,7 +840,7 @@ async function main() {
   log(`Config: ${CONFIG.maxRounds} max rounds, ${CONFIG.agentTimeoutMs / 60000}min/agent, ${CONFIG.maxRuntimeMs / 3600000}hr max runtime`);
   log(`Circuit breaker: stop after ${CONFIG.circuitBreakerThreshold} consecutive test failures`);
   const features = [];
-  if (sdkAvailable) features.push('SDK');
+  if (sdkAvailable) features.push(CONFIG.useSDK ? `SDK+Continuation(max=${CONFIG.maxAgentContinuations},$${CONFIG.maxAgentChainCostUsd})` : 'SDK(available,unused)');
   if (obs) features.push('Observability');
   if (pluginManager?.plugins.size > 0) features.push(`Plugins(${pluginManager.plugins.size})`);
   if (CONFIG.enableDAG) features.push('DAG');
