@@ -79,21 +79,35 @@
 
     <!-- Chain Table -->
     <div class="section">
-      <p class="section__title">Chains</p>
+      <div class="chain-table-header">
+        <p class="section__title">Chains</p>
+        <div id="chain-filters" class="chain-filters">
+          <select name="status" onchange="htmx.trigger(document.getElementById('chain-table'),'reload')">
+            <option value="">All Statuses</option>
+            <option value="running">Running</option>
+            <option value="complete">Complete</option>
+            <option value="failed">Failed</option>
+            <option value="aborted">Aborted</option>
+          </select>
+          <input type="hidden" name="sort" value="updatedAt" id="sort-field">
+          <input type="hidden" name="dir" value="desc" id="sort-dir">
+        </div>
+      </div>
       <table id="chain-table" role="grid">
         <thead>
           <tr>
-            <th>Status</th>
+            <th class="sortable" data-sort="status">Status</th>
             <th>Task</th>
             <th>Model</th>
-            <th>Sessions</th>
-            <th>Cost</th>
-            <th>Updated</th>
+            <th class="sortable" data-sort="sessions">Sessions</th>
+            <th class="sortable" data-sort="cost">Cost</th>
+            <th class="sortable" data-sort="updatedAt">Updated</th>
             <th></th>
           </tr>
         </thead>
         <tbody hx-get="/views/chain-list"
                hx-trigger="load, every 5s, reload from:#chain-table"
+               hx-include="#chain-filters"
                hx-swap="innerHTML">
           <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
           <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
@@ -104,17 +118,26 @@
   </main>
 
   <div id="toast-container"></div>
-
+  <script src="/app.js"></script>
   <script>
-    document.body.addEventListener('htmx:beforeRequest', function() {
-      document.getElementById('progress-bar').classList.add('active');
-      document.getElementById('progress-bar').classList.remove('done');
-    });
-    document.body.addEventListener('htmx:afterRequest', function() {
-      var bar = document.getElementById('progress-bar');
-      bar.classList.remove('active');
-      bar.classList.add('done');
-      setTimeout(function() { bar.classList.remove('done'); bar.style.width = ''; }, 400);
+    // Sortable column headers
+    document.querySelectorAll('.sortable').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var field = th.dataset.sort;
+        var sortInput = document.getElementById('sort-field');
+        var dirInput = document.getElementById('sort-dir');
+        // Toggle direction if same field, otherwise default desc
+        if (sortInput.value === field) {
+          dirInput.value = dirInput.value === 'desc' ? 'asc' : 'desc';
+        } else {
+          sortInput.value = field;
+          dirInput.value = 'desc';
+        }
+        // Update visual indicator
+        document.querySelectorAll('.sortable').forEach(function(h) { h.classList.remove('sorted-asc', 'sorted-desc'); });
+        th.classList.add(dirInput.value === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        htmx.trigger(document.getElementById('chain-table'), 'reload');
+      });
     });
   </script>
 </body>

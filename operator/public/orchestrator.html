@@ -30,7 +30,7 @@
       <p class="section__title">Launch Mission</p>
       <div id="mission-launcher"
            hx-get="/views/mission-launcher"
-           hx-trigger="load"
+           hx-trigger="load, reload from:#mission-launcher"
            hx-swap="innerHTML">
         <div class="skeleton" style="height:60px"></div>
       </div>
@@ -41,7 +41,7 @@
       <p class="section__title">Status</p>
       <div id="orch-content"
            hx-get="/views/orch-status"
-           hx-trigger="load, every 3s"
+           hx-trigger="load, every 3s, reload from:#orch-content"
            hx-swap="innerHTML">
         <div class="skeleton" style="height:32px;width:240px;margin-bottom:16px"></div>
         <div class="skeleton" style="height:16px;width:60%;margin-bottom:24px"></div>
@@ -73,7 +73,7 @@
       <p class="section__title">Reports</p>
       <div id="report-viewer"
            hx-get="/views/report-viewer"
-           hx-trigger="load"
+           hx-trigger="load, every 15s"
            hx-swap="innerHTML">
         <div class="skeleton" style="height:60px"></div>
       </div>
@@ -81,46 +81,9 @@
   </main>
 
   <div id="toast-container"></div>
+  <script src="/app.js"></script>
 
   <script>
-    document.body.addEventListener('htmx:beforeRequest', function() {
-      document.getElementById('progress-bar').classList.add('active');
-      document.getElementById('progress-bar').classList.remove('done');
-    });
-    document.body.addEventListener('htmx:afterRequest', function() {
-      var bar = document.getElementById('progress-bar');
-      bar.classList.remove('active');
-      bar.classList.add('done');
-      setTimeout(function() { bar.classList.remove('done'); bar.style.width = ''; }, 400);
-    });
-
-    // Toast helper
-    function showToast(msg, type) {
-      var container = document.getElementById('toast-container');
-      var toast = document.createElement('div');
-      toast.className = 'toast toast--' + (type || 'info');
-      toast.textContent = msg;
-      container.appendChild(toast);
-      setTimeout(function() { toast.remove(); }, 4000);
-    }
-
-    // Handle mission start/stop responses
-    document.body.addEventListener('htmx:afterRequest', function(evt) {
-      var path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath;
-      if (path === '/api/orchestrator/start') {
-        if (evt.detail.successful) {
-          showToast('Orchestrator started successfully', 'success');
-        } else {
-          try {
-            var err = JSON.parse(evt.detail.xhr.responseText);
-            showToast(err.error || 'Failed to start', 'error');
-          } catch (_) {
-            showToast('Failed to start orchestrator', 'error');
-          }
-        }
-      }
-    });
-
     // ── Live Log WebSocket ──────────────────────────────────
     var MAX_LOG_LINES = 500;
     var logPanel = document.getElementById('log-panel');

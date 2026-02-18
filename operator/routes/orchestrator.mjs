@@ -31,12 +31,16 @@ export function createOrchestratorRoutes(ctx) {
     pid: null,
   };
 
+  // Per-agent tracking (keyed by agentId)
+  const agentMap = new Map();
+
   // Track the child process
   let orchProcess = null;
 
   // Wire up events to track orchestrator state
   if (ctx.events) {
     ctx.events.on('orchestrator:started', (data) => {
+      agentMap.clear();
       orchestratorStatus = {
         running: true,
         startedAt: data.timestamp || new Date().toISOString(),
@@ -53,8 +57,51 @@ export function createOrchestratorRoutes(ctx) {
     });
 
     ctx.events.on('agent:start', (data) => {
-      if (data.agentId && !orchestratorStatus.agents.includes(data.agentId)) {
-        orchestratorStatus.agents.push(data.agentId);
+      if (!data.agentId) return;
+      const agent = {
+        id: data.agentId,
+        status: 'running',
+        model: data.model || 'default',
+        round: data.round || orchestratorStatus.round,
+        startedAt: new Date().toISOString(),
+        elapsedMs: null,
+        cost: null,
+        continuations: 0,
+      };
+      agentMap.set(data.agentId, agent);
+      orchestratorStatus.agents = [...agentMap.values()];
+    });
+
+    ctx.events.on('agent:complete', (data) => {
+      if (!data.agentId) return;
+      const agent = agentMap.get(data.agentId);
+      if (agent) {
+        agent.status = 'complete';
+        agent.elapsedMs = data.elapsedMs || null;
+        if (data.continuations != null) agent.continuations = data.continuations;
+        orchestratorStatus.agents = [...agentMap.values()];
+      }
+    });
+
+    ctx.events.on('agent:error', (data) => {
+      if (!data.agentId) return;
+      const agent = agentMap.get(data.agentId);
+      if (agent) {
+        agent.status = 'failed';
+        agent.statusDetail = data.status || 'ERROR';
+        agent.elapsedMs = data.elapsedMs || null;
+        if (data.continuations != null) agent.continuations = data.continuations;
+        orchestratorStatus.agents = [...agentMap.values()];
+      }
+    });
+
+    ctx.events.on('agent:continuation', (data) => {
+      if (!data.agentId) return;
+      const agent = agentMap.get(data.agentId);
+      if (agent) {
+        agent.continuations = data.index || (agent.continuations + 1);
+        if (data.cost != null) agent.cost = data.cost;
+        orchestratorStatus.agents = [...agentMap.values()];
       }
     });
 

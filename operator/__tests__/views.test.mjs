@@ -248,6 +248,32 @@ describe('Agent Card Renderer', () => {
     expect(html).toContain('test');
     expect(html).toContain('agent-grid');
   });
+
+  it('renders metrics when available', () => {
+    const html = renderAgentCard({
+      id: 'engine-dev',
+      status: 'complete',
+      model: 'sonnet',
+      elapsedMs: 65000,
+      cost: 0.42,
+      continuations: 2,
+    });
+    expect(html).toContain('agent-metrics');
+    expect(html).toContain('sonnet');
+    expect(html).toContain('1m 5s');
+    expect(html).toContain('$0.42');
+    expect(html).toContain('2 cont.');
+  });
+
+  it('omits metrics row when no metric data', () => {
+    const html = renderAgentCard({ id: 'dev', status: 'running' });
+    expect(html).not.toContain('agent-metrics');
+  });
+
+  it('omits default model from metrics', () => {
+    const html = renderAgentCard({ id: 'dev', status: 'running', model: 'default' });
+    expect(html).not.toContain('agent-metrics');
+  });
 });
 
 // ── View Routes (HTTP) ──────────────────────────────────────
@@ -300,6 +326,18 @@ describe('View Routes — Chain List', () => {
     const res = await get('/views/chain-list');
     expect(res.text).toContain('Test task for views');
     expect(res.text).toContain('haiku');
+  });
+
+  it('GET /views/chain-list filters by status', async () => {
+    const reg = loadRegistry();
+    createChain(reg, { task: 'Running chain', config: { model: 'sonnet' } });
+    const chain2 = createChain(reg, { task: 'Failed chain', config: { model: 'sonnet' } });
+    chain2.status = 'failed';
+    saveRegistry(reg);
+
+    const res = await get('/views/chain-list?status=failed');
+    expect(res.text).toContain('Failed chain');
+    expect(res.text).not.toContain('Running chain');
   });
 });
 

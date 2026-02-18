@@ -29,7 +29,7 @@
 
     <div id="chain-content"
          hx-get="/views/chain-detail/{{CHAIN_ID}}"
-         hx-trigger="load, every 5s"
+         hx-trigger="load, every 5s, reload from:#chain-content"
          hx-swap="innerHTML">
       <div class="skeleton" style="height:32px;width:200px;margin-bottom:16px"></div>
       <div class="skeleton" style="height:16px;width:80%;margin-bottom:12px"></div>
@@ -39,18 +39,6 @@
   </main>
 
   <div id="toast-container"></div>
-
-  <script>
-    document.body.addEventListener('htmx:beforeRequest', function() {
-      document.getElementById('progress-bar').classList.add('active');
-      document.getElementById('progress-bar').classList.remove('done');
-    });
-    document.body.addEventListener('htmx:afterRequest', function() {
-      var bar = document.getElementById('progress-bar');
-      bar.classList.remove('active');
-      bar.classList.add('done');
-      setTimeout(function() { bar.classList.remove('done'); bar.style.width = ''; }, 400);
-    });
-  </script>
+  <script src="/app.js"></script>
 </body>
 </html>

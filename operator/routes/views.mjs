@@ -27,13 +27,36 @@ export function createViewRoutes(ctx) {
   const router = Router();
 
   // ── Chain List Fragment ──────────────────────────────────
-  router.get('/chain-list', (_req, res) => {
+  router.get('/chain-list', (req, res) => {
     try {
       const registry = loadRegistry();
-      const chains = [...registry.chains]
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-        .slice(0, 50)
-        .map(getChainSummary);
+      let chains = [...registry.chains];
+
+      // Filter by project
+      if (req.query.project) {
+        const project = req.query.project.replace(/\\/g, '/');
+        chains = chains.filter(c =>
+          (c.projectDir || '').replace(/\\/g, '/') === project
+        );
+      }
+
+      // Filter by status
+      if (req.query.status) {
+        chains = chains.filter(c => c.status === req.query.status);
+      }
+
+      // Sort
+      const sortField = req.query.sort || 'updatedAt';
+      const sortDir = req.query.dir === 'asc' ? 1 : -1;
+      const sorters = {
+        updatedAt: (a, b) => sortDir * (new Date(b.updatedAt) - new Date(a.updatedAt)),
+        cost: (a, b) => sortDir * ((b.totalCostUsd || 0) - (a.totalCostUsd || 0)),
+        status: (a, b) => sortDir * (a.status || '').localeCompare(b.status || ''),
+        sessions: (a, b) => sortDir * ((b.sessions?.length || 0) - (a.sessions?.length || 0)),
+      };
+      chains.sort(sorters[sortField] || sorters.updatedAt);
+
+      chains = chains.slice(0, 50).map(getChainSummary);
       res.type('text/html').send(renderChainTable(chains));
     } catch (err) {
       res.type('text/html').send(`<tr><td colspan="7">Error: ${escapeHtml(err.message)}</td></tr>`);
@@ -94,12 +117,12 @@ export function createViewRoutes(ctx) {
         ${chain.status === 'running' ? `
           <button class="btn btn--danger" hx-post="/api/chains/${chain.id}/abort"
             hx-confirm="Abort this chain?" hx-swap="none"
-            hx-on::after-request="location.reload()">Abort Chain</button>
+            hx-on::after-request="htmx.trigger('#chain-content','reload')">Abort Chain</button>
         ` : ''}
         ${['failed', 'aborted', 'max-continuations'].includes(chain.status) ? `
           <button class="btn btn--ghost" hx-post="/api/chains/${chain.id}/restart"
             hx-swap="none"
-            hx-on::after-request="location.reload()">Restart Chain</button>
+            hx-on::after-request="htmx.trigger('#chain-content','reload')">Restart Chain</button>
         ` : ''}
 
         <h3>Session Timeline</h3>
@@ -148,7 +171,7 @@ export function createViewRoutes(ctx) {
       };
 
       const agentCards = status.agents && status.agents.length > 0
-        ? status.agents.map(a => typeof a === 'string' ? { id: a, status: 'active' } : a)
+        ? status.agents.map(a => typeof a === 'string' ? { id: a, status: 'running' } : a)
         : [];
 
       const html = `
@@ -170,7 +193,7 @@ export function createViewRoutes(ctx) {
         ${status.running ? `
           <button class="btn btn--danger" hx-post="/api/orchestrator/stop"
             hx-confirm="Stop the orchestrator?" hx-swap="none"
-            hx-on::after-request="location.reload()">Stop Orchestrator</button>
+            hx-on::after-request="htmx.trigger('#orch-content','reload'); htmx.trigger('#mission-launcher','reload')">Stop Orchestrator</button>
         ` : ''}
 
         <h3>Agents</h3>

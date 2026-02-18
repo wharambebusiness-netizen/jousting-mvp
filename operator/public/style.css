@@ -322,6 +322,52 @@ tbody td a {
 tbody td a:hover {
   color: var(--accent-hover);
 }
+.chain-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.chain-table-header .section__title {
+  margin-bottom: 0;
+}
+.chain-filters {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.chain-filters select {
+  font-size: 0.8125rem;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  margin-bottom: 0;
+}
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: var(--text-primary);
+}
+th.sortable::after {
+  content: '\2195';
+  margin-left: var(--sp-1);
+  opacity: 0.3;
+  font-size: 0.625rem;
+}
+th.sorted-desc::after {
+  content: '\25BC';
+  opacity: 1;
+  color: var(--accent);
+}
+th.sorted-asc::after {
+  content: '\25B2';
+  opacity: 1;
+  color: var(--accent);
+}
 
 /* === 11. Buttons === */
 .btn {
@@ -502,6 +548,20 @@ tbody td a:hover {
 .agent-role {
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+.agent-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.agent-metric {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-overlay);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 /* === 17. Handoff Content === */

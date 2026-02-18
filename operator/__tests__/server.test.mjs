@@ -462,11 +462,44 @@ describe('Server — Orchestrator Endpoints', () => {
   it('orchestrator status updates via events', async () => {
     // Emit round:start and agent:start events
     events.emit('round:start', { round: 3 });
-    events.emit('agent:start', { agentId: 'engine-dev' });
+    events.emit('agent:start', { agentId: 'engine-dev', model: 'sonnet' });
 
     const { body } = await api('/api/orchestrator/status');
     expect(body.round).toBe(3);
-    expect(body.agents).toContain('engine-dev');
+    expect(body.agents).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'engine-dev', status: 'running', model: 'sonnet' })])
+    );
+  });
+
+  it('agent:complete updates agent status', async () => {
+    events.emit('agent:complete', { agentId: 'engine-dev', elapsedMs: 5000, continuations: 1 });
+
+    const { body } = await api('/api/orchestrator/status');
+    const agent = body.agents.find(a => a.id === 'engine-dev');
+    expect(agent.status).toBe('complete');
+    expect(agent.elapsedMs).toBe(5000);
+    expect(agent.continuations).toBe(1);
+  });
+
+  it('agent:error updates agent status to failed', async () => {
+    // Start a fresh agent
+    events.emit('agent:start', { agentId: 'test-runner' });
+    events.emit('agent:error', { agentId: 'test-runner', status: 'TIMEOUT', elapsedMs: 30000 });
+
+    const { body } = await api('/api/orchestrator/status');
+    const agent = body.agents.find(a => a.id === 'test-runner');
+    expect(agent.status).toBe('failed');
+    expect(agent.statusDetail).toBe('TIMEOUT');
+  });
+
+  it('agent:continuation updates cost and count', async () => {
+    events.emit('agent:start', { agentId: 'dev-agent' });
+    events.emit('agent:continuation', { agentId: 'dev-agent', index: 2, cost: 0.35 });
+
+    const { body } = await api('/api/orchestrator/status');
+    const agent = body.agents.find(a => a.id === 'dev-agent');
+    expect(agent.continuations).toBe(2);
+    expect(agent.cost).toBe(0.35);
   });
 
   it('POST /api/orchestrator/stop stops orchestrator', async () => {
