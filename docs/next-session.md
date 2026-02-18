@@ -10,6 +10,8 @@ Read `CLAUDE.md` first (always), then this file.
 
 S99 added the **P9 Projects File Explorer** — a new `/projects` page with real-time file structure viewing for all managed projects:
 
+### What Was Built
+
 1. **File scanning** (`operator/routes/files.mjs`) — `scanDirectory(root, subPath)` scans directories returning sorted entries (dirs first, then files, alphabetical). Ignores node_modules, .git, dist, build, etc. Path-traversal protection. `GET /api/files?root=<path>&path=<subpath>` API endpoint.
 
 2. **Project view renderers** (`operator/views/projects.mjs`) — 3 exported functions:
@@ -23,28 +25,30 @@ S99 added the **P9 Projects File Explorer** — a new `/projects` page with real
 
 5. **Projects page** (`operator/public/projects.html`) — New page with project cards showing chain stats (running/done/failed counts, cost, last activity), collapsible file trees with lazy-loading subdirectories, refresh button per project.
 
-6. **Navigation** — "Projects" link added between Dashboard and Analytics on all 6 HTML pages.
+6. **Always-show current project** — The server's own project directory is always shown even with 0 chains, so users see their project on first visit.
 
-7. **CSS** — Section 39 in style.css: `.projects-panel`, `.project-card`, `.project-tree`, `.tree-dir`, `.tree-file`, `.tree-summary`, refresh spinner animation, responsive breakpoints.
+7. **Navigation** — "Projects" link added between Dashboard and Analytics on all 6 HTML pages.
 
-8. **Client JS** — `loadTreeNode()` for lazy-loading via vanilla JS fetch, `refreshProjectTree()` for manual refresh, WS file-change listener with per-project debounce. app.js now has 12 systems (was 10).
+8. **CSS** — Section 39 in style.css: `.projects-panel`, `.project-card`, `.project-tree`, `.tree-dir`, `.tree-file`, `.tree-summary`, refresh spinner animation, responsive breakpoints.
+
+9. **Client JS** — `loadTreeNode()` for lazy-loading via vanilla JS fetch (uses `ontoggle` on `<details>`, not `onclick` on `<summary>`, since onclick fires before the browser toggles open state). `refreshProjectTree()` for manual refresh. WS file-change listener with per-project debounce. app.js now has 12 systems (was 10).
 
 **Zero new dependencies** — uses Node.js built-in `fs.watch` for real-time file watching.
 
 **1553 tests, 24 suites, all passing.**
 
-## What Changed (Files Modified)
+### Files Changed
 
 ```
 NEW:  operator/routes/files.mjs              File scanning API (scanDirectory + GET /api/files)
 NEW:  operator/views/projects.mjs            Project card + file tree renderers (3 functions)
 NEW:  operator/public/projects.html          Projects page with HTMX skeleton loading
 NEW:  operator/file-watcher.mjs              Real-time fs.watch for project directories
-EDIT: operator/routes/views.mjs              Import projects/files, add /views/projects + /views/file-tree fragments
+EDIT: operator/routes/views.mjs              Import projects/files, add /views/projects + /views/file-tree, always include server projectDir
 EDIT: operator/server.mjs                    Import file routes + watcher, mount /api/files, add /projects page, init watcher
 EDIT: operator/ws.mjs                        Add project:files-changed to BRIDGED_EVENTS (now 17)
 EDIT: operator/public/style.css              Section 39: projects + file tree CSS
-EDIT: operator/public/app.js                 loadTreeNode, refreshProjectTree, WS file-change listener (12 systems now)
+EDIT: operator/public/app.js                 loadTreeNode (ontoggle), refreshProjectTree, WS file-change listener (12 systems)
 EDIT: operator/public/index.html             Add Projects nav link
 EDIT: operator/public/chain.html             Add Projects nav link
 EDIT: operator/public/analytics.html         Add Projects nav link
@@ -62,29 +66,51 @@ EDIT: CLAUDE.md                              Updated test counts (1553), archite
 - **P8**: Analytics dashboard — DONE (S98)
 - **P9**: Projects file explorer — DONE (S99)
 
-## Future Directions
+## Recommended Next Steps — Operator Interface Improvements
 
-Potential next work:
-- **Analytics enhancements** — time range picker, drill-down charts, cost forecasting, token efficiency metrics
-- **Performance optimization** — virtual scrolling for large chain lists, indexed persistence
-- **Multi-user support** — auth, user roles, shared dashboards
-- **Alerting** — email/slack notifications on chain failures or budget overruns
-- **Mobile/PWA** — manifest, push notifications, responsive refinements
-- **File explorer enhancements** — file content preview, file search, git status indicators on files, diff viewer
+### Priority 1: UX Polish & Functional Gaps
+
+1. **File content preview** — Click a file in the tree to show a read-only preview panel (syntax-highlighted or plain text). Add a side panel or modal that fetches file content via a new `GET /api/files/content?root=...&path=...` endpoint. Limit to reasonable file sizes (~100KB). Great for reviewing code without leaving the dashboard.
+
+2. **Git status indicators on files** — Show modified/untracked/staged status next to files in the tree. Run `git status --porcelain` on the project directory and overlay indicators (colored dots or badges) on tree entries. Could integrate with the existing `/api/git` routes.
+
+3. **File search within projects** — Add a search input at the top of each project's file tree that filters/highlights matching files. Could be client-side for the currently loaded tree, or server-side via `GET /api/files/search?root=...&q=...` using recursive directory scan with name matching.
+
+4. **Analytics enhancements** — Time range picker (7d/14d/30d/90d/all), drill-down from chart elements to filtered chain list, cost forecasting based on recent trends, token efficiency metrics (cost per output token).
+
+5. **Collapsible project cards** — Add expand/collapse to project cards themselves (not just the file tree), so users with many projects can minimize ones they're not interested in.
+
+### Priority 2: Performance & Reliability
+
+6. **Virtual scrolling for chain list** — The chain table loads all rows at once. For users with 100+ chains, implement windowed rendering or server-side pagination improvements (the pagination exists but could be smoother).
+
+7. **Indexed persistence** — The JSON-file registry works but doesn't scale. Consider SQLite (via `better-sqlite3`) for indexed queries, especially for analytics aggregation across many chains.
+
+8. **File watcher robustness** — `fs.watch({recursive: true})` works on Windows/macOS but is unreliable on Linux. Add a fallback using polling or consider optional `chokidar` dependency for cross-platform support.
+
+### Priority 3: New Capabilities
+
+9. **Alerting system** — Email/Slack webhook notifications on chain failures, budget overruns, or orchestrator errors. Add alert rules to settings (threshold-based: cost > $X, consecutive failures > N).
+
+10. **Multi-user support** — Session-based auth, user roles (admin/viewer), shared dashboards. Would require moving from file-based to database storage.
+
+11. **Mobile/PWA** — Add web app manifest, service worker for offline dashboard viewing, push notifications for chain completion. Responsive CSS is already in place from P1-P9.
+
+12. **Diff viewer** — Compare file states between chain sessions. Useful for reviewing what an agent actually changed. Could integrate with git diff or show before/after snapshots.
 
 ## Key Architecture Notes
 
-- **File scanner** is a pure function (`scanDirectory`) separated from the route handler — can be reused by view renderers.
-- **File watcher** uses Node.js `fs.watch` with `recursive: true` — works on Windows and macOS. Linux may need `chokidar` for recursive watching.
-- **Tree lazy-loading** uses vanilla JS `fetch()` (not HTMX) for full control over expand/collapse state. `<details>` elements handle open/close natively.
+- **File scanner** is a pure function (`scanDirectory`) separated from the route handler — reusable by view renderers and tests.
+- **File watcher** uses Node.js `fs.watch` with `recursive: true`. Works on Windows/macOS. Linux may need `chokidar`.
+- **Tree lazy-loading** uses vanilla JS `fetch()` (not HTMX) for full control over expand/collapse state. `<details>` elements handle open/close natively. Uses `ontoggle` event (NOT `onclick` — onclick fires before browser toggles open state).
 - **Real-time flow**: `fs.watch` → debounce → EventBus `project:files-changed` → WS bridge → client JS → re-fetch open tree nodes.
 - **Path-traversal protection** on both `/api/files` and `/views/file-tree` routes — `resolve()` + startsWith check prevents directory escape.
-- **IGNORED set** shared pattern between `scanDirectory` and `file-watcher.mjs` — both skip the same directories (node_modules, .git, dist, etc.).
+- **Always-show current project**: `/views/projects` route checks `ctx.projectDir` and includes it even with 0 chains, so the server's own project directory is always visible.
 
 ## Codebase Stats
 
 ```
-Operator: 20 source files, ~5,000 lines code + ~3,700 lines tests
+Operator: 20 source files, ~5,100 lines code + ~3,700 lines tests
 Routes:   29 API endpoints, 15 view fragment routes, 5 page routes, 1 WebSocket
 Events:   17 bridged WS events, pattern-based subscriptions
 Tests:    297 operator tests (server 100, views 133, errors 43, registry 21)
