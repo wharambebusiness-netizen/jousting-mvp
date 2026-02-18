@@ -33,3 +33,9 @@ orchestrator/spawns/
 # Orchestrator runtime artifacts
 orchestrator/metrics.json
 orchestrator/session-changelog.md
+
+# Operator runtime data
+operator/registry.json
+operator/registry.json.tmp
+operator/registry-archive.json
+operator/handoffs/
