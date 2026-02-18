@@ -27,6 +27,7 @@ export function createOrchestratorRoutes(ctx) {
     round: 0,
     agents: [],
     mission: null,
+    model: null,
     dryRun: false,
     pid: null,
   };
@@ -47,6 +48,7 @@ export function createOrchestratorRoutes(ctx) {
         round: 0,
         agents: [],
         mission: data.mission || null,
+        model: data.model || null,
         dryRun: data.dryRun || false,
         pid: data.pid || null,
       };
@@ -160,7 +162,7 @@ export function createOrchestratorRoutes(ctx) {
       return res.status(409).json({ error: 'Orchestrator is already running' });
     }
 
-    const { mission, dryRun } = req.body || {};
+    const { mission, dryRun, model } = req.body || {};
 
     // Build args for the orchestrator process
     const orchPath = join(projectDir, 'orchestrator', 'orchestrator.mjs');
@@ -178,9 +180,14 @@ export function createOrchestratorRoutes(ctx) {
       args.push('--dry-run');
     }
 
+    if (model) {
+      args.push('--model', model);
+    }
+
     // Emit started event first (updates status)
     ctx.events.emit('orchestrator:started', {
       mission: mission || null,
+      model: model || null,
       dryRun: dryRun || false,
     });
 

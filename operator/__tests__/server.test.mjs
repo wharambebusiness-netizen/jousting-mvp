@@ -588,6 +588,43 @@ describe('Server — Git Endpoints (M6d)', () => {
     expect(status).toBe(400);
     expect(body.error).toContain('required');
   });
+
+  it('POST /api/git/push returns structured response', async () => {
+    const { status, body } = await api('/api/git/push', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    // Will fail in test env (no remote) but should return structured JSON
+    expect([200, 500]).toContain(status);
+    if (status === 200) {
+      expect(body).toHaveProperty('message');
+    } else {
+      expect(body).toHaveProperty('error');
+    }
+  });
+
+  it('POST /api/git/pr returns structured response', async () => {
+    const { status, body } = await api('/api/git/pr', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Test PR', body: 'Test body' }),
+    });
+    // Will fail in test env (no gh CLI or no remote) but should return structured JSON
+    expect([200, 500]).toContain(status);
+    if (status === 200) {
+      expect(body).toHaveProperty('url');
+    } else {
+      expect(body).toHaveProperty('error');
+    }
+  });
+
+  it('POST /api/git/pr with fill mode returns structured response', async () => {
+    const { status, body } = await api('/api/git/pr', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect([200, 500]).toContain(status);
+    expect(body).toBeTruthy();
+  });
 });
 
 describe('Server — Chain Restart (S85)', () => {
@@ -729,6 +766,147 @@ describe('Server — Events Integration', () => {
     expect(emitted).toBeTruthy();
     expect(emitted.task).toBe('event test');
     expect(emitted.projectDir).toBe('/test');
+  });
+});
+
+// ── Chain Branch & Model Tests (S91) ────────────────────────
+
+describe('Server — Chain Branch Field (S91)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/chains accepts branch field', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'branch test',
+        branch: 'auto/branch-test',
+      }),
+    });
+    expect(status).toBe(201);
+    expect(body.config.branch).toBe('auto/branch-test');
+  });
+
+  it('POST /api/chains sanitizes branch name', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'branch sanitize test',
+        branch: 'auto/my feature!!@#$',
+      }),
+    });
+    expect(status).toBe(201);
+    // Special chars should be stripped
+    expect(body.config.branch).not.toContain('!');
+    expect(body.config.branch).not.toContain('@');
+    expect(body.config.branch).not.toContain('#');
+    expect(body.config.branch).not.toContain('$');
+  });
+
+  it('POST /api/chains omits branch when not provided', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'no branch' }),
+    });
+    expect(status).toBe(201);
+    expect(body.config.branch).toBeUndefined();
+  });
+});
+
+describe('Server — Orchestrator Model Override (S91)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/orchestrator/start accepts model field', async () => {
+    const { status, body } = await api('/api/orchestrator/start', {
+      method: 'POST',
+      body: JSON.stringify({ mission: 'test', model: 'opus', dryRun: true }),
+    });
+    expect(status).toBe(202);
+    expect(body.status.model).toBe('opus');
+
+    // Clean up
+    await api('/api/orchestrator/stop', { method: 'POST' });
+  });
+
+  it('orchestrator status includes model after start', async () => {
+    events.emit('orchestrator:started', { mission: 'test', model: 'haiku', dryRun: false });
+    const { body } = await api('/api/orchestrator/status');
+    expect(body.model).toBe('haiku');
+
+    // Clean up
+    events.emit('orchestrator:stopped', {});
+  });
+});
+
+describe('Server — Malformed Request Bodies (S91)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/chains with non-string task returns 400', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 12345 }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('task is required');
+  });
+
+  it('POST /api/chains with whitespace-only task returns 400', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: '   ' }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('task is required');
+  });
+
+  it('POST /api/chains with empty object body returns 400', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('task is required');
+  });
+
+  it('POST /api/git/commit with non-string message returns 400', async () => {
+    const { status, body } = await api('/api/git/commit', {
+      method: 'POST',
+      body: JSON.stringify({ message: 42 }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('required');
+  });
+
+  it('POST /api/chains with maxTurns out of range returns 400', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'test', maxTurns: 999 }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('maxTurns');
   });
 });
 

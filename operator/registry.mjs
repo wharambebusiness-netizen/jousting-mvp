@@ -142,6 +142,7 @@ export function createChain(registry, { task, config, projectDir }) {
       maxTurns: config.maxTurns || 30,
       maxContinuations: config.maxContinuations || 5,
       maxBudgetUsd: config.maxBudgetUsd ?? 5.0,
+      ...(config.branch ? { branch: config.branch } : {}),
     },
     sessions: [],
     totalCostUsd: 0,

@@ -91,7 +91,7 @@ export function createChainRoutes(ctx) {
   // Body: { task, model?, maxTurns?, maxContinuations?, maxBudgetUsd?, projectDir? }
   router.post('/chains', (req, res) => {
     try {
-      const { task, model, maxTurns, maxContinuations, maxBudgetUsd, projectDir } = req.body || {};
+      const { task, model, maxTurns, maxContinuations, maxBudgetUsd, projectDir, branch } = req.body || {};
 
       if (!task || typeof task !== 'string' || task.trim().length === 0) {
         return res.status(400).json({ error: 'task is required' });
@@ -113,6 +113,11 @@ export function createChainRoutes(ctx) {
         return res.status(400).json({ error: 'maxBudgetUsd must be non-negative' });
       }
 
+      // Validate branch name if provided
+      const sanitizedBranch = branch && typeof branch === 'string'
+        ? branch.trim().replace(/[^a-zA-Z0-9/_-]/g, '').slice(0, 100)
+        : null;
+
       const registry = loadRegistry();
       const chain = createChain(registry, {
         task: task.trim(),
@@ -121,6 +126,7 @@ export function createChainRoutes(ctx) {
           maxTurns: parsedMaxTurns,
           maxContinuations: Math.max(1, Math.min(parsedMaxCont, 20)),
           maxBudgetUsd: parsedBudget || 5.0,
+          branch: sanitizedBranch || undefined,
         },
         projectDir: projectDir || null,
       });

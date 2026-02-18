@@ -49,7 +49,8 @@
           <fieldset>
             <label class="task-input">
               Task
-              <input type="text" name="task" placeholder="Describe the task..." required>
+              <input type="text" name="task" id="chain-task" placeholder="Describe the task..." required
+                oninput="autoFillBranch(this.value)">
             </label>
             <label class="model-select">
               Model
@@ -58,6 +59,10 @@
                 <option value="haiku">Haiku</option>
                 <option value="opus">Opus</option>
               </select>
+            </label>
+            <label class="branch-input">
+              Branch
+              <input type="text" name="branch" id="chain-branch" placeholder="auto/my-feature">
             </label>
             <button type="submit">Start</button>
           </fieldset>

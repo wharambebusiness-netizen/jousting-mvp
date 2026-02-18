@@ -520,4 +520,77 @@ describe('View Routes — Mission Launcher Fragment', () => {
     // Should contain either form (stopped) or running message
     expect(res.text.length).toBeGreaterThan(10);
   });
+
+  it('mission launcher includes model dropdown', async () => {
+    const res = await get('/views/mission-launcher');
+    expect(res.text).toContain('name="model"');
+    expect(res.text).toContain('Sonnet');
+    expect(res.text).toContain('Opus');
+    expect(res.text).toContain('Haiku');
+  });
+});
+
+// ── S91: New Feature View Tests ──────────────────────────────
+
+describe('View Routes — Chain Detail PR Button (S91)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('shows Create PR button for completed chains', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'completed task', config: { model: 'sonnet' } });
+    recordSession(chain, { turns: 5, costUsd: 0.10, durationMs: 5000 });
+    updateChainStatus(chain, 'complete');
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).toContain('Create PR');
+    expect(res.text).toContain('/api/git/pr');
+  });
+
+  it('hides Create PR button for running chains', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'running task', config: {} });
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).not.toContain('Create PR');
+  });
+});
+
+describe('View Routes — Orchestrator Model Display (S91)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('shows model in orchestrator status when set', async () => {
+    appCtx.events.emit('orchestrator:started', { mission: 'test', model: 'opus', dryRun: false });
+
+    const res = await get('/views/orch-status');
+    expect(res.text).toContain('opus');
+  });
+});
+
+describe('View Routes — Report Filter (S91)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('report viewer includes search input when reports exist', async () => {
+    const res = await get('/views/report-viewer');
+    // If there are reports, the search filter should be present
+    if (res.text.includes('report-content')) {
+      expect(res.text).toContain('report-search');
+      expect(res.text).toContain('filterReports');
+    }
+  });
+});
+
+describe('View Routes — Git Status Auto-Push Toggle (S91)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('git status fragment includes auto-push toggle', async () => {
+    const res = await get('/views/git-status');
+    expect(res.text).toContain('auto-push-toggle');
+    expect(res.text).toContain('Auto-push');
+  });
 });

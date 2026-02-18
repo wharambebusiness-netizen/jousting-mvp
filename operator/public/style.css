@@ -593,6 +593,7 @@ th.sorted-asc::after {
 }
 .quick-start .task-input { flex: 3; min-width: 200px; }
 .quick-start .model-select { flex: 1; min-width: 100px; }
+.quick-start .branch-input { flex: 2; min-width: 160px; }
 .quick-start button { flex: 0; white-space: nowrap; }
 /* Form refinements */
 input:focus, select:focus, textarea:focus {
@@ -852,7 +853,8 @@ input::placeholder { color: var(--text-muted); }
   .agent-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .quick-start fieldset { flex-direction: column; }
   .quick-start .task-input,
-  .quick-start .model-select { min-width: 100%; }
+  .quick-start .model-select,
+  .quick-start .branch-input { min-width: 100%; }
 }
 @media (max-width: 480px) {
   .metrics-grid { grid-template-columns: 1fr; }

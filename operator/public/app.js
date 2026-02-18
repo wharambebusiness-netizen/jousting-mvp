@@ -43,6 +43,70 @@ function _actionMessage(path, ok) {
   return ok ? 'Success' : 'Action failed';
 }
 
+// ── Branch Name Auto-Generation ──────────────────────────────
+
+function slugify(text) {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+}
+
+function autoFillBranch(task) {
+  var el = document.getElementById('chain-branch');
+  if (!el || el.dataset.manual === '1') return;
+  var slug = slugify(task);
+  el.value = slug ? 'auto/' + slug : '';
+}
+
+// Mark branch as manually edited so auto-fill stops
+(function() {
+  var el = document.getElementById('chain-branch');
+  if (el) {
+    el.addEventListener('input', function() { el.dataset.manual = '1'; });
+    // Reset manual flag when form resets
+    var form = el.closest('form');
+    if (form) form.addEventListener('reset', function() { el.dataset.manual = ''; });
+  }
+})();
+
+// ── Auto-Push Toggle ─────────────────────────────────────────
+
+function toggleAutoPush(enabled) {
+  localStorage.setItem('operator-auto-push', enabled ? '1' : '0');
+}
+
+// Listen for chain completion via WS and auto-push if enabled
+(function connectAutoPushWs() {
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var ws;
+  try { ws = new WebSocket(proto + '//' + location.host + '/ws'); } catch (_) { return; }
+
+  ws.onopen = function() {
+    ws.send(JSON.stringify({ subscribe: ['chain:complete', 'chain:assumed-complete'] }));
+  };
+
+  ws.onmessage = function(e) {
+    try {
+      var msg = JSON.parse(e.data);
+      if ((msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') &&
+          localStorage.getItem('operator-auto-push') === '1') {
+        fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+          .then(function(r) {
+            showToast(r.ok ? 'Auto-pushed to remote' : 'Auto-push failed', r.ok ? 'success' : 'error');
+            var git = document.getElementById('git-panel');
+            if (git) htmx.trigger(git, 'reload');
+          })
+          .catch(function() { showToast('Auto-push failed', 'error'); });
+      }
+    } catch (_) {}
+  };
+
+  ws.onclose = function() { setTimeout(connectAutoPushWs, 5000); };
+})();
+
 // Global listener: show toast for all API POST/DELETE actions
 document.body.addEventListener('htmx:afterRequest', function (evt) {
   var detail = evt.detail;
