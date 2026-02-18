@@ -1520,7 +1520,7 @@ describe('View Routes — Projects (P9)', () => {
     expect(res.text).toContain('Access denied');
   });
 
-  it('GET /views/projects returns empty state with no chains', async () => {
+  it('GET /views/projects shows server project even with no chains', async () => {
     initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     reg.chains = [];
@@ -1528,6 +1528,8 @@ describe('View Routes — Projects (P9)', () => {
 
     const res = await get('/views/projects');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('No projects found');
+    // Server always includes its own project directory
+    expect(res.text).toContain('projects-panel');
+    expect(res.text).toContain('0 chains');
   });
 });

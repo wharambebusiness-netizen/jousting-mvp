@@ -721,6 +721,21 @@ export function createViewRoutes(ctx) {
         }
       }
 
+      // Always include the server's own project directory
+      if (ctx.projectDir) {
+        const norm = ctx.projectDir.replace(/\\/g, '/');
+        const alreadyListed = Object.keys(projectMap).some(
+          k => k.replace(/\\/g, '/') === norm
+        );
+        if (!alreadyListed) {
+          projectMap[ctx.projectDir] = {
+            projectDir: ctx.projectDir,
+            chains: 0, running: 0, completed: 0, failed: 0,
+            totalCostUsd: 0, lastActivity: null,
+          };
+        }
+      }
+
       const projects = Object.values(projectMap)
         .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
 
