@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { Attack, MatchState, SpeedType } from '../engine/types';
 import { JOUST_ATTACK_LIST, MELEE_ATTACK_LIST } from '../engine/attacks';
-import { StanceTag, DeltaVal, Scoreboard, Stars, attackName } from './helpers';
+import { StanceTag, DeltaVal, Scoreboard, Stars, attackName, MeleeWinsTracker } from './helpers';
 import { CounterChart } from './CounterChart';
 
 function AttackCard({ attack, onClick, selected }: {
@@ -64,12 +64,37 @@ function AttackCard({ attack, onClick, selected }: {
   );
 }
 
-export function JoustAttackSelect({ match, speed, onSelect }: {
+function AttackSelectScreen({ match, phase, attacks, label, title, subtitle, onSelect }: {
   match: MatchState;
-  speed: SpeedType;
+  phase: 'joust' | 'melee';
+  attacks: Attack[];
+  label: string;
+  title: string;
+  subtitle: string;
   onSelect: (attack: Attack) => void;
 }) {
   const [showCounterChart, setShowCounterChart] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const cols = 2;
+
+  const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>('[role="button"]'));
+    const idx = cards.indexOf(e.target as HTMLElement);
+    if (idx < 0) return;
+
+    let next = -1;
+    switch (e.key) {
+      case 'ArrowRight': next = idx + 1 < cards.length ? idx + 1 : idx; break;
+      case 'ArrowLeft': next = idx - 1 >= 0 ? idx - 1 : idx; break;
+      case 'ArrowDown': next = idx + cols < cards.length ? idx + cols : idx; break;
+      case 'ArrowUp': next = idx - cols >= 0 ? idx - cols : idx; break;
+      default: return;
+    }
+    e.preventDefault();
+    cards[next]?.focus();
+  }, []);
 
   return (
     <div className="screen">
@@ -82,11 +107,20 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
         p2Sta={match.player2.currentStamina}
         p1MaxSta={match.player1.archetype.stamina}
         p2MaxSta={match.player2.archetype.stamina}
-        label={`Pass ${match.passNumber}`}
+        label={label}
       />
 
+      {phase === 'melee' && (
+        <MeleeWinsTracker
+          wins1={match.meleeWins1}
+          wins2={match.meleeWins2}
+          p1Label="You"
+          p2Label="Opponent"
+        />
+      )}
+
       <div className="attack-select-header">
-        <h2 className="text-center">Choose Your Attack</h2>
+        <h2 className="text-center">{title}</h2>
         <button
           className="counter-chart-icon"
           onClick={() => setShowCounterChart(true)}
@@ -97,10 +131,10 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
           ?
         </button>
       </div>
-      <p className="subtitle">Speed: {speed} — Pick your lance technique</p>
+      <p className="subtitle">{subtitle}</p>
 
-      <div className="attack-grid">
-        {JOUST_ATTACK_LIST.map(atk => (
+      <div className="attack-grid" ref={gridRef} role="group" aria-label="Attack options" onKeyDown={handleGridKeyDown}>
+        {attacks.map(atk => (
           <AttackCard
             key={atk.id}
             attack={atk}
@@ -111,7 +145,7 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
 
       {showCounterChart && (
         <CounterChart
-          phase="joust"
+          phase={phase}
           onClose={() => setShowCounterChart(false)}
         />
       )}
@@ -119,76 +153,38 @@ export function JoustAttackSelect({ match, speed, onSelect }: {
   );
 }
 
+export function JoustAttackSelect({ match, speed, onSelect }: {
+  match: MatchState;
+  speed: SpeedType;
+  onSelect: (attack: Attack) => void;
+}) {
+  return (
+    <AttackSelectScreen
+      match={match}
+      phase="joust"
+      attacks={JOUST_ATTACK_LIST}
+      label={`Pass ${match.passNumber}`}
+      title="Choose Your Attack"
+      subtitle={`Speed: ${speed} — Pick your lance technique`}
+      onSelect={onSelect}
+    />
+  );
+}
+
 export function MeleeAttackSelect({ match, onSelect }: {
   match: MatchState;
   onSelect: (attack: Attack) => void;
 }) {
-  const [showCounterChart, setShowCounterChart] = useState(false);
-
   return (
-    <div className="screen">
-      <Scoreboard
-        p1Name={match.player1.archetype.name}
-        p2Name={match.player2.archetype.name}
-        p1Score={match.cumulativeScore1}
-        p2Score={match.cumulativeScore2}
-        p1Sta={match.player1.currentStamina}
-        p2Sta={match.player2.currentStamina}
-        p1MaxSta={match.player1.archetype.stamina}
-        p2MaxSta={match.player2.archetype.stamina}
-        label={`Melee R${match.meleeRoundResults.length + 1}`}
-      />
-
-      <div className="melee-wins">
-        <div>
-          <span className="player-label player-label--p1">You</span>
-          <div className="melee-wins__dots" aria-label={`You: ${match.meleeWins1} of 4 wins`}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} aria-hidden="true" />
-            ))}
-          </div>
-        </div>
-        <div>
-          <span className="player-label player-label--p2">Opponent</span>
-          <div className="melee-wins__dots" aria-label={`Opponent: ${match.meleeWins2} of 4 wins`}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} aria-hidden="true" />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="attack-select-header">
-        <h2 className="text-center">Choose Your Melee Attack</h2>
-        <button
-          className="counter-chart-icon"
-          onClick={() => setShowCounterChart(true)}
-          aria-label="View counter chart — see what beats what"
-          title="View counter chart"
-          type="button"
-        >
-          ?
-        </button>
-      </div>
-      <p className="subtitle">Dismounted combat — no speed selection</p>
-
-      <div className="attack-grid">
-        {MELEE_ATTACK_LIST.map(atk => (
-          <AttackCard
-            key={atk.id}
-            attack={atk}
-            onClick={() => onSelect(atk)}
-          />
-        ))}
-      </div>
-
-      {showCounterChart && (
-        <CounterChart
-          phase="melee"
-          onClose={() => setShowCounterChart(false)}
-        />
-      )}
-    </div>
+    <AttackSelectScreen
+      match={match}
+      phase="melee"
+      attacks={MELEE_ATTACK_LIST}
+      label={`Melee R${match.meleeRoundResults.length + 1}`}
+      title="Choose Your Melee Attack"
+      subtitle="Dismounted combat — no speed selection"
+      onSelect={onSelect}
+    />
   );
 }
 

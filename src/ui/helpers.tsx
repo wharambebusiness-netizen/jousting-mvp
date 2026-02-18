@@ -115,6 +115,40 @@ export function StanceTag({ stance }: { stance: Stance }) {
   );
 }
 
+export function CounterBadge({ bonus }: { bonus: number }) {
+  if (bonus > 0) return <span className="counter-badge counter-badge--win">Counters!</span>;
+  if (bonus < 0) return <span className="counter-badge counter-badge--lose">Countered!</span>;
+  return null;
+}
+
+export function MeleeWinsTracker({ wins1, wins2, p1Label, p2Label }: {
+  wins1: number;
+  wins2: number;
+  p1Label: string;
+  p2Label: string;
+}) {
+  return (
+    <div className="melee-wins">
+      <div>
+        <span className="player-label player-label--p1">{p1Label}</span>
+        <div className="melee-wins__dots" aria-label={`${p1Label}: ${wins1} of 4 wins`}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className={`melee-wins__dot${i < wins1 ? ' melee-wins__dot--filled-p1' : ''}`} aria-hidden="true" />
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className="player-label player-label--p2">{p2Label}</span>
+        <div className="melee-wins__dots" aria-label={`${p2Label}: ${wins2} of 4 wins`}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className={`melee-wins__dot${i < wins2 ? ' melee-wins__dot--filled-p2' : ''}`} aria-hidden="true" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DeltaVal({ label, value }: { label: string; value: number }) {
   return (
     <span className="attack-card__delta">

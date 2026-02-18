@@ -1,6 +1,6 @@
 import { MeleeOutcome, type MeleeRoundResult, type MatchState } from '../engine/types';
 import { ImpactBreakdownCard } from './PassResult';
-import { Scoreboard, StanceTag } from './helpers';
+import { Scoreboard, StanceTag, CounterBadge, MeleeWinsTracker } from './helpers';
 import { resolveCounters } from '../engine/calculator';
 
 export function MeleeResultScreen({ match, result, onContinue }: {
@@ -33,24 +33,12 @@ export function MeleeResultScreen({ match, result, onContinue }: {
         label={`Melee R${result.roundNumber}`}
       />
 
-      <div className="melee-wins">
-        <div>
-          <span className="player-label player-label--p1">You ({match.player1.archetype.name})</span>
-          <div className="melee-wins__dots" aria-label={`You: ${match.meleeWins1} of 4 wins`}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} aria-hidden="true" />
-            ))}
-          </div>
-        </div>
-        <div>
-          <span className="player-label player-label--p2">Opponent ({match.player2.archetype.name})</span>
-          <div className="melee-wins__dots" aria-label={`Opponent: ${match.meleeWins2} of 4 wins`}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} aria-hidden="true" />
-            ))}
-          </div>
-        </div>
-      </div>
+      <MeleeWinsTracker
+        wins1={match.meleeWins1}
+        wins2={match.meleeWins2}
+        p1Label={`You (${match.player1.archetype.name})`}
+        p2Label={`Opponent (${match.player2.archetype.name})`}
+      />
 
       <div className="text-center mb-16">
         <span className={`outcome-badge ${outcomeClass}`}>{result.outcome}</span>
@@ -68,23 +56,13 @@ export function MeleeResultScreen({ match, result, onContinue }: {
             <div className="player-label player-label--p1">You</div>
             <div className="melee-result__attack-name">{result.player1Attack.name}</div>
             <StanceTag stance={result.player1Attack.stance} />
-            {counters.player1Bonus > 0 && (
-              <span className="counter-badge counter-badge--win">Counters!</span>
-            )}
-            {counters.player1Bonus < 0 && (
-              <span className="counter-badge counter-badge--lose">Countered!</span>
-            )}
+            <CounterBadge bonus={counters.player1Bonus} />
           </div>
           <div className={`text-center${counters.player2Bonus > 0 ? ' reveal-sides__cell--counter-win' : ''}`}>
             <div className="player-label player-label--p2">Opponent</div>
             <div className="melee-result__attack-name">{result.player2Attack.name}</div>
             <StanceTag stance={result.player2Attack.stance} />
-            {counters.player2Bonus > 0 && (
-              <span className="counter-badge counter-badge--win">Counters!</span>
-            )}
-            {counters.player2Bonus < 0 && (
-              <span className="counter-badge counter-badge--lose">Countered!</span>
-            )}
+            <CounterBadge bonus={counters.player2Bonus} />
           </div>
         </div>
 

@@ -38,10 +38,20 @@
   /* --- Stance colors --- */
   --stance-agg: #8b2500;
   --stance-agg-bg: #f5ddd6;
+  --stance-agg-light: rgba(220, 100, 80, 0.08);
+  --stance-agg-glow: rgba(220, 100, 80, 0.3);
+  --stance-agg-shadow: rgba(139, 37, 0, 0.2);
   --stance-bal: #a07c2e;
   --stance-bal-bg: #f5ecd6;
+  --stance-bal-light: rgba(218, 180, 100, 0.08);
+  --stance-bal-glow: rgba(218, 180, 100, 0.3);
+  --stance-bal-shadow: rgba(160, 124, 46, 0.2);
   --stance-def: #1e3a5f;
   --stance-def-bg: #d6e0f5;
+  --stance-def-light: rgba(100, 120, 180, 0.08);
+  --stance-def-glow: rgba(100, 120, 180, 0.3);
+  --stance-def-shadow: rgba(30, 58, 95, 0.2);
+  --inset-highlight: rgba(255, 255, 255, 0.3);
 
   /* --- Rarity colors --- */
   --rarity-uncommon: #4a8a2a;

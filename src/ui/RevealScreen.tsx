@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Attack, MatchState, SpeedType } from '../engine/types';
 import { SPEEDS, JOUST_ATTACK_LIST } from '../engine/attacks';
 import { computeEffectiveStats, canShift, resolveCounters } from '../engine/calculator';
-import { StanceTag, Scoreboard } from './helpers';
+import { StanceTag, Scoreboard, CounterBadge } from './helpers';
 import { AttackCard } from './AttackSelect';
 
 // Reveal phases: player shown → opponent flips → counters + actions appear
@@ -63,11 +63,8 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
           <div className="reveal-attack__speed">{playerSpeed}</div>
           <div className="reveal-attack__name">{playerAttack.name}</div>
           <StanceTag stance={playerAttack.stance} />
-          {actionsReady && counters.player1Bonus > 0 && (
-            <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--win">Counters!</span></div>
-          )}
-          {actionsReady && counters.player1Bonus < 0 && (
-            <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--lose">Countered!</span></div>
+          {actionsReady && counters.player1Bonus !== 0 && (
+            <div className="mt-8 reveal-counter-enter"><CounterBadge bonus={counters.player1Bonus} /></div>
           )}
         </div>
 
@@ -84,11 +81,8 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
             <div className="reveal-attack__speed">{aiSpeed}</div>
             <div className="reveal-attack__name">{aiAttack.name}</div>
             <StanceTag stance={aiAttack.stance} />
-            {actionsReady && counters.player2Bonus > 0 && (
-              <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--win">Counters!</span></div>
-            )}
-            {actionsReady && counters.player2Bonus < 0 && (
-              <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--lose">Countered!</span></div>
+            {actionsReady && counters.player2Bonus !== 0 && (
+              <div className="mt-8 reveal-counter-enter"><CounterBadge bonus={counters.player2Bonus} /></div>
             )}
           </div>
         </div>

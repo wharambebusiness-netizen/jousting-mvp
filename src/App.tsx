@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useReducer, useRef } from 'react';
 import './App.css';
 import {
   Phase,
@@ -43,70 +43,183 @@ type Screen =
   | 'melee-result'
   | 'end';
 
+interface GameState {
+  screen: Screen;
+  transitioning: boolean;
+  match: MatchState | null;
+  p1Archetype: Archetype | null;
+  p2Archetype: Archetype | null;
+  playerSpeed: SpeedType;
+  playerAttack: Attack | null;
+  aiChoice: PassChoice | null;
+  lastPassResult: PassResult | null;
+  lastMeleeResult: MeleeRoundResult | null;
+  combatLog: string[][];
+  p1Loadout: GiglingLoadout | null;
+  p2Loadout: GiglingLoadout | null;
+  p1PlayerLoadout: PlayerLoadout | null;
+  p2PlayerLoadout: PlayerLoadout | null;
+  difficulty: AIDifficulty;
+  aiReasoning: AIReasoning | null;
+  reasoningHistory: AIReasoning[];
+}
+
+const initialState: GameState = {
+  screen: 'setup',
+  transitioning: false,
+  match: null,
+  p1Archetype: null,
+  p2Archetype: null,
+  playerSpeed: SpeedType.Standard,
+  playerAttack: null,
+  aiChoice: null,
+  lastPassResult: null,
+  lastMeleeResult: null,
+  combatLog: [],
+  p1Loadout: null,
+  p2Loadout: null,
+  p1PlayerLoadout: null,
+  p2PlayerLoadout: null,
+  difficulty: 'medium',
+  aiReasoning: null,
+  reasoningHistory: [],
+};
+
+type Action =
+  | { type: 'START'; p1: Archetype; p2: Archetype; difficulty: AIDifficulty }
+  | { type: 'CONFIRM_LOADOUT'; p1Loadout: GiglingLoadout; p2Loadout: GiglingLoadout; p1PlayerLoadout: PlayerLoadout; p2PlayerLoadout: PlayerLoadout; match: MatchState }
+  | { type: 'SELECT_SPEED'; speed: SpeedType }
+  | { type: 'SELECT_ATTACK'; attack: Attack; aiChoice: PassChoice; reasoning: AIReasoning }
+  | { type: 'RESOLVE_PASS'; match: MatchState; passResult: PassResult }
+  | { type: 'PASS_CONTINUE'; nextScreen: Screen }
+  | { type: 'MELEE_ATTACK'; match: MatchState; roundResult: MeleeRoundResult; reasoning: AIReasoning }
+  | { type: 'MELEE_CONTINUE'; nextScreen: Screen }
+  | { type: 'REMATCH' }
+  | { type: 'SET_SCREEN'; screen: Screen }
+  | { type: 'START_TRANSITION' }
+  | { type: 'END_TRANSITION'; screen: Screen };
+
+function gameReducer(state: GameState, action: Action): GameState {
+  switch (action.type) {
+    case 'START':
+      return {
+        ...state,
+        p1Archetype: action.p1,
+        p2Archetype: action.p2,
+        difficulty: action.difficulty,
+        combatLog: [],
+      };
+    case 'CONFIRM_LOADOUT':
+      return {
+        ...state,
+        p1Loadout: action.p1Loadout,
+        p2Loadout: action.p2Loadout,
+        p1PlayerLoadout: action.p1PlayerLoadout,
+        p2PlayerLoadout: action.p2PlayerLoadout,
+        match: action.match,
+        combatLog: [],
+      };
+    case 'SELECT_SPEED':
+      return { ...state, playerSpeed: action.speed };
+    case 'SELECT_ATTACK':
+      return {
+        ...state,
+        playerAttack: action.attack,
+        aiChoice: action.aiChoice,
+        aiReasoning: action.reasoning,
+        reasoningHistory: [...state.reasoningHistory, action.reasoning],
+      };
+    case 'RESOLVE_PASS':
+      return {
+        ...state,
+        match: action.match,
+        lastPassResult: action.passResult,
+        combatLog: [...state.combatLog, action.passResult.log],
+      };
+    case 'PASS_CONTINUE':
+      return state;
+    case 'MELEE_ATTACK':
+      return {
+        ...state,
+        match: action.match,
+        lastMeleeResult: action.roundResult,
+        aiReasoning: action.reasoning,
+        reasoningHistory: [...state.reasoningHistory, action.reasoning],
+        combatLog: [...state.combatLog, action.roundResult.log],
+      };
+    case 'MELEE_CONTINUE':
+      return state;
+    case 'REMATCH':
+      return { ...initialState };
+    case 'SET_SCREEN':
+      return { ...state, screen: action.screen };
+    case 'START_TRANSITION':
+      return { ...state, transitioning: true };
+    case 'END_TRANSITION':
+      return { ...state, transitioning: false, screen: action.screen };
+    default:
+      return state;
+  }
+}
+
 function App() {
-  const [match, setMatch] = useState<MatchState | null>(null);
-  const [screen, setScreen] = useState<Screen>('setup');
-  const [p1Archetype, setP1Archetype] = useState<Archetype | null>(null);
-  const [p2Archetype, setP2Archetype] = useState<Archetype | null>(null);
-  const [playerSpeed, setPlayerSpeed] = useState<SpeedType>(SpeedType.Standard);
-  const [playerAttack, setPlayerAttack] = useState<Attack | null>(null);
-  const [aiChoice, setAiChoice] = useState<PassChoice | null>(null);
-  const [lastPassResult, setLastPassResult] = useState<PassResult | null>(null);
-  const [lastMeleeResult, setLastMeleeResult] = useState<MeleeRoundResult | null>(null);
-  const [combatLog, setCombatLog] = useState<string[][]>([]);
-  const [p1Loadout, setP1Loadout] = useState<GiglingLoadout | null>(null);
-  const [p2Loadout, setP2Loadout] = useState<GiglingLoadout | null>(null);
-  const [p1PlayerLoadout, setP1PlayerLoadout] = useState<PlayerLoadout | null>(null);
-  const [p2PlayerLoadout, setP2PlayerLoadout] = useState<PlayerLoadout | null>(null);
-  const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
-  const [aiReasoning, setAiReasoning] = useState<AIReasoning | null>(null);
-  const [reasoningHistory, setReasoningHistory] = useState<AIReasoning[]>([]);
+  const [state, dispatch] = useReducer(gameReducer, initialState);
+  const transitionTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const {
+    screen, transitioning, match, p1Archetype, p2Archetype,
+    playerSpeed, playerAttack, aiChoice, lastPassResult, lastMeleeResult,
+    combatLog, p1Loadout, p2Loadout, p1PlayerLoadout, p2PlayerLoadout,
+    difficulty, aiReasoning, reasoningHistory,
+  } = state;
+
+  /** Fade out current screen, then switch to next */
+  const transitionTo = (next: Screen) => {
+    if (transitionTimer.current) clearTimeout(transitionTimer.current);
+    dispatch({ type: 'START_TRANSITION' });
+    transitionTimer.current = setTimeout(() => {
+      dispatch({ type: 'END_TRANSITION', screen: next });
+    }, 150);
+  };
 
   // --- Setup ---
   const handleStart = (p1: Archetype, p2: Archetype, diff: AIDifficulty) => {
-    setP1Archetype(p1);
-    setP2Archetype(p2);
-    setDifficulty(diff);
-    setCombatLog([]);
-    setScreen('loadout');
+    dispatch({ type: 'START', p1, p2, difficulty: diff });
+    transitionTo('loadout');
   };
 
   // --- Loadout confirm ---
   const handleLoadoutConfirm = (steedLoadout: GiglingLoadout, playerLoadout: PlayerLoadout) => {
     if (!p1Archetype || !p2Archetype) return;
-    // AI gets random loadouts at the same rarity tier
     const aiRarity = steedLoadout.giglingRarity;
     const aiSteedLoadout = createFullLoadout(aiRarity, aiRarity);
     const aiPlayerLoadout = createFullPlayerLoadout(aiRarity);
-    setP1Loadout(steedLoadout);
-    setP2Loadout(aiSteedLoadout);
-    setP1PlayerLoadout(playerLoadout);
-    setP2PlayerLoadout(aiPlayerLoadout);
     const m = createMatch(p1Archetype, p2Archetype, steedLoadout, aiSteedLoadout, playerLoadout, aiPlayerLoadout);
-    setMatch(m);
-    setCombatLog([]);
-    setScreen('speed');
+    dispatch({
+      type: 'CONFIRM_LOADOUT',
+      p1Loadout: steedLoadout,
+      p2Loadout: aiSteedLoadout,
+      p1PlayerLoadout: playerLoadout,
+      p2PlayerLoadout: aiPlayerLoadout,
+      match: m,
+    });
+    transitionTo('speed');
   };
 
   // --- Speed select ---
   const handleSpeedSelect = (speed: SpeedType) => {
-    setPlayerSpeed(speed);
-    setScreen('attack');
+    dispatch({ type: 'SELECT_SPEED', speed });
+    transitionTo('attack');
   };
 
   // --- Joust attack select ---
   const handleAttackSelect = (attack: Attack) => {
-    setPlayerAttack(attack);
-
-    // AI picks its full choice now (blind speed+attack, shift sees player's attack)
     const lastP2Attack = match!.passResults.length > 0
       ? match!.passResults[match!.passResults.length - 1].player2.finalAttack
       : undefined;
     const { choice: ai, reasoning } = aiPickJoustChoiceWithReasoning(match!.player2, lastP2Attack, attack, difficulty);
-    setAiChoice(ai);
-    setAiReasoning(reasoning);
-    setReasoningHistory(prev => [...prev, reasoning]);
-    setScreen('reveal');
+    dispatch({ type: 'SELECT_ATTACK', attack, aiChoice: ai, reasoning });
+    transitionTo('reveal');
   };
 
   // --- Reveal + shift decision ---
@@ -116,26 +229,21 @@ function App() {
       attack: playerAttack!,
       shiftAttack,
     };
-
     const newMatch = submitJoustPass(match!, p1Choice, aiChoice!);
     const passResult = newMatch.passResults[newMatch.passResults.length - 1];
-
-    setMatch(newMatch);
-    setLastPassResult(passResult);
-    setCombatLog(prev => [...prev, passResult.log]);
-    setScreen('pass-result');
+    dispatch({ type: 'RESOLVE_PASS', match: newMatch, passResult });
+    transitionTo('pass-result');
   };
 
   // --- Pass result continue ---
   const handlePassContinue = () => {
     if (!match) return;
     if (match.phase === Phase.MeleeSelect) {
-      setScreen('melee-transition');
+      transitionTo('melee-transition');
     } else if (match.phase === Phase.MatchEnd) {
-      setScreen('end');
+      transitionTo('end');
     } else {
-      // Next joust pass
-      setScreen('speed');
+      transitionTo('speed');
     }
   };
 
@@ -145,49 +253,30 @@ function App() {
       ? match!.meleeRoundResults[match!.meleeRoundResults.length - 1].player2Attack
       : undefined;
     const { attack: aiAttack, reasoning } = aiPickMeleeAttackWithReasoning(match!.player2, lastP2Attack, difficulty);
-    setAiReasoning(reasoning);
-    setReasoningHistory(prev => [...prev, reasoning]);
-
     const newMatch = submitMeleeRound(match!, attack, aiAttack);
     const roundResult = newMatch.meleeRoundResults[newMatch.meleeRoundResults.length - 1];
-
-    setMatch(newMatch);
-    setLastMeleeResult(roundResult);
-    setCombatLog(prev => [...prev, roundResult.log]);
-    setScreen('melee-result');
+    dispatch({ type: 'MELEE_ATTACK', match: newMatch, roundResult, reasoning });
+    transitionTo('melee-result');
   };
 
   // --- Melee result continue ---
   const handleMeleeContinue = () => {
     if (!match) return;
     if (match.phase === Phase.MatchEnd) {
-      setScreen('end');
+      transitionTo('end');
     } else {
-      setScreen('melee');
+      transitionTo('melee');
     }
   };
 
   // --- Rematch ---
   const handleRematch = () => {
-    setMatch(null);
-    setP1Archetype(null);
-    setP2Archetype(null);
-    setAiChoice(null);
-    setPlayerAttack(null);
-    setLastPassResult(null);
-    setLastMeleeResult(null);
-    setP1Loadout(null);
-    setP2Loadout(null);
-    setP1PlayerLoadout(null);
-    setP2PlayerLoadout(null);
-    setAiReasoning(null);
-    setReasoningHistory([]);
-    setCombatLog([]);
-    setScreen('setup');
+    dispatch({ type: 'REMATCH' });
+    transitionTo('setup');
   };
 
   return (
-    <div>
+    <div className={transitioning ? 'screen-exit' : 'screen-enter'}>
       {screen !== 'setup' && screen !== 'loadout' && screen !== 'end' && (
         <div className="app-header">
           <h1>Joust & Melee</h1>
@@ -240,7 +329,7 @@ function App() {
         <MeleeTransitionScreen
           match={match}
           lastPassResult={lastPassResult}
-          onContinue={() => setScreen('melee')}
+          onContinue={() => transitionTo('melee')}
         />
       )}
 
