@@ -1,90 +1,60 @@
-# Next Session Instructions (S82)
+# Next Session Instructions (S83)
 
-## Task: Review & Harden M1-M3, then Build M5 Web UI Dashboard
+## Task: Build M6 — Orchestrator Management + Git Integration from UI
 
-### Phase 1: Review & Bug-Fix M1, M2, M3
+Read `docs/operator-plan.md` section "M6: Orchestrator Management from UI" for the full spec.
 
-Before starting M5, launch parallel review/test agents to audit the operator M1-M3 code. These milestones were built across S77-S80 and haven't had the same thorough review treatment that M4 received in S81.
+### What's Done (M1-M5)
+- M1-M4: CLI daemon, session management, continuation, HTTP API
+- M5 (S82): Web UI Dashboard — 3 pages (dashboard, chain detail, orchestrator) with Pico CSS dark mode + HTMX polling, kill buttons, quick-start form, session timelines, cost breakdowns
+- 1408 tests across 24 suites, all passing
 
-**Files to review:**
+### M6 Features to Build
 
-| Milestone | Files | Tests |
-|-----------|-------|-------|
-| M1 (Walking Skeleton) | `operator/operator.mjs` (~520 lines) | Manual testing only (no dedicated test suite) |
-| M2 (Session Management) | `operator/registry.mjs`, `operator/errors.mjs` | `operator/__tests__/registry.test.mjs` (15 tests), `operator/__tests__/errors.test.mjs` (36 tests) |
-| M3 (Agent Self-Continuation) | `orchestrator/sdk-adapter.mjs` (v23), `orchestrator/agent-runner.mjs`, `orchestrator/agent-tracking.mjs` | `orchestrator/continuation.test.mjs` (28 tests) |
+**6a. Mission Launcher**
+- Form on dashboard: select mission config from `orchestrator/missions/` dropdown
+- Options: dry-run mode, model tier override, custom agent count
+- Start button → POST to `/api/orchestrator/start`
+- Live redirect to orchestrator view
 
-**What to look for:**
-- Memory leaks, unclosed resources, dangling promises
-- Edge cases in error recovery (errors.mjs circuit breaker, retry logic)
-- Race conditions in operator.mjs chain loop (SDK streaming + PreCompact hook timing)
-- Registry corruption scenarios (concurrent writes, crash during atomic save)
-- Handoff parsing edge cases (malformed output, empty handoffs, very long output)
-- Cost tracking accuracy (accumulated costs, budget enforcement)
-- Multi-project isolation (projectDir filtering, path normalization on Windows)
-- SDK adapter continuation logic (cost caps, continuation count limits, PreCompact hook behavior)
-- Missing test coverage (operator.mjs has NO unit tests — consider adding)
+**6b. Report Viewer**
+- List of past orchestrator reports from `orchestrator/reports/`
+- Rendered markdown → HTML (use `marked` library, CDN-loaded)
+- Filter by date, mission, status
 
-**Approach:** Launch 3 agents in parallel:
-1. **M1 reviewer** — deep review of `operator/operator.mjs` (the main daemon). Focus on the chain loop, session runner, handoff parsing, git commit integration, and CLI argument handling. Look for bugs, missing error handling, and edge cases. Suggest tests if operator.mjs lacks coverage.
-2. **M2 reviewer** — review `registry.mjs` and `errors.mjs` + their test suites. Focus on persistence reliability (atomic writes, crash recovery, archival), error classification accuracy, retry/circuit-breaker correctness, and handoff validation edge cases.
-3. **M3 reviewer** — review `sdk-adapter.mjs` continuation wrapper, `agent-runner.mjs` SDK path, and `agent-tracking.mjs` continuation tracking. Focus on cost accumulation, continuation trigger heuristics, PreCompact hook behavior, session ID handoff, and interaction with operator-level continuation.
+**6c. Handoff Viewer**
+- Browse handoff files from any chain
+- Side-by-side view: previous handoff → session output → next handoff
+- Read-only in M6
 
-Fix all bugs found. Add tests where coverage is weak. Run full test suite after fixes. Commit the review round before moving to Phase 2.
+**6d. Git Integration**
+- Auto-push toggle in UI (sets `OPERATOR_AUTO_PUSH` for current server session)
+- PR creation button: after chain completion, click to create PR via `gh pr create`
+- Branch name auto-generated from task description
+- PR body auto-generated from chain summary
 
----
+### Files to Create/Modify
+- `operator/routes/orchestrator.mjs` — Add start/stop endpoints (extend from M4)
+- `operator/routes/reports.mjs` — Report listing and rendering
+- `operator/routes/git.mjs` — Push and PR creation endpoints
+- `operator/public/mission-launcher.html` — Mission launch form
+- `operator/public/reports.html` — Report browser
+- `operator/views/report-card.mjs` — Report listing HTML fragment
 
-### Phase 2: Build M5 — Web UI Dashboard
-
-Read `docs/operator-plan.md` section "M5: Web UI Dashboard" for the full spec. Key points:
-
-**Stack:**
-- Server-rendered HTML (no React, no build pipeline)
-- HTMX (CDN) for dynamic updates
-- Pico CSS (CDN) for styling — dark mode default
-- Alpine.js (CDN) for minimal client-side state
-- Express static serving from `operator/public/`
-- HTML fragment templates as JS functions in `operator/views/`
-
-**Pages to build:**
-1. **Dashboard (`/`)** — Active chains, live status, total costs, kill button, quick-start form
-2. **Chain Detail (`/chains/:id`)** — Session timeline, per-session stats, expandable handoffs, cost breakdown
-3. **Orchestrator View (`/orchestrator`)** — Round status, agent cards, live output (only when orchestrator is running)
-
-**Key design decisions:**
-- M5 is **read-only + kill switch** — no editing, no launching missions, no config changes (that's M6)
-- The quick-start form on dashboard IS included (POST to create chain)
-- WebSocket for live updates (connect to existing `/ws` endpoint from M4)
-- Dark mode default (developer tool)
-- Responsive (check overnight runs from phone)
-- Multi-project aware: project selector/filter in nav, per-project views
-
-**File structure:**
-```
-operator/
-  public/
-    index.html         Dashboard page
-    chain.html         Chain detail page
-    orchestrator.html  Orchestrator view
-    style.css          Custom styles
-  views/
-    chain-row.mjs      Chain row HTML fragment
-    session-card.mjs   Session detail card
-    agent-card.mjs     Agent status card
-  server.mjs           Add static file serving + view routes
-```
-
-**Modify `server.mjs`** to serve static files and add HTML page routes. The M4 API endpoints remain unchanged.
-
-**Testing:** Add tests for view fragment rendering (pure functions → easy to test). Integration test: fetch HTML pages, verify they load with correct structure. WebSocket live update: verify events flow through to UI.
+### Alternative: Polish M5 First
+If M6 feels like too much for one session, an alternative is to polish M5:
+- Add WebSocket live updates to dashboard (currently polling only)
+- Add project filter/selector to nav
+- Add responsive improvements for mobile
+- Manual browser testing and UX polish
 
 ---
 
 ## Reference
 
-- Handoff: `docs/archive/handoff-s81.md`
-- Operator plan: `docs/operator-plan.md` (M5 section)
-- Current test count: 1348 tests, 23 suites (all passing)
-- Dependencies already installed: `express`, `ws`
+- Handoff: `docs/archive/handoff-s82.md`
+- Operator plan: `docs/operator-plan.md` (M6 section)
+- Current test count: 1408 tests, 24 suites (all passing)
+- Dependencies: `express`, `ws` (already installed)
 - Session history: `docs/session-history.md`
 - CLAUDE.md has all commands, architecture, gotchas

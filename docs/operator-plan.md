@@ -1,7 +1,7 @@
 # Operator System — Architecture & Milestone Plan
 
 Created: S78 (2026-02-17)
-Status: M1 COMPLETE (S77), M2 COMPLETE (S79), M3 COMPLETE (S80), M4 COMPLETE (S81), M5-M6 planned
+Status: M1 COMPLETE (S77), M2 COMPLETE (S79), M3 COMPLETE (S80), M4 COMPLETE (S81), M5 COMPLETE (S82), M6 planned
 
 ## Context
 
@@ -589,3 +589,4 @@ Sessions A and B can be combined if context allows. Sessions D and E can be comb
 - S79: M2 IMPLEMENTED — registry.mjs, errors.mjs, operator.mjs rewritten. 51 tests. Multi-project support via --project-dir + projectDir in registry.
 - S80: M3 IMPLEMENTED — Agent self-continuation. runAgentWithContinuation() in sdk-adapter.mjs, PreCompact hook, cost guardrails ($2/3 cap), wired into agent-runner.mjs (SDK path), recordContinuation() in agent-tracking.mjs. 28 new tests. Config: useSDK, maxAgentContinuations, maxAgentChainCostUsd, maxAgentTurns.
 - S81: M4 IMPLEMENTED — HTTP API layer. Express + WebSocket server (server.mjs), chain CRUD + sessions + costs routes (routes/chains.mjs), orchestrator status/control (routes/orchestrator.mjs), WebSocket event bridge (ws.mjs). Multi-project filtering via ?project= query param + /api/projects endpoint. 34 new tests. Total: 1332 tests, 23 suites.
+- S82: M5 IMPLEMENTED + M1-M3 bug fixes. Web UI Dashboard: 3 pages (dashboard, chain detail, orchestrator), HTMX + Pico CSS dark mode, server-rendered HTML fragments. Also fixed 8 bugs from M1-M3 code review (shell injection, budget tracking, signal handling, etc). 60 new tests. Total: 1408 tests, 24 suites.
