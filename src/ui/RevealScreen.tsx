@@ -1,8 +1,12 @@
+import { useState, useEffect } from 'react';
 import type { Attack, MatchState, SpeedType } from '../engine/types';
 import { SPEEDS, JOUST_ATTACK_LIST } from '../engine/attacks';
 import { computeEffectiveStats, canShift, resolveCounters } from '../engine/calculator';
 import { StanceTag, Scoreboard } from './helpers';
 import { AttackCard } from './AttackSelect';
+
+// Reveal phases: player shown → opponent flips → counters + actions appear
+type RevealPhase = 'player' | 'opponent' | 'complete';
 
 export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAttack, onResolve }: {
   match: MatchState;
@@ -12,6 +16,14 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
   aiAttack: Attack;
   onResolve: (shiftAttack?: Attack) => void;
 }) {
+  const [phase, setPhase] = useState<RevealPhase>('player');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('opponent'), 800);
+    const t2 = setTimeout(() => setPhase('complete'), 1600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
   const speedData = SPEEDS[playerSpeed];
   const sta = match.player1.currentStamina;
   const staAfterSpeed = Math.max(0, sta + speedData.deltaStamina);
@@ -23,6 +35,8 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
   const crossStanceCost = 12;
 
   const counters = resolveCounters(playerAttack, aiAttack);
+  const opponentRevealed = phase === 'opponent' || phase === 'complete';
+  const actionsReady = phase === 'complete';
 
   return (
     <div className="screen">
@@ -38,69 +52,86 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
         label={`Pass ${match.passNumber}`}
       />
 
-      <h2 className="text-center mb-16">Lances Revealed!</h2>
+      <h2 className="text-center mb-16">
+        {actionsReady ? 'Lances Revealed!' : 'Revealing...'}
+      </h2>
 
       <div className="reveal-sides">
-        <div className="player-side player-side--p1">
+        {/* Player side — always visible, slides in */}
+        <div className="player-side player-side--p1 reveal-card reveal-card--enter">
           <div className="player-label player-label--p1">You</div>
           <div className="reveal-attack__speed">{playerSpeed}</div>
           <div className="reveal-attack__name">{playerAttack.name}</div>
           <StanceTag stance={playerAttack.stance} />
-          {counters.player1Bonus > 0 && (
-            <div className="mt-8"><span className="counter-badge counter-badge--win">Counters!</span></div>
+          {actionsReady && counters.player1Bonus > 0 && (
+            <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--win">Counters!</span></div>
           )}
-          {counters.player1Bonus < 0 && (
-            <div className="mt-8"><span className="counter-badge counter-badge--lose">Countered!</span></div>
+          {actionsReady && counters.player1Bonus < 0 && (
+            <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--lose">Countered!</span></div>
           )}
         </div>
-        <div className="player-side player-side--p2">
-          <div className="player-label player-label--p2">Opponent</div>
-          <div className="reveal-attack__speed">{aiSpeed}</div>
-          <div className="reveal-attack__name">{aiAttack.name}</div>
-          <StanceTag stance={aiAttack.stance} />
-          {counters.player2Bonus > 0 && (
-            <div className="mt-8"><span className="counter-badge counter-badge--win">Counters!</span></div>
-          )}
-          {counters.player2Bonus < 0 && (
-            <div className="mt-8"><span className="counter-badge counter-badge--lose">Countered!</span></div>
-          )}
+
+        {/* Opponent side — flip reveal */}
+        <div className={`reveal-flip ${opponentRevealed ? 'reveal-flip--revealed' : ''}`}>
+          {/* Card back (hidden) */}
+          <div className="reveal-flip__back player-side player-side--p2">
+            <div className="player-label player-label--p2">Opponent</div>
+            <div className="reveal-attack__hidden">?</div>
+          </div>
+          {/* Card front (revealed) */}
+          <div className="reveal-flip__front player-side player-side--p2">
+            <div className="player-label player-label--p2">Opponent</div>
+            <div className="reveal-attack__speed">{aiSpeed}</div>
+            <div className="reveal-attack__name">{aiAttack.name}</div>
+            <StanceTag stance={aiAttack.stance} />
+            {actionsReady && counters.player2Bonus > 0 && (
+              <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--win">Counters!</span></div>
+            )}
+            {actionsReady && counters.player2Bonus < 0 && (
+              <div className="mt-8 reveal-counter-enter"><span className="counter-badge counter-badge--lose">Countered!</span></div>
+            )}
+          </div>
         </div>
       </div>
 
-      {playerCanShift ? (
-        <div className="shift-section">
-          <h3>Mid-Run Shift Available!</h3>
-          <p className="shift-info">
-            Your Control ({preStats.control.toFixed(0)}) meets the {playerSpeed} threshold ({speedData.shiftThreshold}).
-            You may switch to a different attack. Same-stance costs {sameStanceCost} STA, cross-stance costs {crossStanceCost} STA.
-          </p>
-          <div className="attack-grid">
-            {shiftOptions.map(atk => (
-              <AttackCard
-                key={atk.id}
-                attack={atk}
-                onClick={() => onResolve(atk)}
-              />
-            ))}
-          </div>
-          <div className="text-center mt-16">
-            <button className="btn btn--primary btn--large" onClick={() => onResolve()}>
-              Keep {playerAttack.name}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="text-center mt-16">
-          {staAfterSpeed < 10 ? (
-            <p className="shift-info mb-8">No shift available (stamina too low)</p>
-          ) : preStats.control < speedData.shiftThreshold ? (
-            <p className="shift-info mb-8">
-              No shift available (Control {preStats.control.toFixed(0)} &lt; threshold {speedData.shiftThreshold})
-            </p>
-          ) : null}
-          <button className="btn btn--primary btn--large" onClick={() => onResolve()}>
-            Resolve Pass
-          </button>
+      {actionsReady && (
+        <div className="reveal-actions-enter">
+          {playerCanShift ? (
+            <div className="shift-section">
+              <h3>Mid-Run Shift Available!</h3>
+              <p className="shift-info">
+                Your Control ({preStats.control.toFixed(0)}) meets the {playerSpeed} threshold ({speedData.shiftThreshold}).
+                You may switch to a different attack. Same-stance costs {sameStanceCost} STA, cross-stance costs {crossStanceCost} STA.
+              </p>
+              <div className="attack-grid">
+                {shiftOptions.map(atk => (
+                  <AttackCard
+                    key={atk.id}
+                    attack={atk}
+                    onClick={() => onResolve(atk)}
+                  />
+                ))}
+              </div>
+              <div className="text-center mt-16">
+                <button className="btn btn--primary btn--large" onClick={() => onResolve()}>
+                  Keep {playerAttack.name}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center mt-16">
+              {staAfterSpeed < 10 ? (
+                <p className="shift-info mb-8">No shift available (stamina too low)</p>
+              ) : preStats.control < speedData.shiftThreshold ? (
+                <p className="shift-info mb-8">
+                  No shift available (Control {preStats.control.toFixed(0)} &lt; threshold {speedData.shiftThreshold})
+                </p>
+              ) : null}
+              <button className="btn btn--primary btn--large" onClick={() => onResolve()}>
+                Resolve Pass
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

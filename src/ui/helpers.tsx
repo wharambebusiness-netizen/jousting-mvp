@@ -19,7 +19,17 @@ export const STAT_ABBR: Record<string, string> = {
   momentum: 'MOM', control: 'CTL', guard: 'GRD', initiative: 'INIT', stamina: 'STA',
 };
 
-const STAT_TIPS: Record<string, string> = {
+/** Brief stat tooltips keyed by full stat name — shared across components */
+export const STAT_TIPS: Record<string, string> = {
+  momentum: 'Momentum — raw hitting power. Drives Impact Score.',
+  control: 'Control — precision. Drives Accuracy and shift eligibility.',
+  guard: 'Guard — defense. Reduces opponent Impact Score.',
+  initiative: 'Initiative — speed advantage. Adds to Accuracy, decides shift priority.',
+  stamina: 'Stamina — endurance. Below 40, Momentum and Control are reduced.',
+};
+
+/** Detailed stat tooltips keyed by abbreviation — used by StatBar */
+const STAT_TIPS_DETAIL: Record<string, string> = {
   mom: 'Momentum — Attack speed and power. Determines how much damage you deal. High Momentum lets you hit first, but leaves you more vulnerable to counters.',
   ctl: 'Control — Defense and precision. Determines your attack accuracy and when you can shift attacks mid-speed. High Control keeps you resilient.',
   grd: 'Guard — Armor strength. Reduces damage from opponent attacks. The only stat that doesn\'t get reduced by fatigue—your armor stays effective.',
@@ -74,7 +84,7 @@ export function StatBar({ label, value, max, type }: {
   type: 'mom' | 'ctl' | 'grd' | 'init' | 'sta';
 }) {
   const pct = Math.min(100, (value / max) * 100);
-  const tip = STAT_TIPS[type];
+  const tip = STAT_TIPS_DETAIL[type];
   const fullLabel = `${label}: ${tip}`;
   return (
     <div className={`stat-bar stat-bar--${type}`}>

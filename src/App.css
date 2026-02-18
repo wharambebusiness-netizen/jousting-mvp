@@ -127,6 +127,66 @@
 .reveal-attack__name { font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; font-weight: 700; margin: 6px 0 4px; }
 .reveal-attack__speed { font-size: 0.85rem; color: var(--ink-light); margin-bottom: 4px; }
 
+/* Reveal hidden state (opponent "?" card back) */
+.reveal-attack__hidden {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.5rem; font-weight: 700; color: var(--ink-faint);
+  margin: 12px 0; line-height: 1; user-select: none;
+}
+
+/* Player card entrance animation */
+.reveal-card--enter { animation: revealSlideIn 0.4s ease-out; }
+@keyframes revealSlideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Opponent card flip container */
+.reveal-flip {
+  perspective: 600px;
+  position: relative;
+  min-height: 120px;
+}
+.reveal-flip__back,
+.reveal-flip__front {
+  backface-visibility: hidden;
+  transition: transform 0.6s ease;
+}
+.reveal-flip__back {
+  transform: rotateY(0deg);
+}
+.reveal-flip__front {
+  position: absolute; inset: 0;
+  transform: rotateY(180deg);
+}
+/* Flipped state */
+.reveal-flip--revealed .reveal-flip__back {
+  transform: rotateY(-180deg);
+}
+.reveal-flip--revealed .reveal-flip__front {
+  transform: rotateY(0deg);
+}
+
+/* Counter badge entrance */
+.reveal-counter-enter { animation: revealFadeIn 0.3s ease-out; }
+
+/* Actions section entrance */
+.reveal-actions-enter { animation: revealFadeIn 0.4s ease-out; }
+
+@keyframes revealFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Reduced motion: disable reveal animations */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-card--enter,
+  .reveal-counter-enter,
+  .reveal-actions-enter { animation: none; }
+  .reveal-flip__back,
+  .reveal-flip__front { transition: none; }
+}
+
 /* Reveal-sides: player attack cells used in PassResult + MeleeResult */
 .reveal-sides__cell { text-align: center; }
 .reveal-sides__attack-name { font-weight: 700; }
@@ -2288,11 +2348,11 @@
 }
 
 .counter-card__label--beats {
-  color: #2ECC71; /* Green for "beats" */
+  color: var(--counter-win-border);
 }
 
 .counter-card__label--weak {
-  color: #E74C3C; /* Red for "weak to" */
+  color: var(--counter-lose-border);
 }
 
 .counter-card__list {
