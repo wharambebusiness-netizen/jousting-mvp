@@ -405,7 +405,8 @@ document.body.addEventListener('htmx:afterRequest', function (evt) {
 // ── Project File Tree ──────────────────────────────────────────
 
 /**
- * Load a tree node's children via fetch (called on <details> toggle).
+ * Load a tree node's children via fetch (called on <details> ontoggle).
+ * ontoggle fires AFTER the browser toggles open state, so details.open is reliable.
  */
 function loadTreeNode(details) {
   // Only load on open, and only if not already loaded

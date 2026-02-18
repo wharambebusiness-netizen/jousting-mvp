@@ -42,8 +42,8 @@ function renderFileEntry(entry, _root) {
   if (entry.type === 'dir') {
     const ePath = escapeHtml(entry.path);
     const countLabel = entry.children === 1 ? '1 item' : `${entry.children} items`;
-    return `<details class="tree-dir" data-path="${ePath}">
-      <summary class="tree-summary tree-summary--dir" onclick="loadTreeNode(this.parentElement)">
+    return `<details class="tree-dir" data-path="${ePath}" ontoggle="loadTreeNode(this)">
+      <summary class="tree-summary tree-summary--dir">
         <span class="tree-icon tree-icon--dir">📁</span>
         <span class="tree-name">${escapeHtml(entry.name)}/</span>
         <span class="tree-meta">${countLabel}</span>
