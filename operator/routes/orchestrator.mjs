@@ -71,18 +71,10 @@ export function createOrchestratorRoutes(ctx) {
     // Placeholder: in M6, this will actually spawn the orchestrator
     const { mission, dryRun } = req.body || {};
 
-    orchestratorStatus = {
-      running: true,
-      startedAt: new Date().toISOString(),
-      round: 0,
-      agents: [],
+    // Emit event — the event listener (line 32) handles state update
+    ctx.events.emit('orchestrator:started', {
       mission: mission || null,
       dryRun: dryRun || false,
-    };
-
-    ctx.events.emit('orchestrator:started', {
-      mission,
-      dryRun,
     });
 
     res.status(202).json({
@@ -98,8 +90,7 @@ export function createOrchestratorRoutes(ctx) {
       return res.status(409).json({ error: 'Orchestrator is not running' });
     }
 
-    orchestratorStatus.running = false;
-
+    // Emit event — the event listener (line 53) handles state update
     ctx.events.emit('orchestrator:stopped', {});
 
     res.json({

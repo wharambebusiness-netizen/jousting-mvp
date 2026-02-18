@@ -104,24 +104,38 @@ export function createApp(options = {}) {
     if (shutdownCalled) return;
     shutdownCalled = true;
 
+    // Clean up EventBus listeners
+    if (wss.cleanup) wss.cleanup();
+
     // Close WebSocket connections
     for (const client of wss.clients) {
       client.close(1001, 'Server shutting down');
     }
 
     // Close HTTP server
-    server.close(() => {
-      process.exit(0);
-    });
-
-    // Force exit after 5s
-    setTimeout(() => process.exit(1), 5000).unref();
+    server.close();
   }
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  // Only register signal handlers when running as CLI (not in tests)
+  if (options._registerSignalHandlers) {
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+  }
 
-  return { app, server, events, wss };
+  /**
+   * Clean teardown for tests — closes server, WS, removes listeners.
+   */
+  function close() {
+    return new Promise((resolve) => {
+      // shutdown() handles WS cleanup + client close + server.close()
+      shutdown();
+      // Wait for server 'close' event or force after 2s
+      server.on('close', resolve);
+      setTimeout(resolve, 2000).unref();
+    });
+  }
+
+  return { app, server, events, wss, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
@@ -169,7 +183,7 @@ if (isMain) {
   const args = parseCliArgs();
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 
-  const { server } = createApp({ operatorDir });
+  const { server } = createApp({ operatorDir, _registerSignalHandlers: true });
 
   server.listen(args.port, args.host, () => {
     console.log(`Operator API server listening on http://${args.host}:${args.port}`);

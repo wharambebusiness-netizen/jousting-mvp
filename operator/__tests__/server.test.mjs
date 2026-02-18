@@ -1,7 +1,8 @@
 // Server tests (M4)
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import WebSocket from 'ws';
 import { createApp } from '../server.mjs';
 import {
   initRegistry, loadRegistry, saveRegistry,
@@ -93,33 +94,25 @@ function seedRegistry() {
 
 // ── Server Test Helpers ─────────────────────────────────────
 
-let server, baseUrl, events;
+let appInstance, baseUrl, events;
 
 function startServer() {
   events = new EventBus();
-  const result = createApp({ operatorDir: TEST_DIR, events });
+  appInstance = createApp({ operatorDir: TEST_DIR, events });
   return new Promise((resolve) => {
-    result.server.listen(0, '127.0.0.1', () => {
-      const port = result.server.address().port;
-      server = result.server;
+    appInstance.server.listen(0, '127.0.0.1', () => {
+      const port = appInstance.server.address().port;
       baseUrl = `http://127.0.0.1:${port}`;
-      resolve({ server: result.server, port, wss: result.wss });
+      resolve({ port });
     });
   });
 }
 
-function stopServer() {
-  return new Promise((resolve) => {
-    if (server) {
-      // Close all WebSocket connections first
-      for (const client of server._wss?.clients || []) {
-        client.close();
-      }
-      server.close(() => resolve());
-    } else {
-      resolve();
-    }
-  });
+async function stopServer() {
+  if (appInstance) {
+    await appInstance.close();
+    appInstance = null;
+  }
 }
 
 async function api(path, options = {}) {
@@ -204,6 +197,21 @@ describe('Server — Chain Endpoints', () => {
     expect(ids1.filter(id => ids2.includes(id))).toEqual([]);
   });
 
+  it('GET /api/chains handles negative/zero limit safely', async () => {
+    const { body: neg } = await api('/api/chains?limit=-1');
+    expect(neg.limit).toBe(1);
+    expect(neg.chains.length).toBe(1);
+
+    const { body: zero } = await api('/api/chains?limit=0');
+    expect(zero.limit).toBeGreaterThanOrEqual(1);
+  });
+
+  it('GET /api/chains handles offset beyond total', async () => {
+    const { body } = await api('/api/chains?offset=9999');
+    expect(body.chains.length).toBe(0);
+    expect(body.total).toBe(4);
+  });
+
   it('GET /api/chains/:id returns chain detail', async () => {
     const { status, body } = await api(`/api/chains/${chains.c1.id}`);
     expect(status).toBe(200);
@@ -243,6 +251,23 @@ describe('Server — Chain Endpoints', () => {
     expect(body.error).toContain('task is required');
   });
 
+  it('POST /api/chains rejects invalid model', async () => {
+    const { status, body } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'test', model: 'gpt-4' }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('model must be one of');
+  });
+
+  it('POST /api/chains rejects negative budget', async () => {
+    const { status } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'test', maxBudgetUsd: -5 }),
+    });
+    expect(status).toBe(400);
+  });
+
   it('POST /api/chains/:id/abort aborts running chain', async () => {
     const { status, body } = await api(`/api/chains/${chains.c2.id}/abort`, {
       method: 'POST',
@@ -269,6 +294,13 @@ describe('Server — Chain Endpoints', () => {
     // Verify it's gone
     const { status: getStatus } = await api(`/api/chains/${chains.c3.id}`);
     expect(getStatus).toBe(404);
+  });
+
+  it('DELETE /api/chains/:id returns 404 for unknown', async () => {
+    const { status } = await api('/api/chains/nonexistent-id', {
+      method: 'DELETE',
+    });
+    expect(status).toBe(404);
   });
 
   it('DELETE /api/chains/:id rejects running chain', async () => {
@@ -308,6 +340,16 @@ describe('Server — Session Endpoints', () => {
 
   it('GET /api/chains/:id/sessions/:idx returns 404 for bad index', async () => {
     const { status } = await api(`/api/chains/${chains.c1.id}/sessions/99`);
+    expect(status).toBe(404);
+  });
+
+  it('GET /api/chains/:id/sessions/:idx returns 404 for negative index', async () => {
+    const { status } = await api(`/api/chains/${chains.c1.id}/sessions/-1`);
+    expect(status).toBe(404);
+  });
+
+  it('GET /api/chains/:id/sessions/:idx returns 404 for non-numeric', async () => {
+    const { status } = await api(`/api/chains/${chains.c1.id}/sessions/abc`);
     expect(status).toBe(404);
   });
 
@@ -417,6 +459,16 @@ describe('Server — Orchestrator Endpoints', () => {
     expect(status).toBe(409);
   });
 
+  it('orchestrator status updates via events', async () => {
+    // Emit round:start and agent:start events
+    events.emit('round:start', { round: 3 });
+    events.emit('agent:start', { agentId: 'engine-dev' });
+
+    const { body } = await api('/api/orchestrator/status');
+    expect(body.round).toBe(3);
+    expect(body.agents).toContain('engine-dev');
+  });
+
   it('POST /api/orchestrator/stop stops orchestrator', async () => {
     const { status, body } = await api('/api/orchestrator/stop', {
       method: 'POST',
@@ -523,5 +575,153 @@ describe('WebSocket — Pattern Matching', () => {
     expect(matchesAnyPattern('chain:started', patterns)).toBe(true);
     expect(matchesAnyPattern('session:output', patterns)).toBe(true);
     expect(matchesAnyPattern('agent:error', patterns)).toBe(false);
+  });
+});
+
+// ── WebSocket Integration Tests ─────────────────────────────
+
+describe('WebSocket — Integration', () => {
+  let wsUrl;
+
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    const { port } = await startServer();
+    wsUrl = `ws://127.0.0.1:${port}/ws`;
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  // Connect WS with message queue to prevent race conditions.
+  // Messages received before nextMessage() is called are buffered.
+  function connectWs(url) {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(url || wsUrl);
+      const msgQueue = [];
+      const waitQueue = [];
+
+      ws.on('message', (data) => {
+        const msg = JSON.parse(data.toString());
+        if (waitQueue.length > 0) {
+          waitQueue.shift()(msg);
+        } else {
+          msgQueue.push(msg);
+        }
+      });
+
+      ws.nextMessage = (timeout = 2000) => {
+        if (msgQueue.length > 0) {
+          return Promise.resolve(msgQueue.shift());
+        }
+        return new Promise((res, rej) => {
+          const timer = setTimeout(() => rej(new Error('WS message timeout')), timeout);
+          waitQueue.push((msg) => { clearTimeout(timer); res(msg); });
+        });
+      };
+
+      ws.on('open', () => resolve(ws));
+      ws.on('error', reject);
+    });
+  }
+
+  it('connects and receives welcome message', async () => {
+    const ws = await connectWs();
+    const msg = await ws.nextMessage();
+    expect(msg.type).toBe('connected');
+    expect(msg.timestamp).toBeTruthy();
+    ws.close();
+  });
+
+  it('subscribes to event patterns', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // consume welcome
+
+    ws.send(JSON.stringify({ subscribe: ['chain:*', 'agent:*'] }));
+    const msg = await ws.nextMessage();
+    expect(msg.type).toBe('subscribed');
+    expect(msg.patterns).toContain('chain:*');
+    expect(msg.patterns).toContain('agent:*');
+    ws.close();
+  });
+
+  it('unsubscribes from patterns', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // welcome
+
+    ws.send(JSON.stringify({ subscribe: ['chain:*', 'agent:*'] }));
+    await ws.nextMessage(); // subscribed
+
+    ws.send(JSON.stringify({ unsubscribe: ['agent:*'] }));
+    const msg = await ws.nextMessage();
+    expect(msg.type).toBe('subscribed');
+    expect(msg.patterns).toContain('chain:*');
+    expect(msg.patterns).not.toContain('agent:*');
+    ws.close();
+  });
+
+  it('receives bridged events matching subscription', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // welcome
+
+    ws.send(JSON.stringify({ subscribe: ['chain:*'] }));
+    await ws.nextMessage(); // subscribed
+
+    // Emit an event on the EventBus
+    events.emit('chain:started', { chainId: 'test-123', task: 'ws test' });
+
+    const msg = await ws.nextMessage();
+    expect(msg.event).toBe('chain:started');
+    expect(msg.data.chainId).toBe('test-123');
+    ws.close();
+  });
+
+  it('does not receive events not matching subscription', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // welcome
+
+    ws.send(JSON.stringify({ subscribe: ['agent:*'] }));
+    await ws.nextMessage(); // subscribed
+
+    // Emit a chain event (not subscribed)
+    events.emit('chain:started', { chainId: 'ignored' });
+
+    // Emit an agent event (subscribed)
+    events.emit('agent:complete', { agentId: 'test-agent' });
+
+    const msg = await ws.nextMessage();
+    expect(msg.event).toBe('agent:complete');
+    expect(msg.data.agentId).toBe('test-agent');
+    ws.close();
+  });
+
+  it('handles ping/pong', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // welcome
+
+    ws.send(JSON.stringify({ type: 'ping' }));
+    const msg = await ws.nextMessage();
+    expect(msg.type).toBe('pong');
+    expect(msg.timestamp).toBeTruthy();
+    ws.close();
+  });
+
+  it('handles invalid JSON gracefully', async () => {
+    const ws = await connectWs();
+    await ws.nextMessage(); // welcome
+
+    ws.send('not valid json {{{');
+    const msg = await ws.nextMessage();
+    expect(msg.type).toBe('error');
+    expect(msg.message).toContain('Invalid JSON');
+    ws.close();
+  });
+
+  it('rejects upgrade on non-/ws path', async () => {
+    const port = appInstance.server.address().port;
+    const badUrl = `ws://127.0.0.1:${port}/not-ws`;
+
+    await expect(connectWs(badUrl)).rejects.toThrow();
   });
 });

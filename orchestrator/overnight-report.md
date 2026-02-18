@@ -1,112 +1,64 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-13 01:54:06
-> Orchestrator: v17
+> Generated: 2026-02-18 00:06:26
+> Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-13 01:54:02
-- **Ended**: 2026-02-13 01:54:06
-- **Total runtime**: 0.1 minutes (0.0 hours)
-- **Rounds completed**: 0
+- **Started**: 2026-02-18 00:06:26
+- **Ended**: 2026-02-18 00:06:26
+- **Total runtime**: 0.0 minutes (0.0 hours)
+- **Rounds completed**: 1
 - **Stop reason**: all agents exhausted their task lists
-- **Mission**: orchestrator\missions\overnight.json
-- **Final test status**: ALL PASSING (8 tests)
+- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771373183999\coord-mission.json
+- **Final test status**: ALL PASSING (1123 tests)
 
 ## Agent Results
 
 | Agent | Type | Role | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
 |-------|------|------|-------------|---------------|----------|--------|----------------|
-| producer | continuous | producer | all-done | 0 | 0 | 0 | 5 |
-| balance-tuner | continuous | balance-analyst | all-done | 0 | 0 | 0 | 1 |
-| qa | continuous | qa-engineer | all-done | 0 | 0 | 0 | 2 |
-| polish | continuous | css-artist | all-done | 0 | 0 | 0 | 1 |
-| reviewer | continuous | tech-lead | all-done | 0 | 0 | 0 | 1 |
-| ui-dev | continuous | ui-dev | all-done | 0 | 0 | 0 | 1 |
-| designer | continuous | game-designer | all-done | 0 | 0 | 0 | 2 |
+| lead | feature | tech-lead | all-done | 1 | 0 | 0 | 1 |
+| dev | feature | engine-dev | all-done | 1 | 0 | 0 | 1 |
 
 ### Agent Details
 
-#### Producer (producer)
+#### Lead (lead)
 - **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/backlog.json (BL-079 status "pending"→"assigned"), orchestrator/analysis/producer-round-1.md, orchestrator/analysis/producer-round-6.md, orchestrator/analysis/producer-round-8.md, orchestrator/analysis/producer-round-10.md (NEW)
-- **Notes**: 🔴 **ORCHESTRATOR BUG CONFIRMED**: BL-079 (P1) stalled 7+ rounds. All escalation attempts failed (explicit message R6, status change R8, validator test R9). Root cause: orchestrator v17 agent activation mechanism broken (all-done agents don't monitor backlog). Session yield: 40% (2/5 tasks completed). Documented in producer-round-10.md. Recommendations for v18 provided. Producer retiring (all actionable work exhausted).
-- **Max model**: haiku
+- **Rounds active**: 1
+- **Files modified**: src/engine/types.ts
+- **Notes**: [dry-run] Mock output for round 1
 
-#### Balance Analyst (balance-tuner)
+#### Dev (dev)
 - **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/balance-tuner-round-7.md
-- **Notes**: @all: Round 7 checkpoint — no new balance tasks in backlog. All critical tier validation complete (bare → relic + mixed, 8 tier configurations documented). Balance is stable and excellent across all documented tiers. All stretch goals complete. Status: all-done (retired).
-- **Max model**: opus
-
-#### QA Engineer (qa)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: src/engine/gear-variants.test.ts, orchestrator/analysis/qa-round-6.md
-- **Notes**: @all: Stretch goal complete. Added 8 legendary/relic tier unit tests (889→897). All tests passing. Zero bugs found. Ultra-high tier combat validated at unit test level. Extends BL-065 pattern to complete tier progression coverage (bare → relic). See orchestrator/analysis/qa-round-6.md for comprehensive findings.
-- **Max model**: opus
-
-#### CSS Artist (polish)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/polish-round-12.md
-- **Notes**: |
-- **Max model**: sonnet
-
-#### Tech Lead (reviewer)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/reviewer-round-11.md
-- **Notes**: @all: **SESSION COMPLETE**. Orchestrator v17 bug CONFIRMED (agent activation broken). 908/908 tests passing (stable R1-R11). Code quality PERFECT (zero changes, zero regressions). Session yield 40% (2/5 tasks completed, 3/5 blocked by bug). All agents terminal. Bug comprehensively documented. Orchestrator v18 requirements provided. Session closed cleanly.
-- **Max model**: sonnet
-
-#### UI Developer (ui-dev)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/ui-dev-round-3.md (NEW)
-- **Notes**: @producer: BL-081 complete (confirmed in backlog.json). No new ui-dev tasks in backlog. MVP 100% complete (7/7 onboarding features). Phase 2 planning delivered (15-19h estimate, Sprint 1-3 roadmap). UI-dev status: all-done (retired until Phase 2 approval). @all: 908/908 tests passing, zero regressions R1-R3.
-- **Max model**: opus
-
-#### Game Designer (designer)
-- **Status**: all-done
-- **Rounds active**: 0
-- **Files modified**: orchestrator/analysis/designer-round-10.md (NEW, R10 checkpoint verification)
-- **Notes**: @producer: R10 checkpoint complete. MVP 100% stable (908/908 R5-R10, zero regressions). Designer all-done standby. No blocking dependencies in design scope. Ready to support Phase 2 or assist if needed.
-- **Max model**: haiku
+- **Rounds active**: 1
+- **Files modified**: src/engine/match.ts
+- **Notes**: [dry-run] Mock output for round 1
 
 ## Round-by-Round Timeline
 
 | Round | Agents | Test Result | Agent Pool | Tests | Pre-Sim | Post-Sim | Overhead | Total |
 |-------|--------|-------------|------------|-------|---------|----------|----------|-------|
-
+| 1 | dev(OK, 0m), lead(OK, 0m) | PASS (1123) | 0s | — | — | — | 0s | 0s |
 
 ## All Files Modified
-- R10 checkpoint verification)
-- orchestrator/analysis/balance-tuner-round-7.md
-- orchestrator/analysis/designer-round-10.md (NEW
-- orchestrator/analysis/polish-round-12.md
-- orchestrator/analysis/producer-round-1.md
-- orchestrator/analysis/producer-round-10.md (NEW)
-- orchestrator/analysis/producer-round-6.md
-- orchestrator/analysis/producer-round-8.md
-- orchestrator/analysis/qa-round-6.md
-- orchestrator/analysis/reviewer-round-11.md
-- orchestrator/analysis/ui-dev-round-3.md (NEW)
-- orchestrator/backlog.json (BL-079 status "pending"→"assigned")
-- src/engine/gear-variants.test.ts
+- src/engine/match.ts
+- src/engine/types.ts
 
 ## Test Trajectory
-(no test data)
+- Round 1: PASS (1123 passed)
 
 ## Round Quality (v14)
 
 | Round | Active | Idle | Util% | Files | OK | Failed |
 |-------|--------|------|-------|-------|----|--------|
-
+| 1 | 2 | 0 | 100% | 1 | 2 | 0 |
 
 ## Agent Effectiveness (v14)
 
-> No effectiveness data captured yet.
+| Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
+|-------|--------|------------|-------|-------------|-----------|----------|-------|
+| dev | 1 | 1 | 1 | 12845 | $0.0988 | 0.0m | 100% |
+| lead | 1 | 1 | 1 | 10891 | $0.0838 | 0.0m | 100% |
+
+> **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
 
 
 ## Session Continuity (v16)
@@ -118,49 +70,40 @@
 
 | Agent | Model | Avg Time | Success | Files/Rnd | Active | Skipped | Blocked | Idle% |
 |-------|-------|----------|---------|-----------|--------|---------|---------|-------|
-| producer | haiku | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| balance-tuner | sonnet | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| qa | sonnet | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| polish | haiku | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| reviewer | sonnet | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| ui-dev | sonnet | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
-| designer | haiku | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
+| lead | default | 0.0m | 100% | 1.0 | 1/1 | 0 | 0 | 0% |
+| dev | default | 0.0m | 100% | 1.0 | 1/1 | 0 | 0 | 0% |
 
 ## Backlog Velocity (v8)
 
 | Round | Pending | Completed | Notes |
 |-------|---------|-----------|-------|
-
+| 1 | 4 | 0 | |
 
 ## Cost Summary
 
-> No cost data captured. Claude CLI may not have emitted token/cost info to stderr.
-> Once cost data is available, this section will populate automatically.
+| Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
+|-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
+| lead | default | 1 | 8.4k | 2.5k | $0.0838 | $0.0838 | 0 |
+| dev | default | 1 | 9.9k | 3.0k | $0.0988 | $0.0988 | 0 |
+| **TOTAL** | | **2** | **18.3k** | **5.5k** | **$0.1826** | **$0.0913** | **0** |
 
+- **Cost per successful agent-round**: $0.0913
+- **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
+- **Note**: Costs are estimates from token counts if CLI did not report direct cost
 
 ## Model Escalation Summary
 
 | Agent | Base Model | Max Model | Final Model | Escalations |
 |-------|-----------|-----------|-------------|-------------|
-| producer | haiku | haiku | haiku | 0 |
-| balance-tuner | sonnet | opus | sonnet | 0 |
-| qa | sonnet | opus | sonnet | 0 |
-| polish | haiku | sonnet | haiku | 0 |
-| reviewer | sonnet | sonnet | sonnet | 0 |
-| ui-dev | sonnet | opus | sonnet | 0 |
-| designer | haiku | haiku | haiku | 0 |
+| lead | default | none | default | 0 |
+| dev | default | none | default | 0 |
 
 ## Decision Log Summary
 
 | Agent | Included | Skipped | Blocked | Success Rate |
 |-------|----------|---------|---------|-------------|
-| producer | 0 | 1 | 0 | — |
-| balance-tuner | 0 | 1 | 0 | — |
-| qa | 0 | 1 | 0 | — |
-| polish | 0 | 1 | 0 | — |
-| reviewer | 0 | 1 | 0 | — |
-| ui-dev | 0 | 1 | 0 | — |
-| designer | 0 | 1 | 0 | — |
+| lead | 1 | 0 | 0 | 100% |
+| dev | 1 | 0 | 0 | 100% |
 
 > Full decision log: `orchestrator/logs/round-decisions.json`
 
@@ -174,4 +117,4 @@
 2. Read analysis reports: `orchestrator/analysis/`
 3. Check git log for per-round commits: `git log --oneline`
 4. To revert to before the run: `git log --oneline` and find the pre-orchestrator commit
-5. Run tests: `npx vitest run`
+5. Run tests: `npm test`

@@ -55,8 +55,8 @@ export function createChainRoutes(ctx) {
       chains.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
       // Pagination
-      const limit = Math.min(parseInt(_req.query.limit, 10) || 50, 100);
-      const offset = parseInt(_req.query.offset, 10) || 0;
+      const limit = Math.max(1, Math.min(parseInt(_req.query.limit, 10) || 50, 100));
+      const offset = Math.max(0, parseInt(_req.query.offset, 10) || 0);
       const total = chains.length;
       const paginated = chains.slice(offset, offset + limit);
 
@@ -91,10 +91,26 @@ export function createChainRoutes(ctx) {
   // Body: { task, model?, maxTurns?, maxContinuations?, maxBudgetUsd?, projectDir? }
   router.post('/chains', (req, res) => {
     try {
-      const { task, model, maxTurns, maxContinuations, maxBudgetUsd, projectDir } = req.body;
+      const { task, model, maxTurns, maxContinuations, maxBudgetUsd, projectDir } = req.body || {};
 
       if (!task || typeof task !== 'string' || task.trim().length === 0) {
         return res.status(400).json({ error: 'task is required' });
+      }
+
+      // Validate numeric fields
+      const validModels = ['haiku', 'sonnet', 'opus'];
+      const parsedMaxTurns = Number(maxTurns) || 30;
+      const parsedMaxCont = Number(maxContinuations) || 5;
+      const parsedBudget = Number(maxBudgetUsd) ?? 5.0;
+
+      if (model && !validModels.includes(model)) {
+        return res.status(400).json({ error: `model must be one of: ${validModels.join(', ')}` });
+      }
+      if (parsedMaxTurns < 1 || parsedMaxTurns > 200) {
+        return res.status(400).json({ error: 'maxTurns must be between 1 and 200' });
+      }
+      if (parsedBudget < 0) {
+        return res.status(400).json({ error: 'maxBudgetUsd must be non-negative' });
       }
 
       const registry = loadRegistry();
@@ -102,9 +118,9 @@ export function createChainRoutes(ctx) {
         task: task.trim(),
         config: {
           model: model || 'sonnet',
-          maxTurns: maxTurns || 30,
-          maxContinuations: maxContinuations || 5,
-          maxBudgetUsd: maxBudgetUsd ?? 5.0,
+          maxTurns: parsedMaxTurns,
+          maxContinuations: Math.max(1, Math.min(parsedMaxCont, 20)),
+          maxBudgetUsd: parsedBudget || 5.0,
         },
         projectDir: projectDir || null,
       });

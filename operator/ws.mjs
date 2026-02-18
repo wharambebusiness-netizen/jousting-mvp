@@ -49,7 +49,7 @@ function matchesAnyPattern(event, patterns) {
  * Returns a function that sends at most once per interval.
  */
 function createThrottle(intervalMs) {
-  const lastSent = new Map(); // key → timestamp
+  const lastSent = new WeakMap(); // key (object) → timestamp — weak refs prevent leaking disconnected clients
 
   return function shouldSend(key) {
     const now = Date.now();
@@ -157,10 +157,12 @@ export function createWebSocketHandler({ server, events }) {
     'orchestrator:started', 'orchestrator:stopped',
     'round:start', 'round:complete',
     'agent:start', 'agent:complete', 'agent:error',
+    'agent:continuation',
   ];
 
+  const bridgeHandlers = [];
   for (const eventName of BRIDGED_EVENTS) {
-    events.on(eventName, (data) => {
+    const handler = (data) => {
       const isOutput = eventName === 'session:output';
 
       for (const client of wss.clients) {
@@ -178,8 +180,18 @@ export function createWebSocketHandler({ server, events }) {
           data,
         });
       }
-    });
+    };
+    events.on(eventName, handler);
+    bridgeHandlers.push({ eventName, handler });
   }
+
+  // Expose cleanup for shutdown/tests
+  wss.cleanup = () => {
+    for (const { eventName, handler } of bridgeHandlers) {
+      events.off(eventName, handler);
+    }
+    bridgeHandlers.length = 0;
+  };
 
   return wss;
 }
