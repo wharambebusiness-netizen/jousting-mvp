@@ -242,7 +242,34 @@ if (isMain) {
   const args = parseCliArgs();
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 
-  const { server } = createApp({ operatorDir, _registerSignalHandlers: true });
+  const appOptions = { operatorDir, _registerSignalHandlers: true };
+
+  // Combined mode: wire up chain execution via operator's runChain
+  if (args.operator) {
+    const { runChain, MODEL_MAP } = await import('./operator.mjs');
+    const { loadRegistry, saveRegistry } = await import('./registry.mjs');
+
+    appOptions.runChainFn = async (chain) => {
+      const registry = loadRegistry();
+      const modelShort = chain.config?.model || 'sonnet';
+      const config = {
+        task: chain.task,
+        model: MODEL_MAP[modelShort] || modelShort,
+        modelShort,
+        maxTurns: chain.config?.maxTurns || 30,
+        maxContinuations: chain.config?.maxContinuations || 5,
+        maxBudgetUsd: chain.config?.maxBudgetUsd || 5.0,
+        projectDir: chain.projectDir || resolve(operatorDir, '..'),
+        permissionMode: 'bypassPermissions',
+        autoPush: false,
+        notifyWebhook: '',
+        dryRun: false,
+      };
+      return runChain(config, registry, chain);
+    };
+  }
+
+  const { server } = createApp(appOptions);
 
   server.listen(args.port, args.host, () => {
     console.log(`Operator API server listening on http://${args.host}:${args.port}`);

@@ -58,8 +58,23 @@ export function createViewRoutes(ctx) {
       };
       chains.sort(sorters[sortField] || sorters.updatedAt);
 
-      chains = chains.slice(0, 50).map(getChainSummary);
-      res.type('text/html').send(renderChainTable(chains));
+      const total = chains.length;
+      const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 25));
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const offset = (page - 1) * limit;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
+      chains = chains.slice(offset, offset + limit).map(getChainSummary);
+
+      // Pagination controls (out-of-band swap into #chain-pagination)
+      const paginationHtml = total > limit ? `
+        <div id="chain-pagination" hx-swap-oob="innerHTML:#chain-pagination">
+          <span class="pagination__info">${offset + 1}–${Math.min(offset + limit, total)} of ${total}</span>
+          ${page > 1 ? `<button class="btn btn--sm btn--ghost" onclick="setPage(${page - 1})">Prev</button>` : ''}
+          ${page < totalPages ? `<button class="btn btn--sm btn--ghost" onclick="setPage(${page + 1})">Next</button>` : ''}
+        </div>` : '<div id="chain-pagination" hx-swap-oob="innerHTML:#chain-pagination"></div>';
+
+      res.type('text/html').send(renderChainTable(chains) + paginationHtml);
     } catch (err) {
       res.type('text/html').send(`<tr><td colspan="7">Error: ${escapeHtml(err.message)}</td></tr>`);
     }
@@ -142,6 +157,11 @@ export function createViewRoutes(ctx) {
             }))}'
             hx-swap="none"
             hx-confirm="Create a PR from this chain?">Create PR</button>
+        ` : ''}
+        ${chain.status !== 'running' ? `
+          <button class="btn btn--danger" hx-delete="/api/chains/${chain.id}"
+            hx-confirm="Delete this chain permanently?" hx-swap="none"
+            hx-on::after-request="window.location='/'">Delete Chain</button>
         ` : ''}
 
         <h3>Session Timeline</h3>

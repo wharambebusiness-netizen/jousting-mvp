@@ -356,6 +356,17 @@ tbody td a:hover {
   color: var(--text-secondary);
   margin-bottom: 0;
 }
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+}
+.pagination__info {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
 th.sortable {
   cursor: pointer;
   user-select: none;
@@ -426,6 +437,12 @@ th.sorted-asc::after {
 .btn--sm {
   padding: 2px var(--sp-3);
   font-size: 0.75rem;
+}
+.btn--delete {
+  opacity: 0.5;
+}
+.btn--delete:hover {
+  opacity: 1;
 }
 
 /* === 12. Chain Meta === */

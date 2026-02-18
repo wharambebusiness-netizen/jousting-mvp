@@ -228,9 +228,11 @@ export function createChainRoutes(ctx) {
         return res.status(409).json({ error: 'Cannot delete a running chain — abort it first' });
       }
 
+      const deletedId = registry.chains[idx].id;
       registry.chains.splice(idx, 1);
       saveRegistry(registry);
 
+      if (ctx.events) ctx.events.emit('chain:deleted', { chainId: deletedId });
       res.json({ deleted: true });
     } catch (err) {
       res.status(500).json({ error: err.message });

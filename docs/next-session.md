@@ -1,4 +1,4 @@
-# Next Session Instructions (S93)
+# Next Session Instructions (S94)
 
 ## PIVOT: Operator Dashboard is Now the Primary Focus
 
@@ -6,73 +6,55 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
-## Context: S92
+## Context: S93
 
-S92 completed **all P3 features** plus P4 test coverage:
+S93 completed **all P5 features** (integration & core gaps):
 
-1. **Multi-project dashboard** — Added `<select id="project-select">` to nav on all 4 pages (index, chain, orchestrator, settings). `loadProjects()` fetches `/api/projects` and populates dropdown. `onProjectChange()` saves to localStorage and reloads all HTMX panels. Global `htmx:configRequest` listener injects `?project=` param into every HTMX GET request automatically. Cost summary route now supports `?project=` filtering.
+1. **Settings → operator CLI integration** — `operator.mjs` now imports `loadSettings()` from `settings.mjs`. Removed `default:` values from `parseArgs` for the 4 settings fields so CLI flags can be distinguished from defaults. Merge priority: CLI flag > saved settings > hardcoded default. `MODEL_MAP` hoisted to module-level constant (eliminates 3 duplicate definitions).
 
-2. **Settings page** — New `operator/settings.mjs` with atomic file persistence (temp+rename), validation, and clamping. Schema: model (haiku/sonnet/opus), maxTurns (1-200), maxContinuations (1-20), maxBudgetUsd (0-100). New `operator/routes/settings.mjs` with GET/PUT endpoints. New `operator/public/settings.html` with form UI. `applySettingsDefaults()` in app.js pre-fills the quick-start form model select from saved settings.
+2. **Combined mode `--operator` wiring** — `server.mjs` now imports `runChain` and `MODEL_MAP` from `operator.mjs` when `--operator` flag is set. Creates adapter wrapper bridging `runChainFn(chain)` → `runChain(config, registry, chain)`. `operator.mjs` has `isMain` guard so `main()` only runs when executed directly, not when imported.
 
-3. **Session output viewer** — New `operator/views/terminal.mjs` with `ansiToHtml()` (16 ANSI colors + bold → HTML spans with `.ansi-*` classes) and `renderTerminalViewer()` (macOS-style terminal chrome with title bar, dots, scrollable pre). Replaces raw `<pre>` in session handoff lazy-load route.
+3. **Chain delete button** — Delete button (`btn--delete btn--sm btn--ghost`) in `chain-row.mjs` for non-running chains (uses `hx-delete` + `hx-confirm`). Delete button also on chain detail page in `views.mjs`. `chain:deleted` event emitted from DELETE handler in `chains.mjs` and added to `BRIDGED_EVENTS` in `ws.mjs` for real-time dashboard refresh.
 
-4. **Real-time chain progress** — Expanded WS subscriptions from specific events to `chain:*` wildcard. Added `chain:assumed-complete` to BRIDGED_EVENTS in ws.mjs. Reduced aggressive polling: cost-summary 5s→30s, chain-list 5s→15s, chain-detail 5s→30s. Dashboard reloads chain table + cost grid on any `chain:*` WS event (2s debounce). Chain detail page has per-chain WS listener that only reloads on events matching its chainId.
+4. **Chain pagination** — `views.mjs` chain-list now accepts `page` and `limit` query params. Uses `hx-swap-oob` to render pagination controls (`#chain-pagination`) outside `<tbody>`. Hidden `page` input added to `#chain-filters` in `index.html`. `setPage()` JS function. Page resets to 1 on sort/filter changes. Default: 25 per page.
 
-5. **P4 test coverage** — +26 new tests: settings API (4: GET defaults, PUT save, PUT clamp, PUT empty), settings page route (1), chain sort/direction (2), terminal ANSI conversion (5), terminal render (4), settings form view (1), cost-summary project filter (2), chain list sort/direction (3), chain list project filter (2), agent grid in orch-status (2).
+5. **Misc fixes** — Empty state text changed from "Start one below!" to "Start one above!". Pagination CSS styles added.
 
-**1482 tests, 24 suites, all passing.** (+26 new tests.)
+**1491 tests, 24 suites, all passing.** (+9 new tests.)
 
 ## What Changed (Files Modified)
 
 ```
-NEW:  operator/settings.mjs               Settings persistence (atomic writes, validation, clamping)
-NEW:  operator/routes/settings.mjs         GET/PUT /api/settings routes
-NEW:  operator/views/terminal.mjs          ANSI-to-HTML converter + terminal viewer renderer
-NEW:  operator/public/settings.html        Settings page with form UI
-EDIT: operator/server.mjs                  Mount settings routes, settings page route, initSettings()
-EDIT: operator/routes/views.mjs            Project filter on cost-summary, terminal viewer for handoffs,
-                                            settings-form view route
-EDIT: operator/ws.mjs                      Added chain:assumed-complete to BRIDGED_EVENTS
-EDIT: operator/public/index.html           Project selector in nav, Settings link, reduced polling,
-                                            cost-summary-grid ID with reload trigger
-EDIT: operator/public/chain.html           Project selector, Settings link, reduced polling,
-                                            WS-driven per-chain real-time reload
-EDIT: operator/public/orchestrator.html    Project selector, Settings link
-EDIT: operator/public/app.js               Project filter system, settings defaults, expanded WS to chain:*,
-                                            dashboard real-time reload with 2s debounce
-EDIT: operator/public/style.css            .nav__project-select, .settings-grid, .terminal-viewer,
-                                            .terminal__title, .terminal__body, ANSI color classes
-EDIT: operator/__tests__/server.test.mjs   +7 tests (settings API, settings page, chain sort)
-EDIT: operator/__tests__/views.test.mjs    +19 tests (terminal, settings form, cost filter, sort, agent grid)
-EDIT: CLAUDE.md                            Updated test counts, operator architecture section
-EDIT: docs/session-history.md              S92 entry
+EDIT: operator/operator.mjs          Import loadSettings/initSettings, remove parseArgs defaults,
+                                      merge CLI > settings > hardcoded, MODEL_MAP to module level,
+                                      export runChain/MODEL_MAP/OPERATOR_DIR, isMain guard
+EDIT: operator/server.mjs            Combined mode imports runChain, creates adapter, passes runChainFn
+EDIT: operator/routes/chains.mjs     chain:deleted event emission from DELETE handler
+EDIT: operator/routes/views.mjs      Pagination (page/limit params, hx-swap-oob), delete button on
+                                      chain detail page
+EDIT: operator/views/chain-row.mjs   Delete button for non-running chains, empty state text fix
+EDIT: operator/ws.mjs                chain:deleted added to BRIDGED_EVENTS
+EDIT: operator/public/index.html     Pagination container, page hidden input, setPage(), page reset
+EDIT: operator/public/style.css      .pagination, .pagination__info, .btn--delete styles
+EDIT: operator/__tests__/server.test.mjs  +1 test (delete event emission)
+EDIT: operator/__tests__/views.test.mjs   +8 tests (delete buttons, pagination)
+EDIT: CLAUDE.md                      Updated test counts
+EDIT: docs/session-history.md        S93 entry
 ```
 
 ## Remaining Operator Improvement Roadmap
 
-### Priority 5: Integration & Core Gaps (HIGH) — NEXT UP
+### Priority 6: UI Feature Gaps (MEDIUM) — NEXT UP
 
-1. **Settings → operator CLI integration** — `operator.mjs` hardcodes defaults (MAX_CONTINUATIONS=5, MAX_TURNS=30, MAX_BUDGET=5.0) and never imports `loadSettings()`. Saved settings only affect the UI form pre-fill. Fix: import settings.mjs in operator.mjs and use saved values as fallback defaults when no CLI flags provided.
+1. **Git commit UI** — POST /api/git/commit exists but git-status fragment only shows Push button. Add commit message input + Commit button when dirty.
 
-2. **Combined mode `--operator` wiring** — `server.mjs` parses `--operator` flag but never starts the operator daemon or provides `runChainFn`. POST /api/chains creates registry entries but can't execute chains. Fix: import operator chain runner and wire it up.
+2. **Chain text search** — No search by task text. Add `?q=` param to chain-list view and search input in filters.
 
-3. **Chain delete button** — DELETE /api/chains/:id exists but no button in chain table or chain detail page. Fix: add delete button (with hx-confirm) for non-running chains in chain-row.mjs and/or chain detail view.
+3. **Chain detail branch display** — Chain meta section omits `chain.config.branch` even though it's a first-class field. Add it.
 
-4. **Chain pagination** — API supports limit/offset but views.mjs hardcodes `.slice(0, 50)` with no UI controls. Fix: add prev/next pagination below chain table.
+4. **Form submission loading states** — No spinner or disabled state on Start/Launch buttons during HTMX requests.
 
-### Priority 6: UI Feature Gaps (MEDIUM)
-
-5. **Git commit UI** — POST /api/git/commit exists but git-status fragment only shows Push button. Add commit message input + Commit button when dirty.
-
-6. **Chain text search** — No search by task text. Add `?q=` param to chain-list view and search input in filters.
-
-7. **Chain detail branch display** — Chain meta section omits `chain.config.branch` even though it's a first-class field. Add it.
-
-8. **Empty state text fix** — chain-row.mjs says "Start one below!" but the form is above the table.
-
-9. **Form submission loading states** — No spinner or disabled state on Start/Launch buttons during HTMX requests.
-
-10. **Auto-push server-side persistence** — Currently localStorage only. Move to settings.mjs so it persists across browsers and CLI can respect it.
+5. **Auto-push server-side persistence** — Currently localStorage only. Move to settings.mjs so it persists across browsers and CLI can respect it.
 
 ### Priority 7: Polish & Enhancements (LOW)
 
@@ -91,21 +73,19 @@ EDIT: docs/session-history.md              S92 entry
 
 ## Key Architecture Notes
 
-- **app.js** now has 6 systems: (1) progress bar, (2) toast + global API toast listener, (3) branch auto-gen with manual override, (4) auto-push WS listener, (5) project filter with htmx:configRequest injection, (6) settings defaults pre-fill.
-- **Project filter** flows: nav select → localStorage → htmx:configRequest listener injects `project` param into all GET requests → server routes filter by project.
-- **Settings** flows: settings.html form → PUT /api/settings → settings.mjs validates+clamps → atomic write. Read by views.mjs settings-form route and app.js applySettingsDefaults().
-- **Terminal viewer** flows: session-handoff view route → reads handoff file → ansiToHtml() converts ANSI escapes → renderTerminalViewer() wraps in terminal chrome → served as HTML fragment.
-- **Real-time updates** flow: EventBus emits chain:* events → ws.mjs bridges to WebSocket clients → app.js receives → debounced htmx.trigger() on chain-table + cost-summary-grid. Chain detail page has its own WS listener that filters by chainId.
-- **Settings NOT integrated with operator CLI** — this is the #1 gap for S93.
+- **Settings CLI integration**: `parseCliArgs()` in `operator.mjs` calls `initSettings({ operatorDir: OPERATOR_DIR })` then `loadSettings()`. For each of the 4 settings fields, if the CLI flag was provided (not `undefined`), uses CLI value; otherwise falls back to saved setting. The `MODEL_MAP` is now a module-level constant shared by `parseCliArgs()`, the resume path, and the export for combined mode.
+- **Combined mode**: `server.mjs` dynamically imports `operator.mjs` only when `--operator` flag is set. The adapter wrapper translates from `runChainFn(chain)` signature (used by `chains.mjs`) to `runChain(config, registry, chain)` signature. The adapter reads `chain.config.*` fields to build the config object.
+- **Pagination**: The `<tbody>` can only contain `<tr>` elements, so pagination controls are rendered via `hx-swap-oob="innerHTML:#chain-pagination"` which swaps content into a `<div id="chain-pagination">` below the table. The `page` value is stored in a hidden input inside `#chain-filters` so it's included in `hx-include`.
+- **Delete flow**: Delete button uses `hx-delete` with `hx-confirm` for native browser confirmation. In chain-row (table), triggers `reload` on `#chain-table`. In chain detail, navigates to `/` via `hx-on::after-request`.
 
 ## Codebase Stats
 
 ```
-Operator: 16 source files, ~3,400 lines code + ~2,700 lines tests
+Operator: 16 source files, ~3,500 lines code + ~2,800 lines tests
 Routes:   24 API endpoints, 9 view fragment routes, 3 page routes, 1 WebSocket
-Events:   16 bridged WS events, pattern-based subscriptions
-Tests:    226 operator tests (server 85, views 77, errors 43, registry 21)
-Total:    1482 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
+Events:   17 bridged WS events (added chain:deleted), pattern-based subscriptions
+Tests:    235 operator tests (server 86, views 85, errors 43, registry 21)
+Total:    1491 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
 ```
 
 ## Running the Operator
@@ -113,7 +93,7 @@ Total:    1482 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
 ```bash
 node operator/server.mjs                    # API server on http://127.0.0.1:3100
 node operator/server.mjs --port 8080        # Custom port
-node operator/server.mjs --operator         # Combined mode (not yet wired — P5 task)
+node operator/server.mjs --operator         # Combined mode: API + chain execution
 ```
 
 Dashboard at http://127.0.0.1:3100, Orchestrator at /orchestrator, Settings at /settings.
@@ -124,7 +104,7 @@ Dashboard at http://127.0.0.1:3100, Orchestrator at /orchestrator, Settings at /
 - Do all edits yourself in the main context
 - Full autonomy — make decisions, don't ask for approval
 - Full permissions granted — no pausing for confirmations
-- Run `npm test` to verify after changes (1482 tests, 24 suites)
+- Run `npm test` to verify after changes (1491 tests, 24 suites)
 
 ## Reference
 

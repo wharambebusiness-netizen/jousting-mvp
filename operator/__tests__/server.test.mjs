@@ -769,6 +769,35 @@ describe('Server — Events Integration', () => {
   });
 });
 
+describe('Server — Delete Event (P5)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('DELETE /api/chains/:id emits chain:deleted event', async () => {
+    // Create and abort a chain (DELETE rejects running chains)
+    const { body: created } = await api('/api/chains', {
+      method: 'POST',
+      body: JSON.stringify({ task: 'delete event test' }),
+    });
+    await api(`/api/chains/${created.id}/abort`, { method: 'POST' });
+
+    let emitted = null;
+    events.on('chain:deleted', (data) => { emitted = data; });
+
+    const { status } = await api(`/api/chains/${created.id}`, { method: 'DELETE' });
+    expect(status).toBe(200);
+    expect(emitted).toBeTruthy();
+    expect(emitted.chainId).toBe(created.id);
+  });
+});
+
 // ── Chain Branch & Model Tests (S91) ────────────────────────
 
 describe('Server — Chain Branch Field (S91)', () => {

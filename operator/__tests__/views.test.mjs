@@ -773,6 +773,117 @@ describe('View Routes — Chain List Project Filter (P4)', () => {
 
 // ── Agent Grid in Orch Status Tests (P4) ────────────────────
 
+// ── Delete Button Tests (P5) ────────────────────────────────
+
+describe('Chain Row — Delete Button (P5)', () => {
+  const mockChain = {
+    id: 'del-123',
+    task: 'Delete test',
+    status: 'complete',
+    sessions: 1,
+    totalCostUsd: 0.10,
+    config: { model: 'sonnet' },
+    updatedAt: new Date().toISOString(),
+  };
+
+  it('shows delete button for non-running chains', () => {
+    const html = renderChainRow(mockChain);
+    expect(html).toContain('Del');
+    expect(html).toContain('hx-delete="/api/chains/del-123"');
+    expect(html).toContain('hx-confirm');
+  });
+
+  it('hides delete button for running chains', () => {
+    const html = renderChainRow({ ...mockChain, status: 'running' });
+    expect(html).not.toContain('hx-delete');
+  });
+
+  it('shows delete button for failed chains alongside restart', () => {
+    const html = renderChainRow({ ...mockChain, status: 'failed' });
+    expect(html).toContain('Restart');
+    expect(html).toContain('Del');
+  });
+});
+
+// ── Chain Detail Delete Button (P5) ──────────────────────────
+
+describe('View Routes — Chain Detail Delete Button (P5)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('shows delete button on chain detail for complete chain', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'del detail test', config: { model: 'sonnet' } });
+    updateChainStatus(chain, 'complete');
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).toContain('Delete Chain');
+    expect(res.text).toContain(`hx-delete="/api/chains/${chain.id}"`);
+  });
+
+  it('hides delete button on chain detail for running chain', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'running no delete', config: { model: 'sonnet' } });
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).not.toContain('Delete Chain');
+  });
+});
+
+// ── Pagination Tests (P5) ───────────────────────────────────
+
+describe('View Routes — Chain List Pagination (P5)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('paginates with page and limit params', async () => {
+    const reg = loadRegistry();
+    for (let i = 0; i < 5; i++) {
+      createChain(reg, { task: `Pagination task ${i}`, config: { model: 'sonnet' } });
+    }
+    saveRegistry(reg);
+
+    const page1 = await get('/views/chain-list?limit=2&page=1');
+    expect(page1.text).toContain('Pagination task');
+    expect(page1.text).toContain('1–2 of 5');
+    expect(page1.text).toContain('Next');
+    expect(page1.text).not.toContain('Prev');
+
+    const page2 = await get('/views/chain-list?limit=2&page=2');
+    expect(page2.text).toContain('3–4 of 5');
+    expect(page2.text).toContain('Prev');
+    expect(page2.text).toContain('Next');
+
+    const page3 = await get('/views/chain-list?limit=2&page=3');
+    expect(page3.text).toContain('5–5 of 5');
+    expect(page3.text).toContain('Prev');
+    expect(page3.text).not.toContain('Next');
+  });
+
+  it('shows no pagination when under limit', async () => {
+    const reg = loadRegistry();
+    createChain(reg, { task: 'Solo chain', config: { model: 'sonnet' } });
+    saveRegistry(reg);
+
+    const res = await get('/views/chain-list?limit=25&page=1');
+    expect(res.text).toContain('Solo chain');
+    expect(res.text).not.toContain('pagination__info');
+  });
+
+  it('defaults to page 1 with limit 25', async () => {
+    const reg = loadRegistry();
+    for (let i = 0; i < 30; i++) {
+      createChain(reg, { task: `Chain ${i}`, config: { model: 'sonnet' } });
+    }
+    saveRegistry(reg);
+
+    const res = await get('/views/chain-list');
+    expect(res.text).toContain('1–25 of 30');
+  });
+});
+
 describe('View Routes — Agent Grid in Orch Status (P4)', () => {
   beforeEach(setupApp);
   afterEach(teardownApp);

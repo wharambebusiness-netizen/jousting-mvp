@@ -91,7 +91,7 @@
       <div class="chain-table-header">
         <p class="section__title">Chains</p>
         <div id="chain-filters" class="chain-filters">
-          <select name="status" onchange="htmx.trigger(document.getElementById('chain-table'),'reload')">
+          <select name="status" onchange="document.getElementById('page-field').value='1'; htmx.trigger(document.getElementById('chain-table'),'reload')">
             <option value="">All Statuses</option>
             <option value="running">Running</option>
             <option value="complete">Complete</option>
@@ -100,6 +100,7 @@
           </select>
           <input type="hidden" name="sort" value="updatedAt" id="sort-field">
           <input type="hidden" name="dir" value="desc" id="sort-dir">
+          <input type="hidden" name="page" value="1" id="page-field">
         </div>
       </div>
       <table id="chain-table" role="grid">
@@ -123,12 +124,18 @@
           <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
         </tbody>
       </table>
+      <div id="chain-pagination" class="pagination"></div>
     </div>
   </main>
 
   <div id="toast-container"></div>
   <script src="/app.js"></script>
   <script>
+    function setPage(p) {
+      document.getElementById('page-field').value = p;
+      htmx.trigger(document.getElementById('chain-table'), 'reload');
+    }
+
     // Sortable column headers
     document.querySelectorAll('.sortable').forEach(function(th) {
       th.addEventListener('click', function() {
@@ -142,6 +149,8 @@
           sortInput.value = field;
           dirInput.value = 'desc';
         }
+        // Reset to page 1 on sort change
+        document.getElementById('page-field').value = '1';
         // Update visual indicator
         document.querySelectorAll('.sortable').forEach(function(h) { h.classList.remove('sorted-asc', 'sorted-desc'); });
         th.classList.add(dirInput.value === 'asc' ? 'sorted-asc' : 'sorted-desc');

@@ -152,7 +152,7 @@ export function createWebSocketHandler({ server, events }) {
   // All event types to bridge
   const BRIDGED_EVENTS = [
     'chain:started', 'chain:session-complete', 'chain:complete',
-    'chain:error', 'chain:aborted', 'chain:assumed-complete',
+    'chain:error', 'chain:aborted', 'chain:assumed-complete', 'chain:deleted',
     'session:output',
     'orchestrator:started', 'orchestrator:stopped',
     'round:start', 'round:complete',

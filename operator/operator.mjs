@@ -43,6 +43,8 @@ import {
   generateSyntheticHandoff, validateHandoff, sleep,
 } from './errors.mjs';
 
+import { initSettings, loadSettings } from './settings.mjs';
+
 // ── Constants ───────────────────────────────────────────────
 
 const OPERATOR_DIR = resolve(import.meta.dirname || new URL('.', import.meta.url).pathname.slice(1));
@@ -50,16 +52,22 @@ const MAX_CONTINUATIONS_DEFAULT = 5;
 const MAX_TURNS_DEFAULT = 30;
 const MAX_BUDGET_DEFAULT = 5.0;
 
+const MODEL_MAP = {
+  haiku: 'claude-haiku-4-5-20251001',
+  sonnet: 'claude-sonnet-4-5-20250929',
+  opus: 'claude-opus-4-6',
+};
+
 // ── CLI Argument Parsing ────────────────────────────────────
 
 function parseCliArgs() {
   const { values, positionals } = parseArgs({
     args: process.argv.slice(2),
     options: {
-      'max-turns':          { type: 'string', default: String(MAX_TURNS_DEFAULT) },
-      'max-continuations':  { type: 'string', default: String(MAX_CONTINUATIONS_DEFAULT) },
-      'max-budget-usd':     { type: 'string', default: String(MAX_BUDGET_DEFAULT) },
-      'model':              { type: 'string', default: 'sonnet' },
+      'max-turns':          { type: 'string' },
+      'max-continuations':  { type: 'string' },
+      'max-budget-usd':     { type: 'string' },
+      'model':              { type: 'string' },
       'project-dir':        { type: 'string', default: '' },
       'dry-run':            { type: 'boolean', default: false },
       'resume':             { type: 'boolean', default: false },
@@ -106,11 +114,17 @@ Environment variables:
     process.exit(1);
   }
 
-  const MODEL_MAP = {
-    haiku: 'claude-haiku-4-5-20251001',
-    sonnet: 'claude-sonnet-4-5-20250929',
-    opus: 'claude-opus-4-6',
-  };
+  // Load saved settings as fallback (CLI flags > saved settings > hardcoded defaults)
+  initSettings({ operatorDir: OPERATOR_DIR });
+  const settings = loadSettings();
+
+  const maxTurns = values['max-turns'] !== undefined
+    ? parseInt(values['max-turns'], 10) : settings.maxTurns;
+  const maxContinuations = values['max-continuations'] !== undefined
+    ? parseInt(values['max-continuations'], 10) : settings.maxContinuations;
+  const maxBudgetUsd = values['max-budget-usd'] !== undefined
+    ? parseFloat(values['max-budget-usd']) : settings.maxBudgetUsd;
+  const modelShort = values.model || settings.model;
 
   // Resolve project directory: --project-dir > parent of operator/
   const projectDir = values['project-dir']
@@ -119,11 +133,11 @@ Environment variables:
 
   return {
     task: positionals.join(' '),
-    maxTurns: parseInt(values['max-turns'], 10),
-    maxContinuations: parseInt(values['max-continuations'], 10),
-    maxBudgetUsd: parseFloat(values['max-budget-usd']),
-    model: MODEL_MAP[values.model] || values.model,
-    modelShort: values.model,
+    maxTurns,
+    maxContinuations,
+    maxBudgetUsd,
+    model: MODEL_MAP[modelShort] || modelShort,
+    modelShort,
     projectDir,
     dryRun: values['dry-run'],
     resume: values.resume,
@@ -780,11 +794,6 @@ async function main() {
     config.model = chain.config.model;
 
     // Re-resolve model name if it's a short name
-    const MODEL_MAP = {
-      haiku: 'claude-haiku-4-5-20251001',
-      sonnet: 'claude-sonnet-4-5-20250929',
-      opus: 'claude-opus-4-6',
-    };
     config.model = MODEL_MAP[config.model] || config.model;
 
     logConfig(config);
@@ -854,6 +863,7 @@ async function finishChain(chain, config, registry) {
 
 let _abortRequested = false;
 export function isAbortRequested() { return _abortRequested; }
+export { runChain, MODEL_MAP, OPERATOR_DIR };
 
 function setupSignalHandlers() {
   const handler = (signal) => {
@@ -868,8 +878,12 @@ function setupSignalHandlers() {
   process.on('SIGTERM', handler);
 }
 
-main().catch(err => {
-  console.error(`\nOperator fatal error: ${err.message}`);
-  console.error(err.stack);
-  process.exit(1);
-});
+// Only run main when executed directly (not when imported for combined mode)
+const isMain = process.argv[1] && resolve(process.argv[1]).includes('operator' + (process.platform === 'win32' ? '\\' : '/') + 'operator');
+if (isMain) {
+  main().catch(err => {
+    console.error(`\nOperator fatal error: ${err.message}`);
+    console.error(err.stack);
+    process.exit(1);
+  });
+}

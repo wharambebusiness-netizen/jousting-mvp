@@ -22,6 +22,11 @@ export function renderChainRow(chain) {
          hx-swap="none"
          hx-on::after-request="htmx.trigger('#chain-table','reload')">Restart</button>`
     : '';
+  const deleteBtn = chain.status !== 'running'
+    ? `<button class="btn btn--sm btn--ghost btn--delete" hx-delete="/api/chains/${chain.id}"
+         hx-confirm="Delete this chain permanently?" hx-swap="none"
+         hx-on::after-request="htmx.trigger('#chain-table','reload')">Del</button>`
+    : '';
 
   return `<tr>
     <td><span class="status-dot status-dot--${chain.status}"></span> ${statusLabel(chain.status)}</td>
@@ -30,13 +35,13 @@ export function renderChainRow(chain) {
     <td>${chain.sessions ?? 0}</td>
     <td>${formatCost(chain.totalCostUsd)}</td>
     <td>${relativeTime(chain.updatedAt)}</td>
-    <td>${killBtn}${restartBtn}</td>
+    <td>${killBtn}${restartBtn}${deleteBtn}</td>
   </tr>`;
 }
 
 export function renderChainTable(chains) {
   if (!chains.length) {
-    return '<tr><td colspan="7" class="empty-state">No chains yet. Start one below!</td></tr>';
+    return '<tr><td colspan="7" class="empty-state">No chains yet. Start one above!</td></tr>';
   }
   return chains.map(renderChainRow).join('\n');
 }
