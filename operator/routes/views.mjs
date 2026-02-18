@@ -47,6 +47,12 @@ export function createViewRoutes(ctx) {
         chains = chains.filter(c => c.status === req.query.status);
       }
 
+      // Filter by text search
+      if (req.query.q) {
+        const q = req.query.q.toLowerCase();
+        chains = chains.filter(c => (c.task || '').toLowerCase().includes(q));
+      }
+
       // Sort
       const sortField = req.query.sort || 'updatedAt';
       const sortDir = req.query.dir === 'asc' ? 1 : -1;
@@ -136,6 +142,7 @@ export function createViewRoutes(ctx) {
           <span>Cost: <strong>${formatCost(chain.totalCostUsd)}</strong></span>
           <span>Duration: <strong>${formatDuration(chain.totalDurationMs)}</strong></span>
           <span>Started: <strong>${relativeTime(chain.startedAt)}</strong></span>
+          ${chain.config?.branch ? `<span>Branch: <strong>${escapeHtml(chain.config.branch)}</strong></span>` : ''}
           ${chain.projectDir ? `<span>Project: <strong>${escapeHtml(chain.projectDir)}</strong></span>` : ''}
         </div>
 
@@ -252,6 +259,7 @@ export function createViewRoutes(ctx) {
   // ── Git Status Fragment ────────────────────────────────────
   router.get('/git-status', async (_req, res) => {
     try {
+      const settings = loadSettings();
       const { execFile } = await import('child_process');
       const run = (cmd, args) => new Promise((resolve) => {
         execFile(cmd, args, { cwd: ctx.projectDir || process.cwd(), timeout: 10000 }, (err, stdout, stderr) => {
@@ -286,26 +294,26 @@ export function createViewRoutes(ctx) {
         </div>
         ${!clean ? `<ul style="list-style:none;padding:0;margin:0 0 var(--sp-3)">${fileList}${files.length > 10 ? `<li style="color:var(--text-muted);font-size:0.8125rem">...and ${files.length - 10} more</li>` : ''}</ul>` : ''}
         ${!clean ? `
-          <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3)">
-            <button class="btn btn--ghost btn--sm" hx-post="/api/git/push" hx-swap="none"
+          <form style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3);align-items:flex-end"
+                hx-post="/api/git/commit" hx-swap="none"
+                hx-on::after-request="htmx.trigger('#git-panel','reload')">
+            <input type="text" name="message" placeholder="Commit message..." required
+              style="flex:1;margin:0;padding:var(--sp-1) var(--sp-2);font-size:0.8125rem">
+            <button type="submit" class="btn btn--ghost btn--sm">Commit</button>
+            <button type="button" class="btn btn--ghost btn--sm" hx-post="/api/git/push" hx-swap="none"
               hx-on::after-request="htmx.trigger('#git-panel','reload')">Push</button>
-          </div>
+          </form>
         ` : ''}
         <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3)">
           <p class="section__title" style="margin:0">Recent Commits</p>
           <label style="margin-left:auto;font-size:0.75rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-secondary);display:flex;align-items:center;gap:var(--sp-1);white-space:nowrap">
             <input type="checkbox" id="auto-push-toggle" role="switch" style="width:auto"
+              ${settings.autoPush ? 'checked' : ''}
               onchange="toggleAutoPush(this.checked)">
             Auto-push
           </label>
         </div>
         <ul style="list-style:none;padding:0;margin:0">${commitList}</ul>
-        <script>
-          (function() {
-            var cb = document.getElementById('auto-push-toggle');
-            if (cb) cb.checked = localStorage.getItem('operator-auto-push') === '1';
-          })();
-        </script>
       `);
     } catch (err) {
       res.type('text/html').send(`<p style="color:var(--text-muted);font-size:0.875rem">Git not available</p>`);
@@ -488,6 +496,11 @@ export function createViewRoutes(ctx) {
               Budget Cap (USD)
               <input type="number" name="maxBudgetUsd" value="${settings.maxBudgetUsd}" min="0" max="100" step="0.50">
               <small style="color:var(--text-muted)">Max cost per chain ($0-$100)</small>
+            </label>
+            <label style="display:flex;flex-direction:row;align-items:center;gap:var(--sp-3)">
+              <input type="checkbox" name="autoPush" value="true" role="switch" ${settings.autoPush ? 'checked' : ''}>
+              Auto-push on completion
+              <small style="color:var(--text-muted);margin-left:auto">Push to remote when chains complete</small>
             </label>
           </div>
           <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-6)">

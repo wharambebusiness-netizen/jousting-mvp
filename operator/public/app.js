@@ -75,7 +75,17 @@ function autoFillBranch(task) {
 // ── Auto-Push Toggle ─────────────────────────────────────────
 
 function toggleAutoPush(enabled) {
-  localStorage.setItem('operator-auto-push', enabled ? '1' : '0');
+  fetch('/api/settings')
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      s.autoPush = enabled;
+      return fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(s),
+      });
+    })
+    .catch(function() {});
 }
 
 // Listen for chain events via WS: auto-push + real-time dashboard updates
@@ -94,16 +104,21 @@ function toggleAutoPush(enabled) {
       var msg = JSON.parse(e.data);
       if (!msg.event || !msg.event.startsWith('chain:')) return;
 
-      // Auto-push on completion
-      if ((msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') &&
-          localStorage.getItem('operator-auto-push') === '1') {
-        fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-          .then(function(r) {
-            showToast(r.ok ? 'Auto-pushed to remote' : 'Auto-push failed', r.ok ? 'success' : 'error');
-            var git = document.getElementById('git-panel');
-            if (git) htmx.trigger(git, 'reload');
+      // Auto-push on completion (check server-side setting)
+      if (msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') {
+        fetch('/api/settings')
+          .then(function(r) { return r.json(); })
+          .then(function(s) {
+            if (!s.autoPush) return;
+            fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+              .then(function(r) {
+                showToast(r.ok ? 'Auto-pushed to remote' : 'Auto-push failed', r.ok ? 'success' : 'error');
+                var git = document.getElementById('git-panel');
+                if (git) htmx.trigger(git, 'reload');
+              })
+              .catch(function() { showToast('Auto-push failed', 'error'); });
           })
-          .catch(function() { showToast('Auto-push failed', 'error'); });
+          .catch(function() {});
       }
 
       // Real-time dashboard updates: debounce to 2s

@@ -13,6 +13,7 @@ const DEFAULTS = {
   maxTurns: 30,
   maxContinuations: 5,
   maxBudgetUsd: 5.0,
+  autoPush: false,
 };
 
 const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
@@ -42,6 +43,7 @@ export function loadSettings() {
         maxTurns: clampInt(data.maxTurns, 1, 200, DEFAULTS.maxTurns),
         maxContinuations: clampInt(data.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
         maxBudgetUsd: clampFloat(data.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
+        autoPush: !!data.autoPush,
       };
     } catch (_) {
       return { ...DEFAULTS };
@@ -63,6 +65,7 @@ export function saveSettings(settings) {
     maxTurns: clampInt(settings.maxTurns, 1, 200, DEFAULTS.maxTurns),
     maxContinuations: clampInt(settings.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
     maxBudgetUsd: clampFloat(settings.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
+    autoPush: !!settings.autoPush,
   };
 
   if (!settingsPath) return validated;

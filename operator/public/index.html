@@ -91,6 +91,9 @@
       <div class="chain-table-header">
         <p class="section__title">Chains</p>
         <div id="chain-filters" class="chain-filters">
+          <input type="search" name="q" placeholder="Search chains..."
+            oninput="clearTimeout(this._t); var self=this; this._t=setTimeout(function(){document.getElementById('page-field').value='1'; htmx.trigger(document.getElementById('chain-table'),'reload')},300)"
+            style="margin:0;padding:var(--sp-1) var(--sp-2);font-size:0.8125rem;width:160px">
           <select name="status" onchange="document.getElementById('page-field').value='1'; htmx.trigger(document.getElementById('chain-table'),'reload')">
             <option value="">All Statuses</option>
             <option value="running">Running</option>
