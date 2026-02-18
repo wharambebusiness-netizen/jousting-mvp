@@ -16,6 +16,12 @@ export function renderChainRow(chain) {
          hx-confirm="Abort this chain?" hx-target="closest tr" hx-swap="outerHTML"
          hx-on::after-request="htmx.trigger('#chain-table','reload')">Kill</button>`
     : '';
+  const restartable = ['failed', 'aborted', 'max-continuations'].includes(chain.status);
+  const restartBtn = restartable
+    ? `<button class="btn btn--sm btn--ghost" hx-post="/api/chains/${chain.id}/restart"
+         hx-swap="none"
+         hx-on::after-request="htmx.trigger('#chain-table','reload')">Restart</button>`
+    : '';
 
   return `<tr>
     <td><span class="status-dot status-dot--${chain.status}"></span> ${statusLabel(chain.status)}</td>
@@ -24,7 +30,7 @@ export function renderChainRow(chain) {
     <td>${chain.sessions ?? 0}</td>
     <td>${formatCost(chain.totalCostUsd)}</td>
     <td>${relativeTime(chain.updatedAt)}</td>
-    <td>${killBtn}</td>
+    <td>${killBtn}${restartBtn}</td>
   </tr>`;
 }
 

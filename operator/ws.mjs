@@ -158,6 +158,7 @@ export function createWebSocketHandler({ server, events }) {
     'round:start', 'round:complete',
     'agent:start', 'agent:complete', 'agent:error',
     'agent:continuation',
+    'orchestrator:log',
   ];
 
   const bridgeHandlers = [];

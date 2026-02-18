@@ -107,6 +107,22 @@ describe('Chain Row Renderer', () => {
     expect(html).toContain('No chains yet');
   });
 
+  it('shows restart button for failed chains', () => {
+    const html = renderChainRow({ ...mockChain, status: 'failed' });
+    expect(html).toContain('Restart');
+    expect(html).toContain('/restart');
+  });
+
+  it('shows restart button for aborted chains', () => {
+    const html = renderChainRow({ ...mockChain, status: 'aborted' });
+    expect(html).toContain('Restart');
+  });
+
+  it('hides restart button for running chains', () => {
+    const html = renderChainRow(mockChain);
+    expect(html).not.toContain('Restart');
+  });
+
   it('renders multiple rows', () => {
     const html = renderChainTable([mockChain, { ...mockChain, id: 'def-456', status: 'complete' }]);
     expect(html).toContain('abc-123');
@@ -396,6 +412,62 @@ describe('View Routes — Git Status Fragment', () => {
     const res = await get('/views/git-status');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
+  });
+});
+
+describe('View Routes — Report Viewer Fragment', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/report-viewer returns HTML', async () => {
+    const res = await get('/views/report-viewer');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    // Should contain either report content or empty state
+    expect(res.text.length).toBeGreaterThan(10);
+  });
+
+  it('shows report content or empty state', async () => {
+    const res = await get('/views/report-viewer');
+    // Either shows a report with content div or empty state
+    const hasReports = res.text.includes('report-content');
+    const isEmpty = res.text.includes('No reports');
+    expect(hasReports || isEmpty).toBe(true);
+  });
+});
+
+describe('View Routes — Chain Restart Button', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('shows restart button for failed chains in chain-list', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'failed task', config: { model: 'sonnet' } });
+    updateChainStatus(chain, 'failed');
+    saveRegistry(reg);
+
+    const res = await get('/views/chain-list');
+    expect(res.text).toContain('Restart');
+    expect(res.text).toContain(`/api/chains/${chain.id}/restart`);
+  });
+
+  it('shows restart button on chain detail for aborted chains', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'aborted task', config: {} });
+    updateChainStatus(chain, 'aborted');
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).toContain('Restart Chain');
+  });
+
+  it('does not show restart for running chains', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'running task', config: {} });
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-detail/${chain.id}`);
+    expect(res.text).not.toContain('Restart Chain');
   });
 });
 

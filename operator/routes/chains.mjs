@@ -169,6 +169,46 @@ export function createChainRoutes(ctx) {
     }
   });
 
+  // ── POST /api/chains/:id/restart ───────────────────────
+  // Restart a failed/aborted chain by creating a new chain with the same task + config.
+  router.post('/chains/:id/restart', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.id);
+      if (!chain) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+      if (chain.status === 'running') {
+        return res.status(409).json({ error: 'Chain is still running' });
+      }
+
+      const newChain = createChain(registry, {
+        task: chain.task,
+        config: chain.config || {},
+        projectDir: chain.projectDir,
+      });
+      saveRegistry(registry);
+
+      ctx.events.emit('chain:started', {
+        chainId: newChain.id,
+        task: newChain.task,
+        projectDir: newChain.projectDir,
+        restartedFrom: chain.id,
+      });
+
+      // If combined mode, start the chain runner
+      if (ctx.runChainFn) {
+        ctx.runChainFn(newChain).catch(err => {
+          ctx.events.emit('chain:error', { chainId: newChain.id, error: err.message });
+        });
+      }
+
+      res.status(201).json(getChainSummary(newChain));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── DELETE /api/chains/:id ──────────────────────────────
   // Remove a chain from the registry.
   router.delete('/chains/:id', (req, res) => {

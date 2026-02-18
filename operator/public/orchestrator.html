@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body hx-boost="true">
   <div class="htmx-progress" id="progress-bar"></div>
@@ -51,6 +52,32 @@
         </div>
       </div>
     </div>
+
+    <!-- Live Log -->
+    <div class="section">
+      <p class="section__title">
+        Live Log
+        <button class="btn btn--sm btn--ghost" onclick="clearLog()" style="margin-left:var(--sp-3)">Clear</button>
+        <label style="margin-left:var(--sp-3);font-size:0.75rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-secondary)">
+          <input type="checkbox" id="log-autoscroll" checked style="width:auto;margin-right:var(--sp-1)">
+          Auto-scroll
+        </label>
+      </p>
+      <div id="log-panel" class="log-panel">
+        <div class="log-panel__empty">Waiting for orchestrator output...</div>
+      </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="section">
+      <p class="section__title">Reports</p>
+      <div id="report-viewer"
+           hx-get="/views/report-viewer"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="skeleton" style="height:60px"></div>
+      </div>
+    </div>
   </main>
 
   <div id="toast-container"></div>
@@ -67,7 +94,7 @@
       setTimeout(function() { bar.classList.remove('done'); bar.style.width = ''; }, 400);
     });
 
-    // Toast helper for mission start feedback
+    // Toast helper
     function showToast(msg, type) {
       var container = document.getElementById('toast-container');
       var toast = document.createElement('div');
@@ -77,9 +104,10 @@
       setTimeout(function() { toast.remove(); }, 4000);
     }
 
-    // Handle mission start response
+    // Handle mission start/stop responses
     document.body.addEventListener('htmx:afterRequest', function(evt) {
-      if (evt.detail.pathInfo && evt.detail.pathInfo.requestPath === '/api/orchestrator/start') {
+      var path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath;
+      if (path === '/api/orchestrator/start') {
         if (evt.detail.successful) {
           showToast('Orchestrator started successfully', 'success');
         } else {
@@ -92,6 +120,68 @@
         }
       }
     });
+
+    // ── Live Log WebSocket ──────────────────────────────────
+    var MAX_LOG_LINES = 500;
+    var logPanel = document.getElementById('log-panel');
+
+    function clearLog() {
+      logPanel.innerHTML = '<div class="log-panel__empty">Log cleared.</div>';
+    }
+
+    function appendLog(text, stream) {
+      // Remove the empty placeholder if present
+      var empty = logPanel.querySelector('.log-panel__empty');
+      if (empty) empty.remove();
+
+      var lines = text.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        if (!lines[i]) continue;
+        var line = document.createElement('div');
+        line.className = 'log-line' + (stream === 'stderr' ? ' log-line--stderr' : '');
+        line.textContent = lines[i];
+        logPanel.appendChild(line);
+      }
+
+      // Trim oldest lines
+      while (logPanel.children.length > MAX_LOG_LINES) {
+        logPanel.removeChild(logPanel.firstChild);
+      }
+
+      // Auto-scroll
+      var autoScroll = document.getElementById('log-autoscroll');
+      if (autoScroll && autoScroll.checked) {
+        logPanel.scrollTop = logPanel.scrollHeight;
+      }
+    }
+
+    // Connect WebSocket for log events
+    (function connectLogWs() {
+      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var ws = new WebSocket(proto + '//' + location.host + '/ws');
+
+      ws.onopen = function() {
+        ws.send(JSON.stringify({ subscribe: ['orchestrator:log', 'orchestrator:started', 'orchestrator:stopped'] }));
+      };
+
+      ws.onmessage = function(e) {
+        try {
+          var msg = JSON.parse(e.data);
+          if (msg.event === 'orchestrator:log' && msg.data) {
+            appendLog(msg.data.text, msg.data.stream);
+          } else if (msg.event === 'orchestrator:started') {
+            appendLog('--- Orchestrator started ---', 'stdout');
+          } else if (msg.event === 'orchestrator:stopped') {
+            appendLog('--- Orchestrator stopped ---', 'stdout');
+          }
+        } catch (_) {}
+      };
+
+      ws.onclose = function() {
+        // Reconnect after 3 seconds
+        setTimeout(connectLogWs, 3000);
+      };
+    })();
   </script>
 </body>
 </html>

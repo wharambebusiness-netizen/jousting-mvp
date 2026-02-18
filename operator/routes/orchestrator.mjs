@@ -8,7 +8,7 @@
 
 import { Router } from 'express';
 import { fork } from 'child_process';
-import { readdirSync, readFileSync, existsSync } from 'fs';
+import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 
 /**
@@ -204,6 +204,54 @@ export function createOrchestratorRoutes(ctx) {
       message: 'Orchestrator stop requested',
       status: orchestratorStatus,
     });
+  });
+
+  // ── GET /api/orchestrator/reports ──────────────────────────
+  // List available report files from orchestrator/
+  router.get('/orchestrator/reports', (_req, res) => {
+    try {
+      const orchDir = join(projectDir, 'orchestrator');
+      if (!existsSync(orchDir)) return res.json([]);
+
+      const files = readdirSync(orchDir)
+        .filter(f => f.endsWith('.md') && f.includes('report'));
+
+      const reports = files.map(f => {
+        const fullPath = join(orchDir, f);
+        const stat = statSync(fullPath);
+        return {
+          file: f,
+          name: f.replace('.md', '').replace(/-/g, ' '),
+          size: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+        };
+      }).sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+
+      res.json(reports);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  // ── GET /api/orchestrator/reports/:file ───────────────────
+  // Return raw markdown content of a report file
+  router.get('/orchestrator/reports/:file', (req, res) => {
+    const file = req.params.file.replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!file.endsWith('.md')) {
+      return res.status(400).json({ error: 'Invalid file type' });
+    }
+
+    const fullPath = join(projectDir, 'orchestrator', file);
+    if (!existsSync(fullPath)) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    try {
+      const content = readFileSync(fullPath, 'utf-8');
+      res.json({ file, content });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Expose router + status getter for M5 views

@@ -557,6 +557,81 @@ describe('Server — Git Endpoints (M6d)', () => {
   });
 });
 
+describe('Server — Chain Restart (S85)', () => {
+  let chains;
+
+  beforeAll(async () => {
+    setupTestDir();
+    chains = seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/chains/:id/restart creates new chain from failed chain', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c3.id}/restart`, {
+      method: 'POST',
+    });
+    expect(status).toBe(201);
+    expect(body.task).toBe('deploy to staging');
+    expect(body.status).toBe('running');
+    expect(body.id).not.toBe(chains.c3.id);
+  });
+
+  it('POST /api/chains/:id/restart rejects running chain', async () => {
+    const { status, body } = await api(`/api/chains/${chains.c2.id}/restart`, {
+      method: 'POST',
+    });
+    expect(status).toBe(409);
+    expect(body.error).toContain('still running');
+  });
+
+  it('POST /api/chains/:id/restart returns 404 for unknown', async () => {
+    const { status } = await api('/api/chains/nonexistent/restart', {
+      method: 'POST',
+    });
+    expect(status).toBe(404);
+  });
+
+  it('POST /api/chains/:id/restart preserves config from original', async () => {
+    const { body } = await api(`/api/chains/${chains.c3.id}/restart`, {
+      method: 'POST',
+    });
+    expect(body.config).toBeTruthy();
+    expect(body.config.model).toBe('haiku');
+  });
+});
+
+describe('Server — Report Endpoints (M6b)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/reports returns array', async () => {
+    const { status, body } = await api('/api/orchestrator/reports');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+  });
+
+  it('GET /api/orchestrator/reports/:file returns 404 for missing', async () => {
+    const { status } = await api('/api/orchestrator/reports/nonexistent.md');
+    expect(status).toBe(404);
+  });
+
+  it('GET /api/orchestrator/reports/:file rejects non-.md files', async () => {
+    const { status } = await api('/api/orchestrator/reports/config.json');
+    expect(status).toBe(400);
+  });
+});
+
 describe('Server — CORS', () => {
   beforeAll(async () => {
     setupTestDir();

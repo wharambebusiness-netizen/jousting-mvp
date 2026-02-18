@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1415 tests, 24 suites (all passing)
+npm test                                           # 1430 tests, 24 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -80,9 +80,9 @@ operator/             Auto-continuation system (M2+M4+M5)
   ws.mjs              WebSocket event bridge (EventBus → clients)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
-    orchestrator.mjs  Orchestrator status/control + mission listing + fork spawning (M6a)
+    orchestrator.mjs  Orchestrator status/control + mission listing + fork spawning + reports (M6a+M6b)
     git.mjs           Git status, push, commit, PR creation (M6d)
-    views.mjs         HTMX fragment routes for dashboard + git + missions (M5+M6)
+    views.mjs         HTMX fragment routes for dashboard + git + missions + reports (M5+M6)
   views/              Server-side HTML fragment renderers (M5)
     helpers.mjs       Formatting: escapeHtml, formatCost, formatDuration, relativeTime
     chain-row.mjs     Chain table row renderer
@@ -92,8 +92,8 @@ operator/             Auto-continuation system (M2+M4+M5)
     index.html        Dashboard: chain list, cost summary, quick-start form
     chain.html        Chain detail: timeline, sessions, handoffs
     orchestrator.html Orchestrator status + agent cards
-    style.css         Pico CSS overrides (dark mode, status dots, timeline)
-  __tests__/          159 tests (registry, errors, server, views)
+    style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports)
+  __tests__/          174 tests (registry, errors, server, views)
 ```
 
 ## Detailed Documentation
@@ -128,7 +128,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1415 tests across 24 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37). Operator: registry (21), errors (43), server (55), views (40). Run `npm test` to verify.
+1430 tests across 24 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37). Operator: registry (21), errors (43), server (55), views (40). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

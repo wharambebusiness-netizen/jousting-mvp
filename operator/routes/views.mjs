@@ -96,6 +96,11 @@ export function createViewRoutes(ctx) {
             hx-confirm="Abort this chain?" hx-swap="none"
             hx-on::after-request="location.reload()">Abort Chain</button>
         ` : ''}
+        ${['failed', 'aborted', 'max-continuations'].includes(chain.status) ? `
+          <button class="btn btn--ghost" hx-post="/api/chains/${chain.id}/restart"
+            hx-swap="none"
+            hx-on::after-request="location.reload()">Restart Chain</button>
+        ` : ''}
 
         <h3>Session Timeline</h3>
         ${renderTimeline(sessions)}
@@ -224,6 +229,59 @@ export function createViewRoutes(ctx) {
       `);
     } catch (err) {
       res.type('text/html').send(`<p style="color:var(--text-muted);font-size:0.875rem">Git not available</p>`);
+    }
+  });
+
+  // ── Report Viewer Fragment ────────────────────────────────
+  router.get('/report-viewer', async (_req, res) => {
+    try {
+      const orchDir = join(ctx.projectDir || process.cwd(), 'orchestrator');
+      let reports = [];
+
+      if (existsSync(orchDir)) {
+        const { statSync } = await import('fs');
+        const files = readdirSync(orchDir)
+          .filter(f => f.endsWith('.md') && f.includes('report'));
+        reports = files.map(f => {
+          const stat = statSync(join(orchDir, f));
+          return { file: f, name: f.replace('.md', '').replace(/-/g, ' '), modifiedAt: stat.mtime.toISOString() };
+        }).sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+      }
+
+      if (reports.length === 0) {
+        res.type('text/html').send('<p class="empty-state">No reports available yet.</p>');
+        return;
+      }
+
+      const reportFile = _req.query.file || reports[0].file;
+      const reportPath = join(orchDir, reportFile.replace(/[^a-zA-Z0-9._-]/g, ''));
+      let content = '';
+
+      if (existsSync(reportPath)) {
+        content = readFileSync(reportPath, 'utf-8');
+      }
+
+      const tabs = reports.map(r =>
+        `<button class="btn btn--sm ${r.file === reportFile ? 'btn--primary' : 'btn--ghost'}"
+           hx-get="/views/report-viewer?file=${encodeURIComponent(r.file)}"
+           hx-target="#report-viewer"
+           hx-swap="innerHTML">${escapeHtml(r.name)}</button>`
+      ).join('\n');
+
+      res.type('text/html').send(`
+        <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-4);flex-wrap:wrap">${tabs}</div>
+        <div id="report-content" class="report-content">${escapeHtml(content)}</div>
+        <script>
+          (function() {
+            var el = document.getElementById('report-content');
+            if (el && window.marked) {
+              el.innerHTML = marked.parse(el.textContent);
+            }
+          })();
+        </script>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }
   });
 
