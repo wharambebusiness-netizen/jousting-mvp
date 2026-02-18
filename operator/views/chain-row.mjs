@@ -12,13 +12,13 @@ export function renderChainRow(chain) {
     chain.task.length > 80 ? chain.task.slice(0, 77) + '...' : chain.task
   );
   const killBtn = chain.status === 'running'
-    ? `<button class="btn-sm btn-kill" hx-post="/api/chains/${chain.id}/abort"
+    ? `<button class="btn btn--sm btn--danger" hx-post="/api/chains/${chain.id}/abort"
          hx-confirm="Abort this chain?" hx-target="closest tr" hx-swap="outerHTML"
          hx-on::after-request="htmx.trigger('#chain-table','reload')">Kill</button>`
     : '';
 
   return `<tr>
-    <td><span class="dot dot-${chain.status}"></span> ${statusLabel(chain.status)}</td>
+    <td><span class="status-dot status-dot--${chain.status}"></span> ${statusLabel(chain.status)}</td>
     <td><a href="/chains/${chain.id}">${task}</a></td>
     <td>${escapeHtml(chain.config?.model || 'sonnet')}</td>
     <td>${chain.sessions ?? 0}</td>
@@ -30,7 +30,7 @@ export function renderChainRow(chain) {
 
 export function renderChainTable(chains) {
   if (!chains.length) {
-    return '<tr><td colspan="7" class="empty-msg">No chains yet. Start one below!</td></tr>';
+    return '<tr><td colspan="7" class="empty-state">No chains yet. Start one below!</td></tr>';
   }
   return chains.map(renderChainRow).join('\n');
 }

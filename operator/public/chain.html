@@ -8,24 +8,49 @@
   <link rel="stylesheet" href="/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
-<body>
-  <nav class="container">
-    <ul><li><strong>Operator</strong></li></ul>
-    <ul>
-      <li><a href="/">Dashboard</a></li>
-      <li><a href="/orchestrator">Orchestrator</a></li>
+<body hx-boost="true">
+  <div class="htmx-progress" id="progress-bar"></div>
+
+  <nav class="nav">
+    <a href="/" class="nav__brand">Operator</a>
+    <ul class="nav__links">
+      <li><a href="/" class="nav__link">Dashboard</a></li>
+      <li><a href="/orchestrator" class="nav__link">Orchestrator</a></li>
     </ul>
   </nav>
 
-  <main class="container">
-    <p><a href="/">&larr; Back to Dashboard</a></p>
+  <main class="page">
+    <nav class="breadcrumb">
+      <ol>
+        <li><a href="/">Dashboard</a></li>
+        <li aria-current="page">Chain Detail</li>
+      </ol>
+    </nav>
 
     <div id="chain-content"
          hx-get="/views/chain-detail/{{CHAIN_ID}}"
          hx-trigger="load, every 5s"
          hx-swap="innerHTML">
-      <p>Loading chain details...</p>
+      <div class="skeleton" style="height:32px;width:200px;margin-bottom:16px"></div>
+      <div class="skeleton" style="height:16px;width:80%;margin-bottom:12px"></div>
+      <div class="skeleton" style="height:32px;margin-bottom:24px"></div>
+      <div class="skeleton" style="height:120px"></div>
     </div>
   </main>
+
+  <div id="toast-container"></div>
+
+  <script>
+    document.body.addEventListener('htmx:beforeRequest', function() {
+      document.getElementById('progress-bar').classList.add('active');
+      document.getElementById('progress-bar').classList.remove('done');
+    });
+    document.body.addEventListener('htmx:afterRequest', function() {
+      var bar = document.getElementById('progress-bar');
+      bar.classList.remove('active');
+      bar.classList.add('done');
+      setTimeout(function() { bar.classList.remove('done'); bar.style.width = ''; }, 400);
+    });
+  </script>
 </body>
 </html>

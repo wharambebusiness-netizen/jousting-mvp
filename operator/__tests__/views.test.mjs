@@ -73,7 +73,7 @@ describe('Chain Row Renderer', () => {
 
   it('renders a chain row with correct data', () => {
     const html = renderChainRow(mockChain);
-    expect(html).toContain('dot-running');
+    expect(html).toContain('status-dot--running');
     expect(html).toContain('Build a feature');
     expect(html).toContain('/chains/abc-123');
     expect(html).toContain('sonnet');
@@ -150,7 +150,7 @@ describe('Session Card Renderer', () => {
   it('shows error badge', () => {
     const html = renderSessionCard({ ...mockSession, error: 'ECONNRESET' });
     expect(html).toContain('ECONNRESET');
-    expect(html).toContain('badge-err');
+    expect(html).toContain('badge--error');
   });
 
   it('renders handoff section when handoffFile exists', () => {
@@ -172,8 +172,8 @@ describe('Session Timeline', () => {
       { index: 1, turns: 10, costUsd: 0.10, status: 'running' },
     ];
     const html = renderTimeline(sessions);
-    expect(html).toContain('timeline-complete');
-    expect(html).toContain('timeline-running');
+    expect(html).toContain('timeline--complete');
+    expect(html).toContain('timeline--running');
     expect(html).toContain('S1');
     expect(html).toContain('S2');
   });
@@ -204,7 +204,7 @@ describe('Agent Card Renderer', () => {
   it('renders agent card', () => {
     const html = renderAgentCard({ id: 'dev', status: 'active', role: 'developer' });
     expect(html).toContain('dev');
-    expect(html).toContain('dot-active');
+    expect(html).toContain('status-dot--active');
     expect(html).toContain('developer');
   });
 
@@ -384,6 +384,30 @@ describe('View Routes — Page Routes', () => {
   it('GET /style.css serves CSS', async () => {
     const res = await get('/style.css');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('.dot');
+    expect(res.text).toContain('.status-dot');
+  });
+});
+
+describe('View Routes — Git Status Fragment', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/git-status returns HTML', async () => {
+    const res = await get('/views/git-status');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+  });
+});
+
+describe('View Routes — Mission Launcher Fragment', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/mission-launcher returns form HTML', async () => {
+    const res = await get('/views/mission-launcher');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    // Should contain either form (stopped) or running message
+    expect(res.text.length).toBeGreaterThan(10);
   });
 });

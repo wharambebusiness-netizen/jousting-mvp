@@ -22,6 +22,7 @@ import { parseArgs } from 'util';
 import { initRegistry } from './registry.mjs';
 import { createChainRoutes } from './routes/chains.mjs';
 import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
+import { createGitRoutes } from './routes/git.mjs';
 import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
 import { EventBus } from '../orchestrator/observability.mjs';
@@ -83,6 +84,13 @@ export function createApp(options = {}) {
     });
   });
 
+  // ── Resolve paths ──────────────────────────────────────
+  // moduleDir resolves from this module's location (not operatorDir,
+  // which may be a test temp directory for registry isolation).
+  const moduleDir = import.meta.dirname || operatorDir;
+  const publicDir = options.publicDir || join(moduleDir, 'public');
+  const projectDir = options.projectDir || resolve(moduleDir, '..');
+
   // API routes
   app.use('/api', createChainRoutes({
     operatorDir,
@@ -90,23 +98,25 @@ export function createApp(options = {}) {
     runChainFn: options.runChainFn || null,
   }));
 
+  // Git routes
+  app.use('/api', createGitRoutes({ projectDir }));
+
   const orchRouter = createOrchestratorRoutes({
     events,
     orchestratorCtx: options.orchestratorCtx || null,
   });
   app.use('/api', orchRouter);
 
-  // ── M5: Web UI ──────────────────────────────────────────
-  // Public dir resolves from this module's location (not operatorDir,
-  // which may be a test temp directory for registry isolation).
-  const moduleDir = import.meta.dirname || operatorDir;
-  const publicDir = options.publicDir || join(moduleDir, 'public');
+  // Resolve missions dir
+  const missionsDir = join(projectDir, 'orchestrator', 'missions');
 
   // View fragment routes (HTMX partial responses)
   app.use('/views', createViewRoutes({
     operatorDir,
     events,
     getOrchStatus: orchRouter.getStatus || null,
+    missionsDir,
+    projectDir,
   }));
 
   // Page routes (serve HTML files)

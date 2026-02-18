@@ -485,6 +485,78 @@ describe('Server — Orchestrator Endpoints', () => {
   });
 });
 
+describe('Server — Mission Endpoints (M6a)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/missions lists available missions', async () => {
+    const { status, body } = await api('/api/orchestrator/missions');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+    // Missions dir exists in real project, should have entries
+    if (body.length > 0) {
+      expect(body[0]).toHaveProperty('file');
+      expect(body[0]).toHaveProperty('name');
+      expect(body[0]).toHaveProperty('type');
+    }
+  });
+
+  it('GET /api/orchestrator/missions returns array even if dir missing', async () => {
+    // The test env's missionsDir may not exist, should return []
+    const { status, body } = await api('/api/orchestrator/missions');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+  });
+});
+
+describe('Server — Git Endpoints (M6d)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/git/status returns git state', async () => {
+    const { status, body } = await api('/api/git/status');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('branch');
+    expect(body).toHaveProperty('clean');
+    expect(body).toHaveProperty('files');
+    expect(body).toHaveProperty('commits');
+    expect(Array.isArray(body.files)).toBe(true);
+    expect(Array.isArray(body.commits)).toBe(true);
+  });
+
+  it('POST /api/git/commit rejects empty message', async () => {
+    const { status, body } = await api('/api/git/commit', {
+      method: 'POST',
+      body: JSON.stringify({ message: '' }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('required');
+  });
+
+  it('POST /api/git/commit rejects missing message', async () => {
+    const { status, body } = await api('/api/git/commit', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('required');
+  });
+});
+
 describe('Server — CORS', () => {
   beforeAll(async () => {
     setupTestDir();

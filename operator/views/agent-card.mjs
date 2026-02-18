@@ -13,7 +13,7 @@ export function renderAgentCard(agent) {
 
   return `<article class="agent-card agent-${status}">
     <header>
-      <span class="dot dot-${status}"></span>
+      <span class="status-dot status-dot--${status}"></span>
       ${id}
       <small>${statusLabel(status)}</small>
     </header>
@@ -23,7 +23,7 @@ export function renderAgentCard(agent) {
 
 export function renderAgentGrid(agents) {
   if (!agents || !agents.length) {
-    return '<p class="empty-msg">No agents active.</p>';
+    return '<p class="empty-state">No agents active.</p>';
   }
   return `<div class="agent-grid">${agents.map(renderAgentCard).join('')}</div>`;
 }
