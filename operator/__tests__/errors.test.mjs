@@ -293,4 +293,56 @@ describe('validateHandoff', () => {
     });
     expect(result.valid).toBe(true);
   });
+
+  it('handles undefined summary field gracefully', () => {
+    const result = validateHandoff({
+      complete: false,
+      remaining: 'stuff to do',
+      raw: '## HANDOFF\n**Remaining:** stuff',
+    });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('summary');
+  });
+});
+
+// ── Edge Cases (S82 review) ──────────────────────────────────
+
+describe('classifyError edge cases', () => {
+  it('classifies mixed fatal+transient message as fatal (fatal checked first)', () => {
+    // Both "authentication" (fatal) and "timeout" (transient) patterns present
+    expect(classifyError(new Error('authentication timeout occurred'))).toBe('fatal');
+  });
+
+  it('classifies TypeError as transient (default behavior)', () => {
+    expect(classifyError(new TypeError('Cannot read properties of undefined'))).toBe('transient');
+  });
+
+  it('handles error-like objects without message property', () => {
+    expect(classifyError({ code: 'ECONNRESET' })).toBe('transient');
+  });
+
+  it('withRetry with maxRetries 0 executes once and returns error', async () => {
+    let callCount = 0;
+    const { error, attempts } = await withRetry(
+      async () => { callCount++; throw new Error('fail'); },
+      { maxRetries: 0 }
+    );
+    expect(callCount).toBe(1);
+    expect(attempts).toBe(1);
+    expect(error.message).toBe('fail');
+  });
+
+  it('shouldTripCircuitBreaker returns false for negative numbers', () => {
+    expect(shouldTripCircuitBreaker(-1)).toBe(false);
+  });
+
+  it('generateSyntheticHandoff handles null output', () => {
+    const handoff = generateSyntheticHandoff({
+      output: null,
+      error: new Error('boom'),
+      sessionIndex: 0,
+    });
+    expect(handoff).toContain('boom');
+    expect(handoff).toContain('no output captured');
+  });
 });

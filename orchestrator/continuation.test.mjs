@@ -334,6 +334,96 @@ Line 3`;
   });
 });
 
+// ── buildContinuationPrompt ──────────────────────────────────
+
+describe('buildContinuationPrompt', () => {
+  const { buildContinuationPrompt } = __test__;
+
+  it('includes handoff raw text when handoff is present', () => {
+    const handoff = {
+      complete: false,
+      raw: '## HANDOFF\n**Accomplished:** Phase 1\n**Remaining:** Phase 2',
+      summary: 'Phase 1',
+      remaining: 'Phase 2',
+      context: '',
+    };
+    const result = buildContinuationPrompt(handoff, 'some output', 'do the task', 1);
+    expect(result).toContain('PREVIOUS SESSION HANDOFF');
+    expect(result).toContain('Phase 1');
+    expect(result).toContain('Phase 2');
+  });
+
+  it('uses output tail when no handoff is available', () => {
+    const longOutput = 'x'.repeat(5000);
+    const result = buildContinuationPrompt(null, longOutput, 'do the task', 1);
+    expect(result).toContain('PREVIOUS SESSION OUTPUT (tail)');
+    expect(result).toContain('No handoff section was found');
+  });
+
+  it('includes original task prompt when no handoff is present', () => {
+    const result = buildContinuationPrompt(null, 'some output', 'Build the widget system', 1);
+    expect(result).toContain('ORIGINAL TASK (for reference)');
+    expect(result).toContain('Build the widget system');
+  });
+
+  it('does not include original task when handoff is present', () => {
+    const handoff = {
+      complete: false,
+      raw: '## HANDOFF\n**Accomplished:** stuff',
+      summary: 'stuff',
+      remaining: 'more stuff',
+      context: '',
+    };
+    const result = buildContinuationPrompt(handoff, 'output', 'Build widget', 1);
+    expect(result).not.toContain('ORIGINAL TASK');
+  });
+
+  it('truncates very long original prompts', () => {
+    const longPrompt = 'x'.repeat(5000);
+    const result = buildContinuationPrompt(null, 'output', longPrompt, 1);
+    expect(result).toContain('...(truncated)');
+    // Should not contain the full 5000 chars
+    expect(result.length).toBeLessThan(6000);
+  });
+
+  it('includes continuation session number', () => {
+    const result = buildContinuationPrompt(null, 'output', 'task', 2);
+    expect(result).toContain('CONTINUATION SESSION 3');
+  });
+});
+
+// ── extractCostFromMessages ──────────────────────────────────
+
+describe('extractCostFromMessages', () => {
+  const { extractCostFromMessages } = __test__;
+
+  it('returns zero costs for empty messages array', () => {
+    const result = extractCostFromMessages([]);
+    expect(result.totalCost).toBe(0);
+    expect(result.inputTokens).toBe(0);
+    expect(result.outputTokens).toBe(0);
+  });
+
+  it('accumulates token counts from assistant messages', () => {
+    const messages = [
+      { type: 'assistant', usage: { input_tokens: 100, output_tokens: 50 } },
+      { type: 'assistant', usage: { input_tokens: 200, output_tokens: 100 } },
+    ];
+    const result = extractCostFromMessages(messages);
+    expect(result.inputTokens).toBe(300);
+    expect(result.outputTokens).toBe(150);
+  });
+
+  it('uses cost_usd when available', () => {
+    const messages = [
+      { type: 'assistant', usage: { input_tokens: 100, output_tokens: 50 } },
+      { cost_usd: 0.42 },
+    ];
+    const result = extractCostFromMessages(messages);
+    expect(result.totalCost).toBe(0.42);
+  });
+});
+
 // ── Config constants ─────────────────────────────────────────
 
 describe('M3 config constants', () => {

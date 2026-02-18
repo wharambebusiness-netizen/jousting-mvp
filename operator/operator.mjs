@@ -27,7 +27,7 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { spawn } from 'child_process';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 import { parseArgs } from 'util';
 
@@ -179,13 +179,29 @@ async function autoCommit(chainIndex, sessionSummary, projectDir) {
     return false;
   }
 
-  const result = await gitExec(`git commit -m "${msg.replace(/"/g, '\\"')}"`, projectDir);
+  // Use spawn with array args to avoid shell injection from LLM output
+  const result = await gitCommit(msg, projectDir);
   if (result.ok) {
     log(`  Committed: ${msg}`);
     return true;
   }
   log(`  Commit failed: ${result.stderr.slice(0, 200)}`);
   return false;
+}
+
+function gitCommit(message, cwd) {
+  return new Promise((resolve) => {
+    const proc = spawn('git', ['commit', '-m', message], {
+      cwd,
+      stdio: 'pipe',
+    });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('close', (code) => resolve({ ok: code === 0, stdout: stdout.trim(), stderr: stderr.trim() }));
+    proc.on('error', (err) => resolve({ ok: false, stdout: '', stderr: err.message }));
+  });
 }
 
 async function autoPush(projectDir) {
@@ -306,7 +322,7 @@ ${handoffInstructions}`;
  * Run a single Claude session via the Agent SDK.
  * Returns { output, handoff, cost, sessionId, turns, durationMs, hitMaxTurns, preCompacted, error, inBandError }
  */
-async function runSession(config, chainIndex, previousHandoff) {
+async function runSession(config, chainIndex, previousHandoff, spentBudgetUsd = 0) {
   const systemPrompt = buildSystemPrompt(config.task, chainIndex, previousHandoff, config.projectDir);
 
   let preCompacted = false;
@@ -349,9 +365,12 @@ async function runSession(config, chainIndex, previousHandoff) {
     },
   };
 
-  // Pass per-session budget if set (SDK-level enforcement)
+  // Pass remaining budget to SDK for per-session enforcement
   if (config.maxBudgetUsd && config.maxBudgetUsd < Infinity) {
-    queryOptions.maxBudgetUsd = config.maxBudgetUsd;
+    const remainingBudget = config.maxBudgetUsd - spentBudgetUsd;
+    if (remainingBudget > 0) {
+      queryOptions.maxBudgetUsd = remainingBudget;
+    }
   }
 
   try {
@@ -533,7 +552,6 @@ async function runChain(config, registry, existingChain) {
   if (startIndex > 0) {
     const lastSession = chain.sessions[chain.sessions.length - 1];
     if (lastSession.handoffFile && existsSync(lastSession.handoffFile)) {
-      const { readFileSync } = await import('fs');
       previousHandoff = readFileSync(lastSession.handoffFile, 'utf-8');
       log(`  Resuming from session ${startIndex} with previous handoff`);
     }
@@ -558,10 +576,19 @@ async function runChain(config, registry, existingChain) {
       break;
     }
 
+    // ── Abort check (SIGINT/SIGTERM) ──
+    if (_abortRequested) {
+      log('Abort requested — stopping chain');
+      updateChainStatus(chain, 'aborted');
+      saveRegistry(registry);
+      await autoCommit(i, 'aborted by user', config.projectDir);
+      break;
+    }
+
     // ── Run session with retry ──
     const { result: sessionResult, error: retryError, attempts, classification } = await withRetry(
       async () => {
-        const result = await runSession(config, i, previousHandoff);
+        const result = await runSession(config, i, previousHandoff, chain.totalCostUsd);
 
         // If session threw an error, re-throw for retry logic
         if (result.error) throw result.error;
@@ -605,7 +632,7 @@ async function runChain(config, registry, existingChain) {
     log(`  Hit max turns: ${result.hitMaxTurns}, PreCompacted: ${result.preCompacted}`);
     if (attempts > 1) log(`  Attempts: ${attempts}`);
 
-    const handoffPath = join(handoffDir, `chain-${i}.md`);
+    const handoffPath = join(handoffDir, `${chain.id.slice(0, 8)}-session-${i}.md`);
     writeFileSync(handoffPath, [
       `# Session ${i + 1} Handoff`,
       `- Session ID: ${result.sessionId}`,
@@ -725,6 +752,8 @@ async function runChain(config, registry, existingChain) {
 async function main() {
   const config = parseCliArgs();
 
+  setupSignalHandlers();
+
   // Initialize registry
   initRegistry({ operatorDir: OPERATOR_DIR, log });
   const registry = loadRegistry();
@@ -819,6 +848,24 @@ async function finishChain(chain, config, registry) {
       timestamp: new Date().toISOString(),
     });
   }
+}
+
+// ── Signal Handling ──────────────────────────────────────────
+
+let _abortRequested = false;
+export function isAbortRequested() { return _abortRequested; }
+
+function setupSignalHandlers() {
+  const handler = (signal) => {
+    if (_abortRequested) {
+      log(`Second ${signal} received — force exit`);
+      process.exit(1);
+    }
+    _abortRequested = true;
+    log(`${signal} received — will abort after current session completes`);
+  };
+  process.on('SIGINT', handler);
+  process.on('SIGTERM', handler);
 }
 
 main().catch(err => {

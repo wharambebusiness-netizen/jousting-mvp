@@ -48,6 +48,8 @@ function atomicWrite(filePath, data) {
     logFn(`  Registry atomic write failed, trying direct: ${err.message}`);
     try {
       writeFileSync(filePath, JSON.stringify(data, null, 2));
+      // Clean up orphaned tmp file from failed rename
+      try { unlinkSync(tmpFile); } catch (_) {}
     } catch (err2) {
       logFn(`  WARNING: Registry write failed: ${err2.message}`);
       throw err2;

@@ -223,3 +223,76 @@ describe('Registry — Archival', () => {
     expect(archive.chains.length).toBe(5);
   });
 });
+
+// ── Edge Cases (S82 review) ──────────────────────────────────
+
+describe('Registry — Edge Cases', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('handles corrupt JSON in main registry gracefully', () => {
+    writeFileSync(join(TEST_DIR, 'registry.json'), '{ broken json!!');
+    const reg = loadRegistry();
+    expect(reg.version).toBe(1);
+    expect(reg.chains).toEqual([]);
+  });
+
+  it('handles version mismatch by returning empty registry', () => {
+    writeFileSync(join(TEST_DIR, 'registry.json'), JSON.stringify({ version: 999, chains: [{ id: 'old' }] }));
+    const reg = loadRegistry();
+    expect(reg.version).toBe(1);
+    expect(reg.chains).toEqual([]);
+  });
+
+  it('createChain preserves explicit maxBudgetUsd of 0 via ??', () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'test', config: { maxBudgetUsd: 0 } });
+    // 0 is falsy but ?? should preserve it (vs || which would use default)
+    expect(chain.config.maxBudgetUsd).toBe(0);
+  });
+
+  it('recordSession correctly accumulates floating-point costs', () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'float test', config: {} });
+
+    for (let i = 0; i < 10; i++) {
+      recordSession(chain, { turns: 1, costUsd: 0.1, durationMs: 100 });
+    }
+
+    // Should be close to 1.0 (floating point)
+    expect(chain.totalCostUsd).toBeCloseTo(1.0, 6);
+    expect(chain.sessions.length).toBe(10);
+  });
+
+  it('findIncompleteChains excludes completed/failed/aborted statuses', () => {
+    const reg = loadRegistry();
+
+    const c1 = createChain(reg, { task: 'complete', config: {} });
+    updateChainStatus(c1, 'complete');
+
+    const c2 = createChain(reg, { task: 'failed', config: {} });
+    updateChainStatus(c2, 'failed');
+
+    const c3 = createChain(reg, { task: 'aborted', config: {} });
+    updateChainStatus(c3, 'aborted');
+
+    const c4 = createChain(reg, { task: 'max-cont', config: {} });
+    updateChainStatus(c4, 'max-continuations');
+
+    const incomplete = findIncompleteChains(reg);
+    expect(incomplete).toEqual([]);
+  });
+
+  it('exactly MAX_CHAINS chains does not trigger archival', () => {
+    const reg = loadRegistry();
+    for (let i = 0; i < MAX_CHAINS; i++) {
+      createChain(reg, { task: `task ${i}`, config: {} });
+    }
+    saveRegistry(reg);
+    const loaded = loadRegistry();
+    expect(loaded.chains.length).toBe(MAX_CHAINS);
+
+    const archivePath = join(TEST_DIR, 'registry-archive.json');
+    expect(existsSync(archivePath)).toBe(false);
+  });
+});

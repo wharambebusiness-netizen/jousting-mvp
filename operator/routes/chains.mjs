@@ -101,7 +101,7 @@ export function createChainRoutes(ctx) {
       const validModels = ['haiku', 'sonnet', 'opus'];
       const parsedMaxTurns = Number(maxTurns) || 30;
       const parsedMaxCont = Number(maxContinuations) || 5;
-      const parsedBudget = Number(maxBudgetUsd) ?? 5.0;
+      const parsedBudget = Number(maxBudgetUsd) || 5.0;
 
       if (model && !validModels.includes(model)) {
         return res.status(400).json({ error: `model must be one of: ${validModels.join(', ')}` });

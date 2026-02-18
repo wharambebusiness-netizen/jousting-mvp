@@ -353,6 +353,17 @@ function buildContinuationPrompt(handoff, previousOutput, originalPrompt, contin
     );
   }
 
+  // Include original task for context when no handoff is available
+  if (originalPrompt && !handoff) {
+    const truncatedPrompt = originalPrompt.length > 2000 ? originalPrompt.slice(0, 2000) + '\n...(truncated)' : originalPrompt;
+    parts.push(
+      ``,
+      `--- ORIGINAL TASK (for reference) ---`,
+      truncatedPrompt,
+      `--- END ORIGINAL TASK ---`,
+    );
+  }
+
   parts.push(
     ``,
     `Do NOT redo work that was already completed.`,
@@ -401,6 +412,7 @@ export async function runAgentWithContinuation(agent, prompt, options = {}) {
   let continuations = 0;
   let chainPreCompacted = false;
   let chainHitMaxTurns = false;
+  let chainSuccess = false;
 
   for (let i = 0; i <= maxCont; i++) {
     // PreCompact flag for this specific session
@@ -445,6 +457,7 @@ export async function runAgentWithContinuation(agent, prompt, options = {}) {
     lastSessionId = result.sessionId || lastSessionId;
     if (result.structuredOutput) lastStructuredOutput = result.structuredOutput;
     if (result.hitMaxTurns) chainHitMaxTurns = true;
+    if (result.success) chainSuccess = true;
 
     // Parse handoff from this session's output
     const handoff = parseChainHandoff(result.output);
@@ -485,7 +498,7 @@ export async function runAgentWithContinuation(agent, prompt, options = {}) {
     cost: totalCost,
     sessionId: lastSessionId,
     elapsedMs: totalElapsedMs,
-    success: true,
+    success: chainSuccess,
     continuations,
     preCompacted: chainPreCompacted,
     hitMaxTurns: chainHitMaxTurns,
@@ -603,6 +616,7 @@ export const __test__ = {
   createAgentOptions,
   extractCostFromMessages,
   parseChainHandoff,
+  buildContinuationPrompt,
   MODEL_MAP,
   MAX_CONTINUATIONS_CAP,
   DEFAULT_CHAIN_COST_CAP,
