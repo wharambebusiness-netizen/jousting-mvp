@@ -104,12 +104,31 @@ export function createViewRoutes(ctx) {
       const totalTurns = chains.reduce((sum, c) => sum + (c.totalTurns || 0), 0);
       const running = chains.filter(c => c.status === 'running').length;
 
+      // Per-model breakdown
+      const byModel = {};
+      for (const chain of chains) {
+        const model = chain.config?.model || 'sonnet';
+        if (!byModel[model]) byModel[model] = { costUsd: 0, chains: 0 };
+        byModel[model].costUsd += chain.totalCostUsd || 0;
+        byModel[model].chains++;
+      }
+      const modelOrder = ['opus', 'sonnet', 'haiku'];
+      const modelCards = modelOrder
+        .filter(m => byModel[m])
+        .map(m => {
+          const d = byModel[m];
+          const label = m.charAt(0).toUpperCase() + m.slice(1);
+          return `<div class="metric-card metric-card--model"><div class="metric-card__label">${escapeHtml(label)}</div><div class="metric-card__value">${formatCost(d.costUsd)}</div><div class="metric-card__sub">${d.chains} chain${d.chains !== 1 ? 's' : ''}</div></div>`;
+        })
+        .join('');
+
       res.type('text/html').send(`
         <div class="metric-card"><div class="metric-card__label">Total Cost</div><div class="metric-card__value">${formatCost(totalCost)}</div></div>
         <div class="metric-card"><div class="metric-card__label">Chains</div><div class="metric-card__value">${chains.length}</div></div>
         <div class="metric-card"><div class="metric-card__label">Sessions</div><div class="metric-card__value">${totalSessions}</div></div>
         <div class="metric-card"><div class="metric-card__label">Turns</div><div class="metric-card__value">${totalTurns}</div></div>
         <div class="metric-card"><div class="metric-card__label">Running</div><div class="metric-card__value">${running}</div></div>
+        ${modelCards}
       `);
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
@@ -179,6 +198,13 @@ export function createViewRoutes(ctx) {
 
         <h3>Sessions</h3>
         ${sessionsWithChainId.map(renderSessionCard).join('\n') || '<p class="empty-state">No sessions recorded.</p>'}
+
+        ${sessions.filter(s => s.handoffFile).length >= 2 ? `
+          <h3>Compare Handoffs</h3>
+          <div hx-get="/views/handoff-compare/${chain.id}"
+               hx-trigger="load"
+               hx-swap="innerHTML">Loading...</div>
+        ` : ''}
       `;
       res.type('text/html').send(html);
     } catch (err) {
@@ -208,6 +234,69 @@ export function createViewRoutes(ctx) {
         } catch (_) { /* fall through */ }
       }
       res.type('text/html').send('<p class="empty-state">No handoff file available.</p>');
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Handoff Comparison Fragment ─────────────────────────
+  // Side-by-side comparison of two session handoffs.
+  router.get('/handoff-compare/:chainId', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.chainId);
+      if (!chain) return res.type('text/html').send('<p>Chain not found.</p>');
+
+      const sessions = chain.sessions || [];
+      const handoffSessions = sessions.filter(s => s.handoffFile && existsSync(s.handoffFile));
+      if (handoffSessions.length < 2) {
+        return res.type('text/html').send('<p class="empty-state">Need at least 2 sessions with handoffs to compare.</p>');
+      }
+
+      const a = parseInt(req.query.a, 10);
+      const b = parseInt(req.query.b, 10);
+
+      // If no indices specified, show the selector
+      if (isNaN(a) || isNaN(b)) {
+        const options = handoffSessions.map(s =>
+          `<option value="${s.index}">Session ${s.index + 1}</option>`
+        ).join('');
+        return res.type('text/html').send(`
+          <div class="handoff-compare-picker">
+            <label>Left: <select id="compare-a">${options}</select></label>
+            <label>Right: <select id="compare-b">${handoffSessions.length > 1
+              ? handoffSessions.map((s, i) =>
+                  `<option value="${s.index}"${i === handoffSessions.length - 1 ? ' selected' : ''}>Session ${s.index + 1}</option>`
+                ).join('')
+              : options}</select></label>
+            <button class="btn btn--sm btn--primary"
+              onclick="var a=document.getElementById('compare-a').value,b=document.getElementById('compare-b').value;
+                htmx.ajax('GET','/views/handoff-compare/${chain.id}?a='+a+'&b='+b,'#handoff-compare-content')">Compare</button>
+          </div>
+          <div id="handoff-compare-content"></div>
+        `);
+      }
+
+      const sessionA = sessions[a];
+      const sessionB = sessions[b];
+      if (!sessionA || !sessionB) {
+        return res.type('text/html').send('<p>Invalid session indices.</p>');
+      }
+
+      let contentA = '', contentB = '';
+      try { contentA = readFileSync(sessionA.handoffFile, 'utf-8'); } catch (_) { contentA = '(unavailable)'; }
+      try { contentB = readFileSync(sessionB.handoffFile, 'utf-8'); } catch (_) { contentB = '(unavailable)'; }
+
+      res.type('text/html').send(`
+        <div class="handoff-compare">
+          <div class="handoff-compare__pane">
+            ${renderTerminalViewer({ content: contentA, title: 'Session ' + (a + 1) + ' Handoff', maxHeight: 500 })}
+          </div>
+          <div class="handoff-compare__pane">
+            ${renderTerminalViewer({ content: contentB, title: 'Session ' + (b + 1) + ' Handoff', maxHeight: 500 })}
+          </div>
+        </div>
+      `);
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }

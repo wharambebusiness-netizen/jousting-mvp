@@ -137,6 +137,15 @@ function toggleAutoPush(enabled) {
     .catch(function() {});
 }
 
+// Reset bulk selection after chain table reload
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target && evt.detail.target.closest && evt.detail.target.closest('#chain-table')) {
+    var selectAll = document.getElementById('select-all');
+    if (selectAll) selectAll.checked = false;
+    updateBulkBar();
+  }
+});
+
 // Dashboard chain WS: auto-push + real-time updates
 (function() {
   var lastDashReload = 0;
@@ -317,6 +326,62 @@ document.addEventListener('keydown', function(e) {
     if (searchInput) searchInput.focus();
   }
 });
+
+// ── Bulk Chain Actions ────────────────────────────────────────
+
+function updateBulkBar() {
+  var checks = document.querySelectorAll('.chain-check:checked');
+  var bar = document.getElementById('bulk-bar');
+  var countEl = document.getElementById('bulk-count');
+  var selectAll = document.getElementById('select-all');
+  if (bar) bar.style.display = checks.length > 0 ? 'flex' : 'none';
+  if (countEl) countEl.textContent = checks.length;
+  if (selectAll) {
+    var total = document.querySelectorAll('.chain-check');
+    selectAll.checked = total.length > 0 && checks.length === total.length;
+    selectAll.indeterminate = checks.length > 0 && checks.length < total.length;
+  }
+}
+window.updateBulkBar = updateBulkBar;
+
+function toggleSelectAll(el) {
+  var checks = document.querySelectorAll('.chain-check');
+  checks.forEach(function(c) { c.checked = el.checked; });
+  updateBulkBar();
+}
+window.toggleSelectAll = toggleSelectAll;
+
+function bulkClearSelection() {
+  var checks = document.querySelectorAll('.chain-check');
+  checks.forEach(function(c) { c.checked = false; });
+  var selectAll = document.getElementById('select-all');
+  if (selectAll) selectAll.checked = false;
+  updateBulkBar();
+}
+window.bulkClearSelection = bulkClearSelection;
+
+function bulkDelete() {
+  var checks = document.querySelectorAll('.chain-check:checked');
+  var ids = Array.from(checks).map(function(c) { return c.value; });
+  if (ids.length === 0) return;
+  _showConfirm('Delete ' + ids.length + ' chain(s) permanently?', function() {
+    fetch('/api/chains/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    }).then(function(r) {
+      if (r.ok) {
+        showToast('Deleted ' + ids.length + ' chain(s)', 'success');
+        htmx.trigger(document.getElementById('chain-table'), 'reload');
+        htmx.trigger(document.getElementById('cost-summary-grid'), 'reload');
+        bulkClearSelection();
+      } else {
+        r.json().then(function(d) { showToast(d.error || 'Delete failed', 'error'); });
+      }
+    }).catch(function() { showToast('Delete failed', 'error'); });
+  });
+}
+window.bulkDelete = bulkDelete;
 
 // Global listener: show toast for all API POST/DELETE actions
 document.body.addEventListener('htmx:afterRequest', function (evt) {

@@ -90,7 +90,7 @@
     <!-- Chain Table -->
     <div class="section">
       <div class="chain-table-header">
-        <p class="section__title">Chains</p>
+        <p class="section__title">Chains <span class="export-links"><a href="/api/chains/export?format=json" class="btn btn--xs btn--ghost" download>JSON</a><a href="/api/chains/export?format=csv" class="btn btn--xs btn--ghost" download>CSV</a></span></p>
         <div id="chain-filters" class="chain-filters">
           <input type="search" name="q" placeholder="Search chains..."
             oninput="clearTimeout(this._t); var self=this; this._t=setTimeout(function(){document.getElementById('page-field').value='1'; htmx.trigger(document.getElementById('chain-table'),'reload')},300)"
@@ -107,9 +107,15 @@
           <input type="hidden" name="page" value="1" id="page-field">
         </div>
       </div>
+      <div id="bulk-bar" class="bulk-bar" style="display:none">
+        <span id="bulk-count">0</span> selected
+        <button class="btn btn--sm btn--danger" onclick="bulkDelete()">Delete Selected</button>
+        <button class="btn btn--sm btn--ghost" onclick="bulkClearSelection()">Clear</button>
+      </div>
       <table id="chain-table" role="grid">
         <thead>
           <tr>
+            <th class="bulk-col"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
             <th class="sortable" data-sort="status">Status</th>
             <th>Task</th>
             <th>Model</th>
@@ -123,9 +129,9 @@
                hx-trigger="load, every 15s, reload from:#chain-table"
                hx-include="#chain-filters"
                hx-swap="innerHTML">
-          <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
-          <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
-          <tr><td colspan="7"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
+          <tr><td colspan="8"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
+          <tr><td colspan="8"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
+          <tr><td colspan="8"><div class="skeleton" style="height:20px;margin:4px 0"></div></td></tr>
         </tbody>
       </table>
       <div id="chain-pagination" class="pagination"></div>

@@ -239,6 +239,33 @@ export function createChainRoutes(ctx) {
     }
   });
 
+  // ── POST /api/chains/batch-delete ───────────────────────
+  // Delete multiple chains at once. Body: { ids: string[] }
+  router.post('/batch-delete', (req, res) => {
+    try {
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'ids array required' });
+      }
+      const registry = loadRegistry();
+      const idSet = new Set(ids);
+      const running = registry.chains.filter(c => idSet.has(c.id) && c.status === 'running');
+      if (running.length > 0) {
+        return res.status(409).json({ error: `Cannot delete ${running.length} running chain(s) — abort first` });
+      }
+      const before = registry.chains.length;
+      registry.chains = registry.chains.filter(c => !idSet.has(c.id));
+      const deleted = before - registry.chains.length;
+      saveRegistry(registry);
+      for (const id of ids) {
+        if (ctx.events) ctx.events.emit('chain:deleted', { chainId: id });
+      }
+      res.json({ deleted });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /api/chains/:id/sessions/:idx ───────────────────
   // Session detail including handoff file content.
   router.get('/chains/:id/sessions/:idx', (req, res) => {
@@ -316,6 +343,22 @@ export function createChainRoutes(ctx) {
         byProject[proj].sessions += chain.sessions?.length || 0;
       }
 
+      // Per-model breakdown
+      const byModel = {};
+      for (const chain of chains) {
+        const model = chain.config?.model || 'sonnet';
+        if (!byModel[model]) {
+          byModel[model] = { chains: 0, costUsd: 0, sessions: 0, inputTokens: 0, outputTokens: 0 };
+        }
+        byModel[model].chains++;
+        byModel[model].costUsd += chain.totalCostUsd || 0;
+        byModel[model].sessions += chain.sessions?.length || 0;
+        for (const s of (chain.sessions || [])) {
+          byModel[model].inputTokens += s.inputTokens || 0;
+          byModel[model].outputTokens += s.outputTokens || 0;
+        }
+      }
+
       res.json({
         totalCostUsd: totalCost,
         totalChains: chains.length,
@@ -323,7 +366,63 @@ export function createChainRoutes(ctx) {
         totalTurns,
         byStatus,
         byProject,
+        byModel,
       });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/chains/export ──────────────────────────────
+  // Export chain list as JSON or CSV. ?format=csv|json (default json).
+  // Supports same ?project= filter as chain list.
+  router.get('/export', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      let chains = registry.chains;
+
+      const projectFilter = req.query.project;
+      if (projectFilter) {
+        const normalizedFilter = resolve(projectFilter).replace(/\\/g, '/');
+        chains = chains.filter(c => {
+          if (!c.projectDir) return false;
+          return resolve(c.projectDir).replace(/\\/g, '/') === normalizedFilter;
+        });
+      }
+
+      const rows = chains.map(c => ({
+        id: c.id,
+        task: c.task,
+        status: c.status,
+        model: c.config?.model || 'sonnet',
+        sessions: c.sessions?.length || 0,
+        totalCostUsd: c.totalCostUsd || 0,
+        totalTurns: c.totalTurns || 0,
+        totalDurationMs: c.totalDurationMs || 0,
+        startedAt: c.startedAt || '',
+        updatedAt: c.updatedAt || '',
+        projectDir: c.projectDir || '',
+        branch: c.config?.branch || '',
+      }));
+
+      const format = (req.query.format || 'json').toLowerCase();
+      if (format === 'csv') {
+        const headers = ['id', 'task', 'status', 'model', 'sessions', 'totalCostUsd', 'totalTurns', 'totalDurationMs', 'startedAt', 'updatedAt', 'projectDir', 'branch'];
+        const csvEscape = (v) => {
+          const s = String(v ?? '');
+          return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const lines = [headers.join(',')];
+        for (const row of rows) {
+          lines.push(headers.map(h => csvEscape(row[h])).join(','));
+        }
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="chains.csv"');
+        res.send(lines.join('\n'));
+      } else {
+        res.setHeader('Content-Disposition', 'attachment; filename="chains.json"');
+        res.json(rows);
+      }
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

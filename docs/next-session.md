@@ -1,4 +1,4 @@
-# Next Session Instructions (S96)
+# Next Session Instructions (S97)
 
 ## PIVOT: Operator Dashboard is Now the Primary Focus
 
@@ -6,68 +6,70 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
-## Context: S95
+## Context: S96
 
-S95 completed **5 P7 polish & enhancement features**:
+S96 completed **4 P7 features** (continuing the polish & enhancements phase):
 
-1. **WebSocket reconnection with exponential backoff** — Created shared `createWS(subscriptions, onMessage, opts)` utility in `app.js`. Handles reconnection with backoff (1s→2s→4s→8s→16s→30s max), resets on successful connect. Refactored all 3 WS connection points (dashboard chain events, chain detail, orchestrator log) to use it instead of inline `new WebSocket()` + `setTimeout(reconnect, N)`.
+1. **Per-model cost breakdown** — Dashboard cost summary now shows per-model metric cards (Opus/Sonnet/Haiku) with cost and chain count. Added `byModel` aggregation to `GET /api/costs` API. Extended session data model to persist `inputTokens`/`outputTokens` from SDK results (future sessions will have token-level data).
 
-2. **Keyboard shortcuts** — Added global `keydown` listener in `app.js`. `N` key opens the "New Chain" details and focuses the task input. `/` key focuses the chain search input. Both skip when user is already in an input/textarea/select or using modifier keys.
+2. **Chain export (CSV/JSON)** — New `GET /api/chains/export?format=csv|json` endpoint exports chain list with all metadata. JSON/CSV download buttons added next to "Chains" title on dashboard. Supports `?project=` filter.
 
-3. **SVG favicon** — Two interlocking circles (chain links) in accent colors (`#6366f1` and `#818cf8`) as an inline SVG data URI. Added `<link rel="icon">` to all 4 HTML pages (index, chain, orchestrator, settings).
+3. **Bulk chain actions** — Checkbox column on chain table rows with select-all header checkbox (supports indeterminate state). Bulk action bar appears when items are selected showing count + "Delete Selected" + "Clear" buttons. New `POST /api/chains/batch-delete` endpoint. Uses the styled confirm dialog for destructive actions. Selection resets on table reload.
 
-4. **WS connection status indicator** — Small 6px dot next to "Operator" brand text in the nav bar on all pages. Green with glow when connected, red when disconnected, yellow with pulse animation when connecting. Driven by `createWS` `trackStatus` option (only the primary dashboard WS drives the dot).
+4. **Side-by-side handoff viewer** — New `/views/handoff-compare/:chainId` fragment with session picker dropdowns. Renders two handoffs in a side-by-side grid layout via terminal viewer. Auto-loads on chain detail page when 2+ sessions have handoffs. Responsive: stacks vertically on mobile.
 
-5. **Styled confirm dialog** — HTML `<dialog>` element dynamically created in `app.js`. Intercepts HTMX `hx-confirm` events globally via `htmx:confirm` event listener, preventing the native `confirm()`. Shows a styled modal with backdrop blur, contextual button text (Delete/Abort/Stop/Confirm), danger styling for destructive actions. Cancel button auto-focused. Click-outside-to-close.
-
-**1491 tests, 24 suites, all passing.** (No new tests — all changes were UI/view layer.)
+**1491 tests, 24 suites, all passing.**
 
 ## What Changed (Files Modified)
 
 ```
-EDIT: operator/public/app.js           createWS() utility, keyboard shortcuts, confirm dialog, refactored dashboard WS
-EDIT: operator/public/style.css        WS status indicator styles (.ws-dot), confirm dialog styles (.confirm-dialog)
-EDIT: operator/public/index.html       Favicon link, WS dot in nav brand
-EDIT: operator/public/chain.html       Favicon link, WS dot in nav brand, refactored inline WS to use createWS()
-EDIT: operator/public/orchestrator.html Favicon link, WS dot in nav brand, refactored inline WS to use createWS()
-EDIT: operator/public/settings.html    Favicon link, WS dot in nav brand
-EDIT: docs/session-history.md          S95 entry
+EDIT: operator/registry.mjs             Added inputTokens/outputTokens to session data model
+EDIT: operator/operator.mjs             Pass token data from SDK result to recordSession()
+EDIT: operator/routes/chains.mjs        byModel aggregation in GET /api/costs, GET /api/chains/export, POST /api/chains/batch-delete
+EDIT: operator/routes/views.mjs         Per-model cards in cost-summary, handoff-compare fragment, compare section in chain detail
+EDIT: operator/views/chain-row.mjs      Checkbox column in chain rows, colspan 7→8
+EDIT: operator/public/index.html        Checkbox th, bulk action bar, export links, colspan 7→8
+EDIT: operator/public/style.css         metric-card__sub, metric-card--model, btn--xs, export-links, bulk-bar, bulk-col, handoff-compare
+EDIT: operator/public/app.js            Bulk selection JS (updateBulkBar, toggleSelectAll, bulkDelete, bulkClearSelection), table reload reset
+EDIT: docs/session-history.md           S96 entry
 ```
 
 ## Remaining Operator Improvement Roadmap
 
 ### Priority 7 (continued): Polish & Enhancements
 
-Completed in S95: WS reconnection, keyboard shortcuts, favicon, WS status indicator, modal/dialog.
+Completed through S95-S96:
+- WS reconnection with exponential backoff
+- Keyboard shortcuts (N, /)
+- SVG favicon
+- WS connection status indicator
+- Styled confirm dialog
+- Per-model cost breakdown
+- Chain export (CSV/JSON)
+- Bulk chain actions
+- Side-by-side handoff viewer
 
 Remaining items:
-- Per-model cost breakdown in cost summary
-- Orchestrator run history (persist past runs)
-- Bulk chain actions (select multiple → delete/abort)
-- Chain export (CSV/JSON)
-- Dark/light theme toggle
-- Side-by-side handoff viewer
-- Chain dependency graph visualization
+- **Orchestrator run history** — persist past orchestrator runs (start time, duration, mission, outcome) so users can review previous runs
+- **Dark/light theme toggle** — add theme switcher to settings or nav
+- **Chain dependency graph visualization** — visual representation of chain relationships/dependencies
 
-These are all low-priority polish items. Suggested next picks:
-1. **Per-model cost breakdown** — show input/output token costs per model in cost summary cards
-2. **Chain export** — download chain list as CSV or JSON for external analysis
-3. **Bulk chain actions** — checkbox selection on chain rows, batch delete/abort
-4. **Side-by-side handoff viewer** — compare consecutive session handoffs
+These are all low-priority polish items. The dashboard is fully functional for production use.
 
 ## Key Architecture Notes
 
-- **createWS(subs, onMsg, opts)** in `app.js`: shared WS utility with exponential backoff. `opts.trackStatus = true` drives the `#ws-dot` element. Returns `{ close }`. All pages use it.
-- **Confirm dialog**: intercepts `htmx:confirm` event globally. Uses `evt.detail.issueRequest()` to proceed. Danger detection via regex on message text (`/delete|abort|stop/i`).
-- **Keyboard shortcuts**: `N` = new chain (opens details + focuses `#chain-task`), `/` = search (focuses `#chain-filters input[type="search"]`). Skips when in form elements.
-- **Settings schema**: `{ model, maxTurns, maxContinuations, maxBudgetUsd, autoPush }` — validated+clamped on both load and save.
-- **app.js** now has 8 systems: progress bar, toast, createWS utility, branch auto-gen, auto-push toggle, project filter, confirm dialog, keyboard shortcuts.
+- **Session token data** now persisted: `inputTokens` and `outputTokens` fields in session objects (backward-compatible — defaults to 0 for old sessions).
+- **Bulk delete** uses `POST /api/chains/batch-delete` with `{ ids: string[] }` body. Rejects if any chain is running (409). Emits `chain:deleted` for each removed chain.
+- **Chain export** at `GET /api/chains/export?format=csv|json` — defaults to JSON, supports project filter. CSV uses proper escaping for commas/quotes/newlines.
+- **Handoff compare** fragment auto-shows picker when no `?a=&b=` params specified, then renders side-by-side via htmx.ajax() on button click.
+- **Bulk bar JS**: `updateBulkBar()`, `toggleSelectAll()`, `bulkDelete()`, `bulkClearSelection()` all exposed as `window.*` globals. Select-all supports indeterminate state. Selection resets on htmx:afterSwap of chain table.
+- **app.js** now has 10 systems: progress bar, toast, createWS utility, branch auto-gen, auto-push toggle, project filter, confirm dialog, keyboard shortcuts, bulk actions, table reload reset.
 
 ## Codebase Stats
 
 ```
-Operator: 16 source files, ~3,700 lines code + ~2,800 lines tests
-Routes:   24 API endpoints, 9 view fragment routes, 3 page routes, 1 WebSocket
+Operator: 16 source files, ~4,000 lines code + ~2,800 lines tests
+Routes:   27 API endpoints, 10 view fragment routes, 3 page routes, 1 WebSocket
 Events:   17 bridged WS events, pattern-based subscriptions
 Tests:    235 operator tests (server 86, views 85, errors 43, registry 21)
 Total:    1491 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)

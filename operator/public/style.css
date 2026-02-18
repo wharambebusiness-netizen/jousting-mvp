@@ -218,6 +218,14 @@ h3 { font-size: 1rem; font-weight: 600; }
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
+.metric-card__sub {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+}
+.metric-card--model {
+  border-left: 3px solid var(--accent);
+}
 
 /* === 7. Cards === */
 article, .card {
@@ -438,6 +446,18 @@ th.sorted-asc::after {
 .btn--sm {
   padding: 2px var(--sp-3);
   font-size: 0.75rem;
+}
+.btn--xs {
+  padding: 1px var(--sp-2);
+  font-size: 0.6875rem;
+}
+.export-links {
+  margin-left: var(--sp-3);
+  font-size: 0;
+}
+.export-links a {
+  margin-left: var(--sp-1);
+  text-decoration: none;
 }
 .btn--delete {
   opacity: 0.5;
@@ -1033,12 +1053,58 @@ input::placeholder { color: var(--text-muted); }
   justify-content: flex-end;
 }
 
-/* === 33. Responsive === */
+/* === 33. Bulk Actions === */
+.bulk-col { width: 32px; text-align: center; }
+.bulk-col input[type="checkbox"] { margin: 0; }
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--sp-3);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.bulk-bar span { font-weight: 600; color: var(--text-primary); }
+
+/* === 34. Handoff Compare === */
+.handoff-compare-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+.handoff-compare-picker label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.handoff-compare-picker select {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.8125rem;
+  width: auto;
+}
+.handoff-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+.handoff-compare__pane {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* === 35. Responsive === */
 @media (max-width: 768px) {
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .page { padding: var(--sp-4); }
   .nav { padding: var(--sp-3) var(--sp-4); }
   .agent-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .handoff-compare { grid-template-columns: 1fr; }
   .quick-start fieldset { flex-direction: column; }
   .quick-start .task-input,
   .quick-start .model-select,

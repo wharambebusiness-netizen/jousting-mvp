@@ -663,6 +663,8 @@ async function runChain(config, registry, existingChain) {
       sessionId: result.sessionId,
       turns: result.turns,
       costUsd: result.cost.totalUsd,
+      inputTokens: result.cost.usage?.input_tokens || 0,
+      outputTokens: result.cost.usage?.output_tokens || 0,
       durationMs: result.durationMs,
       hitMaxTurns: result.hitMaxTurns,
       preCompacted: result.preCompacted,

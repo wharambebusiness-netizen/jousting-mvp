@@ -1,14 +1,14 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-18 07:37:03
+> Generated: 2026-02-18 16:41:05
 > Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-18 07:37:03
-- **Ended**: 2026-02-18 07:37:03
+- **Started**: 2026-02-18 16:41:05
+- **Ended**: 2026-02-18 16:41:05
 - **Total runtime**: 0.0 minutes (0.0 hours)
 - **Rounds completed**: 1
 - **Stop reason**: all agents exhausted their task lists
-- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771400221327\coord-mission.json
+- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771432863826\coord-mission.json
 - **Final test status**: ALL PASSING (1123 tests)
 
 ## Agent Results
@@ -55,8 +55,8 @@
 
 | Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
 |-------|--------|------------|-------|-------------|-----------|----------|-------|
-| dev | 1 | 1 | 1 | 19450 | $0.1496 | 0.0m | 100% |
-| lead | 1 | 1 | 1 | 9674 | $0.0744 | 0.0m | 100% |
+| dev | 1 | 1 | 1 | 9792 | $0.0753 | 0.0m | 100% |
+| lead | 1 | 1 | 1 | 7475 | $0.0575 | 0.0m | 100% |
 
 > **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
 
@@ -83,11 +83,11 @@
 
 | Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
 |-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
-| lead | default | 1 | 7.4k | 2.2k | $0.0744 | $0.0744 | 0 |
-| dev | default | 1 | 15.0k | 4.5k | $0.1496 | $0.1496 | 0 |
-| **TOTAL** | | **2** | **22.4k** | **6.7k** | **$0.2240** | **$0.1120** | **0** |
+| lead | default | 1 | 5.8k | 1.7k | $0.0575 | $0.0575 | 0 |
+| dev | default | 1 | 7.5k | 2.3k | $0.0753 | $0.0753 | 0 |
+| **TOTAL** | | **2** | **13.3k** | **4.0k** | **$0.1328** | **$0.0664** | **0** |
 
-- **Cost per successful agent-round**: $0.1120
+- **Cost per successful agent-round**: $0.0664
 - **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
 - **Note**: Costs are estimates from token counts if CLI did not report direct cost
 

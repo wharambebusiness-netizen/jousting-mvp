@@ -167,6 +167,8 @@ export function recordSession(chain, sessionData) {
     status: sessionData.error ? 'error' : 'complete',
     turns: sessionData.turns || 0,
     costUsd: sessionData.costUsd || 0,
+    inputTokens: sessionData.inputTokens || 0,
+    outputTokens: sessionData.outputTokens || 0,
     durationMs: sessionData.durationMs || 0,
     hitMaxTurns: sessionData.hitMaxTurns || false,
     preCompacted: sessionData.preCompacted || false,

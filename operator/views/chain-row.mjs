@@ -29,6 +29,7 @@ export function renderChainRow(chain) {
     : '';
 
   return `<tr>
+    <td class="bulk-col"><input type="checkbox" class="chain-check" value="${chain.id}" onchange="updateBulkBar()"></td>
     <td><span class="status-dot status-dot--${chain.status}"></span> ${statusLabel(chain.status)}</td>
     <td><a href="/chains/${chain.id}">${task}</a></td>
     <td>${escapeHtml(chain.config?.model || 'sonnet')}</td>
@@ -41,7 +42,7 @@ export function renderChainRow(chain) {
 
 export function renderChainTable(chains) {
   if (!chains.length) {
-    return '<tr><td colspan="7" class="empty-state">No chains yet. Start one above!</td></tr>';
+    return '<tr><td colspan="8" class="empty-state">No chains yet. Start one above!</td></tr>';
   }
   return chains.map(renderChainRow).join('\n');
 }
