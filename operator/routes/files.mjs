@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Router } from 'express';
-import { readdirSync, statSync } from 'fs';
+import { readdirSync, statSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 
 // ── Ignore List ─────────────────────────────────────────────
@@ -18,6 +18,25 @@ const IGNORED = new Set([
 ]);
 
 const MAX_ENTRIES = 500;
+const MAX_FILE_SIZE = 100 * 1024; // 100 KB preview limit
+
+// Binary detection: check first 8KB for null bytes
+function isBinary(buffer) {
+  const len = Math.min(buffer.length, 8192);
+  for (let i = 0; i < len; i++) {
+    if (buffer[i] === 0) return true;
+  }
+  return false;
+}
+
+// Text file extensions (guaranteed non-binary)
+const TEXT_EXTS = new Set([
+  'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'json', 'md', 'txt', 'html',
+  'css', 'svg', 'yml', 'yaml', 'toml', 'sh', 'bat', 'ps1', 'py', 'rb',
+  'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'xml', 'ini', 'cfg',
+  'env', 'gitignore', 'dockerignore', 'editorconfig', 'eslintrc', 'prettierrc',
+  'lock', 'log', 'csv', 'sql', 'graphql', 'vue', 'svelte', 'astro', 'mdx',
+]);
 
 // ── Directory Scanner ───────────────────────────────────────
 
@@ -29,6 +48,8 @@ const MAX_ENTRIES = 500;
  * @param {string} subPath  Relative path within root ('' for root)
  * @returns {Array<{name:string, type:'dir'|'file', path:string, children?:number, size?:number}>}
  */
+export { MAX_FILE_SIZE, TEXT_EXTS, isBinary };
+
 export function scanDirectory(root, subPath = '') {
   const fullPath = subPath ? join(root, subPath) : root;
 
@@ -116,6 +137,65 @@ export function createFileRoutes() {
       root: resolvedRoot.replace(/\\/g, '/'),
       path: (subPath || '').replace(/\\/g, '/'),
       entries,
+    });
+  });
+
+  // GET /api/files/content?root=<abs-path>&path=<relative-file-path>
+  router.get('/files/content', (req, res) => {
+    const root = req.query.root;
+    const filePath = req.query.path || '';
+
+    if (!root || !filePath) {
+      return res.status(400).json({ error: 'root and path parameters are required' });
+    }
+
+    const resolvedRoot = resolve(root);
+    const resolvedFull = resolve(resolvedRoot, filePath);
+
+    // Path-traversal guard
+    if (!resolvedFull.replace(/\\/g, '/').startsWith(resolvedRoot.replace(/\\/g, '/'))) {
+      return res.status(403).json({ error: 'Path traversal denied' });
+    }
+
+    let stat;
+    try {
+      stat = statSync(resolvedFull);
+    } catch {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    if (!stat.isFile()) {
+      return res.status(400).json({ error: 'Not a file' });
+    }
+
+    if (stat.size > MAX_FILE_SIZE) {
+      return res.status(413).json({
+        error: 'File too large for preview',
+        size: stat.size,
+        limit: MAX_FILE_SIZE,
+      });
+    }
+
+    // Check extension for known text types
+    const ext = filePath.includes('.') ? filePath.split('.').pop().toLowerCase() : '';
+    let buf;
+    try {
+      buf = readFileSync(resolvedFull);
+    } catch {
+      return res.status(500).json({ error: 'Failed to read file' });
+    }
+
+    // Binary check (skip for known text extensions)
+    if (!TEXT_EXTS.has(ext) && isBinary(buf)) {
+      return res.status(415).json({ error: 'Binary file cannot be previewed' });
+    }
+
+    const content = buf.toString('utf-8');
+    res.json({
+      path: filePath.replace(/\\/g, '/'),
+      size: stat.size,
+      content,
+      lines: content.split('\n').length,
     });
   });
 

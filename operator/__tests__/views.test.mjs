@@ -16,7 +16,8 @@ import {
   renderStatusBreakdown, renderModelUsage, renderTopChains, renderAnalyticsPanel,
 } from '../views/analytics.mjs';
 import { renderProjectsPanel, renderProjectCard, renderFileTree } from '../views/projects.mjs';
-import { scanDirectory } from '../routes/files.mjs';
+import { scanDirectory, MAX_FILE_SIZE, TEXT_EXTS, isBinary } from '../routes/files.mjs';
+import { getGitFileStatus } from '../routes/git.mjs';
 
 describe('View Helpers', () => {
   it('escapes HTML entities', () => {
@@ -1531,5 +1532,280 @@ describe('View Routes — Projects (P9)', () => {
     // Server always includes its own project directory
     expect(res.text).toContain('projects-panel');
     expect(res.text).toContain('0 chains');
+  });
+});
+
+// ── P10: File Content Preview Tests ─────────────────────────────
+
+describe('File Content API — isBinary', () => {
+  it('detects binary files with null bytes', () => {
+    const buf = Buffer.from([0x48, 0x65, 0x00, 0x6C, 0x6C, 0x6F]); // He\0llo
+    expect(isBinary(buf)).toBe(true);
+  });
+
+  it('detects text files without null bytes', () => {
+    const buf = Buffer.from('Hello world\nLine 2\n');
+    expect(isBinary(buf)).toBe(false);
+  });
+
+  it('handles empty buffer', () => {
+    expect(isBinary(Buffer.alloc(0))).toBe(false);
+  });
+});
+
+describe('File Content API — TEXT_EXTS', () => {
+  it('includes common text extensions', () => {
+    for (const ext of ['js', 'mjs', 'ts', 'tsx', 'json', 'md', 'html', 'css', 'py', 'go', 'rs']) {
+      expect(TEXT_EXTS.has(ext)).toBe(true);
+    }
+  });
+
+  it('does not include image extensions', () => {
+    for (const ext of ['png', 'jpg', 'gif', 'bmp', 'mp3', 'mp4']) {
+      expect(TEXT_EXTS.has(ext)).toBe(false);
+    }
+  });
+});
+
+describe('File Content API — /api/files/content route', () => {
+  const CONTENT_DIR = join(import.meta.dirname, '..', '__test_tmp_content');
+
+  beforeEach(function() {
+    setupApp();
+    if (existsSync(CONTENT_DIR)) rmSync(CONTENT_DIR, { recursive: true });
+    mkdirSync(CONTENT_DIR, { recursive: true });
+    writeFileSync(join(CONTENT_DIR, 'hello.txt'), 'Hello\nWorld\n');
+    writeFileSync(join(CONTENT_DIR, 'code.js'), 'const x = 42;\nconsole.log(x);\n');
+    writeFileSync(join(CONTENT_DIR, 'binary.dat'), Buffer.from([0x00, 0xFF, 0x00, 0xFF]));
+    mkdirSync(join(CONTENT_DIR, 'subdir'));
+  });
+
+  afterEach(function() {
+    teardownApp();
+    if (existsSync(CONTENT_DIR)) rmSync(CONTENT_DIR, { recursive: true });
+  });
+
+  it('returns file content with line count', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=hello.txt`);
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.text);
+    expect(data.content).toBe('Hello\nWorld\n');
+    expect(data.lines).toBe(3); // 'Hello', 'World', ''
+    expect(data.size).toBe(12);
+    expect(data.path).toBe('hello.txt');
+  });
+
+  it('returns JS file content', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=code.js`);
+    expect(res.status).toBe(200);
+    const data = JSON.parse(res.text);
+    expect(data.content).toContain('const x = 42');
+  });
+
+  it('rejects binary files', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=binary.dat`);
+    expect(res.status).toBe(415);
+    const data = JSON.parse(res.text);
+    expect(data.error).toContain('Binary');
+  });
+
+  it('returns 404 for nonexistent file', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=nope.txt`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for directory', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=subdir`);
+    expect(res.status).toBe(400);
+    const data = JSON.parse(res.text);
+    expect(data.error).toContain('Not a file');
+  });
+
+  it('returns 400 when missing params', async () => {
+    const res = await get('/api/files/content');
+    expect(res.status).toBe(400);
+  });
+
+  it('blocks path traversal', async () => {
+    const root = encodeURIComponent(CONTENT_DIR);
+    const res = await get(`/api/files/content?root=${root}&path=../../package.json`);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── P10: Git Status on File Tree Tests ──────────────────────────
+
+describe('P10 — renderFileTree with git status', () => {
+  it('renders git badge for modified files', () => {
+    const entries = [
+      { name: 'app.js', type: 'file', path: 'src/app.js', size: 200 },
+      { name: 'clean.js', type: 'file', path: 'src/clean.js', size: 100 },
+    ];
+    const gitStatus = { 'src/app.js': 'M' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).toContain('git-badge');
+    expect(html).toContain('git-modified');
+    // clean file should NOT have badge
+    const cleanPart = html.split('clean.js')[1];
+    expect(cleanPart).not.toContain('git-badge');
+  });
+
+  it('renders untracked badge', () => {
+    const entries = [
+      { name: 'new.ts', type: 'file', path: 'new.ts', size: 50 },
+    ];
+    const gitStatus = { 'new.ts': '?' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).toContain('git-untracked');
+    expect(html).toContain('title="Untracked"');
+  });
+
+  it('renders added badge', () => {
+    const entries = [
+      { name: 'added.ts', type: 'file', path: 'added.ts', size: 50 },
+    ];
+    const gitStatus = { 'added.ts': 'A' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).toContain('git-added');
+  });
+
+  it('renders deleted badge', () => {
+    const entries = [
+      { name: 'removed.ts', type: 'file', path: 'removed.ts', size: 0 },
+    ];
+    const gitStatus = { 'removed.ts': 'D' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).toContain('git-deleted');
+  });
+
+  it('shows change dot on directories with modified files', () => {
+    const entries = [
+      { name: 'src', type: 'dir', path: 'src', children: 3 },
+    ];
+    const gitStatus = { 'src/index.ts': 'M' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).toContain('git-dir-dot');
+    expect(html).toContain('Contains changes');
+  });
+
+  it('no change dot on clean directories', () => {
+    const entries = [
+      { name: 'lib', type: 'dir', path: 'lib', children: 2 },
+    ];
+    const gitStatus = { 'src/other.ts': 'M' };
+    const html = renderFileTree(entries, '/proj', gitStatus);
+    expect(html).not.toContain('git-dir-dot');
+  });
+
+  it('works without gitStatus (backward compat)', () => {
+    const entries = [
+      { name: 'app.js', type: 'file', path: 'app.js', size: 100 },
+    ];
+    const html = renderFileTree(entries, '/proj');
+    expect(html).toContain('app.js');
+    expect(html).not.toContain('git-badge');
+  });
+});
+
+// ── P10: Clickable Files ────────────────────────────────────────
+
+describe('P10 — clickable file entries', () => {
+  it('file entries have onclick previewFile', () => {
+    const entries = [
+      { name: 'test.ts', type: 'file', path: 'test.ts', size: 50 },
+    ];
+    const html = renderFileTree(entries, '/proj');
+    expect(html).toContain('previewFile');
+    expect(html).toContain('tree-file--clickable');
+    expect(html).toContain('data-path="test.ts"');
+  });
+});
+
+// ── P10: Project Card Enhancements ──────────────────────────────
+
+describe('P10 — renderProjectCard enhancements', () => {
+  const baseProject = {
+    projectDir: '/home/user/proj',
+    chains: 3, running: 0, completed: 3, failed: 0,
+    totalCostUsd: 1.5, lastActivity: new Date().toISOString(),
+  };
+
+  it('includes collapse toggle button', () => {
+    const html = renderProjectCard(baseProject, []);
+    expect(html).toContain('project-card__toggle');
+    expect(html).toContain('toggleProjectCard');
+  });
+
+  it('includes search input', () => {
+    const html = renderProjectCard(baseProject, []);
+    expect(html).toContain('tree-search');
+    expect(html).toContain('filterTree');
+    expect(html).toContain('Search files');
+  });
+
+  it('includes collapsible body wrapper', () => {
+    const html = renderProjectCard(baseProject, []);
+    expect(html).toContain('project-card__body');
+    expect(html).toContain('project-card__search');
+  });
+
+  it('shows git changed count when gitStatus provided', () => {
+    const gitStatus = { 'src/a.ts': 'M', 'src/b.ts': '?' };
+    const html = renderProjectCard(baseProject, [], gitStatus);
+    expect(html).toContain('2 changed');
+    expect(html).toContain('proj-stat--git');
+  });
+
+  it('hides git changed count when no changes', () => {
+    const html = renderProjectCard(baseProject, [], {});
+    expect(html).not.toContain('changed');
+    expect(html).not.toContain('proj-stat--git');
+  });
+
+  it('hides git changed count when gitStatus is null', () => {
+    const html = renderProjectCard(baseProject, [], null);
+    expect(html).not.toContain('proj-stat--git');
+  });
+});
+
+// ── P10: renderProjectsPanel with git status ────────────────────
+
+describe('P10 — renderProjectsPanel with gitStatusMap', () => {
+  it('passes gitStatus to project cards', () => {
+    const projects = [
+      { projectDir: '/proj/a', chains: 1, running: 0, completed: 1, failed: 0, totalCostUsd: 0, lastActivity: new Date().toISOString() },
+    ];
+    const rootMap = new Map();
+    rootMap.set('/proj/a', [{ name: 'index.js', type: 'file', path: 'index.js', size: 50 }]);
+    const gitMap = new Map();
+    gitMap.set('/proj/a', { 'index.js': 'M' });
+    const html = renderProjectsPanel(projects, rootMap, gitMap);
+    expect(html).toContain('git-badge');
+    expect(html).toContain('1 changed');
+  });
+
+  it('includes file preview panel', () => {
+    const projects = [
+      { projectDir: '/proj/a', chains: 1, running: 0, completed: 1, failed: 0, totalCostUsd: 0, lastActivity: new Date().toISOString() },
+    ];
+    const html = renderProjectsPanel(projects, new Map([[ '/proj/a', [] ]]));
+    expect(html).toContain('file-preview');
+    expect(html).toContain('file-preview__header');
+    expect(html).toContain('file-preview__close');
+    expect(html).toContain('closePreview');
+  });
+
+  it('works without gitStatusMap (backward compat)', () => {
+    const projects = [
+      { projectDir: '/proj/a', chains: 1, running: 0, completed: 1, failed: 0, totalCostUsd: 0, lastActivity: null },
+    ];
+    const html = renderProjectsPanel(projects, new Map([[ '/proj/a', [] ]]));
+    expect(html).toContain('project-card');
+    expect(html).not.toContain('git-badge');
   });
 });

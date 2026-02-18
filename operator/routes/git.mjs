@@ -29,9 +29,52 @@ function run(cmd, args, cwd) {
  * @param {object} ctx
  * @param {string} ctx.projectDir - Project root directory
  */
+/**
+ * Run git status --porcelain on an arbitrary directory.
+ * Returns a Map of relative path → status code (M, A, ?, D, etc.)
+ */
+async function getGitFileStatus(dir) {
+  const result = await run('git', ['status', '--porcelain', '-uall'], dir);
+  const statusMap = {};
+  if (result.code !== 0 || !result.stdout) return statusMap;
+
+  for (const line of result.stdout.split('\n')) {
+    if (!line || line.length < 4) continue;
+    // Porcelain format: XY <path> or XY <path> -> <renamed>
+    const xy = line.slice(0, 2);
+    let filePath = line.slice(3);
+    // Handle renames: "R  old -> new"
+    const arrowIdx = filePath.indexOf(' -> ');
+    if (arrowIdx >= 0) filePath = filePath.slice(arrowIdx + 4);
+    filePath = filePath.replace(/\\/g, '/');
+    // Pick the most meaningful status char (index then working tree)
+    const code = xy[0] !== ' ' && xy[0] !== '?' ? xy[0] : xy[1];
+    statusMap[filePath] = code;
+  }
+  return statusMap;
+}
+
+export { getGitFileStatus };
+
 export function createGitRoutes(ctx) {
   const router = Router();
   const projectDir = ctx.projectDir || process.cwd();
+
+  // ── GET /api/git/file-status ────────────────────────────
+  // Returns per-file git status for a project directory (used by file tree)
+  router.get('/git/file-status', async (req, res) => {
+    const root = req.query.root;
+    if (!root) {
+      return res.status(400).json({ error: 'root parameter is required' });
+    }
+    try {
+      const resolvedRoot = resolve(root);
+      const statusMap = await getGitFileStatus(resolvedRoot);
+      res.json({ root: resolvedRoot.replace(/\\/g, '/'), files: statusMap });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ── GET /api/git/status ─────────────────────────────────
   // Returns git status + recent log

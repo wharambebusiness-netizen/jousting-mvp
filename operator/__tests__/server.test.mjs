@@ -1424,3 +1424,64 @@ describe('Projects Page', () => {
     expect(text.length).toBeGreaterThan(0);
   });
 });
+
+// ── P10: File Content Preview ─────────────────────────────────────
+
+describe('File Content API (P10)', () => {
+  let contentDir;
+
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    contentDir = join(TEST_DIR, 'content-test');
+    mkdirSync(contentDir, { recursive: true });
+    writeFileSync(join(contentDir, 'sample.js'), 'const x = 1;\n');
+    writeFileSync(join(contentDir, 'binary.dat'), Buffer.from([0x00, 0xFF, 0x00]));
+    mkdirSync(join(contentDir, 'sub'));
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /api/files/content returns file content', async () => {
+    const root = encodeURIComponent(contentDir);
+    const { status, body } = await api(`/api/files/content?root=${root}&path=sample.js`);
+    expect(status).toBe(200);
+    expect(body.content).toContain('const x = 1');
+    expect(body.lines).toBeGreaterThan(0);
+    expect(body.path).toBe('sample.js');
+  });
+
+  it('GET /api/files/content rejects binary', async () => {
+    const root = encodeURIComponent(contentDir);
+    const { status, body } = await api(`/api/files/content?root=${root}&path=binary.dat`);
+    expect(status).toBe(415);
+    expect(body.error).toContain('Binary');
+  });
+
+  it('GET /api/files/content returns 404 for missing file', async () => {
+    const root = encodeURIComponent(contentDir);
+    const { status } = await api(`/api/files/content?root=${root}&path=nope.txt`);
+    expect(status).toBe(404);
+  });
+
+  it('GET /api/files/content blocks path traversal', async () => {
+    const root = encodeURIComponent(contentDir);
+    const { status } = await api(`/api/files/content?root=${root}&path=../../package.json`);
+    expect(status).toBe(403);
+  });
+
+  it('GET /api/files/content returns 400 for directory', async () => {
+    const root = encodeURIComponent(contentDir);
+    const { status, body } = await api(`/api/files/content?root=${root}&path=sub`);
+    expect(status).toBe(400);
+    expect(body.error).toContain('Not a file');
+  });
+
+  it('GET /api/files/content returns 400 for missing params', async () => {
+    const { status } = await api('/api/files/content');
+    expect(status).toBe(400);
+  });
+});

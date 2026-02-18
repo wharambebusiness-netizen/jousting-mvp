@@ -424,7 +424,12 @@ function loadTreeNode(details) {
 
   fetch('/views/file-tree?root=' + encodeURIComponent(root) + '&path=' + encodeURIComponent(path))
     .then(function(r) { return r.text(); })
-    .then(function(html) { children.innerHTML = html; })
+    .then(function(html) {
+      children.innerHTML = html;
+      // Re-apply any active search filter
+      var search = card && card.querySelector('.tree-search');
+      if (search && search.value) filterTree(search);
+    })
     .catch(function() { children.innerHTML = '<div class="tree-empty">Failed to load</div>'; });
 }
 window.loadTreeNode = loadTreeNode;
@@ -447,12 +452,177 @@ function refreshProjectTree(card) {
     .then(function(html) {
       tree.innerHTML = html;
       if (btn) setTimeout(function() { btn.classList.remove('refreshing'); }, 400);
+      // Re-apply search filter
+      var search = card.querySelector('.tree-search');
+      if (search && search.value) filterTree(search);
     })
     .catch(function() {
       if (btn) btn.classList.remove('refreshing');
     });
 }
 window.refreshProjectTree = refreshProjectTree;
+
+// ── File Preview ────────────────────────────────────────────────
+
+function previewFile(el) {
+  var card = el.closest('.project-card');
+  var root = card ? card.dataset.root : '';
+  var path = el.dataset.path || '';
+  if (!root || !path) return;
+
+  // Highlight active file
+  var prev = document.querySelector('.tree-file--active');
+  if (prev) prev.classList.remove('tree-file--active');
+  el.classList.add('tree-file--active');
+
+  var panel = document.getElementById('file-preview');
+  if (!panel) return;
+
+  var pathEl = panel.querySelector('.file-preview__path');
+  var codeEl = panel.querySelector('.file-preview__code code');
+  if (pathEl) pathEl.textContent = path;
+  if (codeEl) codeEl.textContent = 'Loading…';
+  panel.style.display = '';
+
+  fetch('/api/files/content?root=' + encodeURIComponent(root) + '&path=' + encodeURIComponent(path))
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      if (codeEl) {
+        // Add line numbers
+        var lines = data.content.split('\n');
+        var numbered = lines.map(function(line, i) {
+          var num = String(i + 1);
+          var pad = '     '.slice(num.length);
+          return '<span class="line-num">' + pad + num + '</span>  ' + escapePreviewHtml(line);
+        }).join('\n');
+        codeEl.innerHTML = numbered;
+      }
+    })
+    .catch(function(err) {
+      if (codeEl) codeEl.textContent = err.message || 'Failed to load file';
+    });
+}
+window.previewFile = previewFile;
+
+function closePreview() {
+  var panel = document.getElementById('file-preview');
+  if (panel) panel.style.display = 'none';
+  var active = document.querySelector('.tree-file--active');
+  if (active) active.classList.remove('tree-file--active');
+}
+window.closePreview = closePreview;
+
+function escapePreviewHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── File Tree Search ────────────────────────────────────────────
+
+var _filterTimer = null;
+function filterTree(input) {
+  if (_filterTimer) clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(function() { _doFilterTree(input); }, 150);
+}
+window.filterTree = filterTree;
+
+function _doFilterTree(input) {
+  var card = input.closest('.project-card');
+  if (!card) return;
+  var tree = card.querySelector('.project-tree');
+  if (!tree) return;
+
+  var query = (input.value || '').toLowerCase().trim();
+
+  // Show all entries if query is empty
+  var files = tree.querySelectorAll('.tree-file');
+  var dirs = tree.querySelectorAll('.tree-dir');
+
+  if (!query) {
+    for (var i = 0; i < files.length; i++) files[i].style.display = '';
+    for (var j = 0; j < dirs.length; j++) dirs[j].style.display = '';
+    return;
+  }
+
+  // Filter files: show if name matches
+  for (var fi = 0; fi < files.length; fi++) {
+    var nameEl = files[fi].querySelector('.tree-name');
+    var name = nameEl ? nameEl.textContent.toLowerCase() : '';
+    files[fi].style.display = name.includes(query) ? '' : 'none';
+  }
+
+  // Show dirs if they contain any visible children
+  for (var di = dirs.length - 1; di >= 0; di--) {
+    var children = dirs[di].querySelector('.tree-children');
+    var hasVisible = false;
+    if (children) {
+      var visFiles = children.querySelectorAll('.tree-file:not([style*="display: none"])');
+      var visDirs = children.querySelectorAll('.tree-dir:not([style*="display: none"])');
+      hasVisible = visFiles.length > 0 || visDirs.length > 0;
+    }
+    // Also check if dir name matches
+    var dirName = dirs[di].querySelector('.tree-name');
+    var dirNameText = dirName ? dirName.textContent.toLowerCase() : '';
+    if (dirNameText.includes(query)) hasVisible = true;
+    dirs[di].style.display = hasVisible ? '' : 'none';
+    // Auto-open dirs with matches
+    if (hasVisible && !dirs[di].open) {
+      dirs[di].open = true;
+      loadTreeNode(dirs[di]);
+    }
+  }
+}
+
+// ── Collapsible Project Cards ───────────────────────────────────
+
+function toggleProjectCard(card) {
+  if (!card) return;
+  var body = card.querySelector('.project-card__body');
+  var btn = card.querySelector('.project-card__toggle');
+  if (!body) return;
+
+  var collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (btn) btn.textContent = collapsed ? '▾' : '▸';
+
+  // Persist state
+  var root = card.dataset.root || '';
+  var key = 'proj-collapsed';
+  try {
+    var state = JSON.parse(localStorage.getItem(key) || '{}');
+    if (collapsed) { delete state[root]; } else { state[root] = true; }
+    localStorage.setItem(key, JSON.stringify(state));
+  } catch (_) {}
+}
+window.toggleProjectCard = toggleProjectCard;
+
+// Restore collapsed state on load
+(function() {
+  function restoreCollapsed() {
+    try {
+      var state = JSON.parse(localStorage.getItem('proj-collapsed') || '{}');
+      var cards = document.querySelectorAll('.project-card');
+      for (var i = 0; i < cards.length; i++) {
+        var root = cards[i].dataset.root || '';
+        if (state[root]) {
+          var body = cards[i].querySelector('.project-card__body');
+          var btn = cards[i].querySelector('.project-card__toggle');
+          if (body) body.style.display = 'none';
+          if (btn) btn.textContent = '▸';
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Run after HTMX loads the projects panel
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target && evt.detail.target.id === 'projects-panel') {
+      restoreCollapsed();
+    }
+  });
+})();
 
 // ── Real-time File Change Listener ─────────────────────────────
 

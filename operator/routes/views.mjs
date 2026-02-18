@@ -20,6 +20,7 @@ import { loadSettings } from '../settings.mjs';
 import { renderAnalyticsPanel } from '../views/analytics.mjs';
 import { renderProjectsPanel, renderFileTree } from '../views/projects.mjs';
 import { scanDirectory } from './files.mjs';
+import { getGitFileStatus } from './git.mjs';
 
 /**
  * Create view routes for HTMX fragments.
@@ -694,7 +695,7 @@ export function createViewRoutes(ctx) {
   });
 
   // ── Projects Fragment ────────────────────────────────────────
-  router.get('/projects', (_req, res) => {
+  router.get('/projects', async (_req, res) => {
     try {
       const registry = loadRegistry();
       const chains = registry.chains || [];
@@ -741,14 +742,25 @@ export function createViewRoutes(ctx) {
 
       // Scan root-level entries for each project
       const rootEntriesMap = new Map();
+      const gitStatusMap = new Map();
+      const gitPromises = [];
+
       for (const p of projects) {
         const dir = p.projectDir;
         if (dir && dir !== '(default)') {
           rootEntriesMap.set(dir, scanDirectory(dir, ''));
+          // Fetch git status in parallel (non-blocking, fail-safe)
+          gitPromises.push(
+            getGitFileStatus(dir)
+              .then(status => gitStatusMap.set(dir, status))
+              .catch(() => {}) // git not available — skip silently
+          );
         }
       }
 
-      res.type('text/html').send(renderProjectsPanel(projects, rootEntriesMap));
+      await Promise.all(gitPromises);
+
+      res.type('text/html').send(renderProjectsPanel(projects, rootEntriesMap, gitStatusMap));
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }
