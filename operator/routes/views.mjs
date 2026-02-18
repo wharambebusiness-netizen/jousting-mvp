@@ -14,7 +14,9 @@ import {
 import { renderChainTable } from '../views/chain-row.mjs';
 import { renderSessionCard, renderTimeline, renderCostBreakdown } from '../views/session-card.mjs';
 import { renderAgentGrid } from '../views/agent-card.mjs';
+import { renderTerminalViewer } from '../views/terminal.mjs';
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
+import { loadSettings } from '../settings.mjs';
 
 /**
  * Create view routes for HTMX fragments.
@@ -67,7 +69,15 @@ export function createViewRoutes(ctx) {
   router.get('/cost-summary', (_req, res) => {
     try {
       const registry = loadRegistry();
-      const chains = registry.chains;
+      let chains = registry.chains;
+
+      // Filter by project
+      if (_req.query.project) {
+        const project = _req.query.project.replace(/\\/g, '/');
+        chains = chains.filter(c =>
+          (c.projectDir || '').replace(/\\/g, '/') === project
+        );
+      }
       const totalCost = chains.reduce((sum, c) => sum + (c.totalCostUsd || 0), 0);
       const totalSessions = chains.reduce((sum, c) => sum + (c.sessions?.length || 0), 0);
       const totalTurns = chains.reduce((sum, c) => sum + (c.totalTurns || 0), 0);
@@ -163,7 +173,11 @@ export function createViewRoutes(ctx) {
       if (session.handoffFile && existsSync(session.handoffFile)) {
         try {
           const content = readFileSync(session.handoffFile, 'utf-8');
-          return res.type('text/html').send(`<pre class="handoff-pre">${escapeHtml(content)}</pre>`);
+          return res.type('text/html').send(renderTerminalViewer({
+            content,
+            title: `Session ${idx + 1} — Handoff`,
+            maxHeight: 400,
+          }));
         } catch (_) { /* fall through */ }
       }
       res.type('text/html').send('<p class="empty-state">No handoff file available.</p>');
@@ -414,6 +428,53 @@ export function createViewRoutes(ctx) {
             </label>
             <button type="submit" ${missions.length === 0 ? 'disabled' : ''} style="flex:0;white-space:nowrap">Launch</button>
           </fieldset>
+        </form>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Settings Form Fragment ─────────────────────────────────
+  router.get('/settings-form', (_req, res) => {
+    try {
+      const settings = loadSettings();
+
+      const modelOptions = ['sonnet', 'opus', 'haiku'].map(m =>
+        `<option value="${m}"${settings.model === m ? ' selected' : ''}>${m.charAt(0).toUpperCase() + m.slice(1)}</option>`
+      ).join('');
+
+      res.type('text/html').send(`
+        <form id="settings-save-form"
+              hx-put="/api/settings"
+              hx-swap="none"
+              hx-on::after-request="if(event.detail.successful) showToast('Settings saved', 'success');">
+          <div class="settings-grid">
+            <label>
+              Default Model
+              <select name="model">${modelOptions}</select>
+            </label>
+            <label>
+              Max Turns
+              <input type="number" name="maxTurns" value="${settings.maxTurns}" min="1" max="200">
+              <small style="color:var(--text-muted)">Per session (1-200)</small>
+            </label>
+            <label>
+              Max Continuations
+              <input type="number" name="maxContinuations" value="${settings.maxContinuations}" min="1" max="20">
+              <small style="color:var(--text-muted)">Auto-continue limit (1-20)</small>
+            </label>
+            <label>
+              Budget Cap (USD)
+              <input type="number" name="maxBudgetUsd" value="${settings.maxBudgetUsd}" min="0" max="100" step="0.50">
+              <small style="color:var(--text-muted)">Max cost per chain ($0-$100)</small>
+            </label>
+          </div>
+          <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-6)">
+            <button type="submit" class="btn btn--primary">Save Settings</button>
+            <button type="button" class="btn btn--ghost"
+                    hx-get="/views/settings-form" hx-target="#settings-form" hx-swap="innerHTML">Reset</button>
+          </div>
         </form>
       `);
     } catch (err) {

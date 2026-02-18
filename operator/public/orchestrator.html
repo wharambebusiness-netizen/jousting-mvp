@@ -17,7 +17,11 @@
     <ul class="nav__links">
       <li><a href="/" class="nav__link">Dashboard</a></li>
       <li><a href="/orchestrator" class="nav__link nav__link--active">Orchestrator</a></li>
+      <li><a href="/settings" class="nav__link">Settings</a></li>
     </ul>
+    <select id="project-select" class="nav__project-select" onchange="onProjectChange(this.value)">
+      <option value="">All Projects</option>
+    </select>
   </nav>
 
   <main class="page">

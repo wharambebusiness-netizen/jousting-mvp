@@ -16,7 +16,11 @@
     <ul class="nav__links">
       <li><a href="/" class="nav__link">Dashboard</a></li>
       <li><a href="/orchestrator" class="nav__link">Orchestrator</a></li>
+      <li><a href="/settings" class="nav__link">Settings</a></li>
     </ul>
+    <select id="project-select" class="nav__project-select" onchange="onProjectChange(this.value)">
+      <option value="">All Projects</option>
+    </select>
   </nav>
 
   <main class="page">
@@ -29,7 +33,7 @@
 
     <div id="chain-content"
          hx-get="/views/chain-detail/{{CHAIN_ID}}"
-         hx-trigger="load, every 5s, reload from:#chain-content"
+         hx-trigger="load, every 30s, reload from:#chain-content"
          hx-swap="innerHTML">
       <div class="skeleton" style="height:32px;width:200px;margin-bottom:16px"></div>
       <div class="skeleton" style="height:16px;width:80%;margin-bottom:12px"></div>
@@ -40,5 +44,36 @@
 
   <div id="toast-container"></div>
   <script src="/app.js"></script>
+  <script>
+    // Real-time chain progress via WebSocket
+    (function connectChainWs() {
+      var chainId = '{{CHAIN_ID}}';
+      if (!chainId || chainId === '{{CHAIN_ID}}') return;
+
+      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var ws;
+      try { ws = new WebSocket(proto + '//' + location.host + '/ws'); } catch (_) { return; }
+
+      ws.onopen = function() {
+        ws.send(JSON.stringify({ subscribe: ['chain:*'] }));
+      };
+
+      ws.onmessage = function(e) {
+        try {
+          var msg = JSON.parse(e.data);
+          if (!msg.event || !msg.event.startsWith('chain:')) return;
+          // Only reload if event is about this chain
+          var data = msg.data || {};
+          if (data.chainId && data.chainId !== chainId) return;
+          // Debounce: don't reload more than once per second
+          if (connectChainWs._lastReload && Date.now() - connectChainWs._lastReload < 1000) return;
+          connectChainWs._lastReload = Date.now();
+          htmx.trigger(document.getElementById('chain-content'), 'reload');
+        } catch (_) {}
+      };
+
+      ws.onclose = function() { setTimeout(connectChainWs, 5000); };
+    })();
+  </script>
 </body>
 </html>

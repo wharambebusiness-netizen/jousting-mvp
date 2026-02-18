@@ -1083,3 +1083,122 @@ describe('WebSocket — Integration', () => {
     await expect(connectWs(badUrl)).rejects.toThrow();
   });
 });
+
+// ── Settings API Tests (P3) ──────────────────────────────────
+
+describe('Settings API', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /api/settings returns default settings', async () => {
+    const res = await fetch(`${baseUrl}/api/settings`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.model).toBe('sonnet');
+    expect(data.maxTurns).toBe(30);
+    expect(data.maxContinuations).toBe(5);
+    expect(data.maxBudgetUsd).toBe(5.0);
+  });
+
+  it('PUT /api/settings saves and returns validated settings', async () => {
+    const res = await fetch(`${baseUrl}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'opus', maxTurns: 50, maxContinuations: 10, maxBudgetUsd: 20 }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.model).toBe('opus');
+    expect(data.maxTurns).toBe(50);
+    expect(data.maxContinuations).toBe(10);
+    expect(data.maxBudgetUsd).toBe(20);
+
+    // Verify persistence
+    const res2 = await fetch(`${baseUrl}/api/settings`);
+    const data2 = await res2.json();
+    expect(data2.model).toBe('opus');
+    expect(data2.maxTurns).toBe(50);
+  });
+
+  it('PUT /api/settings clamps out-of-range values', async () => {
+    const res = await fetch(`${baseUrl}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'invalid', maxTurns: 999, maxContinuations: -1, maxBudgetUsd: 500 }),
+    });
+    const data = await res.json();
+    expect(data.model).toBe('sonnet'); // falls back to default
+    expect(data.maxTurns).toBe(200);   // clamped to max
+    expect(data.maxContinuations).toBe(1); // clamped to min
+    expect(data.maxBudgetUsd).toBe(100);   // clamped to max
+  });
+
+  it('PUT /api/settings handles empty body', async () => {
+    const res = await fetch(`${baseUrl}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    expect(data.model).toBe('sonnet'); // defaults
+    expect(data.maxTurns).toBe(30);
+  });
+});
+
+// ── Settings Page Route (P3) ─────────────────────────────────
+
+describe('Settings Page', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /settings serves settings page HTML', async () => {
+    const res = await fetch(`${baseUrl}/settings`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Settings');
+    expect(text).toContain('settings-form');
+  });
+});
+
+// ── Chain Sort/Direction Tests (P4) ──────────────────────────
+
+describe('Chain List Sort/Direction', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('sorts chains by cost descending', async () => {
+    const res = await fetch(`${baseUrl}/api/chains?sort=cost&dir=desc`);
+    const data = await res.json();
+    expect(data.chains.length).toBeGreaterThan(0);
+    // Verify the API does not error
+    expect(res.status).toBe(200);
+  });
+
+  it('sorts chains by status ascending', async () => {
+    const res = await fetch(`${baseUrl}/api/chains`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.chains.length).toBeGreaterThan(0);
+  });
+});

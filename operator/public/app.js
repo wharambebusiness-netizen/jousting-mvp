@@ -78,19 +78,23 @@ function toggleAutoPush(enabled) {
   localStorage.setItem('operator-auto-push', enabled ? '1' : '0');
 }
 
-// Listen for chain completion via WS and auto-push if enabled
-(function connectAutoPushWs() {
+// Listen for chain events via WS: auto-push + real-time dashboard updates
+(function connectChainWs() {
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var ws;
   try { ws = new WebSocket(proto + '//' + location.host + '/ws'); } catch (_) { return; }
+  var lastDashReload = 0;
 
   ws.onopen = function() {
-    ws.send(JSON.stringify({ subscribe: ['chain:complete', 'chain:assumed-complete'] }));
+    ws.send(JSON.stringify({ subscribe: ['chain:*'] }));
   };
 
   ws.onmessage = function(e) {
     try {
       var msg = JSON.parse(e.data);
+      if (!msg.event || !msg.event.startsWith('chain:')) return;
+
+      // Auto-push on completion
       if ((msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') &&
           localStorage.getItem('operator-auto-push') === '1') {
         fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
@@ -101,11 +105,91 @@ function toggleAutoPush(enabled) {
           })
           .catch(function() { showToast('Auto-push failed', 'error'); });
       }
+
+      // Real-time dashboard updates: debounce to 2s
+      var now = Date.now();
+      if (now - lastDashReload < 2000) return;
+      lastDashReload = now;
+
+      var chainTable = document.getElementById('chain-table');
+      if (chainTable) htmx.trigger(chainTable, 'reload');
+      var costGrid = document.getElementById('cost-summary-grid');
+      if (costGrid) htmx.trigger(costGrid, 'reload');
     } catch (_) {}
   };
 
-  ws.onclose = function() { setTimeout(connectAutoPushWs, 5000); };
+  ws.onclose = function() { setTimeout(connectChainWs, 5000); };
 })();
+
+// ── Project Filter ───────────────────────────────────────────
+
+function onProjectChange(value) {
+  localStorage.setItem('operator-project', value);
+  // Reload all HTMX-driven panels
+  var targets = ['#chain-table', '#cost-summary-grid', '#git-panel', '#orch-content', '#mission-launcher', '#report-viewer'];
+  for (var i = 0; i < targets.length; i++) {
+    var el = document.querySelector(targets[i]);
+    if (el) htmx.trigger(el, 'reload');
+  }
+  // Also reload child tbody for chain table
+  var tbody = document.querySelector('#chain-table tbody');
+  if (tbody) htmx.trigger(document.getElementById('chain-table'), 'reload');
+}
+
+function loadProjects() {
+  var select = document.getElementById('project-select');
+  if (!select) return;
+  var saved = localStorage.getItem('operator-project') || '';
+
+  fetch('/api/projects')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var projects = data.projects || [];
+      // Keep "All Projects" as first option
+      var html = '<option value="">All Projects</option>';
+      for (var i = 0; i < projects.length; i++) {
+        var p = projects[i];
+        var dir = p.projectDir || '(default)';
+        // Show just the last path segment for brevity
+        var label = dir.split('/').pop() || dir.split('\\').pop() || dir;
+        if (dir === '(default)') label = '(default)';
+        var selected = dir === saved ? ' selected' : '';
+        html += '<option value="' + dir.replace(/"/g, '&quot;') + '"' + selected + '>' + label + ' (' + p.chains + ')</option>';
+      }
+      select.innerHTML = html;
+
+      // Hide dropdown if only 0-1 projects
+      select.style.display = projects.length <= 1 ? 'none' : '';
+    })
+    .catch(function() {
+      select.style.display = 'none';
+    });
+}
+
+// Inject project filter into all HTMX GET requests
+document.body.addEventListener('htmx:configRequest', function(evt) {
+  var project = localStorage.getItem('operator-project');
+  if (project && evt.detail.verb === 'get') {
+    evt.detail.parameters.project = project;
+  }
+});
+
+loadProjects();
+
+// ── Settings Defaults ────────────────────────────────────────
+
+function applySettingsDefaults() {
+  fetch('/api/settings')
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      // Pre-fill quick-start form model select
+      var modelSelect = document.querySelector('.quick-start select[name="model"]');
+      if (modelSelect && s.model) modelSelect.value = s.model;
+    })
+    .catch(function() {});
+}
+
+applySettingsDefaults();
 
 // Global listener: show toast for all API POST/DELETE actions
 document.body.addEventListener('htmx:afterRequest', function (evt) {

@@ -25,6 +25,8 @@ import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
 import { createGitRoutes } from './routes/git.mjs';
 import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
+import { createSettingsRoutes } from './routes/settings.mjs';
+import { initSettings } from './settings.mjs';
 import { EventBus } from '../orchestrator/observability.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -66,8 +68,9 @@ export function createApp(options = {}) {
   const operatorDir = options.operatorDir || resolve(import.meta.dirname || '.', '.');
   const events = options.events || new EventBus();
 
-  // Initialize registry
+  // Initialize registry and settings
   initRegistry({ operatorDir, log: () => {} });
+  initSettings({ operatorDir });
 
   const app = express();
 
@@ -100,6 +103,9 @@ export function createApp(options = {}) {
 
   // Git routes
   app.use('/api', createGitRoutes({ projectDir }));
+
+  // Settings routes
+  app.use('/api', createSettingsRoutes());
 
   const orchRouter = createOrchestratorRoutes({
     events,
@@ -135,6 +141,11 @@ export function createApp(options = {}) {
   // Orchestrator page
   app.get('/orchestrator', (_req, res) => {
     res.sendFile(join(publicDir, 'orchestrator.html'));
+  });
+
+  // Settings page
+  app.get('/settings', (_req, res) => {
+    res.sendFile(join(publicDir, 'settings.html'));
   });
 
   // Static files (CSS, index.html for /)

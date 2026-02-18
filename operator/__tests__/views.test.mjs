@@ -1,5 +1,5 @@
 // ============================================================
-// M5: View Renderer & Route Tests
+// M5+P3: View Renderer & Route Tests
 // ============================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -592,5 +592,214 @@ describe('View Routes — Git Status Auto-Push Toggle (S91)', () => {
     const res = await get('/views/git-status');
     expect(res.text).toContain('auto-push-toggle');
     expect(res.text).toContain('Auto-push');
+  });
+});
+
+// ── Terminal Viewer Tests (P3) ───────────────────────────────
+
+import { ansiToHtml, renderTerminalViewer } from '../views/terminal.mjs';
+
+describe('Terminal Viewer — ANSI to HTML', () => {
+  it('converts basic ANSI color codes', () => {
+    const result = ansiToHtml('\x1b[31mred text\x1b[0m');
+    expect(result).toContain('ansi-red');
+    expect(result).toContain('red text');
+    expect(result).toContain('</span>');
+  });
+
+  it('escapes HTML in content', () => {
+    const result = ansiToHtml('<script>alert("xss")</script>');
+    expect(result).toContain('&lt;script&gt;');
+    expect(result).not.toContain('<script>');
+  });
+
+  it('handles bold style', () => {
+    const result = ansiToHtml('\x1b[1;32mbold green\x1b[0m');
+    expect(result).toContain('ansi-bold');
+    expect(result).toContain('ansi-green');
+  });
+
+  it('strips unknown ANSI sequences', () => {
+    const result = ansiToHtml('before\x1b[2Kafter');
+    expect(result).toBe('beforeafter');
+  });
+
+  it('handles empty input', () => {
+    expect(ansiToHtml('')).toBe('');
+    expect(ansiToHtml(null)).toBe('');
+  });
+});
+
+describe('Terminal Viewer — renderTerminalViewer', () => {
+  it('renders terminal with content', () => {
+    const html = renderTerminalViewer({ content: 'hello world', title: 'Test' });
+    expect(html).toContain('terminal-viewer');
+    expect(html).toContain('terminal__body');
+    expect(html).toContain('terminal__title');
+    expect(html).toContain('Test');
+    expect(html).toContain('hello world');
+  });
+
+  it('renders terminal without title', () => {
+    const html = renderTerminalViewer({ content: 'output' });
+    expect(html).toContain('terminal__body');
+    expect(html).not.toContain('terminal__title');
+  });
+
+  it('shows empty state when no content', () => {
+    const html = renderTerminalViewer({ content: '' });
+    expect(html).toContain('empty-state');
+  });
+
+  it('respects maxHeight option', () => {
+    const html = renderTerminalViewer({ content: 'data', maxHeight: 300 });
+    expect(html).toContain('max-height:300px');
+  });
+});
+
+// ── Settings Form View Route Tests (P3) ─────────────────────
+
+describe('View Routes — Settings Form (P3)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('returns settings form with defaults', async () => {
+    const res = await get('/views/settings-form');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('settings-save-form');
+    expect(res.text).toContain('name="model"');
+    expect(res.text).toContain('name="maxTurns"');
+    expect(res.text).toContain('name="maxContinuations"');
+    expect(res.text).toContain('name="maxBudgetUsd"');
+    expect(res.text).toContain('Sonnet');
+    expect(res.text).toContain('Opus');
+    expect(res.text).toContain('Haiku');
+  });
+});
+
+// ── Cost Summary Project Filter Tests (P3) ──────────────────
+
+describe('View Routes — Cost Summary Project Filter (P3)', () => {
+  beforeEach(function() {
+    setupApp();
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    createChain(reg, { task: 'alpha task', config: {}, projectDir: '/proj/alpha' });
+    const c = createChain(reg, { task: 'beta task', config: {}, projectDir: '/proj/beta' });
+    recordSession(c, { turns: 5, costUsd: 1.50, durationMs: 5000 });
+    saveRegistry(reg);
+  });
+  afterEach(teardownApp);
+
+  it('returns all costs without filter', async () => {
+    const res = await get('/views/cost-summary');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('metric-card');
+  });
+
+  it('filters costs by project', async () => {
+    const proj = encodeURIComponent('/proj/beta');
+    const res = await get(`/views/cost-summary?project=${proj}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('$1.50');
+  });
+});
+
+// ── Chain List Sort/Direction View Tests (P4) ────────────────
+
+describe('View Routes — Chain List Sort/Direction (P4)', () => {
+  beforeEach(function() {
+    setupApp();
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    const c1 = createChain(reg, { task: 'cheap task', config: {} });
+    recordSession(c1, { turns: 1, costUsd: 0.10, durationMs: 1000 });
+    updateChainStatus(c1, 'complete');
+    const c2 = createChain(reg, { task: 'expensive task', config: {} });
+    recordSession(c2, { turns: 10, costUsd: 5.00, durationMs: 50000 });
+    saveRegistry(reg);
+  });
+  afterEach(teardownApp);
+
+  it('sorts by cost descending', async () => {
+    const res = await get('/views/chain-list?sort=cost&dir=desc');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('expensive task');
+    expect(res.text).toContain('cheap task');
+  });
+
+  it('sorts by cost ascending', async () => {
+    const res = await get('/views/chain-list?sort=cost&dir=asc');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('cheap task');
+    expect(res.text).toContain('expensive task');
+  });
+
+  it('sorts by status', async () => {
+    const res = await get('/views/chain-list?sort=status');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('<tr>');
+  });
+});
+
+// ── Chain List Project Filter View Tests (P4) ────────────────
+
+describe('View Routes — Chain List Project Filter (P4)', () => {
+  beforeEach(function() {
+    setupApp();
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    createChain(reg, { task: 'proj-a task', config: {}, projectDir: '/projects/a' });
+    createChain(reg, { task: 'proj-b task', config: {}, projectDir: '/projects/b' });
+    saveRegistry(reg);
+  });
+  afterEach(teardownApp);
+
+  it('filters chains by project', async () => {
+    const proj = encodeURIComponent('/projects/a');
+    const res = await get(`/views/chain-list?project=${proj}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('proj-a task');
+    expect(res.text).not.toContain('proj-b task');
+  });
+
+  it('shows all chains without project filter', async () => {
+    const res = await get('/views/chain-list');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('proj-a task');
+    expect(res.text).toContain('proj-b task');
+  });
+});
+
+// ── Agent Grid in Orch Status Tests (P4) ────────────────────
+
+describe('View Routes — Agent Grid in Orch Status (P4)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('shows agent cards after agent:start events', async () => {
+    // Emit orchestrator:started to set running state
+    appCtx.events.emit('orchestrator:started', { mission: 'test-mission' });
+
+    // Emit agent:start events to populate agent list
+    appCtx.events.emit('agent:start', { agentId: 'agent-1', model: 'sonnet' });
+    appCtx.events.emit('agent:start', { agentId: 'agent-2', model: 'opus' });
+
+    const res = await get('/views/orch-status');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('agent-grid');
+    expect(res.text).toContain('agent-1');
+    expect(res.text).toContain('agent-2');
+  });
+
+  it('shows agent status change after completion', async () => {
+    appCtx.events.emit('orchestrator:started', { mission: 'metrics-test' });
+    appCtx.events.emit('agent:start', { agentId: 'agent-x', model: 'sonnet' });
+    appCtx.events.emit('agent:complete', { agentId: 'agent-x', elapsedMs: 5000 });
+
+    const res = await get('/views/orch-status');
+    expect(res.text).toContain('agent-x');
+    expect(res.text).toContain('Complete');
+    expect(res.text).toContain('agent-complete');
   });
 });

@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1456 tests, 24 suites (all passing)
+npm test                                           # 1482 tests, 24 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -72,28 +72,33 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   roles/              16 role templates
   missions/           Mission configs
 
-operator/             Auto-continuation system (M2+M4+M5)
+operator/             Auto-continuation system (M2+M4+M5+P3)
   operator.mjs        CLI daemon: SDK query → context monitor → handoff → auto-commit → chain
   server.mjs          HTTP API + Web UI server (Express + WebSocket, M4+M5)
   registry.mjs        Chain persistence (atomic writes, CRUD, archival)
+  settings.mjs        Settings persistence (atomic writes, validation, clamping)
   errors.mjs          Error classification, retry logic, circuit breaker, handoff validation
   ws.mjs              WebSocket event bridge (EventBus → clients)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
     orchestrator.mjs  Orchestrator status/control + mission listing + fork spawning + reports (M6a+M6b)
     git.mjs           Git status, push, commit, PR creation (M6d)
-    views.mjs         HTMX fragment routes for dashboard + git + missions + reports (M5+M6)
+    settings.mjs      Settings GET/PUT API routes
+    views.mjs         HTMX fragment routes for dashboard + git + missions + reports + settings (M5+M6+P3)
   views/              Server-side HTML fragment renderers (M5)
     helpers.mjs       Formatting: escapeHtml, formatCost, formatDuration, relativeTime
     chain-row.mjs     Chain table row renderer
     session-card.mjs  Session card, timeline, cost breakdown
     agent-card.mjs    Agent status card renderer
-  public/             Static HTML pages (M5)
-    index.html        Dashboard: chain list, cost summary, quick-start form
-    chain.html        Chain detail: timeline, sessions, handoffs
+    terminal.mjs      ANSI-to-HTML terminal viewer renderer
+  public/             Static HTML pages (M5+P3)
+    index.html        Dashboard: chain list, cost summary, quick-start form, project filter
+    chain.html        Chain detail: timeline, sessions, handoffs, real-time WS updates
     orchestrator.html Orchestrator status + agent cards
-    style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports)
-  __tests__/          174 tests (registry, errors, server, views)
+    settings.html     Settings page: model, limits, preferences
+    style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports, terminal)
+    app.js            Shared client JS: toast, progress, branch auto-gen, project filter, WS updates
+  __tests__/          226 tests (registry, errors, server, views)
 ```
 
 ## Detailed Documentation
@@ -128,7 +133,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1456 tests across 24 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37). Operator: registry (21), errors (43), server (55), views (40). Run `npm test` to verify.
+1482 tests across 24 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37). Operator: registry (21), errors (43), server (85), views (77). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 
