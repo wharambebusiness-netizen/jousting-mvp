@@ -1,38 +1,35 @@
-# Next Session Instructions (S87)
+# Next Session Instructions (S88)
 
-## Context: S86 — React Frontend Polish Started
+## Context: S87 — React Frontend Polish Continued
 
-S86 fixed 3 UI bugs and removed dead code in the React game frontend:
-- Melee win dots: 3 → 4 (matching engine's `meleeWinsNeeded: 4`)
-- Player labels: P1/P2/Opp → You/Opponent (consistency across all screens)
-- Unseat check: excluded `'none'` value in MeleeTransitionScreen
-- Deleted dead `MeleeTransition.tsx` (superseded by `MeleeTransitionScreen.tsx`)
+S87 completed the top 3 polish items from S86's audit:
+- **Dramatic reveal animation**: RevealScreen now has a 3-phase staged reveal — player attack slides in immediately, opponent card flips via CSS 3D perspective after 0.8s, counters and actions fade in at 1.6s. Respects prefers-reduced-motion.
+- **Hardcoded colors fixed**: CounterChart CSS replaced `#2ECC71`/`#E74C3C` with `--counter-win-border`/`--counter-lose-border` design tokens
+- **STAT_TIPS consolidated**: Exported shared `STAT_TIPS` from `helpers.tsx`, removed duplicate from `LoadoutScreen.tsx`. `STAT_TIPS_DETAIL` (abbreviated keys) kept for StatBar tooltips.
 - 1430 tests across 24 suites, all passing
 
-## React Frontend Polish (Partially Done)
+## Remaining React Polish
 
-S86 performed a comprehensive audit of all 15 React UI components. Bugs are fixed; polish items remain:
+### 1. Keyboard Navigation for Attack Grids (Medium)
+- Arrow key navigation between attack cards in `AttackSelect.tsx`
+- Focus management when entering/leaving card grids
+- Enter/Space already works (handled by `handleKeyDown`)
 
-### 1. Dramatic Reveal Animation (Medium)
-- `RevealScreen.tsx` shows both attacks immediately — no suspense
-- Add card-flip or fade-in animation with brief delay
-- Could add a "3-2-1" countdown or dramatic pause before showing opponent's choice
+### 2. Screen Transition Animations (Low-Medium)
+- Fade/slide transitions between game states in `App.tsx`
+- Currently each screen has `animation: fadeIn 0.25s` but no exit animation
+- Consider `AnimatePresence`-style approach or CSS-only transitions
 
-### 2. Hardcoded Colors in CounterChart (Low)
-- `CounterChart.tsx` uses stance color classes that may have hardcoded values
-- Should use CSS custom properties from the design token system in `index.css`
+### 3. Mobile Responsiveness (Low)
+- Attack grid, speed grid, loadout screen need responsive breakpoints
+- `@media (max-width: 480px)` exists but only handles grid collapse
+- Touch-friendly card sizes, readable text at small screens
 
-### 3. Code Duplication Cleanup (Low)
-- `LoadoutScreen.tsx` has `STAT_TIPS` that may duplicate tooltip content
-- Minor cleanup opportunity
+### 4. Sound Effect Hooks (Low)
+- Placeholder hook system for future audio integration
+- `useSound()` hook that returns no-op functions until audio assets are ready
 
-### 4. Additional Polish
-- Keyboard navigation for attack card grids (arrow keys)
-- Screen transition animations (fade/slide between game states)
-- Mobile responsiveness for smaller screens
-- Sound effect hooks for future audio integration
-
-## Operator Dashboard (Complete — Optional Improvements)
+## Operator Dashboard (Optional Improvements)
 
 ### 5. Multi-Project Dashboard (Medium-Large)
 - Project selector in nav or sidebar
@@ -46,8 +43,8 @@ S86 performed a comprehensive audit of all 15 React UI components. Bugs are fixe
 - Poll for new reports after orchestrator runs
 
 ## Reference
-- Handoff: `docs/archive/handoff-s86.md`
-- Previous handoff: `docs/archive/handoff-s85.md`
+- Handoff: `docs/archive/handoff-s87.md`
+- Previous handoff: `docs/archive/handoff-s86.md`
 - Design reference: `memory/web-design.md` (29 sections)
 - Operator plan: `docs/operator-plan.md`
 - Current test count: 1430 tests, 24 suites (all passing)
