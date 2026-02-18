@@ -1,7 +1,8 @@
 // ============================================================
 // Shared UI Utilities — Operator Dashboard
 // ============================================================
-// Progress bar, toast system, and global API toast listener.
+// Progress bar, toast, WS reconnect, keyboard shortcuts,
+// confirm dialog, and global API toast listener.
 // Loaded by all HTML pages.
 // ============================================================
 
@@ -41,6 +42,54 @@ function _actionMessage(path, ok) {
   if (path.includes('/orchestrator/stop')) return ok ? 'Orchestrator stopped' : 'Failed to stop orchestrator';
   if (path === '/api/chains') return ok ? 'Chain created' : 'Failed to create chain';
   return ok ? 'Success' : 'Action failed';
+}
+
+// ── WebSocket Utility (reconnect with exponential backoff) ───
+
+function createWS(subscriptions, onMessage, opts) {
+  opts = opts || {};
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var url = proto + '//' + location.host + '/ws';
+  var backoff = 1000;
+  var maxBackoff = 30000;
+  var ws = null;
+  var closed = false;
+
+  function updateDot(state) {
+    if (!opts.trackStatus) return;
+    var dot = document.getElementById('ws-dot');
+    if (!dot) return;
+    dot.className = 'ws-dot ws-dot--' + state;
+    dot.title = 'WebSocket: ' + state;
+  }
+
+  function connect() {
+    if (closed) return;
+    try { ws = new WebSocket(url); } catch (_) { return; }
+
+    updateDot('connecting');
+
+    ws.onopen = function() {
+      backoff = 1000;
+      updateDot('connected');
+      ws.send(JSON.stringify({ subscribe: subscriptions }));
+    };
+
+    ws.onmessage = function(e) {
+      try { onMessage(JSON.parse(e.data)); } catch (_) {}
+    };
+
+    ws.onclose = function() {
+      updateDot('disconnected');
+      if (!closed) {
+        setTimeout(connect, backoff);
+        backoff = Math.min(backoff * 2, maxBackoff);
+      }
+    };
+  }
+
+  connect();
+  return { close: function() { closed = true; if (ws) ws.close(); } };
 }
 
 // ── Branch Name Auto-Generation ──────────────────────────────
@@ -88,52 +137,40 @@ function toggleAutoPush(enabled) {
     .catch(function() {});
 }
 
-// Listen for chain events via WS: auto-push + real-time dashboard updates
-(function connectChainWs() {
-  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  var ws;
-  try { ws = new WebSocket(proto + '//' + location.host + '/ws'); } catch (_) { return; }
+// Dashboard chain WS: auto-push + real-time updates
+(function() {
   var lastDashReload = 0;
 
-  ws.onopen = function() {
-    ws.send(JSON.stringify({ subscribe: ['chain:*'] }));
-  };
+  createWS(['chain:*'], function(msg) {
+    if (!msg.event || !msg.event.startsWith('chain:')) return;
 
-  ws.onmessage = function(e) {
-    try {
-      var msg = JSON.parse(e.data);
-      if (!msg.event || !msg.event.startsWith('chain:')) return;
+    // Auto-push on completion (check server-side setting)
+    if (msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') {
+      fetch('/api/settings')
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+          if (!s.autoPush) return;
+          fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            .then(function(r) {
+              showToast(r.ok ? 'Auto-pushed to remote' : 'Auto-push failed', r.ok ? 'success' : 'error');
+              var git = document.getElementById('git-panel');
+              if (git) htmx.trigger(git, 'reload');
+            })
+            .catch(function() { showToast('Auto-push failed', 'error'); });
+        })
+        .catch(function() {});
+    }
 
-      // Auto-push on completion (check server-side setting)
-      if (msg.event === 'chain:complete' || msg.event === 'chain:assumed-complete') {
-        fetch('/api/settings')
-          .then(function(r) { return r.json(); })
-          .then(function(s) {
-            if (!s.autoPush) return;
-            fetch('/api/git/push', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-              .then(function(r) {
-                showToast(r.ok ? 'Auto-pushed to remote' : 'Auto-push failed', r.ok ? 'success' : 'error');
-                var git = document.getElementById('git-panel');
-                if (git) htmx.trigger(git, 'reload');
-              })
-              .catch(function() { showToast('Auto-push failed', 'error'); });
-          })
-          .catch(function() {});
-      }
+    // Real-time dashboard updates: debounce to 2s
+    var now = Date.now();
+    if (now - lastDashReload < 2000) return;
+    lastDashReload = now;
 
-      // Real-time dashboard updates: debounce to 2s
-      var now = Date.now();
-      if (now - lastDashReload < 2000) return;
-      lastDashReload = now;
-
-      var chainTable = document.getElementById('chain-table');
-      if (chainTable) htmx.trigger(chainTable, 'reload');
-      var costGrid = document.getElementById('cost-summary-grid');
-      if (costGrid) htmx.trigger(costGrid, 'reload');
-    } catch (_) {}
-  };
-
-  ws.onclose = function() { setTimeout(connectChainWs, 5000); };
+    var chainTable = document.getElementById('chain-table');
+    if (chainTable) htmx.trigger(chainTable, 'reload');
+    var costGrid = document.getElementById('cost-summary-grid');
+    if (costGrid) htmx.trigger(costGrid, 'reload');
+  }, { trackStatus: true });
 })();
 
 // ── Project Filter ───────────────────────────────────────────
@@ -205,6 +242,81 @@ function applySettingsDefaults() {
 }
 
 applySettingsDefaults();
+
+// ── Confirm Dialog ───────────────────────────────────────────
+
+(function() {
+  var dialog = document.createElement('dialog');
+  dialog.className = 'confirm-dialog';
+  dialog.innerHTML =
+    '<div class="confirm-dialog__body">' +
+      '<p class="confirm-dialog__msg"></p>' +
+      '<div class="confirm-dialog__actions">' +
+        '<button class="btn btn--ghost" data-action="cancel">Cancel</button>' +
+        '<button class="btn btn--primary" data-action="confirm">Confirm</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(dialog);
+
+  var msgEl = dialog.querySelector('.confirm-dialog__msg');
+  var confirmBtn = dialog.querySelector('[data-action="confirm"]');
+  var cancelBtn = dialog.querySelector('[data-action="cancel"]');
+  var _cb = null;
+
+  function close() { dialog.close(); _cb = null; }
+
+  cancelBtn.onclick = close;
+  confirmBtn.onclick = function() { var cb = _cb; close(); if (cb) cb(); };
+  dialog.addEventListener('click', function(e) {
+    if (e.target === dialog) close();
+  });
+
+  window._showConfirm = function(msg, cb) {
+    msgEl.textContent = msg;
+    _cb = cb;
+    var danger = /delete|abort|stop/i.test(msg);
+    confirmBtn.className = danger ? 'btn btn--danger' : 'btn btn--primary';
+    if (/delete/i.test(msg)) confirmBtn.textContent = 'Delete';
+    else if (/abort/i.test(msg)) confirmBtn.textContent = 'Abort';
+    else if (/stop/i.test(msg)) confirmBtn.textContent = 'Stop';
+    else confirmBtn.textContent = 'Confirm';
+    dialog.showModal();
+    cancelBtn.focus();
+  };
+})();
+
+// Intercept HTMX confirm dialogs
+document.body.addEventListener('htmx:confirm', function(evt) {
+  if (!evt.detail.question) return;
+  evt.preventDefault();
+  _showConfirm(evt.detail.question, function() {
+    evt.detail.issueRequest();
+  });
+});
+
+// ── Keyboard Shortcuts ───────────────────────────────────────
+
+document.addEventListener('keydown', function(e) {
+  var tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  if (e.key === 'n') {
+    e.preventDefault();
+    var taskInput = document.getElementById('chain-task');
+    if (taskInput) {
+      var details = taskInput.closest('details');
+      if (details) details.open = true;
+      taskInput.focus();
+    }
+  }
+
+  if (e.key === '/') {
+    e.preventDefault();
+    var searchInput = document.querySelector('#chain-filters input[type="search"]');
+    if (searchInput) searchInput.focus();
+  }
+});
 
 // Global listener: show toast for all API POST/DELETE actions
 document.body.addEventListener('htmx:afterRequest', function (evt) {

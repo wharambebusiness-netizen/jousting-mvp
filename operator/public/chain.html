@@ -6,13 +6,14 @@
   <title>Chain Detail — Operator</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='12' cy='16' r='7' fill='none' stroke='%236366f1' stroke-width='2.5'/%3E%3Ccircle cx='20' cy='16' r='7' fill='none' stroke='%23818cf8' stroke-width='2.5'/%3E%3C/svg%3E">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
 <body hx-boost="true">
   <div class="htmx-progress" id="progress-bar"></div>
 
   <nav class="nav">
-    <a href="/" class="nav__brand">Operator</a>
+    <a href="/" class="nav__brand">Operator <span class="ws-dot" id="ws-dot" title="WebSocket: connecting"></span></a>
     <ul class="nav__links">
       <li><a href="/" class="nav__link">Dashboard</a></li>
       <li><a href="/orchestrator" class="nav__link">Orchestrator</a></li>
@@ -45,34 +46,20 @@
   <div id="toast-container"></div>
   <script src="/app.js"></script>
   <script>
-    // Real-time chain progress via WebSocket
-    (function connectChainWs() {
+    // Real-time chain progress via WebSocket (uses createWS from app.js)
+    (function() {
       var chainId = '{{CHAIN_ID}}';
       if (!chainId || chainId === '{{CHAIN_ID}}') return;
+      var lastReload = 0;
 
-      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var ws;
-      try { ws = new WebSocket(proto + '//' + location.host + '/ws'); } catch (_) { return; }
-
-      ws.onopen = function() {
-        ws.send(JSON.stringify({ subscribe: ['chain:*'] }));
-      };
-
-      ws.onmessage = function(e) {
-        try {
-          var msg = JSON.parse(e.data);
-          if (!msg.event || !msg.event.startsWith('chain:')) return;
-          // Only reload if event is about this chain
-          var data = msg.data || {};
-          if (data.chainId && data.chainId !== chainId) return;
-          // Debounce: don't reload more than once per second
-          if (connectChainWs._lastReload && Date.now() - connectChainWs._lastReload < 1000) return;
-          connectChainWs._lastReload = Date.now();
-          htmx.trigger(document.getElementById('chain-content'), 'reload');
-        } catch (_) {}
-      };
-
-      ws.onclose = function() { setTimeout(connectChainWs, 5000); };
+      createWS(['chain:*'], function(msg) {
+        if (!msg.event || !msg.event.startsWith('chain:')) return;
+        var data = msg.data || {};
+        if (data.chainId && data.chainId !== chainId) return;
+        if (lastReload && Date.now() - lastReload < 1000) return;
+        lastReload = Date.now();
+        htmx.trigger(document.getElementById('chain-content'), 'reload');
+      });
     })();
   </script>
 </body>

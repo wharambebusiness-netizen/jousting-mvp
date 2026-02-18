@@ -1,4 +1,4 @@
-# Next Session Instructions (S95)
+# Next Session Instructions (S96)
 
 ## PIVOT: Operator Dashboard is Now the Primary Focus
 
@@ -6,70 +6,67 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
-## Context: S94
+## Context: S95
 
-S94 completed **all P6 features** (UI feature gaps):
+S95 completed **5 P7 polish & enhancement features**:
 
-1. **Git commit UI** — Added commit message input + Commit button to the git-status fragment when the working tree is dirty. Form POSTs to `/api/git/commit` with the message, reloads the git panel after. Push button sits alongside the Commit button in a flex row.
+1. **WebSocket reconnection with exponential backoff** — Created shared `createWS(subscriptions, onMessage, opts)` utility in `app.js`. Handles reconnection with backoff (1s→2s→4s→8s→16s→30s max), resets on successful connect. Refactored all 3 WS connection points (dashboard chain events, chain detail, orchestrator log) to use it instead of inline `new WebSocket()` + `setTimeout(reconnect, N)`.
 
-2. **Chain text search** — Added `?q=` query param filter in `views.mjs` chain-list handler (case-insensitive task text match). Added debounced (300ms) search input to `index.html` `#chain-filters`. Resets to page 1 on search. Styled consistent with other filter controls via `.chain-filters input[type="search"]` CSS.
+2. **Keyboard shortcuts** — Added global `keydown` listener in `app.js`. `N` key opens the "New Chain" details and focuses the task input. `/` key focuses the chain search input. Both skip when user is already in an input/textarea/select or using modifier keys.
 
-3. **Chain detail branch display** — Added `Branch: <strong>...</strong>` to chain-meta section in chain-detail view. Only shows when `chain.config.branch` is set.
+3. **SVG favicon** — Two interlocking circles (chain links) in accent colors (`#6366f1` and `#818cf8`) as an inline SVG data URI. Added `<link rel="icon">` to all 4 HTML pages (index, chain, orchestrator, settings).
 
-4. **Form submission loading states** — CSS-based loading states targeting `button[type="submit"]` inside `.htmx-request` elements. Buttons get `opacity: 0.6`, `pointer-events: none`, and a spinning border indicator via `::after` pseudo-element. Works automatically on all HTMX forms.
+4. **WS connection status indicator** — Small 6px dot next to "Operator" brand text in the nav bar on all pages. Green with glow when connected, red when disconnected, yellow with pulse animation when connecting. Driven by `createWS` `trackStatus` option (only the primary dashboard WS drives the dot).
 
-5. **Auto-push server-side persistence** — Added `autoPush: false` to `settings.mjs` DEFAULTS, `loadSettings()`, and `saveSettings()`. Git-status toggle now renders `checked` state from server settings. `toggleAutoPush()` in `app.js` now reads current settings then PUTs updated value to `/api/settings`. WS auto-push listener fetches `/api/settings` to check the flag. Added autoPush checkbox to settings form fragment.
+5. **Styled confirm dialog** — HTML `<dialog>` element dynamically created in `app.js`. Intercepts HTMX `hx-confirm` events globally via `htmx:confirm` event listener, preventing the native `confirm()`. Shows a styled modal with backdrop blur, contextual button text (Delete/Abort/Stop/Confirm), danger styling for destructive actions. Cancel button auto-focused. Click-outside-to-close.
 
 **1491 tests, 24 suites, all passing.** (No new tests — all changes were UI/view layer.)
 
 ## What Changed (Files Modified)
 
 ```
-EDIT: operator/routes/views.mjs       Git commit form, ?q= search filter, branch in chain-meta,
-                                       autoPush server-rendered toggle, autoPush in settings form
-EDIT: operator/public/index.html       Search input in #chain-filters with debounce
-EDIT: operator/public/style.css        .chain-filters input[type="search"], HTMX loading state CSS
-EDIT: operator/public/app.js           toggleAutoPush → PUT /api/settings, WS listener checks server
-EDIT: operator/settings.mjs            autoPush field in DEFAULTS, loadSettings, saveSettings
-EDIT: docs/session-history.md          S94 entry
+EDIT: operator/public/app.js           createWS() utility, keyboard shortcuts, confirm dialog, refactored dashboard WS
+EDIT: operator/public/style.css        WS status indicator styles (.ws-dot), confirm dialog styles (.confirm-dialog)
+EDIT: operator/public/index.html       Favicon link, WS dot in nav brand
+EDIT: operator/public/chain.html       Favicon link, WS dot in nav brand, refactored inline WS to use createWS()
+EDIT: operator/public/orchestrator.html Favicon link, WS dot in nav brand, refactored inline WS to use createWS()
+EDIT: operator/public/settings.html    Favicon link, WS dot in nav brand
+EDIT: docs/session-history.md          S95 entry
 ```
 
 ## Remaining Operator Improvement Roadmap
 
-### Priority 7: Polish & Enhancements (LOW) — NEXT UP
+### Priority 7 (continued): Polish & Enhancements
 
+Completed in S95: WS reconnection, keyboard shortcuts, favicon, WS status indicator, modal/dialog.
+
+Remaining items:
 - Per-model cost breakdown in cost summary
 - Orchestrator run history (persist past runs)
-- WebSocket reconnection with exponential backoff
-- Modal/dialog component for confirmations (replace native confirm())
 - Bulk chain actions (select multiple → delete/abort)
 - Chain export (CSV/JSON)
-- Keyboard shortcuts (N=new chain, /=search)
-- Favicon
 - Dark/light theme toggle
 - Side-by-side handoff viewer
-- WebSocket connection status indicator
 - Chain dependency graph visualization
 
-These are all low-priority polish items. Pick a subset that seems most impactful and implement them. Suggested high-impact picks:
-1. **WebSocket reconnection** — currently no reconnect in app.js dashboard WS listener if connection drops mid-session
-2. **Keyboard shortcuts** — N=new chain (focus task input), /=search (focus chain search)
-3. **Favicon** — simple SVG favicon for the operator brand
-4. **WS connection status indicator** — small dot in nav showing connected/disconnected
-5. **Modal/dialog** — replace native confirm() for delete/abort actions with styled dialog
+These are all low-priority polish items. Suggested next picks:
+1. **Per-model cost breakdown** — show input/output token costs per model in cost summary cards
+2. **Chain export** — download chain list as CSV or JSON for external analysis
+3. **Bulk chain actions** — checkbox selection on chain rows, batch delete/abort
+4. **Side-by-side handoff viewer** — compare consecutive session handoffs
 
 ## Key Architecture Notes
 
-- **Settings schema**: `{ model, maxTurns, maxContinuations, maxBudgetUsd, autoPush }` — validated+clamped on both load and save. `autoPush` is a boolean (!!coerced).
-- **Auto-push flow**: git-status fragment reads `loadSettings().autoPush` for initial checkbox state → user toggles → `toggleAutoPush()` GETs current settings, sets `autoPush`, PUTs back → WS listener on `chain:complete` fetches `/api/settings` to check `autoPush` before pushing.
-- **Chain search**: `?q=` param in chain-list view filters by `(c.task || '').toLowerCase().includes(q)`. The search input uses `oninput` with `clearTimeout`/`setTimeout` for 300ms debounce.
-- **Loading states**: Pure CSS approach — `.htmx-request button[type="submit"]` and `.htmx-request .btn` get disabled styling. Submit buttons also get a `::after` spinner pseudo-element. No JS needed.
-- **Git commit form**: Wraps commit input + Commit + Push buttons in a `<form>` that POSTs to `/api/git/commit`. Push button is `type="button"` with its own `hx-post` to avoid being part of the commit form submission.
+- **createWS(subs, onMsg, opts)** in `app.js`: shared WS utility with exponential backoff. `opts.trackStatus = true` drives the `#ws-dot` element. Returns `{ close }`. All pages use it.
+- **Confirm dialog**: intercepts `htmx:confirm` event globally. Uses `evt.detail.issueRequest()` to proceed. Danger detection via regex on message text (`/delete|abort|stop/i`).
+- **Keyboard shortcuts**: `N` = new chain (opens details + focuses `#chain-task`), `/` = search (focuses `#chain-filters input[type="search"]`). Skips when in form elements.
+- **Settings schema**: `{ model, maxTurns, maxContinuations, maxBudgetUsd, autoPush }` — validated+clamped on both load and save.
+- **app.js** now has 8 systems: progress bar, toast, createWS utility, branch auto-gen, auto-push toggle, project filter, confirm dialog, keyboard shortcuts.
 
 ## Codebase Stats
 
 ```
-Operator: 16 source files, ~3,600 lines code + ~2,800 lines tests
+Operator: 16 source files, ~3,700 lines code + ~2,800 lines tests
 Routes:   24 API endpoints, 9 view fragment routes, 3 page routes, 1 WebSocket
 Events:   17 bridged WS events, pattern-based subscriptions
 Tests:    235 operator tests (server 86, views 85, errors 43, registry 21)
