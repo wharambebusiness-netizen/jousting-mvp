@@ -1,0 +1,211 @@
+/* ============================================================
+   Operator Dashboard — Custom Styles (M5)
+   ============================================================
+   Minimal overrides on top of Pico CSS (dark mode).
+   ============================================================ */
+
+/* Status dots */
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.dot-running  { background: #4caf50; animation: pulse 1.5s infinite; }
+.dot-complete, .dot-assumed-complete { background: #2196f3; }
+.dot-failed   { background: #f44336; }
+.dot-aborted  { background: #ff9800; }
+.dot-max-continuations { background: #9c27b0; }
+.dot-error    { background: #f44336; }
+.dot-active   { background: #4caf50; }
+.dot-unknown  { background: #666; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Stats grid */
+.stats-grid {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.stat-card {
+  flex: 1;
+  min-width: 120px;
+  text-align: center;
+  padding: 1rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+}
+.stat-card strong {
+  display: block;
+  font-size: 1.5rem;
+}
+.stat-card small {
+  color: var(--pico-muted-color);
+}
+
+/* Chain meta info */
+.chain-meta {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  color: var(--pico-muted-color);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  background: var(--pico-secondary-background);
+  color: var(--pico-secondary-inverse);
+}
+.badge-warn { background: #ff9800; color: #000; }
+.badge-err  { background: #f44336; color: #fff; }
+.badge-ok   { background: #4caf50; color: #fff; }
+
+/* Session cards */
+.session-card {
+  margin-bottom: 1rem;
+}
+.session-card header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.session-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--pico-muted-color);
+}
+
+/* Session timeline */
+.timeline {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 1.5rem;
+  height: 40px;
+}
+.timeline-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #fff;
+  min-width: 30px;
+  cursor: default;
+}
+.timeline-complete, .timeline-assumed-complete { background: #2196f3; }
+.timeline-running { background: #4caf50; animation: pulse 1.5s infinite; }
+.timeline-error   { background: #f44336; }
+.timeline-timeout { background: #ff9800; }
+
+/* Cost breakdown bar */
+.cost-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.cost-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #fff;
+  min-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cost-complete { background: #2196f3; }
+.cost-running  { background: #4caf50; }
+.cost-error    { background: #f44336; }
+.cost-total {
+  text-align: right;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+/* Agent grid */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+.agent-card header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.agent-card small {
+  margin-left: auto;
+  color: var(--pico-muted-color);
+}
+.agent-role {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+}
+
+/* Handoff content */
+.handoff-pre {
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Kill buttons */
+.btn-kill {
+  --pico-background-color: #f44336;
+  --pico-border-color: #f44336;
+  --pico-color: #fff;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+}
+.btn-sm {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+/* Quick-start form */
+.quick-start {
+  margin-bottom: 2rem;
+}
+.quick-start fieldset {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.quick-start .task-input { flex: 3; min-width: 200px; }
+.quick-start .model-select { flex: 1; min-width: 100px; }
+.quick-start button { flex: 0; white-space: nowrap; }
+
+/* Empty state */
+.empty-msg {
+  text-align: center;
+  color: var(--pico-muted-color);
+  padding: 2rem;
+}
+
+/* Nav active state */
+nav a[aria-current="page"] {
+  font-weight: bold;
+  text-decoration: underline;
+}

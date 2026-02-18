@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // ============================================================
-// Operator HTTP Server (M4)
+// Operator HTTP Server (M4 + M5)
 // ============================================================
 // Express + WebSocket server exposing operator and orchestrator
-// state via REST API and real-time events. Binds to 127.0.0.1
-// only (localhost single-user tool).
+// state via REST API, real-time events, and a web UI dashboard.
+// Binds to 127.0.0.1 only (localhost single-user tool).
 //
 // Usage:
-//   node operator/server.mjs                    # API server (port 3100)
+//   node operator/server.mjs                    # Server (port 3100)
 //   node operator/server.mjs --port 8080        # Custom port
 //   node operator/server.mjs --operator         # Combined mode (API + operator)
 //
@@ -16,11 +16,13 @@
 import express from 'express';
 import http from 'http';
 import { resolve, join } from 'path';
+import { readFileSync } from 'fs';
 import { parseArgs } from 'util';
 
 import { initRegistry } from './registry.mjs';
 import { createChainRoutes } from './routes/chains.mjs';
 import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
+import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
 import { EventBus } from '../orchestrator/observability.mjs';
 
@@ -81,16 +83,52 @@ export function createApp(options = {}) {
     });
   });
 
-  // Routes
+  // API routes
   app.use('/api', createChainRoutes({
     operatorDir,
     events,
     runChainFn: options.runChainFn || null,
   }));
-  app.use('/api', createOrchestratorRoutes({
+
+  const orchRouter = createOrchestratorRoutes({
     events,
     orchestratorCtx: options.orchestratorCtx || null,
+  });
+  app.use('/api', orchRouter);
+
+  // ── M5: Web UI ──────────────────────────────────────────
+  // Public dir resolves from this module's location (not operatorDir,
+  // which may be a test temp directory for registry isolation).
+  const moduleDir = import.meta.dirname || operatorDir;
+  const publicDir = options.publicDir || join(moduleDir, 'public');
+
+  // View fragment routes (HTMX partial responses)
+  app.use('/views', createViewRoutes({
+    operatorDir,
+    events,
+    getOrchStatus: orchRouter.getStatus || null,
   }));
+
+  // Page routes (serve HTML files)
+  // Chain detail: inject chain ID into template
+  app.get('/chains/:id', (req, res) => {
+    try {
+      const htmlPath = join(publicDir, 'chain.html');
+      let html = readFileSync(htmlPath, 'utf-8');
+      html = html.replace(/\{\{CHAIN_ID\}\}/g, req.params.id.replace(/[^a-f0-9-]/g, ''));
+      res.type('text/html').send(html);
+    } catch (err) {
+      res.status(500).send('Error loading page');
+    }
+  });
+
+  // Orchestrator page
+  app.get('/orchestrator', (_req, res) => {
+    res.sendFile(join(publicDir, 'orchestrator.html'));
+  });
+
+  // Static files (CSS, index.html for /)
+  app.use(express.static(publicDir));
 
   // Create HTTP server (needed for WebSocket upgrade)
   const server = http.createServer(app);

@@ -230,6 +230,7 @@ export function getChainSummary(chain) {
     startedAt: chain.startedAt,
     updatedAt: chain.updatedAt,
     projectDir: chain.projectDir,
+    config: chain.config,
   };
 }
 

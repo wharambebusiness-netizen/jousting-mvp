@@ -99,5 +99,7 @@ export function createOrchestratorRoutes(ctx) {
     });
   });
 
+  // Expose router + status getter for M5 views
+  router.getStatus = () => orchestratorStatus;
   return router;
 }
