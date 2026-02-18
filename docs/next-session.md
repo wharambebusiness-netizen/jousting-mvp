@@ -1,4 +1,4 @@
-# Next Session Instructions (S99)
+# Next Session Instructions (S100)
 
 ## PIVOT: Operator Dashboard is Now the Primary Focus
 
@@ -6,44 +6,53 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
-## Context: S98
+## Context: S99
 
-S98 added the **P8 Analytics Dashboard** — a new `/analytics` page with server-side rendered SVG charts for cost analysis and chain performance insights:
+S99 added the **P9 Projects File Explorer** — a new `/projects` page with real-time file structure viewing for all managed projects:
 
-1. **Analytics view renderer** (`operator/views/analytics.mjs`) — 7 exported functions:
-   - `aggregateAnalytics(chains)` — computes all metrics from raw chain data (cost totals, status breakdown, model grouping, daily cost aggregation, success rate, top chains, averages)
-   - `renderCostTimeline(data)` — 30-day daily cost SVG bar chart with Y-axis labels, gridlines, and hover tooltips
-   - `renderStatusBreakdown(data)` — SVG donut chart showing chain outcome distribution (complete/failed/running/aborted) with legend
-   - `renderModelUsage(data)` — horizontal bar chart showing cost and chain count per model (opus/sonnet/haiku)
-   - `renderAnalyticsMetrics(data)` — 6 metric cards: total cost, success rate, avg cost/chain, avg duration, total turns, total duration
-   - `renderTopChains(data)` — top 10 chains by cost leaderboard table with links to chain detail
-   - `renderAnalyticsPanel(chains)` — combines all charts into a single HTMX fragment
+1. **File scanning** (`operator/routes/files.mjs`) — `scanDirectory(root, subPath)` scans directories returning sorted entries (dirs first, then files, alphabetical). Ignores node_modules, .git, dist, build, etc. Path-traversal protection. `GET /api/files?root=<path>&path=<subpath>` API endpoint.
 
-2. **Analytics page** (`operator/public/analytics.html`) — New page with HTMX auto-refresh (60s), skeleton loading states, project filter support via global `htmx:configRequest` injection
+2. **Project view renderers** (`operator/views/projects.mjs`) — 3 exported functions:
+   - `renderProjectsPanel(projects, rootEntriesMap)` — full panel with all project cards
+   - `renderProjectCard(project, rootEntries)` — single project card with stats + file tree
+   - `renderFileTree(entries, root)` — collapsible file tree using `<details>/<summary>` HTML elements
 
-3. **Navigation** — "Analytics" link added between Dashboard and Orchestrator on all 5 HTML pages
+3. **File watcher** (`operator/file-watcher.mjs`) — `createFileWatcher(events)` watches project directories via `fs.watch({recursive: true})`, 1s debounce per project, emits `project:files-changed` on EventBus. Auto-watches existing projects on server startup, new projects on `chain:started`.
 
-4. **CSS** — Section 37 in style.css: `.analytics-panel`, `.chart-container`, `.chart-svg`, `.donut-layout`, `.hbar-row`, `.analytics-table` + responsive breakpoints
+4. **Real-time updates** — `project:files-changed` bridged to WebSocket (now 17 bridged events). Client JS listens for changes, auto-refreshes open directory trees with 3s debounce.
 
-**Zero new dependencies** — all charts are inline SVG via template literals, consistent with the existing architecture.
+5. **Projects page** (`operator/public/projects.html`) — New page with project cards showing chain stats (running/done/failed counts, cost, last activity), collapsible file trees with lazy-loading subdirectories, refresh button per project.
 
-**1526 tests, 24 suites, all passing.**
+6. **Navigation** — "Projects" link added between Dashboard and Analytics on all 6 HTML pages.
+
+7. **CSS** — Section 39 in style.css: `.projects-panel`, `.project-card`, `.project-tree`, `.tree-dir`, `.tree-file`, `.tree-summary`, refresh spinner animation, responsive breakpoints.
+
+8. **Client JS** — `loadTreeNode()` for lazy-loading via vanilla JS fetch, `refreshProjectTree()` for manual refresh, WS file-change listener with per-project debounce. app.js now has 12 systems (was 10).
+
+**Zero new dependencies** — uses Node.js built-in `fs.watch` for real-time file watching.
+
+**1553 tests, 24 suites, all passing.**
 
 ## What Changed (Files Modified)
 
 ```
-NEW:  operator/views/analytics.mjs          SVG chart renderers (7 functions, ~280 lines)
-NEW:  operator/public/analytics.html         Analytics page with HTMX skeleton loading
-EDIT: operator/routes/views.mjs              Import analytics renderer, add /views/analytics fragment route with project filter
-EDIT: operator/server.mjs                    Add /analytics page route
-EDIT: operator/public/index.html             Add Analytics nav link
-EDIT: operator/public/chain.html             Add Analytics nav link
-EDIT: operator/public/orchestrator.html      Add Analytics nav link
-EDIT: operator/public/settings.html          Add Analytics nav link
-EDIT: operator/public/style.css              Section 37: analytics CSS (charts, donut, horizontal bars, analytics table, responsive)
-EDIT: operator/__tests__/views.test.mjs      +20 tests: aggregation unit tests, chart renderer tests, route integration tests
-EDIT: operator/__tests__/server.test.mjs     +2 tests: analytics page + fragment endpoint
-EDIT: CLAUDE.md                              Updated test counts (1526), architecture listing (analytics.mjs, analytics.html)
+NEW:  operator/routes/files.mjs              File scanning API (scanDirectory + GET /api/files)
+NEW:  operator/views/projects.mjs            Project card + file tree renderers (3 functions)
+NEW:  operator/public/projects.html          Projects page with HTMX skeleton loading
+NEW:  operator/file-watcher.mjs              Real-time fs.watch for project directories
+EDIT: operator/routes/views.mjs              Import projects/files, add /views/projects + /views/file-tree fragments
+EDIT: operator/server.mjs                    Import file routes + watcher, mount /api/files, add /projects page, init watcher
+EDIT: operator/ws.mjs                        Add project:files-changed to BRIDGED_EVENTS (now 17)
+EDIT: operator/public/style.css              Section 39: projects + file tree CSS
+EDIT: operator/public/app.js                 loadTreeNode, refreshProjectTree, WS file-change listener (12 systems now)
+EDIT: operator/public/index.html             Add Projects nav link
+EDIT: operator/public/chain.html             Add Projects nav link
+EDIT: operator/public/analytics.html         Add Projects nav link
+EDIT: operator/public/orchestrator.html      Add Projects nav link
+EDIT: operator/public/settings.html          Add Projects nav link
+EDIT: operator/__tests__/views.test.mjs      +21 tests: scanDirectory, renderFileTree, renderProjectCard, renderProjectsPanel, route tests
+EDIT: operator/__tests__/server.test.mjs     +6 tests: projects page, file API, path traversal
+EDIT: CLAUDE.md                              Updated test counts (1553), architecture (files.mjs, projects.mjs, file-watcher.mjs, projects.html)
 ```
 
 ## Milestone Status
@@ -51,32 +60,35 @@ EDIT: CLAUDE.md                              Updated test counts (1526), archite
 - **M1-M6**: Core operator system — DONE
 - **P1-P7**: Polish & enhancements — DONE (S90-S97)
 - **P8**: Analytics dashboard — DONE (S98)
+- **P9**: Projects file explorer — DONE (S99)
 
 ## Future Directions
 
 Potential next work:
+- **Analytics enhancements** — time range picker, drill-down charts, cost forecasting, token efficiency metrics
 - **Performance optimization** — virtual scrolling for large chain lists, indexed persistence
 - **Multi-user support** — auth, user roles, shared dashboards
 - **Alerting** — email/slack notifications on chain failures or budget overruns
-- **Analytics enhancements** — time range picker, drill-down charts, cost forecasting, token efficiency metrics
 - **Mobile/PWA** — manifest, push notifications, responsive refinements
+- **File explorer enhancements** — file content preview, file search, git status indicators on files, diff viewer
 
 ## Key Architecture Notes
 
-- **Analytics renderer** follows same pattern as all other view renderers: export function → takes data → returns HTML string via template literal. No external chart library.
-- **SVG charts** use inline SVG elements within template literals. Colors reference CSS custom properties via hardcoded hex values matching the design system (STATUS_COLORS, MODEL_COLORS constants).
-- **`aggregateAnalytics()`** is a pure function that takes raw chain array and returns a comprehensive data object. All chart renderers consume this single data object.
-- **Project filter** works automatically via the existing `htmx:configRequest` listener in app.js that injects `?project=` into all GET requests.
-- **Daily cost aggregation** uses `startedAt` date (YYYY-MM-DD) to bucket chain costs into a 30-day window.
+- **File scanner** is a pure function (`scanDirectory`) separated from the route handler — can be reused by view renderers.
+- **File watcher** uses Node.js `fs.watch` with `recursive: true` — works on Windows and macOS. Linux may need `chokidar` for recursive watching.
+- **Tree lazy-loading** uses vanilla JS `fetch()` (not HTMX) for full control over expand/collapse state. `<details>` elements handle open/close natively.
+- **Real-time flow**: `fs.watch` → debounce → EventBus `project:files-changed` → WS bridge → client JS → re-fetch open tree nodes.
+- **Path-traversal protection** on both `/api/files` and `/views/file-tree` routes — `resolve()` + startsWith check prevents directory escape.
+- **IGNORED set** shared pattern between `scanDirectory` and `file-watcher.mjs` — both skip the same directories (node_modules, .git, dist, etc.).
 
 ## Codebase Stats
 
 ```
-Operator: 17 source files, ~4,500 lines code + ~3,300 lines tests
-Routes:   28 API endpoints, 13 view fragment routes, 4 page routes, 1 WebSocket
+Operator: 20 source files, ~5,000 lines code + ~3,700 lines tests
+Routes:   29 API endpoints, 15 view fragment routes, 5 page routes, 1 WebSocket
 Events:   17 bridged WS events, pattern-based subscriptions
-Tests:    270 operator tests (server 94, views 112, errors 43, registry 21)
-Total:    1526 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
+Tests:    297 operator tests (server 100, views 133, errors 43, registry 21)
+Total:    1553 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
 ```
 
 ## Running the Operator
@@ -87,7 +99,7 @@ node operator/server.mjs --port 8080        # Custom port
 node operator/server.mjs --operator         # Combined mode: API + chain execution
 ```
 
-Dashboard at http://127.0.0.1:3100, Analytics at /analytics, Orchestrator at /orchestrator, Settings at /settings.
+Dashboard at http://127.0.0.1:3100, Projects at /projects, Analytics at /analytics, Orchestrator at /orchestrator, Settings at /settings.
 
 ## Working Style Reminder
 
@@ -95,7 +107,7 @@ Dashboard at http://127.0.0.1:3100, Analytics at /analytics, Orchestrator at /or
 - Do all edits yourself in the main context
 - Full autonomy — make decisions, don't ask for approval
 - Full permissions granted — no pausing for confirmations
-- Run `npm test` to verify after changes (1526 tests, 24 suites)
+- Run `npm test` to verify after changes (1553 tests, 24 suites)
 
 ## Reference
 

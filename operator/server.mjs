@@ -19,14 +19,16 @@ import { resolve, join } from 'path';
 import { readFileSync } from 'fs';
 import { parseArgs } from 'util';
 
-import { initRegistry } from './registry.mjs';
+import { initRegistry, loadRegistry } from './registry.mjs';
 import { createChainRoutes } from './routes/chains.mjs';
 import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
 import { createGitRoutes } from './routes/git.mjs';
 import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
 import { createSettingsRoutes } from './routes/settings.mjs';
+import { createFileRoutes } from './routes/files.mjs';
 import { initSettings } from './settings.mjs';
+import { createFileWatcher } from './file-watcher.mjs';
 import { EventBus } from '../orchestrator/observability.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -107,6 +109,9 @@ export function createApp(options = {}) {
   // Settings routes
   app.use('/api', createSettingsRoutes());
 
+  // File system routes
+  app.use('/api', createFileRoutes());
+
   const orchRouter = createOrchestratorRoutes({
     events,
     operatorDir,
@@ -150,6 +155,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'settings.html'));
   });
 
+  // Projects page
+  app.get('/projects', (_req, res) => {
+    res.sendFile(join(publicDir, 'projects.html'));
+  });
+
   // Analytics page
   app.get('/analytics', (_req, res) => {
     res.sendFile(join(publicDir, 'analytics.html'));
@@ -164,11 +174,37 @@ export function createApp(options = {}) {
   // WebSocket
   const wss = createWebSocketHandler({ server, events });
 
+  // File watcher for real-time project file updates
+  const fileWatcher = options.enableFileWatcher !== false
+    ? createFileWatcher(events) : null;
+
+  // Watch existing project directories from registry
+  if (fileWatcher) {
+    try {
+      const reg = loadRegistry();
+      const seen = new Set();
+      for (const chain of reg.chains || []) {
+        if (chain.projectDir && !seen.has(chain.projectDir)) {
+          seen.add(chain.projectDir);
+          fileWatcher.watchProject(chain.projectDir);
+        }
+      }
+    } catch { /* registry not ready yet */ }
+
+    // Watch new projects as chains are created
+    events.on('chain:started', (data) => {
+      if (data?.projectDir) fileWatcher.watchProject(data.projectDir);
+    });
+  }
+
   // Graceful shutdown
   let shutdownCalled = false;
   function shutdown() {
     if (shutdownCalled) return;
     shutdownCalled = true;
+
+    // Clean up file watchers
+    if (fileWatcher) fileWatcher.unwatchAll();
 
     // Clean up EventBus listeners
     if (wss.cleanup) wss.cleanup();

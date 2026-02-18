@@ -1364,3 +1364,63 @@ describe('Chain Restart Lineage', () => {
     expect(chainWithParent.restartedFrom).toBeTruthy();
   });
 });
+
+// ── Projects Page + File API Tests (P9) ─────────────────────
+
+describe('Projects Page', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /projects serves projects page HTML', async () => {
+    const res = await fetch(`${baseUrl}/projects`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Projects');
+    expect(text).toContain('projects-panel');
+  });
+
+  it('GET /views/projects returns projects fragment', async () => {
+    const res = await fetch(`${baseUrl}/views/projects`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('projects-panel');
+    expect(text).toContain('project-card');
+  });
+
+  it('GET /api/files returns directory listing', async () => {
+    // Use the operator directory itself as a real path
+    const root = encodeURIComponent(join(TEST_DIR, '..'));
+    const { status, body } = await api(`/api/files?root=${root}`);
+    expect(status).toBe(200);
+    expect(body.entries).toBeDefined();
+    expect(Array.isArray(body.entries)).toBe(true);
+  });
+
+  it('GET /api/files rejects missing root', async () => {
+    const { status, body } = await api('/api/files');
+    expect(status).toBe(400);
+    expect(body.error).toContain('root');
+  });
+
+  it('GET /api/files blocks path traversal', async () => {
+    const root = encodeURIComponent(TEST_DIR);
+    const { status } = await api(`/api/files?root=${root}&path=../../..`);
+    expect(status).toBe(403);
+  });
+
+  it('GET /views/file-tree returns subtree HTML', async () => {
+    const root = encodeURIComponent(join(TEST_DIR, '..'));
+    const res = await fetch(`${baseUrl}/views/file-tree?root=${root}`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    // Should contain some file/dir entries from the operator directory
+    expect(text.length).toBeGreaterThan(0);
+  });
+});

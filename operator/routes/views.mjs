@@ -7,7 +7,7 @@
 
 import { Router } from 'express';
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import {
   loadRegistry, findChainById, getChainSummary, getChainLineage,
 } from '../registry.mjs';
@@ -18,6 +18,8 @@ import { renderTerminalViewer } from '../views/terminal.mjs';
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
 import { loadSettings } from '../settings.mjs';
 import { renderAnalyticsPanel } from '../views/analytics.mjs';
+import { renderProjectsPanel, renderFileTree } from '../views/projects.mjs';
+import { scanDirectory } from './files.mjs';
 
 /**
  * Create view routes for HTMX fragments.
@@ -686,6 +688,77 @@ export function createViewRoutes(ctx) {
       }).join('');
 
       res.type('text/html').send(`<div class="lineage">${nodes}</div>`);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Projects Fragment ────────────────────────────────────────
+  router.get('/projects', (_req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chains = registry.chains || [];
+
+      // Build project summaries (same logic as /api/projects)
+      const projectMap = {};
+      for (const chain of chains) {
+        const proj = chain.projectDir || '(default)';
+        if (!projectMap[proj]) {
+          projectMap[proj] = {
+            projectDir: chain.projectDir,
+            chains: 0, running: 0, completed: 0, failed: 0,
+            totalCostUsd: 0, lastActivity: null,
+          };
+        }
+        const entry = projectMap[proj];
+        entry.chains++;
+        if (chain.status === 'running') entry.running++;
+        if (chain.status === 'complete' || chain.status === 'assumed-complete') entry.completed++;
+        if (chain.status === 'failed' || chain.status === 'aborted') entry.failed++;
+        entry.totalCostUsd += chain.totalCostUsd || 0;
+        if (!entry.lastActivity || chain.updatedAt > entry.lastActivity) {
+          entry.lastActivity = chain.updatedAt;
+        }
+      }
+
+      const projects = Object.values(projectMap)
+        .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
+
+      // Scan root-level entries for each project
+      const rootEntriesMap = new Map();
+      for (const p of projects) {
+        const dir = p.projectDir;
+        if (dir && dir !== '(default)') {
+          rootEntriesMap.set(dir, scanDirectory(dir, ''));
+        }
+      }
+
+      res.type('text/html').send(renderProjectsPanel(projects, rootEntriesMap));
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── File Tree Fragment (lazy-load subdirectories) ────────────
+  router.get('/file-tree', (req, res) => {
+    try {
+      const root = req.query.root;
+      const subPath = req.query.path || '';
+
+      if (!root) {
+        return res.type('text/html').send('<div class="tree-empty">No root specified</div>');
+      }
+
+      const resolvedRoot = resolve(root);
+      const resolvedFull = resolve(resolvedRoot, subPath);
+
+      // Path-traversal guard
+      if (!resolvedFull.replace(/\\/g, '/').startsWith(resolvedRoot.replace(/\\/g, '/'))) {
+        return res.type('text/html').send('<div class="tree-empty">Access denied</div>');
+      }
+
+      const entries = scanDirectory(resolvedRoot, subPath);
+      res.type('text/html').send(renderFileTree(entries, resolvedRoot));
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }

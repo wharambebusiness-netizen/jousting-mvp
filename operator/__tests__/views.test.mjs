@@ -3,7 +3,7 @@
 // ============================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { createApp } from '../server.mjs';
 import { initRegistry, loadRegistry, createChain, recordSession, updateChainStatus, saveRegistry, getChainLineage } from '../registry.mjs';
@@ -15,6 +15,8 @@ import {
   aggregateAnalytics, renderAnalyticsMetrics, renderCostTimeline,
   renderStatusBreakdown, renderModelUsage, renderTopChains, renderAnalyticsPanel,
 } from '../views/analytics.mjs';
+import { renderProjectsPanel, renderProjectCard, renderFileTree } from '../views/projects.mjs';
+import { scanDirectory } from '../routes/files.mjs';
 
 describe('View Helpers', () => {
   it('escapes HTML entities', () => {
@@ -1296,5 +1298,236 @@ describe('View Routes — Analytics (P8)', () => {
     const res = await get('/views/analytics');
     expect(res.status).toBe(200);
     expect(res.text).toContain('empty-state');
+  });
+});
+
+// ── scanDirectory Unit Tests (P9) ─────────────────────────────
+
+describe('scanDirectory', () => {
+  const SCAN_DIR = join(import.meta.dirname, '..', '__test_tmp_scan');
+
+  beforeEach(() => {
+    if (existsSync(SCAN_DIR)) rmSync(SCAN_DIR, { recursive: true });
+    mkdirSync(join(SCAN_DIR, 'src', 'engine'), { recursive: true });
+    mkdirSync(join(SCAN_DIR, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(SCAN_DIR, '.git', 'objects'), { recursive: true });
+    writeFileSync(join(SCAN_DIR, 'package.json'), '{}');
+    writeFileSync(join(SCAN_DIR, 'README.md'), '# Test');
+    writeFileSync(join(SCAN_DIR, 'src', 'index.ts'), 'export {};');
+    writeFileSync(join(SCAN_DIR, 'src', 'engine', 'types.ts'), '');
+    writeFileSync(join(SCAN_DIR, 'node_modules', 'pkg', 'index.js'), '');
+  });
+
+  afterEach(() => {
+    if (existsSync(SCAN_DIR)) rmSync(SCAN_DIR, { recursive: true });
+  });
+
+  it('lists directories before files alphabetically', () => {
+    const entries = scanDirectory(SCAN_DIR);
+    const names = entries.map(e => e.name);
+    // src/ should come before package.json and README.md
+    expect(names.indexOf('src')).toBeLessThan(names.indexOf('package.json'));
+    expect(entries.find(e => e.name === 'src').type).toBe('dir');
+    expect(entries.find(e => e.name === 'package.json').type).toBe('file');
+  });
+
+  it('excludes node_modules and .git', () => {
+    const entries = scanDirectory(SCAN_DIR);
+    const names = entries.map(e => e.name);
+    expect(names).not.toContain('node_modules');
+    expect(names).not.toContain('.git');
+  });
+
+  it('includes file size', () => {
+    const entries = scanDirectory(SCAN_DIR);
+    const pkg = entries.find(e => e.name === 'package.json');
+    expect(pkg).toBeDefined();
+    expect(pkg.size).toBe(2); // '{}'
+  });
+
+  it('includes child count for directories', () => {
+    const entries = scanDirectory(SCAN_DIR);
+    const src = entries.find(e => e.name === 'src');
+    expect(src).toBeDefined();
+    expect(src.children).toBeGreaterThan(0);
+  });
+
+  it('scans subdirectories with subPath', () => {
+    const entries = scanDirectory(SCAN_DIR, 'src');
+    const names = entries.map(e => e.name);
+    expect(names).toContain('engine');
+    expect(names).toContain('index.ts');
+  });
+
+  it('returns empty array for nonexistent path', () => {
+    const entries = scanDirectory(SCAN_DIR, 'nonexistent');
+    expect(entries).toEqual([]);
+  });
+
+  it('uses forward slashes in paths', () => {
+    const entries = scanDirectory(SCAN_DIR, 'src');
+    const engine = entries.find(e => e.name === 'engine');
+    expect(engine.path).toBe('src/engine');
+    expect(engine.path).not.toContain('\\');
+  });
+});
+
+// ── Project View Renderer Tests (P9) ──────────────────────────
+
+describe('Projects — renderFileTree', () => {
+  it('renders directory entries with details/summary', () => {
+    const entries = [
+      { name: 'src', type: 'dir', path: 'src', children: 5 },
+      { name: 'index.ts', type: 'file', path: 'index.ts', size: 100 },
+    ];
+    const html = renderFileTree(entries, '/proj');
+    expect(html).toContain('tree-dir');
+    expect(html).toContain('tree-summary');
+    expect(html).toContain('src/');
+    expect(html).toContain('5 items');
+    expect(html).toContain('tree-file');
+    expect(html).toContain('index.ts');
+  });
+
+  it('shows empty directory message', () => {
+    const html = renderFileTree([], '/proj');
+    expect(html).toContain('tree-empty');
+    expect(html).toContain('Empty directory');
+  });
+
+  it('escapes HTML in file names', () => {
+    const entries = [
+      { name: '<script>alert(1)</script>', type: 'file', path: 'x', size: 0 },
+    ];
+    const html = renderFileTree(entries, '/proj');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>alert');
+  });
+});
+
+describe('Projects — renderProjectCard', () => {
+  it('renders project name from path', () => {
+    const project = {
+      projectDir: '/home/user/my-project',
+      chains: 5, running: 1, completed: 3, failed: 1,
+      totalCostUsd: 2.50, lastActivity: new Date().toISOString(),
+    };
+    const html = renderProjectCard(project, []);
+    expect(html).toContain('project-card');
+    expect(html).toContain('my-project');
+    expect(html).toContain('5 chains');
+    expect(html).toContain('1 running');
+    expect(html).toContain('3 done');
+    expect(html).toContain('1 failed');
+    expect(html).toContain('$2.50');
+  });
+
+  it('handles default project', () => {
+    const project = {
+      projectDir: null,
+      chains: 1, running: 0, completed: 1, failed: 0,
+      totalCostUsd: 0, lastActivity: null,
+    };
+    const html = renderProjectCard(project, []);
+    expect(html).toContain('Default Project');
+    expect(html).toContain('No project directory set');
+  });
+
+  it('includes refresh button', () => {
+    const project = {
+      projectDir: '/proj',
+      chains: 0, running: 0, completed: 0, failed: 0,
+      totalCostUsd: 0, lastActivity: null,
+    };
+    const html = renderProjectCard(project, []);
+    expect(html).toContain('project-card__refresh');
+    expect(html).toContain('refreshProjectTree');
+  });
+});
+
+describe('Projects — renderProjectsPanel', () => {
+  it('renders empty state when no projects', () => {
+    const html = renderProjectsPanel([], new Map());
+    expect(html).toContain('projects-panel');
+    expect(html).toContain('No projects found');
+  });
+
+  it('renders multiple project cards', () => {
+    const projects = [
+      { projectDir: '/proj/a', chains: 2, running: 0, completed: 2, failed: 0, totalCostUsd: 1, lastActivity: new Date().toISOString() },
+      { projectDir: '/proj/b', chains: 1, running: 1, completed: 0, failed: 0, totalCostUsd: 0.5, lastActivity: new Date().toISOString() },
+    ];
+    const rootMap = new Map();
+    rootMap.set('/proj/a', [{ name: 'src', type: 'dir', path: 'src', children: 3 }]);
+    rootMap.set('/proj/b', []);
+    const html = renderProjectsPanel(projects, rootMap);
+    expect(html).toContain('project-card');
+    expect(html).toContain('2 chains');
+    expect(html).toContain('1 chain');
+  });
+});
+
+// ── Projects View Route Tests (P9) ───────────────────────────
+
+describe('View Routes — Projects (P9)', () => {
+  beforeEach(function() {
+    setupApp();
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    // Use a real path that exists for file tree scanning
+    createChain(reg, {
+      task: 'project test chain',
+      config: { model: 'sonnet' },
+      projectDir: join(import.meta.dirname, '..'),
+    });
+    saveRegistry(reg);
+  });
+  afterEach(teardownApp);
+
+  it('GET /views/projects returns projects panel', async () => {
+    const res = await get('/views/projects');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('projects-panel');
+    expect(res.text).toContain('project-card');
+  });
+
+  it('GET /views/projects shows file tree entries', async () => {
+    const res = await get('/views/projects');
+    expect(res.status).toBe(200);
+    // The operator/ directory should contain known files
+    expect(res.text).toContain('tree-dir');
+  });
+
+  it('GET /views/file-tree returns subtree for valid path', async () => {
+    const root = encodeURIComponent(join(import.meta.dirname, '..'));
+    const res = await get(`/views/file-tree?root=${root}&path=views`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('helpers.mjs');
+    expect(res.text).toContain('analytics.mjs');
+    expect(res.text).toContain('projects.mjs');
+  });
+
+  it('GET /views/file-tree returns empty for missing root', async () => {
+    const res = await get('/views/file-tree');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('No root specified');
+  });
+
+  it('GET /views/file-tree blocks path traversal', async () => {
+    const root = encodeURIComponent(join(import.meta.dirname, '..'));
+    const res = await get(`/views/file-tree?root=${root}&path=../../..`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Access denied');
+  });
+
+  it('GET /views/projects returns empty state with no chains', async () => {
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    reg.chains = [];
+    saveRegistry(reg);
+
+    const res = await get('/views/projects');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('No projects found');
   });
 });

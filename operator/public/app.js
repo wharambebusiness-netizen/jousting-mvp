@@ -187,7 +187,7 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
 function onProjectChange(value) {
   localStorage.setItem('operator-project', value);
   // Reload all HTMX-driven panels
-  var targets = ['#chain-table', '#cost-summary-grid', '#git-panel', '#orch-content', '#mission-launcher', '#report-viewer'];
+  var targets = ['#chain-table', '#cost-summary-grid', '#git-panel', '#orch-content', '#mission-launcher', '#report-viewer', '#projects-panel'];
   for (var i = 0; i < targets.length; i++) {
     var el = document.querySelector(targets[i]);
     if (el) htmx.trigger(el, 'reload');
@@ -401,3 +401,93 @@ document.body.addEventListener('htmx:afterRequest', function (evt) {
     showToast(msg, 'error');
   }
 });
+
+// ── Project File Tree ──────────────────────────────────────────
+
+/**
+ * Load a tree node's children via fetch (called on <details> toggle).
+ */
+function loadTreeNode(details) {
+  // Only load on open, and only if not already loaded
+  if (!details.open || details.dataset.loaded === '1') return;
+  details.dataset.loaded = '1';
+
+  var card = details.closest('.project-card') || details.closest('.project-tree');
+  var root = card ? card.dataset.root : '';
+  var path = details.dataset.path || '';
+
+  if (!root) return;
+
+  var children = details.querySelector('.tree-children');
+  if (!children) return;
+
+  fetch('/views/file-tree?root=' + encodeURIComponent(root) + '&path=' + encodeURIComponent(path))
+    .then(function(r) { return r.text(); })
+    .then(function(html) { children.innerHTML = html; })
+    .catch(function() { children.innerHTML = '<div class="tree-empty">Failed to load</div>'; });
+}
+window.loadTreeNode = loadTreeNode;
+
+/**
+ * Refresh a project's file tree (re-fetch all open directories).
+ */
+function refreshProjectTree(card) {
+  if (!card) return;
+  var btn = card.querySelector('.project-card__refresh');
+  if (btn) btn.classList.add('refreshing');
+
+  var root = card.dataset.root;
+  var tree = card.querySelector('.project-tree');
+  if (!tree || !root) return;
+
+  // Re-fetch root entries
+  fetch('/views/file-tree?root=' + encodeURIComponent(root) + '&path=')
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      tree.innerHTML = html;
+      if (btn) setTimeout(function() { btn.classList.remove('refreshing'); }, 400);
+    })
+    .catch(function() {
+      if (btn) btn.classList.remove('refreshing');
+    });
+}
+window.refreshProjectTree = refreshProjectTree;
+
+// ── Real-time File Change Listener ─────────────────────────────
+
+(function() {
+  var lastChange = {};
+  var DEBOUNCE = 3000;
+
+  createWS(['project:*'], function(msg) {
+    if (msg.event !== 'project:files-changed') return;
+    var dir = msg.data && msg.data.projectDir;
+    if (!dir) return;
+
+    // Debounce per project
+    var now = Date.now();
+    if (lastChange[dir] && now - lastChange[dir] < DEBOUNCE) return;
+    lastChange[dir] = now;
+
+    // Find matching project cards and refresh open trees
+    var cards = document.querySelectorAll('.project-card');
+    for (var i = 0; i < cards.length; i++) {
+      var cardRoot = (cards[i].dataset.root || '').replace(/\\/g, '/');
+      if (cardRoot === dir.replace(/\\/g, '/')) {
+        // Refresh open details within this card
+        var openDirs = cards[i].querySelectorAll('details.tree-dir[open]');
+        for (var j = 0; j < openDirs.length; j++) {
+          openDirs[j].dataset.loaded = '0';
+          loadTreeNode(openDirs[j]);
+          // Re-mark as open since loadTreeNode checks details.open
+          openDirs[j].open = true;
+        }
+        // Also refresh root-level tree if visible
+        var tree = cards[i].querySelector('.project-tree');
+        if (tree && !openDirs.length) {
+          refreshProjectTree(cards[i]);
+        }
+      }
+    }
+  });
+})();
