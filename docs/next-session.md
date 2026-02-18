@@ -51,6 +51,10 @@ S88 completed all 7 priority tasks:
 ### 8. Report Auto-Refresh (Low)
 - Poll for new reports after orchestrator runs
 
+## Working Style Reminder
+- **Use Task subagents aggressively** — spin up agents for parallel research, file exploration, codebase searches, and any work that can run concurrently. Don't do sequentially what agents can do in parallel. Examples: reading multiple files at once, searching for usage patterns across the codebase, investigating dependencies before editing, auditing multiple components simultaneously. Only skip agents for trivial single-file reads or when you already know the exact answer.
+- Subagents CANNOT use Write/Bash — they are for research/exploration only. Do all edits yourself in the main context.
+
 ## Reference
 - Handoff: `docs/archive/handoff-s88.md`
 - Previous handoff: `docs/archive/handoff-s87.md`
