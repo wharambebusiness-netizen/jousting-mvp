@@ -37,7 +37,7 @@ export function MeleeTransitionScreen({ match, lastPassResult, onContinue }: Mel
   };
 
   // Check if there was an unseat (optional details)
-  const hasUnseat = lastPassResult?.unseat !== undefined;
+  const hasUnseat = lastPassResult?.unseat !== undefined && lastPassResult?.unseat !== 'none';
   const unseater = hasUnseat && match && lastPassResult
     ? (lastPassResult.unseat === 'player1' ? match.player1.archetype.name : match.player2.archetype.name)
     : null;

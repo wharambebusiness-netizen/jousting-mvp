@@ -41,7 +41,7 @@ src/engine/           Pure TS combat engine (no UI imports)
   player-gear.ts      6-slot player gear system
   balance-config.ts   ALL tuning constants (single source of truth)
 
-src/ui/               15 React components, App.tsx 10-screen state machine
+src/ui/               14 React components, App.tsx 10-screen state machine
 src/ai/               AI opponent: difficulty levels, personality, pattern tracking
 src/tools/            simulate.ts (balance testing), param-search.ts (parameter optimization)
 

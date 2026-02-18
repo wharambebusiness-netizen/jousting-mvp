@@ -1,35 +1,53 @@
-# Next Session Instructions (S86)
+# Next Session Instructions (S87)
 
-## Context: M1-M6 Complete + S85 Additions
+## Context: S86 — React Frontend Polish Started
 
-All 6 operator milestones are done, plus S85 added:
-- Report viewer rendering markdown reports via marked CDN (M6b)
-- Live log streaming via WebSocket on orchestrator page
-- Chain restart/retry for failed/aborted chains
+S86 fixed 3 UI bugs and removed dead code in the React game frontend:
+- Melee win dots: 3 → 4 (matching engine's `meleeWinsNeeded: 4`)
+- Player labels: P1/P2/Opp → You/Opponent (consistency across all screens)
+- Unseat check: excluded `'none'` value in MeleeTransitionScreen
+- Deleted dead `MeleeTransition.tsx` (superseded by `MeleeTransitionScreen.tsx`)
 - 1430 tests across 24 suites, all passing
 
-## What's Left / Possible Next Steps
+## React Frontend Polish (Partially Done)
 
-### 1. Multi-Project Dashboard (Medium-Large)
+S86 performed a comprehensive audit of all 15 React UI components. Bugs are fixed; polish items remain:
+
+### 1. Dramatic Reveal Animation (Medium)
+- `RevealScreen.tsx` shows both attacks immediately — no suspense
+- Add card-flip or fade-in animation with brief delay
+- Could add a "3-2-1" countdown or dramatic pause before showing opponent's choice
+
+### 2. Hardcoded Colors in CounterChart (Low)
+- `CounterChart.tsx` uses stance color classes that may have hardcoded values
+- Should use CSS custom properties from the design token system in `index.css`
+
+### 3. Code Duplication Cleanup (Low)
+- `LoadoutScreen.tsx` has `STAT_TIPS` that may duplicate tooltip content
+- Minor cleanup opportunity
+
+### 4. Additional Polish
+- Keyboard navigation for attack card grids (arrow keys)
+- Screen transition animations (fade/slide between game states)
+- Mobile responsiveness for smaller screens
+- Sound effect hooks for future audio integration
+
+## Operator Dashboard (Complete — Optional Improvements)
+
+### 5. Multi-Project Dashboard (Medium-Large)
 - Project selector in nav or sidebar
 - Filter all views by project
 - Project-specific cost summaries
 
-### 2. Better Toast Integration (Low)
+### 6. Better Toast Integration (Low)
 - Show toasts for chain restart, git push, abort, all API actions
-- Consistent feedback for every user action
 
-### 3. Report Auto-Refresh (Low)
-- Poll `/api/orchestrator/reports` for new reports after orchestrator runs
-- Show notification when new report available
-
-### 4. Game Engine Work
-- The game engine is feature-complete and balanced
-- Could work on UI polish, new content, or the React frontend
-- `docs/joust-melee-v4.1.md` is the canonical spec
+### 7. Report Auto-Refresh (Low)
+- Poll for new reports after orchestrator runs
 
 ## Reference
-- Handoff: `docs/archive/handoff-s85.md`
+- Handoff: `docs/archive/handoff-s86.md`
+- Previous handoff: `docs/archive/handoff-s85.md`
 - Design reference: `memory/web-design.md` (29 sections)
 - Operator plan: `docs/operator-plan.md`
 - Current test count: 1430 tests, 24 suites (all passing)

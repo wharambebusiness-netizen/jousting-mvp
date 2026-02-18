@@ -36,17 +36,17 @@ export function MeleeResultScreen({ match, result, onContinue }: {
       <div className="melee-wins">
         <div>
           <span className="player-label player-label--p1">You ({match.player1.archetype.name})</span>
-          <div className="melee-wins__dots">
-            {[0, 1, 2].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} />
+          <div className="melee-wins__dots" aria-label={`You: ${match.meleeWins1} of 4 wins`}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className={`melee-wins__dot${i < match.meleeWins1 ? ' melee-wins__dot--filled-p1' : ''}`} aria-hidden="true" />
             ))}
           </div>
         </div>
         <div>
-          <span className="player-label player-label--p2">Opp ({match.player2.archetype.name})</span>
-          <div className="melee-wins__dots">
-            {[0, 1, 2].map(i => (
-              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} />
+          <span className="player-label player-label--p2">Opponent ({match.player2.archetype.name})</span>
+          <div className="melee-wins__dots" aria-label={`Opponent: ${match.meleeWins2} of 4 wins`}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className={`melee-wins__dot${i < match.meleeWins2 ? ' melee-wins__dot--filled-p2' : ''}`} aria-hidden="true" />
             ))}
           </div>
         </div>
