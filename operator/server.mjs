@@ -150,6 +150,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'settings.html'));
   });
 
+  // Analytics page
+  app.get('/analytics', (_req, res) => {
+    res.sendFile(join(publicDir, 'analytics.html'));
+  });
+
   // Static files (CSS, index.html for /)
   app.use(express.static(publicDir));
 

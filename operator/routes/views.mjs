@@ -17,6 +17,7 @@ import { renderAgentGrid } from '../views/agent-card.mjs';
 import { renderTerminalViewer } from '../views/terminal.mjs';
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
 import { loadSettings } from '../settings.mjs';
+import { renderAnalyticsPanel } from '../views/analytics.mjs';
 
 /**
  * Create view routes for HTMX fragments.
@@ -640,6 +641,25 @@ export function createViewRoutes(ctx) {
           <tbody>${rows}</tbody>
         </table>
       `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Analytics Fragment ──────────────────────────────────────
+  router.get('/analytics', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      let chains = registry.chains || [];
+
+      // Project filter
+      const project = req.query.project;
+      if (project) {
+        const norm = project.replace(/\\/g, '/');
+        chains = chains.filter(c => (c.projectDir || '').replace(/\\/g, '/') === norm);
+      }
+
+      res.type('text/html').send(renderAnalyticsPanel(chains));
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }

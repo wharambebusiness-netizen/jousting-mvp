@@ -1203,6 +1203,37 @@ describe('Settings Page', () => {
   });
 });
 
+// ── Analytics Page Tests (P8) ────────────────────────────────
+
+describe('Analytics Page', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /analytics serves analytics page HTML', async () => {
+    const res = await fetch(`${baseUrl}/analytics`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Analytics');
+    expect(text).toContain('analytics-panel');
+  });
+
+  it('GET /views/analytics returns analytics fragment', async () => {
+    const res = await fetch(`${baseUrl}/views/analytics`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('analytics-panel');
+    expect(text).toContain('metrics-grid');
+    expect(text).toContain('chart-container');
+  });
+});
+
 // ── Chain Sort/Direction Tests (P4) ──────────────────────────
 
 describe('Chain List Sort/Direction', () => {

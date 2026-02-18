@@ -11,6 +11,10 @@ import { initRegistry, loadRegistry, createChain, recordSession, updateChainStat
 // ── View Helpers ────────────────────────────────────────────
 
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
+import {
+  aggregateAnalytics, renderAnalyticsMetrics, renderCostTimeline,
+  renderStatusBreakdown, renderModelUsage, renderTopChains, renderAnalyticsPanel,
+} from '../views/analytics.mjs';
 
 describe('View Helpers', () => {
   it('escapes HTML entities', () => {
@@ -1034,5 +1038,263 @@ describe('View Routes — Chain Lineage Fragment (P7)', () => {
     expect(res.text).toContain('lineage');
     expect(res.text).toContain('original chain task');
     expect(res.text).toContain('lineage__node--current');
+  });
+});
+
+// ── Analytics Unit Tests (P8) ────────────────────────────────
+
+describe('Analytics — aggregateAnalytics', () => {
+  function makeChain(overrides = {}) {
+    return {
+      id: 'c-' + Math.random().toString(36).slice(2),
+      task: overrides.task || 'test task',
+      status: overrides.status || 'complete',
+      startedAt: overrides.startedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      config: { model: overrides.model || 'sonnet' },
+      sessions: overrides.sessions || [],
+      totalCostUsd: overrides.totalCostUsd || 0,
+      totalTurns: overrides.totalTurns || 0,
+      totalDurationMs: overrides.totalDurationMs || 0,
+      ...overrides,
+    };
+  }
+
+  it('returns zeros for empty chains', () => {
+    const data = aggregateAnalytics([]);
+    expect(data.totalChains).toBe(0);
+    expect(data.totalCost).toBe(0);
+    expect(data.successRate).toBe(0);
+    expect(data.topChains).toEqual([]);
+    expect(data.days.length).toBe(30);
+  });
+
+  it('aggregates cost and turns', () => {
+    const chains = [
+      makeChain({ totalCostUsd: 1.50, totalTurns: 10, totalDurationMs: 5000 }),
+      makeChain({ totalCostUsd: 2.50, totalTurns: 20, totalDurationMs: 10000 }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.totalCost).toBe(4.0);
+    expect(data.totalTurns).toBe(30);
+    expect(data.totalDuration).toBe(15000);
+    expect(data.totalChains).toBe(2);
+    expect(data.avgCostPerChain).toBe(2.0);
+  });
+
+  it('calculates success rate', () => {
+    const chains = [
+      makeChain({ status: 'complete' }),
+      makeChain({ status: 'complete' }),
+      makeChain({ status: 'failed' }),
+      makeChain({ status: 'running' }),
+    ];
+    const data = aggregateAnalytics(chains);
+    // 2 completed out of 3 finished (running not counted)
+    expect(data.completed).toBe(2);
+    expect(data.failed).toBe(1);
+    expect(data.finished).toBe(3);
+    expect(Math.round(data.successRate)).toBe(67);
+  });
+
+  it('groups by model', () => {
+    const chains = [
+      makeChain({ model: 'sonnet', totalCostUsd: 1.0 }),
+      makeChain({ model: 'opus', totalCostUsd: 3.0 }),
+      makeChain({ model: 'sonnet', totalCostUsd: 2.0 }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.byModel.sonnet.count).toBe(2);
+    expect(data.byModel.sonnet.cost).toBe(3.0);
+    expect(data.byModel.opus.count).toBe(1);
+    expect(data.byModel.opus.cost).toBe(3.0);
+  });
+
+  it('groups by status', () => {
+    const chains = [
+      makeChain({ status: 'complete' }),
+      makeChain({ status: 'failed' }),
+      makeChain({ status: 'complete' }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.byStatus.complete.count).toBe(2);
+    expect(data.byStatus.failed.count).toBe(1);
+  });
+
+  it('aggregates daily cost for today', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const chains = [
+      makeChain({ startedAt: new Date().toISOString(), totalCostUsd: 1.50 }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.dailyCost[today]).toBe(1.50);
+  });
+
+  it('aggregates token counts from sessions', () => {
+    const chains = [
+      makeChain({
+        sessions: [
+          { inputTokens: 1000, outputTokens: 500 },
+          { inputTokens: 2000, outputTokens: 800 },
+        ],
+      }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.totalInputTokens).toBe(3000);
+    expect(data.totalOutputTokens).toBe(1300);
+  });
+
+  it('ranks top chains by cost', () => {
+    const chains = [
+      makeChain({ task: 'cheap', totalCostUsd: 0.50 }),
+      makeChain({ task: 'expensive', totalCostUsd: 5.00 }),
+      makeChain({ task: 'medium', totalCostUsd: 2.00 }),
+    ];
+    const data = aggregateAnalytics(chains);
+    expect(data.topChains[0].task).toBe('expensive');
+    expect(data.topChains[1].task).toBe('medium');
+    expect(data.topChains[2].task).toBe('cheap');
+  });
+});
+
+describe('Analytics — Chart Renderers', () => {
+  const sampleData = aggregateAnalytics([
+    {
+      id: 'c1', task: 'task one', status: 'complete',
+      startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      config: { model: 'sonnet' },
+      sessions: [{ inputTokens: 100, outputTokens: 50, costUsd: 0.5, turns: 5, durationMs: 3000 }],
+      totalCostUsd: 0.5, totalTurns: 5, totalDurationMs: 3000,
+    },
+    {
+      id: 'c2', task: 'task two', status: 'failed',
+      startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      config: { model: 'opus' },
+      sessions: [{ inputTokens: 200, outputTokens: 100, costUsd: 2.0, turns: 10, durationMs: 8000 }],
+      totalCostUsd: 2.0, totalTurns: 10, totalDurationMs: 8000,
+    },
+  ]);
+
+  it('renderAnalyticsMetrics returns metric cards', () => {
+    const html = renderAnalyticsMetrics(sampleData);
+    expect(html).toContain('metrics-grid');
+    expect(html).toContain('metric-card');
+    expect(html).toContain('Total Cost');
+    expect(html).toContain('Success Rate');
+    expect(html).toContain('$2.50');
+    expect(html).toContain('2 chains');
+  });
+
+  it('renderCostTimeline returns SVG bar chart', () => {
+    const html = renderCostTimeline(sampleData);
+    expect(html).toContain('chart-container');
+    expect(html).toContain('<svg');
+    expect(html).toContain('chart-bar');
+    expect(html).toContain('Daily Cost');
+  });
+
+  it('renderStatusBreakdown returns donut chart', () => {
+    const html = renderStatusBreakdown(sampleData);
+    expect(html).toContain('donut-svg');
+    expect(html).toContain('Chain Outcomes');
+    expect(html).toContain('legend-item');
+    expect(html).toContain('complete');
+    expect(html).toContain('failed');
+  });
+
+  it('renderStatusBreakdown handles empty data', () => {
+    const emptyData = aggregateAnalytics([]);
+    const html = renderStatusBreakdown(emptyData);
+    expect(html).toContain('empty-state');
+  });
+
+  it('renderModelUsage returns horizontal bar chart', () => {
+    const html = renderModelUsage(sampleData);
+    expect(html).toContain('Model Usage');
+    expect(html).toContain('hbar-row');
+    expect(html).toContain('sonnet');
+    expect(html).toContain('opus');
+  });
+
+  it('renderModelUsage handles empty data', () => {
+    const emptyData = aggregateAnalytics([]);
+    const html = renderModelUsage(emptyData);
+    expect(html).toContain('empty-state');
+  });
+
+  it('renderTopChains returns cost leaderboard', () => {
+    const html = renderTopChains(sampleData);
+    expect(html).toContain('analytics-table');
+    expect(html).toContain('Top Chains');
+    expect(html).toContain('task two');
+    expect(html).toContain('task one');
+  });
+
+  it('renderTopChains handles empty data', () => {
+    const emptyData = aggregateAnalytics([]);
+    const html = renderTopChains(emptyData);
+    expect(html).toContain('empty-state');
+  });
+
+  it('renderAnalyticsPanel combines all charts', () => {
+    const html = renderAnalyticsPanel([
+      {
+        id: 'c1', task: 'combined test', status: 'complete',
+        startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        config: { model: 'sonnet' }, sessions: [],
+        totalCostUsd: 1.0, totalTurns: 5, totalDurationMs: 3000,
+      },
+    ]);
+    expect(html).toContain('analytics-panel');
+    expect(html).toContain('metrics-grid');
+    expect(html).toContain('chart-container');
+    expect(html).toContain('analytics-table');
+  });
+});
+
+// ── Analytics View Route Tests (P8) ──────────────────────────
+
+describe('View Routes — Analytics (P8)', () => {
+  beforeEach(function() {
+    setupApp();
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    const c1 = createChain(reg, { task: 'analytics task 1', config: { model: 'sonnet' }, projectDir: '/proj/a' });
+    recordSession(c1, { turns: 5, costUsd: 1.50, durationMs: 5000, inputTokens: 1000, outputTokens: 500 });
+    updateChainStatus(c1, 'complete');
+    const c2 = createChain(reg, { task: 'analytics task 2', config: { model: 'opus' }, projectDir: '/proj/b' });
+    recordSession(c2, { turns: 10, costUsd: 3.00, durationMs: 10000, inputTokens: 2000, outputTokens: 800 });
+    saveRegistry(reg);
+  });
+  afterEach(teardownApp);
+
+  it('GET /views/analytics returns full analytics panel', async () => {
+    const res = await get('/views/analytics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('analytics-panel');
+    expect(res.text).toContain('metrics-grid');
+    expect(res.text).toContain('chart-container');
+    expect(res.text).toContain('$4.50');
+  });
+
+  it('GET /views/analytics filters by project', async () => {
+    const proj = encodeURIComponent('/proj/a');
+    const res = await get(`/views/analytics?project=${proj}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('$1.50');
+    expect(res.text).not.toContain('$4.50');
+  });
+
+  it('GET /views/analytics returns empty state with no chains', async () => {
+    // Reset to empty registry
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    // Clear chains
+    reg.chains = [];
+    saveRegistry(reg);
+
+    const res = await get('/views/analytics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('empty-state');
   });
 });
