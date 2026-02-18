@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import { SpeedType, type MatchState } from '../engine/types';
 import { SPEEDS } from '../engine/attacks';
 import { DeltaVal, Scoreboard } from './helpers';
@@ -8,6 +9,28 @@ export function SpeedSelect({ match, onSelect }: {
   match: MatchState;
   onSelect: (speed: SpeedType) => void;
 }) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const cols = 3;
+
+  const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>('[role="button"]'));
+    const idx = cards.indexOf(e.target as HTMLElement);
+    if (idx < 0) return;
+
+    let next = -1;
+    switch (e.key) {
+      case 'ArrowRight': next = idx + 1 < cards.length ? idx + 1 : idx; break;
+      case 'ArrowLeft': next = idx - 1 >= 0 ? idx - 1 : idx; break;
+      case 'ArrowDown': next = idx + cols < cards.length ? idx + cols : idx; break;
+      case 'ArrowUp': next = idx - cols >= 0 ? idx - cols : idx; break;
+      default: return;
+    }
+    e.preventDefault();
+    cards[next]?.focus();
+  }, []);
+
   return (
     <div className="screen">
       <Scoreboard
@@ -25,7 +48,7 @@ export function SpeedSelect({ match, onSelect }: {
       <h2 className="text-center">Choose Your Speed</h2>
       <p className="subtitle">Higher speed means more momentum but less control. Pass {match.passNumber} of 5.</p>
 
-      <div className="speed-grid">
+      <div className="speed-grid" ref={gridRef} role="group" aria-label="Speed options" onKeyDown={handleGridKeyDown}>
         {SPEED_ORDER.map(type => {
           const s = SPEEDS[type];
           const handleKeyDown = (e: React.KeyboardEvent) => {

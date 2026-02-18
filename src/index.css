@@ -90,6 +90,34 @@
   --glow-gold-soft: rgba(201, 168, 76, 0.5);
   --glow-gold-subtle: rgba(201, 168, 76, 0.6);
 
+  /* --- Gold tint tokens (low-opacity for backgrounds/borders) --- */
+  --gold-tint-05: rgba(201, 168, 76, 0.05);
+  --gold-tint-08: rgba(201, 168, 76, 0.08);
+  --gold-tint-10: rgba(201, 168, 76, 0.1);
+  --gold-tint-15: rgba(201, 168, 76, 0.15);
+  --gold-tint-20: rgba(201, 168, 76, 0.2);
+  --gold-tint-30: rgba(201, 168, 76, 0.3);
+
+  /* --- Red tint tokens --- */
+  --red-tint-zero: rgba(139, 37, 0, 0);
+  --red-tint-08: rgba(139, 37, 0, 0.08);
+  --red-tint-60: rgba(139, 37, 0, 0.6);
+
+  /* --- Overlay & shadow tokens (pure black at various opacities) --- */
+  --overlay-faint: rgba(0, 0, 0, 0.1);
+  --overlay-light: rgba(0, 0, 0, 0.15);
+  --overlay-dim: rgba(0, 0, 0, 0.2);
+  --overlay-medium: rgba(0, 0, 0, 0.3);
+  --overlay-dark: rgba(0, 0, 0, 0.4);
+  --overlay-heavy: rgba(0, 0, 0, 0.5);
+  --overlay-curtain: rgba(0, 0, 0, 0.6);
+
+  /* --- Misc tint tokens --- */
+  --green-tint: rgba(40, 167, 69, 0.06);
+  --blue-tint: rgba(42, 90, 143, 0.08);
+  --parchment-ghost: rgba(244, 228, 193, 0.25);
+  --parchment-ghost-border: rgba(244, 228, 193, 0.4);
+
   /* --- Stat bar gradient colors --- */
   --stat-mom: #c94040;
   --stat-mom-end: #e06040;
@@ -388,7 +416,7 @@ h3 { font-size: 1.1rem; margin-bottom: 4px; }
   width: 220px;
   text-align: center;
   border-radius: var(--radius);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px var(--overlay-medium);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;

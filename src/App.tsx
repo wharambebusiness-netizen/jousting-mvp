@@ -162,6 +162,22 @@ function gameReducer(state: GameState, action: Action): GameState {
   }
 }
 
+/** Pure helper: compute AI joust choice given match state + player's chosen attack. */
+function computeJoustAI(match: MatchState, playerAttack: Attack, difficulty: AIDifficulty) {
+  const lastP2Attack = match.passResults.length > 0
+    ? match.passResults[match.passResults.length - 1].player2.finalAttack
+    : undefined;
+  return aiPickJoustChoiceWithReasoning(match.player2, lastP2Attack, playerAttack, difficulty);
+}
+
+/** Pure helper: compute AI melee choice given match state. */
+function computeMeleeAI(match: MatchState, difficulty: AIDifficulty) {
+  const lastP2Attack = match.meleeRoundResults.length > 0
+    ? match.meleeRoundResults[match.meleeRoundResults.length - 1].player2Attack
+    : undefined;
+  return aiPickMeleeAttackWithReasoning(match.player2, lastP2Attack, difficulty);
+}
+
 function App() {
   const [state, dispatch] = useReducer(gameReducer, initialState);
   const transitionTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -184,13 +200,14 @@ function App() {
 
   // --- Setup ---
   const handleStart = (p1: Archetype, p2: Archetype, diff: AIDifficulty) => {
+    if (transitioning) return;
     dispatch({ type: 'START', p1, p2, difficulty: diff });
     transitionTo('loadout');
   };
 
   // --- Loadout confirm ---
   const handleLoadoutConfirm = (steedLoadout: GiglingLoadout, playerLoadout: PlayerLoadout) => {
-    if (!p1Archetype || !p2Archetype) return;
+    if (transitioning || !p1Archetype || !p2Archetype) return;
     const aiRarity = steedLoadout.giglingRarity;
     const aiSteedLoadout = createFullLoadout(aiRarity, aiRarity);
     const aiPlayerLoadout = createFullPlayerLoadout(aiRarity);
@@ -208,22 +225,22 @@ function App() {
 
   // --- Speed select ---
   const handleSpeedSelect = (speed: SpeedType) => {
+    if (transitioning) return;
     dispatch({ type: 'SELECT_SPEED', speed });
     transitionTo('attack');
   };
 
   // --- Joust attack select ---
   const handleAttackSelect = (attack: Attack) => {
-    const lastP2Attack = match!.passResults.length > 0
-      ? match!.passResults[match!.passResults.length - 1].player2.finalAttack
-      : undefined;
-    const { choice: ai, reasoning } = aiPickJoustChoiceWithReasoning(match!.player2, lastP2Attack, attack, difficulty);
+    if (transitioning) return;
+    const { choice: ai, reasoning } = computeJoustAI(match!, attack, difficulty);
     dispatch({ type: 'SELECT_ATTACK', attack, aiChoice: ai, reasoning });
     transitionTo('reveal');
   };
 
   // --- Reveal + shift decision ---
   const handleResolve = (shiftAttack?: Attack) => {
+    if (transitioning) return;
     const p1Choice: PassChoice = {
       speed: playerSpeed,
       attack: playerAttack!,
@@ -237,7 +254,7 @@ function App() {
 
   // --- Pass result continue ---
   const handlePassContinue = () => {
-    if (!match) return;
+    if (transitioning || !match) return;
     if (match.phase === Phase.MeleeSelect) {
       transitionTo('melee-transition');
     } else if (match.phase === Phase.MatchEnd) {
@@ -249,10 +266,8 @@ function App() {
 
   // --- Melee attack select ---
   const handleMeleeAttack = (attack: Attack) => {
-    const lastP2Attack = match!.meleeRoundResults.length > 0
-      ? match!.meleeRoundResults[match!.meleeRoundResults.length - 1].player2Attack
-      : undefined;
-    const { attack: aiAttack, reasoning } = aiPickMeleeAttackWithReasoning(match!.player2, lastP2Attack, difficulty);
+    if (transitioning) return;
+    const { attack: aiAttack, reasoning } = computeMeleeAI(match!, difficulty);
     const newMatch = submitMeleeRound(match!, attack, aiAttack);
     const roundResult = newMatch.meleeRoundResults[newMatch.meleeRoundResults.length - 1];
     dispatch({ type: 'MELEE_ATTACK', match: newMatch, roundResult, reasoning });
@@ -261,7 +276,7 @@ function App() {
 
   // --- Melee result continue ---
   const handleMeleeContinue = () => {
-    if (!match) return;
+    if (transitioning || !match) return;
     if (match.phase === Phase.MatchEnd) {
       transitionTo('end');
     } else {
@@ -271,6 +286,7 @@ function App() {
 
   // --- Rematch ---
   const handleRematch = () => {
+    if (transitioning) return;
     dispatch({ type: 'REMATCH' });
     transitionTo('setup');
   };
@@ -329,7 +345,7 @@ function App() {
         <MeleeTransitionScreen
           match={match}
           lastPassResult={lastPassResult}
-          onContinue={() => transitionTo('melee')}
+          onContinue={() => { if (!transitioning) transitionTo('melee'); }}
         />
       )}
 

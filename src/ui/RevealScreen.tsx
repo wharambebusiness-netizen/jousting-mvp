@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Attack, MatchState, SpeedType } from '../engine/types';
 import { SPEEDS, JOUST_ATTACK_LIST } from '../engine/attacks';
 import { computeEffectiveStats, canShift, resolveCounters } from '../engine/calculator';
@@ -33,6 +33,28 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
   const shiftOptions = JOUST_ATTACK_LIST.filter(a => a.id !== playerAttack.id);
   const sameStanceCost = 5;
   const crossStanceCost = 12;
+
+  const shiftGridRef = useRef<HTMLDivElement>(null);
+  const shiftCols = 2;
+
+  const handleShiftGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const grid = shiftGridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>('[role="button"]'));
+    const idx = cards.indexOf(e.target as HTMLElement);
+    if (idx < 0) return;
+
+    let next = -1;
+    switch (e.key) {
+      case 'ArrowRight': next = idx + 1 < cards.length ? idx + 1 : idx; break;
+      case 'ArrowLeft': next = idx - 1 >= 0 ? idx - 1 : idx; break;
+      case 'ArrowDown': next = idx + shiftCols < cards.length ? idx + shiftCols : idx; break;
+      case 'ArrowUp': next = idx - shiftCols >= 0 ? idx - shiftCols : idx; break;
+      default: return;
+    }
+    e.preventDefault();
+    cards[next]?.focus();
+  }, []);
 
   const counters = resolveCounters(playerAttack, aiAttack);
   const opponentRevealed = phase === 'opponent' || phase === 'complete';
@@ -97,7 +119,7 @@ export function RevealScreen({ match, playerSpeed, playerAttack, aiSpeed, aiAtta
                 Your Control ({preStats.control.toFixed(0)}) meets the {playerSpeed} threshold ({speedData.shiftThreshold}).
                 You may switch to a different attack. Same-stance costs {sameStanceCost} STA, cross-stance costs {crossStanceCost} STA.
               </p>
-              <div className="attack-grid">
+              <div className="attack-grid" ref={shiftGridRef} role="group" aria-label="Shift attack options" onKeyDown={handleShiftGridKeyDown}>
                 {shiftOptions.map(atk => (
                   <AttackCard
                     key={atk.id}
