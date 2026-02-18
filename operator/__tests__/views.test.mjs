@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { createApp } from '../server.mjs';
-import { initRegistry, loadRegistry, createChain, recordSession, updateChainStatus, saveRegistry } from '../registry.mjs';
+import { initRegistry, loadRegistry, createChain, recordSession, updateChainStatus, saveRegistry, getChainLineage } from '../registry.mjs';
 
 // ── View Helpers ────────────────────────────────────────────
 
@@ -912,5 +912,127 @@ describe('View Routes — Agent Grid in Orch Status (P4)', () => {
     expect(res.text).toContain('agent-x');
     expect(res.text).toContain('Complete');
     expect(res.text).toContain('agent-complete');
+  });
+});
+
+// ── Orchestrator Run History View (P7) ───────────────────────
+
+describe('View Routes — Orch History (P7)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/orch-history shows empty state when no runs', async () => {
+    const res = await get('/views/orch-history');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('No orchestrator runs recorded yet');
+  });
+
+  it('GET /views/orch-history shows runs after start+stop', async () => {
+    appCtx.events.emit('orchestrator:started', { mission: 'view-test', model: 'opus', dryRun: true });
+    appCtx.events.emit('round:start', { round: 2 });
+    appCtx.events.emit('agent:start', { agentId: 'v-agent' });
+    appCtx.events.emit('orchestrator:stopped', {});
+
+    const res = await get('/views/orch-history');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('orch-history-table');
+    expect(res.text).toContain('view-test');
+    expect(res.text).toContain('opus');
+    expect(res.text).toContain('dry-run');
+  });
+});
+
+// ── Chain Lineage View (P7) ──────────────────────────────────
+
+describe('Chain Lineage (P7)', () => {
+  it('returns single entry for standalone chain', () => {
+    if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'solo chain', config: {} });
+    saveRegistry(reg);
+
+    const lineage = getChainLineage(reg, chain.id);
+    expect(lineage.length).toBe(1);
+    expect(lineage[0].id).toBe(chain.id);
+
+    rmSync(TEST_DIR, { recursive: true });
+  });
+
+  it('builds lineage tree for restarted chains', () => {
+    if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+
+    const root = createChain(reg, { task: 'original task', config: {} });
+    updateChainStatus(root, 'failed');
+    const child = createChain(reg, { task: 'original task', config: {}, restartedFrom: root.id });
+    updateChainStatus(child, 'failed');
+    const grandchild = createChain(reg, { task: 'original task', config: {}, restartedFrom: child.id });
+    saveRegistry(reg);
+
+    const lineage = getChainLineage(reg, grandchild.id);
+    expect(lineage.length).toBe(3);
+    expect(lineage[0].id).toBe(root.id);
+    expect(lineage[0].depth).toBe(0);
+    expect(lineage[1].id).toBe(child.id);
+    expect(lineage[1].depth).toBe(1);
+    expect(lineage[2].id).toBe(grandchild.id);
+    expect(lineage[2].depth).toBe(2);
+
+    rmSync(TEST_DIR, { recursive: true });
+  });
+
+  it('handles branching (multiple restarts from same parent)', () => {
+    if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+    initRegistry({ operatorDir: TEST_DIR });
+    const reg = loadRegistry();
+
+    const root = createChain(reg, { task: 'parent task', config: {} });
+    updateChainStatus(root, 'failed');
+    const childA = createChain(reg, { task: 'parent task', config: {}, restartedFrom: root.id });
+    const childB = createChain(reg, { task: 'parent task', config: {}, restartedFrom: root.id });
+    saveRegistry(reg);
+
+    const lineage = getChainLineage(reg, childA.id);
+    expect(lineage.length).toBe(3);
+    expect(lineage[0].depth).toBe(0);
+    expect(lineage[1].depth).toBe(1);
+    expect(lineage[2].depth).toBe(1);
+
+    rmSync(TEST_DIR, { recursive: true });
+  });
+});
+
+describe('View Routes — Chain Lineage Fragment (P7)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/chain-lineage/:id returns empty for standalone chain', async () => {
+    const reg = loadRegistry();
+    const chain = createChain(reg, { task: 'standalone', config: {} });
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-lineage/${chain.id}`);
+    expect(res.status).toBe(200);
+    // Single-chain lineage returns empty (nothing to show)
+    expect(res.text).not.toContain('lineage');
+  });
+
+  it('GET /views/chain-lineage/:id renders lineage for restarted chains', async () => {
+    const reg = loadRegistry();
+    const root = createChain(reg, { task: 'original chain task', config: {} });
+    root.status = 'failed';
+    const child = createChain(reg, { task: 'original chain task', config: {}, restartedFrom: root.id });
+    saveRegistry(reg);
+
+    const res = await get(`/views/chain-lineage/${child.id}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('lineage');
+    expect(res.text).toContain('original chain task');
+    expect(res.text).toContain('lineage__node--current');
   });
 });

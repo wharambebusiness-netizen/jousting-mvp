@@ -8,13 +8,15 @@
 
 import { Router } from 'express';
 import { fork } from 'child_process';
-import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { readdirSync, readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync } from 'fs';
+import { join, resolve, dirname } from 'path';
+import { randomUUID } from 'crypto';
 
 /**
  * Create orchestrator routes.
  * @param {object} ctx
  * @param {EventBus} ctx.events
+ * @param {string}   [ctx.operatorDir] - Path to operator/ directory (for history persistence)
  * @param {object}   [ctx.orchestratorCtx] - Live orchestrator context (if running)
  */
 export function createOrchestratorRoutes(ctx) {
@@ -38,6 +40,72 @@ export function createOrchestratorRoutes(ctx) {
   // Track the child process
   let orchProcess = null;
 
+  // ── Run History Persistence ──────────────────────────────
+  const MAX_HISTORY = 50;
+  const operatorDir = ctx.operatorDir || null;
+  const historyPath = operatorDir ? join(operatorDir, 'orch-history.json') : null;
+  let currentRunId = null;
+
+  function loadHistory() {
+    if (!historyPath) return [];
+    try {
+      if (existsSync(historyPath)) {
+        const data = JSON.parse(readFileSync(historyPath, 'utf-8'));
+        return Array.isArray(data) ? data : [];
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  function saveHistory(runs) {
+    if (!historyPath) return;
+    const dir = dirname(historyPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const tmpFile = historyPath + '.tmp';
+    try {
+      writeFileSync(tmpFile, JSON.stringify(runs, null, 2));
+      renameSync(tmpFile, historyPath);
+    } catch (_) {
+      try { writeFileSync(historyPath, JSON.stringify(runs, null, 2)); } catch (__) {}
+    }
+  }
+
+  function recordRunStart(data) {
+    const run = {
+      id: randomUUID(),
+      mission: data.mission || null,
+      model: data.model || null,
+      dryRun: data.dryRun || false,
+      startedAt: data.timestamp || new Date().toISOString(),
+      stoppedAt: null,
+      durationMs: 0,
+      outcome: 'running',
+      rounds: 0,
+      agents: 0,
+    };
+    currentRunId = run.id;
+    const history = loadHistory();
+    history.unshift(run);
+    if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+    saveHistory(history);
+    return run;
+  }
+
+  function recordRunStop(data) {
+    if (!currentRunId) return;
+    const history = loadHistory();
+    const run = history.find(r => r.id === currentRunId);
+    if (run) {
+      run.stoppedAt = new Date().toISOString();
+      run.durationMs = new Date(run.stoppedAt) - new Date(run.startedAt);
+      run.outcome = data?.error ? 'error' : (data?.code != null && data.code !== 0) ? 'error' : 'stopped';
+      run.rounds = orchestratorStatus.round || 0;
+      run.agents = agentMap.size;
+      saveHistory(history);
+    }
+    currentRunId = null;
+  }
+
   // Wire up events to track orchestrator state
   if (ctx.events) {
     ctx.events.on('orchestrator:started', (data) => {
@@ -52,6 +120,7 @@ export function createOrchestratorRoutes(ctx) {
         dryRun: data.dryRun || false,
         pid: data.pid || null,
       };
+      recordRunStart(data);
     });
 
     ctx.events.on('round:start', (data) => {
@@ -107,7 +176,8 @@ export function createOrchestratorRoutes(ctx) {
       }
     });
 
-    ctx.events.on('orchestrator:stopped', () => {
+    ctx.events.on('orchestrator:stopped', (data) => {
+      recordRunStop(data);
       orchestratorStatus.running = false;
       orchestratorStatus.pid = null;
       orchProcess = null;
@@ -308,7 +378,16 @@ export function createOrchestratorRoutes(ctx) {
     }
   });
 
-  // Expose router + status getter for M5 views
+  // ── GET /api/orchestrator/history ─────────────────────────
+  // List past orchestrator runs from persisted history.
+  router.get('/orchestrator/history', (_req, res) => {
+    const limit = Math.max(1, Math.min(50, parseInt(_req.query.limit, 10) || 20));
+    const history = loadHistory().slice(0, limit);
+    res.json(history);
+  });
+
+  // Expose router + status/history getters for M5 views
   router.getStatus = () => orchestratorStatus;
+  router.getHistory = loadHistory;
   return router;
 }

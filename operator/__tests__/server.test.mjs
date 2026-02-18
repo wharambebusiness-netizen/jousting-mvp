@@ -1231,3 +1231,105 @@ describe('Chain List Sort/Direction', () => {
     expect(data.chains.length).toBeGreaterThan(0);
   });
 });
+
+// ── Orchestrator Run History Tests (P7) ─────────────────────
+
+describe('Orchestrator Run History', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/history returns empty array initially', async () => {
+    const { status, body } = await api('/api/orchestrator/history');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBe(0);
+  });
+
+  it('records run after start + stop', async () => {
+    // Start orchestrator
+    await api('/api/orchestrator/start', {
+      method: 'POST',
+      body: JSON.stringify({ mission: 'test-history', dryRun: true, model: 'haiku' }),
+    });
+
+    // Emit some round/agent events
+    events.emit('round:start', { round: 1 });
+    events.emit('agent:start', { agentId: 'hist-agent' });
+
+    // Stop orchestrator
+    await api('/api/orchestrator/stop', { method: 'POST' });
+
+    const { status, body } = await api('/api/orchestrator/history');
+    expect(status).toBe(200);
+    expect(body.length).toBe(1);
+    expect(body[0].mission).toBe('test-history');
+    expect(body[0].model).toBe('haiku');
+    expect(body[0].dryRun).toBe(true);
+    expect(body[0].outcome).toBe('stopped');
+    expect(body[0].rounds).toBe(1);
+    expect(body[0].agents).toBe(1);
+    expect(body[0].durationMs).toBeGreaterThanOrEqual(0);
+    expect(body[0].startedAt).toBeTruthy();
+    expect(body[0].stoppedAt).toBeTruthy();
+  });
+
+  it('records multiple runs in order (newest first)', async () => {
+    await api('/api/orchestrator/start', {
+      method: 'POST',
+      body: JSON.stringify({ mission: 'second-run' }),
+    });
+    await api('/api/orchestrator/stop', { method: 'POST' });
+
+    const { body } = await api('/api/orchestrator/history');
+    expect(body.length).toBe(2);
+    expect(body[0].mission).toBe('second-run');
+    expect(body[1].mission).toBe('test-history');
+  });
+
+  it('respects limit query param', async () => {
+    const { body } = await api('/api/orchestrator/history?limit=1');
+    expect(body.length).toBe(1);
+  });
+});
+
+// ── Chain Restart Lineage Tests (P7) ─────────────────────────
+
+describe('Chain Restart Lineage', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('restart creates chain with restartedFrom', async () => {
+    // Get a failed chain
+    const listRes = await api('/api/chains?status=failed');
+    const failedChain = listRes.body.chains[0];
+    expect(failedChain).toBeTruthy();
+
+    // Restart it
+    const { status, body } = await api(`/api/chains/${failedChain.id}/restart`, {
+      method: 'POST',
+    });
+    expect(status).toBe(201);
+    expect(body.restartedFrom).toBe(failedChain.id);
+  });
+
+  it('chain detail includes restartedFrom in summary', async () => {
+    const listRes = await api('/api/chains');
+    const chainWithParent = listRes.body.chains.find(c => c.restartedFrom);
+    expect(chainWithParent).toBeTruthy();
+    expect(chainWithParent.restartedFrom).toBeTruthy();
+  });
+});

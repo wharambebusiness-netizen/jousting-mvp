@@ -109,6 +109,7 @@ export function createApp(options = {}) {
 
   const orchRouter = createOrchestratorRoutes({
     events,
+    operatorDir,
     orchestratorCtx: options.orchestratorCtx || null,
   });
   app.use('/api', orchRouter);
@@ -121,6 +122,7 @@ export function createApp(options = {}) {
     operatorDir,
     events,
     getOrchStatus: orchRouter.getStatus || null,
+    getOrchHistory: orchRouter.getHistory || null,
     missionsDir,
     projectDir,
   }));

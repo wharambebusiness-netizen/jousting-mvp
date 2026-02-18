@@ -73,6 +73,17 @@
       </div>
     </div>
 
+    <!-- Run History -->
+    <div class="section">
+      <p class="section__title">Run History</p>
+      <div id="orch-history"
+           hx-get="/views/orch-history"
+           hx-trigger="load, every 30s, reload from:#orch-history"
+           hx-swap="innerHTML">
+        <div class="skeleton" style="height:60px"></div>
+      </div>
+    </div>
+
     <!-- Reports -->
     <div class="section">
       <p class="section__title">Reports</p>
@@ -131,6 +142,8 @@
         appendLog('--- Orchestrator started ---', 'stdout');
       } else if (msg.event === 'orchestrator:stopped') {
         appendLog('--- Orchestrator stopped ---', 'stdout');
+        var hist = document.getElementById('orch-history');
+        if (hist) htmx.trigger(hist, 'reload');
       }
     });
   </script>

@@ -1098,7 +1098,85 @@ input::placeholder { color: var(--text-muted); }
   overflow: hidden;
 }
 
-/* === 35. Responsive === */
+/* === 35. Orchestrator Run History === */
+.orch-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.orch-history-table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.orch-history-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.orch-history-table tr:hover td {
+  background: var(--bg-raised);
+}
+
+/* === 36. Chain Lineage === */
+.lineage {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.lineage::before {
+  content: 'Restart Lineage';
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-3);
+}
+.lineage__node {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  position: relative;
+}
+.lineage__node--current {
+  background: var(--accent-bg);
+  border: 1px solid rgba(99,102,241,0.2);
+}
+.lineage__connector {
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 50%;
+  width: 12px;
+  border-left: 2px solid var(--border-default);
+  border-bottom: 2px solid var(--border-default);
+  border-bottom-left-radius: 4px;
+}
+.lineage__node a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.lineage__node a:hover {
+  color: var(--accent-hover);
+}
+.lineage__meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* === 37. Responsive === */
 @media (max-width: 768px) {
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .page { padding: var(--sp-4); }

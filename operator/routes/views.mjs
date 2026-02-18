@@ -9,7 +9,7 @@ import { Router } from 'express';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import {
-  loadRegistry, findChainById, getChainSummary,
+  loadRegistry, findChainById, getChainSummary, getChainLineage,
 } from '../registry.mjs';
 import { renderChainTable } from '../views/chain-row.mjs';
 import { renderSessionCard, renderTimeline, renderCostBreakdown } from '../views/session-card.mjs';
@@ -205,6 +205,10 @@ export function createViewRoutes(ctx) {
                hx-trigger="load"
                hx-swap="innerHTML">Loading...</div>
         ` : ''}
+
+        <div hx-get="/views/chain-lineage/${chain.id}"
+             hx-trigger="load"
+             hx-swap="innerHTML"></div>
       `;
       res.type('text/html').send(html);
     } catch (err) {
@@ -599,6 +603,69 @@ export function createViewRoutes(ctx) {
           </div>
         </form>
       `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Orchestrator Run History Fragment ────────────────────────
+  router.get('/orch-history', (_req, res) => {
+    try {
+      const history = ctx.getOrchHistory ? ctx.getOrchHistory() : [];
+      if (history.length === 0) {
+        return res.type('text/html').send('<p class="empty-state">No orchestrator runs recorded yet.</p>');
+      }
+
+      const rows = history.slice(0, 20).map(run => {
+        const outcomeClass = run.outcome === 'error' ? 'error' : run.outcome === 'running' ? 'running' : 'complete';
+        return `<tr>
+          <td><span class="status-dot status-dot--${outcomeClass}"></span> ${escapeHtml(run.outcome || 'unknown')}</td>
+          <td>${escapeHtml(run.mission || '(none)')}</td>
+          <td>${escapeHtml(run.model || 'default')}</td>
+          <td>${run.rounds || 0}</td>
+          <td>${run.agents || 0}</td>
+          <td>${formatDuration(run.durationMs)}</td>
+          <td>${relativeTime(run.startedAt)}</td>
+          <td>${run.dryRun ? '<span class="badge badge--neutral">dry-run</span>' : ''}</td>
+        </tr>`;
+      }).join('');
+
+      res.type('text/html').send(`
+        <table class="orch-history-table" role="grid">
+          <thead><tr>
+            <th>Outcome</th><th>Mission</th><th>Model</th>
+            <th>Rounds</th><th>Agents</th><th>Duration</th>
+            <th>Started</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Chain Lineage Fragment ─────────────────────────────────
+  router.get('/chain-lineage/:id', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const lineage = getChainLineage(registry, req.params.id);
+
+      if (lineage.length <= 1) {
+        return res.type('text/html').send('');
+      }
+
+      const nodes = lineage.map(c => {
+        const isCurrent = c.id === req.params.id;
+        return `<div class="lineage__node ${isCurrent ? 'lineage__node--current' : ''}" style="margin-left:${c.depth * 24}px">
+          ${c.depth > 0 ? '<span class="lineage__connector"></span>' : ''}
+          <span class="status-dot status-dot--${c.status}"></span>
+          <a href="/chains/${c.id}">${escapeHtml(c.task.length > 60 ? c.task.slice(0, 57) + '...' : c.task)}</a>
+          <span class="lineage__meta">${statusLabel(c.status)} · ${formatCost(c.totalCostUsd)} · ${relativeTime(c.updatedAt)}</span>
+        </div>`;
+      }).join('');
+
+      res.type('text/html').send(`<div class="lineage">${nodes}</div>`);
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }

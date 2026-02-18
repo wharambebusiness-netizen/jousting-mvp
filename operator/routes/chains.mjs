@@ -192,6 +192,7 @@ export function createChainRoutes(ctx) {
         task: chain.task,
         config: chain.config || {},
         projectDir: chain.projectDir,
+        restartedFrom: chain.id,
       });
       saveRegistry(registry);
 

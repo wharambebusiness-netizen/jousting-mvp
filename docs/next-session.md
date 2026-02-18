@@ -1,4 +1,4 @@
-# Next Session Instructions (S97)
+# Next Session Instructions (S98)
 
 ## PIVOT: Operator Dashboard is Now the Primary Focus
 
@@ -6,73 +6,72 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
-## Context: S96
+## Context: S97
 
-S96 completed **4 P7 features** (continuing the polish & enhancements phase):
+S97 completed the **final P7 features** (theme toggle skipped per user request):
 
-1. **Per-model cost breakdown** — Dashboard cost summary now shows per-model metric cards (Opus/Sonnet/Haiku) with cost and chain count. Added `byModel` aggregation to `GET /api/costs` API. Extended session data model to persist `inputTokens`/`outputTokens` from SDK results (future sessions will have token-level data).
+1. **Orchestrator run history** — Past orchestrator runs now persisted to `orch-history.json` (atomic writes, max 50 entries). Records mission, model, dryRun, startedAt, stoppedAt, durationMs, outcome, rounds, agents. New `GET /api/orchestrator/history` API endpoint. New `/views/orch-history` HTMX fragment renders a table with status dots, mission, model, rounds, agents, duration, relative time. Added "Run History" section to orchestrator page with 30s polling + WS-triggered reload when orchestrator stops.
 
-2. **Chain export (CSV/JSON)** — New `GET /api/chains/export?format=csv|json` endpoint exports chain list with all metadata. JSON/CSV download buttons added next to "Chains" title on dashboard. Supports `?project=` filter.
+2. **Chain dependency/lineage graph** — Chains now track `restartedFrom` field linking to the parent chain ID. `POST /api/chains/:id/restart` automatically sets the lineage link. New `getChainLineage()` function in registry.mjs walks the tree (BFS from root) and returns ordered array with depth. New `/views/chain-lineage/:id` fragment renders a CSS tree with connector lines and current-chain highlighting. Auto-loads on chain detail page via lazy HTMX fetch. Returns empty for standalone chains (no visual noise).
 
-3. **Bulk chain actions** — Checkbox column on chain table rows with select-all header checkbox (supports indeterminate state). Bulk action bar appears when items are selected showing count + "Delete Selected" + "Clear" buttons. New `POST /api/chains/batch-delete` endpoint. Uses the styled confirm dialog for destructive actions. Selection resets on table reload.
+**P7 is now COMPLETE.** The operator dashboard is feature-complete for production use.
 
-4. **Side-by-side handoff viewer** — New `/views/handoff-compare/:chainId` fragment with session picker dropdowns. Renders two handoffs in a side-by-side grid layout via terminal viewer. Auto-loads on chain detail page when 2+ sessions have handoffs. Responsive: stacks vertically on mobile.
-
-**1491 tests, 24 suites, all passing.**
+**1504 tests, 24 suites, all passing.**
 
 ## What Changed (Files Modified)
 
 ```
-EDIT: operator/registry.mjs             Added inputTokens/outputTokens to session data model
-EDIT: operator/operator.mjs             Pass token data from SDK result to recordSession()
-EDIT: operator/routes/chains.mjs        byModel aggregation in GET /api/costs, GET /api/chains/export, POST /api/chains/batch-delete
-EDIT: operator/routes/views.mjs         Per-model cards in cost-summary, handoff-compare fragment, compare section in chain detail
-EDIT: operator/views/chain-row.mjs      Checkbox column in chain rows, colspan 7→8
-EDIT: operator/public/index.html        Checkbox th, bulk action bar, export links, colspan 7→8
-EDIT: operator/public/style.css         metric-card__sub, metric-card--model, btn--xs, export-links, bulk-bar, bulk-col, handoff-compare
-EDIT: operator/public/app.js            Bulk selection JS (updateBulkBar, toggleSelectAll, bulkDelete, bulkClearSelection), table reload reset
-EDIT: docs/session-history.md           S96 entry
+EDIT: operator/server.mjs               Pass operatorDir + getOrchHistory to orchestrator routes & views
+EDIT: operator/routes/orchestrator.mjs   Run history persistence (load/save/record), GET /api/orchestrator/history, getHistory export
+EDIT: operator/registry.mjs             restartedFrom field in createChain/getChainSummary, getChainLineage() BFS helper
+EDIT: operator/routes/chains.mjs        Pass restartedFrom on chain restart
+EDIT: operator/routes/views.mjs         /views/orch-history fragment, /views/chain-lineage/:id fragment, lineage section in chain detail
+EDIT: operator/public/orchestrator.html  Run History section, WS reload on stop
+EDIT: operator/public/style.css         orch-history-table, lineage tree styles (nodes, connectors, current highlight)
+EDIT: operator/__tests__/server.test.mjs History endpoint tests (empty, start+stop, multiple runs, limit), chain restart lineage tests
+EDIT: operator/__tests__/views.test.mjs  Orch history view tests, chain lineage unit tests (standalone, tree, branching), lineage fragment tests
+EDIT: docs/session-history.md           S97 entry
 ```
 
-## Remaining Operator Improvement Roadmap
+## Operator Polish Status — P7 COMPLETE
 
-### Priority 7 (continued): Polish & Enhancements
+All P7 items completed across S95-S97:
+- WS reconnection with exponential backoff (S95)
+- Keyboard shortcuts (N, /) (S95)
+- SVG favicon (S95)
+- WS connection status indicator (S95)
+- Styled confirm dialog (S95)
+- Per-model cost breakdown (S96)
+- Chain export CSV/JSON (S96)
+- Bulk chain actions (S96)
+- Side-by-side handoff viewer (S96)
+- Orchestrator run history (S97)
+- Chain lineage graph (S97)
+- ~~Dark/light theme toggle~~ (skipped per user)
 
-Completed through S95-S96:
-- WS reconnection with exponential backoff
-- Keyboard shortcuts (N, /)
-- SVG favicon
-- WS connection status indicator
-- Styled confirm dialog
-- Per-model cost breakdown
-- Chain export (CSV/JSON)
-- Bulk chain actions
-- Side-by-side handoff viewer
+## Future Directions
 
-Remaining items:
-- **Orchestrator run history** — persist past orchestrator runs (start time, duration, mission, outcome) so users can review previous runs
-- **Dark/light theme toggle** — add theme switcher to settings or nav
-- **Chain dependency graph visualization** — visual representation of chain relationships/dependencies
-
-These are all low-priority polish items. The dashboard is fully functional for production use.
+The operator dashboard is now feature-complete. Potential future work:
+- **Performance optimization** — virtual scrolling for large chain lists, indexed persistence
+- **Multi-user support** — auth, user roles, shared dashboards
+- **Alerting** — email/slack notifications on chain failures or budget overruns
+- **Analytics** — cost trends over time, agent efficiency metrics, charts
+- **Mobile app** — PWA manifest, push notifications
 
 ## Key Architecture Notes
 
-- **Session token data** now persisted: `inputTokens` and `outputTokens` fields in session objects (backward-compatible — defaults to 0 for old sessions).
-- **Bulk delete** uses `POST /api/chains/batch-delete` with `{ ids: string[] }` body. Rejects if any chain is running (409). Emits `chain:deleted` for each removed chain.
-- **Chain export** at `GET /api/chains/export?format=csv|json` — defaults to JSON, supports project filter. CSV uses proper escaping for commas/quotes/newlines.
-- **Handoff compare** fragment auto-shows picker when no `?a=&b=` params specified, then renders side-by-side via htmx.ajax() on button click.
-- **Bulk bar JS**: `updateBulkBar()`, `toggleSelectAll()`, `bulkDelete()`, `bulkClearSelection()` all exposed as `window.*` globals. Select-all supports indeterminate state. Selection resets on htmx:afterSwap of chain table.
-- **app.js** now has 10 systems: progress bar, toast, createWS utility, branch auto-gen, auto-push toggle, project filter, confirm dialog, keyboard shortcuts, bulk actions, table reload reset.
+- **Orch history** persisted in `operatorDir/orch-history.json` — array of run objects, newest first. `operatorDir` passed to orchestrator routes via ctx for file path resolution.
+- **Chain lineage** uses `restartedFrom` field (null for original chains). `getChainLineage()` walks up to root via `restartedFrom`, then BFS down to collect all descendants with depth. Handles branching (multiple restarts from same parent).
+- **Run recording** hooks into existing `orchestrator:started` and `orchestrator:stopped` events — zero new events needed.
 
 ## Codebase Stats
 
 ```
-Operator: 16 source files, ~4,000 lines code + ~2,800 lines tests
-Routes:   27 API endpoints, 10 view fragment routes, 3 page routes, 1 WebSocket
+Operator: 16 source files, ~4,200 lines code + ~3,000 lines tests
+Routes:   28 API endpoints, 12 view fragment routes, 3 page routes, 1 WebSocket
 Events:   17 bridged WS events, pattern-based subscriptions
-Tests:    235 operator tests (server 86, views 85, errors 43, registry 21)
-Total:    1491 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
+Tests:    248 operator tests (server 92, views 92, errors 43, registry 21)
+Total:    1504 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
 ```
 
 ## Running the Operator
@@ -91,7 +90,7 @@ Dashboard at http://127.0.0.1:3100, Orchestrator at /orchestrator, Settings at /
 - Do all edits yourself in the main context
 - Full autonomy — make decisions, don't ask for approval
 - Full permissions granted — no pausing for confirmations
-- Run `npm test` to verify after changes (1491 tests, 24 suites)
+- Run `npm test` to verify after changes (1504 tests, 24 suites)
 
 ## Reference
 

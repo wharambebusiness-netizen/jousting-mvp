@@ -129,7 +129,7 @@ function createEmptyRegistry() {
  * @param {{ task: string, config: object, projectDir?: string }} opts
  * @returns {object} The new chain object (already pushed to registry.chains)
  */
-export function createChain(registry, { task, config, projectDir }) {
+export function createChain(registry, { task, config, projectDir, restartedFrom }) {
   const chain = {
     id: randomUUID(),
     task,
@@ -137,6 +137,7 @@ export function createChain(registry, { task, config, projectDir }) {
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     projectDir: projectDir || null,
+    restartedFrom: restartedFrom || null,
     config: {
       model: config.model || 'sonnet',
       maxTurns: config.maxTurns || 30,
@@ -233,8 +234,50 @@ export function getChainSummary(chain) {
     startedAt: chain.startedAt,
     updatedAt: chain.updatedAt,
     projectDir: chain.projectDir,
+    restartedFrom: chain.restartedFrom || null,
     config: chain.config,
   };
+}
+
+/**
+ * Get the full lineage tree for a chain (ancestors + descendants via restartedFrom).
+ * Returns array of chain summaries ordered root → leaf, with `depth` field.
+ */
+export function getChainLineage(registry, chainId) {
+  // Find the root: walk up via restartedFrom
+  let current = registry.chains.find(c => c.id === chainId);
+  if (!current) return [];
+
+  while (current.restartedFrom) {
+    const parent = registry.chains.find(c => c.id === current.restartedFrom);
+    if (!parent) break;
+    current = parent;
+  }
+  const rootId = current.id;
+
+  // BFS from root to collect all descendants
+  const result = [];
+  const queue = [{ id: rootId, depth: 0 }];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    const chain = registry.chains.find(c => c.id === id);
+    if (!chain) continue;
+
+    result.push({ ...getChainSummary(chain), depth });
+
+    // Find children (chains that have restartedFrom === id)
+    const children = registry.chains.filter(c => c.restartedFrom === id);
+    for (const child of children) {
+      queue.push({ id: child.id, depth: depth + 1 });
+    }
+  }
+
+  return result;
 }
 
 // ── Archival ─────────────────────────────────────────────────
