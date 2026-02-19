@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
-  initRegistry, loadRegistry, saveRegistry,
+  createRegistry,
   createChain, recordSession, updateChainStatus,
   findIncompleteChains, findChainById, getChainSummary,
   REGISTRY_VERSION, MAX_CHAINS,
@@ -12,31 +12,37 @@ import {
 
 const TEST_DIR = join(import.meta.dirname, '..', '__test_tmp_registry');
 
+let reg; // registry store instance
+
 function setup() {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_DIR, { recursive: true });
-  initRegistry({ operatorDir: TEST_DIR });
+  reg = createRegistry({ operatorDir: TEST_DIR });
 }
 
 function teardown() {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
 }
 
+// Convenience aliases matching old API names
+const loadRegistry = () => reg.load();
+const saveRegistry = (r) => reg.save(r);
+
 describe('Registry — Load/Save', () => {
   beforeEach(setup);
   afterEach(teardown);
 
   it('creates empty registry when none exists', () => {
-    const reg = loadRegistry();
-    expect(reg.version).toBe(REGISTRY_VERSION);
-    expect(reg.chains).toEqual([]);
-    expect(reg.createdAt).toBeTruthy();
+    const data = loadRegistry();
+    expect(data.version).toBe(REGISTRY_VERSION);
+    expect(data.chains).toEqual([]);
+    expect(data.createdAt).toBeTruthy();
   });
 
   it('round-trips save and load', () => {
-    const reg = loadRegistry();
-    createChain(reg, { task: 'test task', config: { model: 'sonnet' } });
-    saveRegistry(reg);
+    const data = loadRegistry();
+    createChain(data, { task: 'test task', config: { model: 'sonnet' } });
+    saveRegistry(data);
 
     const loaded = loadRegistry();
     expect(loaded.chains.length).toBe(1);
@@ -44,9 +50,9 @@ describe('Registry — Load/Save', () => {
   });
 
   it('atomic write creates valid JSON', () => {
-    const reg = loadRegistry();
-    createChain(reg, { task: 'test', config: {} });
-    saveRegistry(reg);
+    const data = loadRegistry();
+    createChain(data, { task: 'test', config: {} });
+    saveRegistry(data);
 
     const raw = readFileSync(join(TEST_DIR, 'registry.json'), 'utf-8');
     const parsed = JSON.parse(raw);
@@ -54,18 +60,18 @@ describe('Registry — Load/Save', () => {
   });
 
   it('recovers from .tmp file when main is missing', () => {
-    const reg = _createEmptyRegistry();
-    reg.chains = [{ id: 'tmp-test', task: 'from tmp' }];
-    writeFileSync(join(TEST_DIR, 'registry.json.tmp'), JSON.stringify(reg));
+    const data = _createEmptyRegistry();
+    data.chains = [{ id: 'tmp-test', task: 'from tmp' }];
+    writeFileSync(join(TEST_DIR, 'registry.json.tmp'), JSON.stringify(data));
 
     const loaded = loadRegistry();
     expect(loaded.chains[0].id).toBe('tmp-test');
   });
 
   it('sets updatedAt on save', () => {
-    const reg = loadRegistry();
-    const before = reg.updatedAt;
-    saveRegistry(reg);
+    const data = loadRegistry();
+    const before = data.updatedAt;
+    saveRegistry(data);
     const loaded = loadRegistry();
     expect(loaded.updatedAt).toBeTruthy();
   });
@@ -76,8 +82,8 @@ describe('Registry — Chain CRUD', () => {
   afterEach(teardown);
 
   it('creates chain with UUID', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, {
+    const data = loadRegistry();
+    const chain = createChain(data, {
       task: 'build feature X',
       config: { model: 'sonnet', maxTurns: 20, maxContinuations: 3, maxBudgetUsd: 2.0 },
       projectDir: '/path/to/project',
@@ -91,18 +97,18 @@ describe('Registry — Chain CRUD', () => {
     expect(chain.projectDir).toBe('/path/to/project');
     expect(chain.sessions).toEqual([]);
     expect(chain.totalCostUsd).toBe(0);
-    expect(reg.chains.length).toBe(1);
+    expect(data.chains.length).toBe(1);
   });
 
   it('creates chain with default budget', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'test', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'test', config: {} });
     expect(chain.config.maxBudgetUsd).toBe(5.0);
   });
 
   it('records session and accumulates totals', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'test', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'test', config: {} });
 
     recordSession(chain, {
       sessionId: 'sid-1',
@@ -124,8 +130,8 @@ describe('Registry — Chain CRUD', () => {
   });
 
   it('records error session and increments consecutiveErrors', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'test', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'test', config: {} });
 
     recordSession(chain, { error: 'timeout', turns: 2, costUsd: 0.05, durationMs: 5000 });
     expect(chain.consecutiveErrors).toBe(1);
@@ -140,8 +146,8 @@ describe('Registry — Chain CRUD', () => {
   });
 
   it('updates chain status', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'test', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'test', config: {} });
 
     updateChainStatus(chain, 'complete');
     expect(chain.status).toBe('complete');
@@ -154,35 +160,35 @@ describe('Registry — Query', () => {
   afterEach(teardown);
 
   it('finds incomplete chains', () => {
-    const reg = loadRegistry();
-    createChain(reg, { task: 'task A', config: {} });
-    const chainB = createChain(reg, { task: 'task B', config: {} });
+    const data = loadRegistry();
+    createChain(data, { task: 'task A', config: {} });
+    const chainB = createChain(data, { task: 'task B', config: {} });
     updateChainStatus(chainB, 'complete');
-    createChain(reg, { task: 'task C', config: {} });
+    createChain(data, { task: 'task C', config: {} });
 
-    const incomplete = findIncompleteChains(reg);
+    const incomplete = findIncompleteChains(data);
     expect(incomplete.length).toBe(2);
     expect(incomplete.map(c => c.task)).toContain('task A');
     expect(incomplete.map(c => c.task)).toContain('task C');
   });
 
   it('returns empty array when no incomplete chains', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'done', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'done', config: {} });
     updateChainStatus(chain, 'complete');
-    expect(findIncompleteChains(reg)).toEqual([]);
+    expect(findIncompleteChains(data)).toEqual([]);
   });
 
   it('finds chain by ID', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'find me', config: {} });
-    expect(findChainById(reg, chain.id)).toBe(chain);
-    expect(findChainById(reg, 'nonexistent')).toBeNull();
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'find me', config: {} });
+    expect(findChainById(data, chain.id)).toBe(chain);
+    expect(findChainById(data, 'nonexistent')).toBeNull();
   });
 
   it('generates chain summary', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'my task', config: {}, projectDir: '/proj' });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'my task', config: {}, projectDir: '/proj' });
     recordSession(chain, { turns: 3, costUsd: 0.05, durationMs: 5000 });
     updateChainStatus(chain, 'complete');
 
@@ -201,17 +207,17 @@ describe('Registry — Archival', () => {
   afterEach(teardown);
 
   it('archives chains beyond MAX_CHAINS on save', () => {
-    const reg = loadRegistry();
+    const data = loadRegistry();
 
     // Create MAX_CHAINS + 5 chains
     for (let i = 0; i < MAX_CHAINS + 5; i++) {
-      const chain = createChain(reg, { task: `task ${i}`, config: {} });
+      const chain = createChain(data, { task: `task ${i}`, config: {} });
       // Give them sequential timestamps
       chain.updatedAt = new Date(Date.now() + i * 1000).toISOString();
     }
 
-    expect(reg.chains.length).toBe(MAX_CHAINS + 5);
-    saveRegistry(reg);
+    expect(data.chains.length).toBe(MAX_CHAINS + 5);
+    saveRegistry(data);
 
     const loaded = loadRegistry();
     expect(loaded.chains.length).toBe(MAX_CHAINS);
@@ -232,28 +238,28 @@ describe('Registry — Edge Cases', () => {
 
   it('handles corrupt JSON in main registry gracefully', () => {
     writeFileSync(join(TEST_DIR, 'registry.json'), '{ broken json!!');
-    const reg = loadRegistry();
-    expect(reg.version).toBe(1);
-    expect(reg.chains).toEqual([]);
+    const data = loadRegistry();
+    expect(data.version).toBe(1);
+    expect(data.chains).toEqual([]);
   });
 
   it('handles version mismatch by returning empty registry', () => {
     writeFileSync(join(TEST_DIR, 'registry.json'), JSON.stringify({ version: 999, chains: [{ id: 'old' }] }));
-    const reg = loadRegistry();
-    expect(reg.version).toBe(1);
-    expect(reg.chains).toEqual([]);
+    const data = loadRegistry();
+    expect(data.version).toBe(1);
+    expect(data.chains).toEqual([]);
   });
 
   it('createChain preserves explicit maxBudgetUsd of 0 via ??', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'test', config: { maxBudgetUsd: 0 } });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'test', config: { maxBudgetUsd: 0 } });
     // 0 is falsy but ?? should preserve it (vs || which would use default)
     expect(chain.config.maxBudgetUsd).toBe(0);
   });
 
   it('recordSession correctly accumulates floating-point costs', () => {
-    const reg = loadRegistry();
-    const chain = createChain(reg, { task: 'float test', config: {} });
+    const data = loadRegistry();
+    const chain = createChain(data, { task: 'float test', config: {} });
 
     for (let i = 0; i < 10; i++) {
       recordSession(chain, { turns: 1, costUsd: 0.1, durationMs: 100 });
@@ -265,30 +271,30 @@ describe('Registry — Edge Cases', () => {
   });
 
   it('findIncompleteChains excludes completed/failed/aborted statuses', () => {
-    const reg = loadRegistry();
+    const data = loadRegistry();
 
-    const c1 = createChain(reg, { task: 'complete', config: {} });
+    const c1 = createChain(data, { task: 'complete', config: {} });
     updateChainStatus(c1, 'complete');
 
-    const c2 = createChain(reg, { task: 'failed', config: {} });
+    const c2 = createChain(data, { task: 'failed', config: {} });
     updateChainStatus(c2, 'failed');
 
-    const c3 = createChain(reg, { task: 'aborted', config: {} });
+    const c3 = createChain(data, { task: 'aborted', config: {} });
     updateChainStatus(c3, 'aborted');
 
-    const c4 = createChain(reg, { task: 'max-cont', config: {} });
+    const c4 = createChain(data, { task: 'max-cont', config: {} });
     updateChainStatus(c4, 'max-continuations');
 
-    const incomplete = findIncompleteChains(reg);
+    const incomplete = findIncompleteChains(data);
     expect(incomplete).toEqual([]);
   });
 
   it('exactly MAX_CHAINS chains does not trigger archival', () => {
-    const reg = loadRegistry();
+    const data = loadRegistry();
     for (let i = 0; i < MAX_CHAINS; i++) {
-      createChain(reg, { task: `task ${i}`, config: {} });
+      createChain(data, { task: `task ${i}`, config: {} });
     }
-    saveRegistry(reg);
+    saveRegistry(data);
     const loaded = loadRegistry();
     expect(loaded.chains.length).toBe(MAX_CHAINS);
 

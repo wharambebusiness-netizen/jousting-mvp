@@ -9,14 +9,13 @@ import { Router } from 'express';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 import {
-  loadRegistry, findChainById, getChainSummary, getChainLineage,
+  findChainById, getChainSummary, getChainLineage,
 } from '../registry.mjs';
 import { renderChainTable } from '../views/chain-row.mjs';
 import { renderSessionCard, renderTimeline, renderCostBreakdown } from '../views/session-card.mjs';
 import { renderAgentGrid } from '../views/agent-card.mjs';
 import { renderTerminalViewer } from '../views/terminal.mjs';
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
-import { loadSettings } from '../settings.mjs';
 import { renderAnalyticsPanel } from '../views/analytics.mjs';
 import { renderProjectsPanel, renderFileTree } from '../views/projects.mjs';
 import { scanDirectory } from './files.mjs';
@@ -30,6 +29,8 @@ import { getGitFileStatus } from './git.mjs';
  * @param {Function} [ctx.getOrchStatus] - Returns orchestrator status object
  */
 export function createViewRoutes(ctx) {
+  const loadRegistry = ctx.registry.load;
+  const loadSettings = ctx.settings.load;
   const router = Router();
 
   // ── Chain List Fragment ──────────────────────────────────

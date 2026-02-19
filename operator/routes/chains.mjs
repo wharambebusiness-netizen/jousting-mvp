@@ -12,7 +12,6 @@ import { Router } from 'express';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import {
-  loadRegistry, saveRegistry,
   createChain, updateChainStatus,
   findChainById, getChainSummary,
 } from '../registry.mjs';
@@ -25,6 +24,7 @@ import {
  * @param {Function} [ctx.runChainFn] - For combined mode chain creation
  */
 export function createChainRoutes(ctx) {
+  const { load: loadRegistry, save: saveRegistry } = ctx.registry;
   const router = Router();
 
   // ── GET /api/chains ─────────────────────────────────────

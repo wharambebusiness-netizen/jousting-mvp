@@ -2,7 +2,10 @@
 // Settings Persistence (P3)
 // ============================================================
 // Stores operator defaults in a JSON file. Settings are loaded
-// on demand and cached in memory. Atomic writes via temp+rename.
+// on demand. Atomic writes via temp+rename.
+//
+// Factory pattern: createSettings(ctx) returns { load, save }
+// with path state enclosed in closure.
 // ============================================================
 
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'fs';
@@ -18,73 +21,70 @@ const DEFAULTS = {
 
 const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
 
-let settingsPath = '';
-
 /**
- * Initialize settings with the operator directory path.
+ * Create a settings instance with its own path state.
  * @param {{ operatorDir: string }} ctx
+ * @returns {{ load: Function, save: Function }}
  */
-export function initSettings(ctx) {
-  settingsPath = join(ctx.operatorDir, 'settings.json');
-}
+export function createSettings(ctx) {
+  const settingsPath = join(ctx.operatorDir, 'settings.json');
 
-/**
- * Load settings from disk. Returns defaults if file missing or corrupt.
- */
-export function loadSettings() {
-  if (!settingsPath) return { ...DEFAULTS };
-
-  if (existsSync(settingsPath)) {
-    try {
-      const raw = readFileSync(settingsPath, 'utf-8');
-      const data = JSON.parse(raw);
-      return {
-        model: VALID_MODELS.includes(data.model) ? data.model : DEFAULTS.model,
-        maxTurns: clampInt(data.maxTurns, 1, 200, DEFAULTS.maxTurns),
-        maxContinuations: clampInt(data.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
-        maxBudgetUsd: clampFloat(data.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
-        autoPush: !!data.autoPush,
-      };
-    } catch (_) {
-      return { ...DEFAULTS };
+  /**
+   * Load settings from disk. Returns defaults if file missing or corrupt.
+   */
+  function load() {
+    if (existsSync(settingsPath)) {
+      try {
+        const raw = readFileSync(settingsPath, 'utf-8');
+        const data = JSON.parse(raw);
+        return {
+          model: VALID_MODELS.includes(data.model) ? data.model : DEFAULTS.model,
+          maxTurns: clampInt(data.maxTurns, 1, 200, DEFAULTS.maxTurns),
+          maxContinuations: clampInt(data.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
+          maxBudgetUsd: clampFloat(data.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
+          autoPush: !!data.autoPush,
+        };
+      } catch (_) {
+        return { ...DEFAULTS };
+      }
     }
+
+    return { ...DEFAULTS };
   }
 
-  return { ...DEFAULTS };
-}
+  /**
+   * Save settings to disk (atomic write).
+   * Validates and clamps all values before saving.
+   * @param {object} settings
+   * @returns {object} The validated settings that were saved
+   */
+  function save(settings) {
+    const validated = {
+      model: VALID_MODELS.includes(settings.model) ? settings.model : DEFAULTS.model,
+      maxTurns: clampInt(settings.maxTurns, 1, 200, DEFAULTS.maxTurns),
+      maxContinuations: clampInt(settings.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
+      maxBudgetUsd: clampFloat(settings.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
+      autoPush: !!settings.autoPush,
+    };
 
-/**
- * Save settings to disk (atomic write).
- * Validates and clamps all values before saving.
- * @param {object} settings
- * @returns {object} The validated settings that were saved
- */
-export function saveSettings(settings) {
-  const validated = {
-    model: VALID_MODELS.includes(settings.model) ? settings.model : DEFAULTS.model,
-    maxTurns: clampInt(settings.maxTurns, 1, 200, DEFAULTS.maxTurns),
-    maxContinuations: clampInt(settings.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
-    maxBudgetUsd: clampFloat(settings.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
-    autoPush: !!settings.autoPush,
-  };
+    const dir = dirname(settingsPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-  if (!settingsPath) return validated;
-
-  const dir = dirname(settingsPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-  const tmpFile = settingsPath + '.tmp';
-  try {
-    writeFileSync(tmpFile, JSON.stringify(validated, null, 2));
-    renameSync(tmpFile, settingsPath);
-  } catch (err) {
-    // Fallback: direct write
+    const tmpFile = settingsPath + '.tmp';
     try {
-      writeFileSync(settingsPath, JSON.stringify(validated, null, 2));
-    } catch (_) { /* swallow */ }
+      writeFileSync(tmpFile, JSON.stringify(validated, null, 2));
+      renameSync(tmpFile, settingsPath);
+    } catch (err) {
+      // Fallback: direct write
+      try {
+        writeFileSync(settingsPath, JSON.stringify(validated, null, 2));
+      } catch (_) { /* swallow */ }
+    }
+
+    return validated;
   }
 
-  return validated;
+  return { load, save };
 }
 
 function clampInt(value, min, max, fallback) {

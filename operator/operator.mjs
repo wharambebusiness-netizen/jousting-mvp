@@ -32,7 +32,7 @@ import { join, resolve } from 'path';
 import { parseArgs } from 'util';
 
 import {
-  initRegistry, loadRegistry, saveRegistry,
+  createRegistry,
   createChain, recordSession, updateChainStatus,
   findIncompleteChains, getChainSummary,
 } from './registry.mjs';
@@ -43,7 +43,7 @@ import {
   generateSyntheticHandoff, validateHandoff, sleep,
 } from './errors.mjs';
 
-import { initSettings, loadSettings } from './settings.mjs';
+import { createSettings } from './settings.mjs';
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -115,8 +115,8 @@ Environment variables:
   }
 
   // Load saved settings as fallback (CLI flags > saved settings > hardcoded defaults)
-  initSettings({ operatorDir: OPERATOR_DIR });
-  const settings = loadSettings();
+  const settingsStore = createSettings({ operatorDir: OPERATOR_DIR });
+  const settings = settingsStore.load();
 
   const maxTurns = values['max-turns'] !== undefined
     ? parseInt(values['max-turns'], 10) : settings.maxTurns;
@@ -539,8 +539,13 @@ Please write your HANDOFF section now in the exact format:
 /**
  * Run a chain of sessions until the task is complete, budget exhausted,
  * circuit breaker trips, or max continuations reached.
+ * @param {object} config - Chain configuration
+ * @param {object} registry - Loaded registry data object
+ * @param {object|null} existingChain - Existing chain to resume, or null
+ * @param {{ save: Function }} [regStore] - Registry store for persistence
  */
-async function runChain(config, registry, existingChain) {
+async function runChain(config, registry, existingChain, regStore) {
+  const saveRegistry = regStore ? regStore.save : () => {};
   const handoffDir = join(OPERATOR_DIR, 'handoffs');
   mkdirSync(handoffDir, { recursive: true });
 
@@ -771,8 +776,8 @@ async function main() {
   setupSignalHandlers();
 
   // Initialize registry
-  initRegistry({ operatorDir: OPERATOR_DIR, log });
-  const registry = loadRegistry();
+  const regStore = createRegistry({ operatorDir: OPERATOR_DIR, log });
+  const registry = regStore.load();
 
   logSection('Operator — Robust Session Management (M2)');
 
@@ -801,7 +806,7 @@ async function main() {
     logConfig(config);
     if (config.dryRun) { log('DRY RUN — exiting'); process.exit(0); }
 
-    const completedChain = await runChain(config, registry, chain);
+    const completedChain = await runChain(config, registry, chain, regStore);
     await finishChain(completedChain, config, registry);
     return;
   }
@@ -816,7 +821,7 @@ async function main() {
     log(`NOTE: ${incomplete.length} incomplete chain(s) exist. Use --resume to continue the latest.`);
   }
 
-  const completedChain = await runChain(config, registry, null);
+  const completedChain = await runChain(config, registry, null, regStore);
   await finishChain(completedChain, config, registry);
 }
 

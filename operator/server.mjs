@@ -19,7 +19,7 @@ import { resolve, join } from 'path';
 import { readFileSync } from 'fs';
 import { parseArgs } from 'util';
 
-import { initRegistry, loadRegistry } from './registry.mjs';
+import { createRegistry } from './registry.mjs';
 import { createChainRoutes } from './routes/chains.mjs';
 import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
 import { createGitRoutes } from './routes/git.mjs';
@@ -27,9 +27,9 @@ import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
 import { createSettingsRoutes } from './routes/settings.mjs';
 import { createFileRoutes } from './routes/files.mjs';
-import { initSettings } from './settings.mjs';
+import { createSettings } from './settings.mjs';
 import { createFileWatcher } from './file-watcher.mjs';
-import { EventBus } from '../orchestrator/observability.mjs';
+import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -70,9 +70,9 @@ export function createApp(options = {}) {
   const operatorDir = options.operatorDir || resolve(import.meta.dirname || '.', '.');
   const events = options.events || new EventBus();
 
-  // Initialize registry and settings
-  initRegistry({ operatorDir, log: () => {} });
-  initSettings({ operatorDir });
+  // Create registry and settings instances (factory pattern, multi-instance safe)
+  const registry = options.registry || createRegistry({ operatorDir, log: () => {} });
+  const settings = options.settings || createSettings({ operatorDir });
 
   const app = express();
 
@@ -100,15 +100,16 @@ export function createApp(options = {}) {
   app.use('/api', createChainRoutes({
     operatorDir,
     events,
+    registry,
     runChainFn: options.runChainFn || null,
   }));
 
   // Build allowed-roots callback from registry project directories
   function getAllowedRoots() {
     try {
-      const reg = loadRegistry();
+      const regData = registry.load();
       const roots = new Set();
-      for (const chain of reg.chains || []) {
+      for (const chain of regData.chains || []) {
         if (chain.projectDir) roots.add(resolve(chain.projectDir));
       }
       return roots;
@@ -119,7 +120,7 @@ export function createApp(options = {}) {
   app.use('/api', createGitRoutes({ projectDir, getAllowedRoots }));
 
   // Settings routes
-  app.use('/api', createSettingsRoutes());
+  app.use('/api', createSettingsRoutes({ settings }));
 
   // File system routes
   app.use('/api', createFileRoutes({ getAllowedRoots }));
@@ -138,6 +139,8 @@ export function createApp(options = {}) {
   app.use('/views', createViewRoutes({
     operatorDir,
     events,
+    registry,
+    settings,
     getOrchStatus: orchRouter.getStatus || null,
     getOrchHistory: orchRouter.getHistory || null,
     missionsDir,
@@ -193,9 +196,9 @@ export function createApp(options = {}) {
   // Watch existing project directories from registry
   if (fileWatcher) {
     try {
-      const reg = loadRegistry();
+      const regData = registry.load();
       const seen = new Set();
-      for (const chain of reg.chains || []) {
+      for (const chain of regData.chains || []) {
         if (chain.projectDir && !seen.has(chain.projectDir)) {
           seen.add(chain.projectDir);
           fileWatcher.watchProject(chain.projectDir);
@@ -302,10 +305,12 @@ if (isMain) {
   // Combined mode: wire up chain execution via operator's runChain
   if (args.operator) {
     const { runChain, MODEL_MAP } = await import('./operator.mjs');
-    const { loadRegistry, saveRegistry } = await import('./registry.mjs');
+    const { createRegistry: createReg } = await import('./registry.mjs');
+    const reg = createReg({ operatorDir });
+    appOptions.registry = reg;
 
     appOptions.runChainFn = async (chain) => {
-      const registry = loadRegistry();
+      const regData = reg.load();
       const modelShort = chain.config?.model || 'sonnet';
       const config = {
         task: chain.task,
@@ -320,7 +325,7 @@ if (isMain) {
         notifyWebhook: '',
         dryRun: false,
       };
-      return runChain(config, registry, chain);
+      return runChain(config, regData, chain, reg);
     };
   }
 

@@ -5,9 +5,9 @@
 // ============================================================
 
 import { Router } from 'express';
-import { loadSettings, saveSettings } from '../settings.mjs';
 
-export function createSettingsRoutes() {
+export function createSettingsRoutes(ctx) {
+  const { load: loadSettings, save: saveSettings } = ctx.settings;
   const router = Router();
 
   router.get('/settings', (_req, res) => {

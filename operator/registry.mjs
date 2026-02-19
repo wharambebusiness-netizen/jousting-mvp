@@ -5,135 +5,173 @@
 // session. Supports load/save/create/update/query with atomic
 // writes (temp + rename) following checkpoint.mjs pattern.
 //
+// Factory pattern: createRegistry(ctx) returns { load, save }
+// with path state enclosed in closure. Pure data functions
+// (createChain, recordSession, etc.) remain standalone exports.
+//
 // Schema: see docs/operator-plan.md §2a
 // ============================================================
 
 import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync, mkdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { randomUUID } from 'crypto';
+import { lockSync, unlockSync } from 'proper-lockfile';
 
 const REGISTRY_VERSION = 1;
 const MAX_CHAINS = 50;
 
-// ── In-Memory Cache ──────────────────────────────────────────
-let _cache = null;
-let _cacheMtimeMs = 0;
-
-// ── Defaults ─────────────────────────────────────────────────
-
-let registryPath = '';
-let archivePath = '';
-let logFn = (msg) => console.log(msg);
-
-// ── Init ─────────────────────────────────────────────────────
+// ── Factory ─────────────────────────────────────────────────
 
 /**
- * Initialize registry with paths and optional logger.
+ * Create a registry instance with its own path state and cache.
+ * Supports multiple independent instances (multi-orchestrator).
  * @param {{ operatorDir: string, log?: Function }} ctx
+ * @returns {{ load: Function, save: Function }}
  */
-export function initRegistry(ctx) {
-  registryPath = join(ctx.operatorDir, 'registry.json');
-  archivePath = join(ctx.operatorDir, 'registry-archive.json');
-  if (ctx.log) logFn = ctx.log;
-}
+export function createRegistry(ctx) {
+  const registryPath = join(ctx.operatorDir, 'registry.json');
+  const archivePath = join(ctx.operatorDir, 'registry-archive.json');
+  const logFn = ctx.log || ((msg) => console.log(msg));
+  let _cache = null;
+  let _cacheMtimeMs = 0;
 
-// ── Atomic Write ─────────────────────────────────────────────
+  function atomicWrite(filePath, data) {
+    const dir = dirname(filePath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-function atomicWrite(filePath, data) {
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-  const tmpFile = filePath + '.tmp';
-  try {
-    writeFileSync(tmpFile, JSON.stringify(data, null, 2));
-    renameSync(tmpFile, filePath);
-  } catch (err) {
-    // Fallback: direct write if rename fails (cross-device, etc.)
-    logFn(`  Registry atomic write failed, trying direct: ${err.message}`);
+    const tmpFile = filePath + '.tmp';
     try {
-      writeFileSync(filePath, JSON.stringify(data, null, 2));
-      // Clean up orphaned tmp file from failed rename
+      writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+      renameSync(tmpFile, filePath);
+    } catch (err) {
+      // Fallback: direct write if rename fails (cross-device, etc.)
+      logFn(`  Registry atomic write failed, trying direct: ${err.message}`);
+      try {
+        writeFileSync(filePath, JSON.stringify(data, null, 2));
+        // Clean up orphaned tmp file from failed rename
+        try { unlinkSync(tmpFile); } catch (_) {}
+      } catch (err2) {
+        logFn(`  WARNING: Registry write failed: ${err2.message}`);
+        throw err2;
+      }
+    }
+  }
+
+  function archiveOldChains(registry) {
+    // Keep newest MAX_CHAINS, archive the rest
+    const sorted = [...registry.chains].sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+    );
+    const keep = sorted.slice(0, MAX_CHAINS);
+    const archive = sorted.slice(MAX_CHAINS);
+
+    if (archive.length === 0) return;
+
+    // Load existing archive and append
+    let existing = { version: REGISTRY_VERSION, chains: [] };
+    if (existsSync(archivePath)) {
+      try {
+        existing = JSON.parse(readFileSync(archivePath, 'utf-8'));
+      } catch (_) { /* start fresh */ }
+    }
+    existing.chains.push(...archive);
+    atomicWrite(archivePath, existing);
+
+    registry.chains = keep;
+    logFn(`  Archived ${archive.length} old chains`);
+  }
+
+  /**
+   * Load registry from disk. Returns empty registry if none exists or corrupt.
+   */
+  function load() {
+    // Check mtime-based cache: skip disk read if file hasn't changed
+    if (_cache && registryPath) {
+      try {
+        const st = statSync(registryPath);
+        if (st.mtimeMs === _cacheMtimeMs) return _cache;
+      } catch { /* file missing — fall through to full load */ }
+    }
+
+    const tmpFile = registryPath + '.tmp';
+
+    // Try primary file
+    if (existsSync(registryPath)) {
+      try {
+        const data = JSON.parse(readFileSync(registryPath, 'utf-8'));
+        if (data && data.version === REGISTRY_VERSION) {
+          // Clean up stale tmp
+          if (existsSync(tmpFile)) try { unlinkSync(tmpFile); } catch (_) {}
+          // Populate cache
+          try { _cacheMtimeMs = statSync(registryPath).mtimeMs; } catch { _cacheMtimeMs = 0; }
+          _cache = data;
+          return data;
+        }
+        logFn(`  Registry version mismatch (expected ${REGISTRY_VERSION}, got ${data?.version})`);
+      } catch (err) {
+        logFn(`  WARNING: Registry parse failed: ${err.message}`);
+      }
+    }
+
+    // Fallback: recover from incomplete atomic write
+    if (existsSync(tmpFile)) {
+      try {
+        const data = JSON.parse(readFileSync(tmpFile, 'utf-8'));
+        if (data && data.version === REGISTRY_VERSION) {
+          logFn('  Recovered registry from .tmp file');
+          try { renameSync(tmpFile, registryPath); } catch (_) {}
+          _cache = data;
+          _cacheMtimeMs = 0; // unknown mtime after rename
+          return data;
+        }
+      } catch (err) {
+        logFn(`  WARNING: Tmp registry also corrupt: ${err.message}`);
+      }
       try { unlinkSync(tmpFile); } catch (_) {}
-    } catch (err2) {
-      logFn(`  WARNING: Registry write failed: ${err2.message}`);
-      throw err2;
     }
-  }
-}
 
-// ── Load / Save ──────────────────────────────────────────────
-
-/**
- * Load registry from disk. Returns empty registry if none exists or corrupt.
- */
-export function loadRegistry() {
-  // Check mtime-based cache: skip disk read if file hasn't changed
-  if (_cache && registryPath) {
-    try {
-      const st = statSync(registryPath);
-      if (st.mtimeMs === _cacheMtimeMs) return _cache;
-    } catch { /* file missing — fall through to full load */ }
+    return createEmptyRegistry();
   }
 
-  const tmpFile = registryPath + '.tmp';
+  /**
+   * Save registry to disk (atomic write with file locking).
+   */
+  function save(registry) {
+    registry.updatedAt = new Date().toISOString();
 
-  // Try primary file
-  if (existsSync(registryPath)) {
+    // Archive overflow chains before saving
+    if (registry.chains.length > MAX_CHAINS) {
+      archiveOldChains(registry);
+    }
+
+    // Invalidate cache before write
+    _cache = null;
+    _cacheMtimeMs = 0;
+
+    // Ensure directory exists for lockfile
+    const dir = dirname(registryPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    // Lock the registry file to prevent concurrent write corruption
+    let release;
     try {
-      const data = JSON.parse(readFileSync(registryPath, 'utf-8'));
-      if (data && data.version === REGISTRY_VERSION) {
-        // Clean up stale tmp
-        if (existsSync(tmpFile)) try { unlinkSync(tmpFile); } catch (_) {}
-        // Populate cache
-        try { _cacheMtimeMs = statSync(registryPath).mtimeMs; } catch { _cacheMtimeMs = 0; }
-        _cache = data;
-        return data;
+      release = lockSync(registryPath, { realpath: false });
+    } catch (_) {
+      // If lock fails (e.g. file doesn't exist yet), proceed without lock
+    }
+    try {
+      atomicWrite(registryPath, registry);
+    } finally {
+      if (release) {
+        try { unlockSync(registryPath, { realpath: false }); } catch (_) {}
       }
-      logFn(`  Registry version mismatch (expected ${REGISTRY_VERSION}, got ${data?.version})`);
-    } catch (err) {
-      logFn(`  WARNING: Registry parse failed: ${err.message}`);
     }
   }
 
-  // Fallback: recover from incomplete atomic write
-  if (existsSync(tmpFile)) {
-    try {
-      const data = JSON.parse(readFileSync(tmpFile, 'utf-8'));
-      if (data && data.version === REGISTRY_VERSION) {
-        logFn('  Recovered registry from .tmp file');
-        try { renameSync(tmpFile, registryPath); } catch (_) {}
-        _cache = data;
-        _cacheMtimeMs = 0; // unknown mtime after rename
-        return data;
-      }
-    } catch (err) {
-      logFn(`  WARNING: Tmp registry also corrupt: ${err.message}`);
-    }
-    try { unlinkSync(tmpFile); } catch (_) {}
-  }
-
-  return createEmptyRegistry();
+  return { load, save };
 }
 
-/**
- * Save registry to disk (atomic write).
- */
-export function saveRegistry(registry) {
-  registry.updatedAt = new Date().toISOString();
-
-  // Archive overflow chains before saving
-  if (registry.chains.length > MAX_CHAINS) {
-    archiveOldChains(registry);
-  }
-
-  // Invalidate cache before write (saveRegistry may be called from other modules)
-  _cache = null;
-  _cacheMtimeMs = 0;
-
-  atomicWrite(registryPath, registry);
-}
-
-// ── Create / Query ───────────────────────────────────────────
+// ── Pure Data Functions (standalone, no path state) ─────────
 
 function createEmptyRegistry() {
   return {
@@ -301,33 +339,7 @@ export function getChainLineage(registry, chainId) {
   return result;
 }
 
-// ── Archival ─────────────────────────────────────────────────
+// ── Exports ─────────────────────────────────────────────────
 
-function archiveOldChains(registry) {
-  // Keep newest MAX_CHAINS, archive the rest
-  const sorted = [...registry.chains].sort(
-    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-  );
-  const keep = sorted.slice(0, MAX_CHAINS);
-  const archive = sorted.slice(MAX_CHAINS);
-
-  if (archive.length === 0) return;
-
-  // Load existing archive and append
-  let existing = { version: REGISTRY_VERSION, chains: [] };
-  if (existsSync(archivePath)) {
-    try {
-      existing = JSON.parse(readFileSync(archivePath, 'utf-8'));
-    } catch (_) { /* start fresh */ }
-  }
-  existing.chains.push(...archive);
-  atomicWrite(archivePath, existing);
-
-  registry.chains = keep;
-  logFn(`  Archived ${archive.length} old chains`);
-}
-
-// ── Exports for testing ──────────────────────────────────────
-
-export { REGISTRY_VERSION, MAX_CHAINS, registryPath };
+export { REGISTRY_VERSION, MAX_CHAINS };
 export { createEmptyRegistry as _createEmptyRegistry };

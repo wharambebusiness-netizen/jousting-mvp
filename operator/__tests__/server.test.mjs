@@ -5,10 +5,10 @@ import { join, resolve } from 'path';
 import WebSocket from 'ws';
 import { createApp } from '../server.mjs';
 import {
-  initRegistry, loadRegistry, saveRegistry,
+  createRegistry,
   createChain, recordSession, updateChainStatus,
 } from '../registry.mjs';
-import { EventBus } from '../../orchestrator/observability.mjs';
+import { EventBus } from '../../shared/event-bus.mjs';
 import { matchesPattern, matchesAnyPattern } from '../ws.mjs';
 
 // ── Test Setup ──────────────────────────────────────────────
@@ -26,8 +26,8 @@ function teardownTestDir() {
 
 // Seed registry with sample chains for testing
 function seedRegistry() {
-  initRegistry({ operatorDir: TEST_DIR });
-  const reg = loadRegistry();
+  const regStore = createRegistry({ operatorDir: TEST_DIR });
+  const reg = regStore.load();
 
   // Project A chains
   const c1 = createChain(reg, {
@@ -83,7 +83,7 @@ function seedRegistry() {
   });
   updateChainStatus(c4, 'complete');
 
-  saveRegistry(reg);
+  regStore.save(reg);
 
   // Create a handoff file for session testing
   mkdirSync(join(TEST_DIR, 'handoffs'), { recursive: true });
@@ -305,9 +305,10 @@ describe('Server — Chain Endpoints', () => {
 
   it('DELETE /api/chains/:id rejects running chain', async () => {
     // Create a running chain to try to delete
-    const reg = loadRegistry();
+    const regStore = createRegistry({ operatorDir: TEST_DIR });
+    const reg = regStore.load();
     const running = createChain(reg, { task: 'cannot delete', config: {} });
-    saveRegistry(reg);
+    regStore.save(reg);
 
     const { status } = await api(`/api/chains/${running.id}`, {
       method: 'DELETE',
@@ -1372,9 +1373,10 @@ describe('Projects Page', () => {
     setupTestDir();
     seedRegistry();
     // Register the test parent dir as a project so root validation passes
-    const reg = loadRegistry();
+    const regStore = createRegistry({ operatorDir: TEST_DIR });
+    const reg = regStore.load();
     createChain(reg, { task: 'test files', config: { model: 'sonnet' }, projectDir: resolve(TEST_DIR, '..') });
-    saveRegistry(reg);
+    regStore.save(reg);
     await startServer();
   });
   afterAll(async () => {
@@ -1443,9 +1445,10 @@ describe('File Content API (P10)', () => {
     writeFileSync(join(contentDir, 'binary.dat'), Buffer.from([0x00, 0xFF, 0x00]));
     mkdirSync(join(contentDir, 'sub'));
     // Register contentDir as a project so root validation passes
-    const reg = loadRegistry();
+    const regStore = createRegistry({ operatorDir: TEST_DIR });
+    const reg = regStore.load();
     createChain(reg, { task: 'test content', config: { model: 'sonnet' }, projectDir: resolve(contentDir) });
-    saveRegistry(reg);
+    regStore.save(reg);
     await startServer();
   });
   afterAll(async () => {

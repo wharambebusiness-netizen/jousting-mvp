@@ -78,17 +78,17 @@ From the project structure review, these singleton patterns block multi-orchestr
 
 ## Milestone Plan
 
-### Phase 0: Foundation Cleanup (S102) — ~1 session
+### Phase 0: Foundation Cleanup (S103) — DONE
 **Goal:** Eliminate singleton blockers, prepare codebase for multi-instance
 
-- [ ] Convert `registry.mjs` from module-level state to factory pattern (`createRegistry(ctx)`)
-- [ ] Convert `settings.mjs` from module-level state to factory pattern
-- [ ] Add `proper-lockfile` around registry read-modify-write cycles
-- [ ] Extract `EventBus` from `orchestrator/observability.mjs` to `shared/event-bus.mjs`
-- [ ] Update all imports (operator + orchestrator) to use shared EventBus
-- [ ] Create `IPCEventBus` subclass that emits locally AND via `process.send()`
-- [ ] All existing tests must still pass
-- [ ] **Deliverable:** Registry, settings, and EventBus ready for multi-instance use
+- [x] Convert `registry.mjs` from module-level state to factory pattern (`createRegistry(ctx)`)
+- [x] Convert `settings.mjs` from module-level state to factory pattern
+- [x] Add `proper-lockfile` around registry read-modify-write cycles
+- [x] Extract `EventBus` from `orchestrator/observability.mjs` to `shared/event-bus.mjs`
+- [x] Update all imports (operator + orchestrator) to use shared EventBus
+- [x] Create `IPCEventBus` subclass that emits locally AND via `process.send()`
+- [x] All existing tests must still pass (1604/1604)
+- [x] **Deliverable:** Registry, settings, and EventBus ready for multi-instance use
 
 ### Phase 1: Process Pool + Multi-Instance Backend (S103) — ~1 session
 **Goal:** Spawn and manage multiple orchestrator worker processes

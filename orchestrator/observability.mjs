@@ -17,6 +17,7 @@
 import { writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { EOL } from 'os';
+import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Log Levels ──────────────────────────────────────────────
 
@@ -184,29 +185,8 @@ class MetricsCollector {
 }
 
 // ── EventBus ────────────────────────────────────────────────
-
-class EventBus {
-  constructor() { this._handlers = new Map(); }
-
-  on(event, handler) {
-    if (!this._handlers.has(event)) this._handlers.set(event, new Set());
-    this._handlers.get(event).add(handler);
-  }
-
-  off(event, handler) {
-    const set = this._handlers.get(event);
-    if (set) { set.delete(handler); if (set.size === 0) this._handlers.delete(event); }
-  }
-
-  emit(event, data = {}) {
-    const payload = { timestamp: new Date().toISOString(), ...data };
-    const set = this._handlers.get(event);
-    if (!set) return;
-    for (const handler of set) {
-      try { handler(payload); } catch (_) { /* noop */ }
-    }
-  }
-}
+// EventBus is now imported from shared/event-bus.mjs.
+// Re-exported below for backward compatibility.
 
 // ── Dashboard Helpers ───────────────────────────────────────
 

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { createApp } from '../server.mjs';
-import { initRegistry, loadRegistry, createChain, recordSession, updateChainStatus, saveRegistry, getChainLineage } from '../registry.mjs';
+import { createRegistry, createChain, recordSession, updateChainStatus, getChainLineage } from '../registry.mjs';
 
 // ── View Helpers ────────────────────────────────────────────
 
@@ -287,6 +287,10 @@ describe('Agent Card Renderer', () => {
 
 const TEST_DIR = join(import.meta.dirname, '..', '__test_tmp_views');
 let appCtx;
+
+// Convenience aliases matching old API names (each call creates a fresh store for the same path)
+function loadRegistry() { return createRegistry({ operatorDir: TEST_DIR }).load(); }
+function saveRegistry(data) { createRegistry({ operatorDir: TEST_DIR }).save(data); }
 
 function setupApp() {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
@@ -689,7 +693,6 @@ describe('View Routes — Settings Form (P3)', () => {
 describe('View Routes — Cost Summary Project Filter (P3)', () => {
   beforeEach(function() {
     setupApp();
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     createChain(reg, { task: 'alpha task', config: {}, projectDir: '/proj/alpha' });
     const c = createChain(reg, { task: 'beta task', config: {}, projectDir: '/proj/beta' });
@@ -717,7 +720,6 @@ describe('View Routes — Cost Summary Project Filter (P3)', () => {
 describe('View Routes — Chain List Sort/Direction (P4)', () => {
   beforeEach(function() {
     setupApp();
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     const c1 = createChain(reg, { task: 'cheap task', config: {} });
     recordSession(c1, { turns: 1, costUsd: 0.10, durationMs: 1000 });
@@ -754,7 +756,6 @@ describe('View Routes — Chain List Sort/Direction (P4)', () => {
 describe('View Routes — Chain List Project Filter (P4)', () => {
   beforeEach(function() {
     setupApp();
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     createChain(reg, { task: 'proj-a task', config: {}, projectDir: '/projects/a' });
     createChain(reg, { task: 'proj-b task', config: {}, projectDir: '/projects/b' });
@@ -955,7 +956,6 @@ describe('Chain Lineage (P7)', () => {
   it('returns single entry for standalone chain', () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
     mkdirSync(TEST_DIR, { recursive: true });
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     const chain = createChain(reg, { task: 'solo chain', config: {} });
     saveRegistry(reg);
@@ -970,7 +970,6 @@ describe('Chain Lineage (P7)', () => {
   it('builds lineage tree for restarted chains', () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
     mkdirSync(TEST_DIR, { recursive: true });
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
 
     const root = createChain(reg, { task: 'original task', config: {} });
@@ -995,7 +994,6 @@ describe('Chain Lineage (P7)', () => {
   it('handles branching (multiple restarts from same parent)', () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
     mkdirSync(TEST_DIR, { recursive: true });
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
 
     const root = createChain(reg, { task: 'parent task', config: {} });
@@ -1260,7 +1258,6 @@ describe('Analytics — Chart Renderers', () => {
 describe('View Routes — Analytics (P8)', () => {
   beforeEach(function() {
     setupApp();
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     const c1 = createChain(reg, { task: 'analytics task 1', config: { model: 'sonnet' }, projectDir: '/proj/a' });
     recordSession(c1, { turns: 5, costUsd: 1.50, durationMs: 5000, inputTokens: 1000, outputTokens: 500 });
@@ -1290,7 +1287,6 @@ describe('View Routes — Analytics (P8)', () => {
 
   it('GET /views/analytics returns empty state with no chains', async () => {
     // Reset to empty registry
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     // Clear chains
     reg.chains = [];
@@ -1473,7 +1469,6 @@ describe('Projects — renderProjectsPanel', () => {
 describe('View Routes — Projects (P9)', () => {
   beforeEach(function() {
     setupApp();
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     // Use a real path that exists for file tree scanning
     createChain(reg, {
@@ -1522,7 +1517,6 @@ describe('View Routes — Projects (P9)', () => {
   });
 
   it('GET /views/projects shows server project even with no chains', async () => {
-    initRegistry({ operatorDir: TEST_DIR });
     const reg = loadRegistry();
     reg.chains = [];
     saveRegistry(reg);
