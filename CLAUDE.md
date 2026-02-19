@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1904 tests, 29 suites (all passing)
+npm test                                           # 1979 tests, 30 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -112,9 +112,12 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
     registry.mjs     Skill registry — load, validate, index, search, get
     selector.mjs     Two-stage skill selection pipeline (coarse filter + scoring)
     resolver.mjs     Dependency resolution, conflict detection, enhancement suggestions
+    tracker.mjs      Usage analytics — assignment/usage tracking, per-turn re-evaluation
+    discovery.mjs    Mid-task skill discovery protocol (file-based, like spawn requests)
+    assignment.mjs   Role-to-skills mapping, profile detection, reassignment
     schema/          JSON Schema for skill manifests
     manifests/       17 skill manifests in git/, code/, research/, audit/ subdirs
-  __tests__/          568 tests (registry, errors, server, views, file-watcher, process-pool, skills)
+  __tests__/          643 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -152,7 +155,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1904 tests across 29 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (162), file-watcher (16), process-pool (43), skills (158). Run `npm test` to verify.
+1979 tests across 30 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (162), file-watcher (16), process-pool (43), skills (158), skills-5b (75). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 
