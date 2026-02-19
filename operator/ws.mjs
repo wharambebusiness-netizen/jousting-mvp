@@ -162,10 +162,14 @@ export function createWebSocketHandler({ server, events }) {
     'project:files-changed',
     'worker:spawned', 'worker:ready', 'worker:exit',
     'worker:error', 'worker:log', 'worker:unhealthy', 'worker:restarted',
+    'worker:idle-killed', 'worker:circuit-open', 'worker:circuit-half-open', 'worker:max-restarts',
     'handoff:generated', 'handoff:restart',
     'coord:started', 'coord:stopped', 'coord:draining',
     'coord:assigned', 'coord:task-complete', 'coord:task-failed',
     'coord:all-complete', 'coord:budget-warning', 'coord:budget-exceeded',
+    'coord:scale-up', 'coord:drain-timeout',
+    'coord:worktree-created', 'coord:worktree-removed', 'coord:worktree-merged',
+    'coord:conflicts-detected',
   ];
 
   const bridgeHandlers = [];

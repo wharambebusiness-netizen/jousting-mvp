@@ -11,6 +11,11 @@
 //   { type: 'stop' }
 //   { type: 'shutdown' }
 //   { type: 'ping' }
+//   { type: 'coord:proceed', taskId, task, category?, metadata? }
+//   { type: 'coord:wait', reason }
+//   { type: 'coord:rate-grant', remaining }
+//   { type: 'coord:rate-wait', waitMs, remaining }
+//   { type: 'coord:budget-stop', workerExceeded, globalExceeded, workerTotal, globalTotal }
 //
 // IPC Protocol (worker → parent):
 //   { type: 'ready' }
@@ -51,8 +56,76 @@ function sendStatus() {
       workerId,
       running,
       pid: orchProcess?.pid || null,
+      currentTask: currentTask ? currentTask.taskId : null,
+      budgetExceeded,
     },
   });
+}
+
+// ── Coordination State ──────────────────────────────────────
+
+let currentTask = null;     // Currently assigned coordination task
+let budgetExceeded = false;  // Whether budget-stop has been received
+
+/**
+ * Handle coordinator IPC messages routed from parent.
+ * Re-emits them on the local IPCEventBus so internal code can react.
+ */
+function handleCoordMessage(msg) {
+  if (!events) return; // Not initialized yet
+
+  switch (msg.type) {
+    case 'coord:proceed':
+      currentTask = { taskId: msg.taskId, task: msg.task, category: msg.category, metadata: msg.metadata };
+      events.emit('coord:proceed', {
+        workerId,
+        taskId: msg.taskId,
+        task: msg.task,
+        category: msg.category,
+        metadata: msg.metadata,
+      });
+      break;
+
+    case 'coord:wait':
+      events.emit('coord:wait', { workerId, reason: msg.reason });
+      break;
+
+    case 'coord:rate-grant':
+      events.emit('coord:rate-grant', { workerId, remaining: msg.remaining });
+      break;
+
+    case 'coord:rate-wait':
+      events.emit('coord:rate-wait', { workerId, waitMs: msg.waitMs, remaining: msg.remaining });
+      break;
+
+    case 'coord:budget-stop':
+      budgetExceeded = true;
+      events.emit('coord:budget-stop', {
+        workerId,
+        workerExceeded: msg.workerExceeded,
+        globalExceeded: msg.globalExceeded,
+        workerTotal: msg.workerTotal,
+        globalTotal: msg.globalTotal,
+      });
+      // Actually stop the orchestrator when budget is exceeded
+      if (running && orchProcess) {
+        // Report current task as failed due to budget
+        if (currentTask) {
+          sendToParent({
+            type: 'event',
+            event: 'coord:failed',
+            data: {
+              workerId,
+              taskId: currentTask.taskId,
+              error: msg.globalExceeded ? 'Global budget exceeded' : 'Per-worker budget exceeded',
+            },
+          });
+          currentTask = null;
+        }
+        stopOrchestrator();
+      }
+      break;
+  }
 }
 
 // ── Orchestrator Management ─────────────────────────────────
@@ -127,6 +200,8 @@ function startOrchestrator(opts = {}) {
     child.on('exit', (code, signal) => {
       running = false;
       orchProcess = null;
+      // Clear stale task state
+      currentTask = null;
       events.emit('orchestrator:stopped', {
         workerId,
         code,
@@ -220,6 +295,15 @@ function handleMessage(msg) {
       }
       break;
 
+    // ── Coordination IPC messages (from coordinator via pool.sendTo) ──
+    case 'coord:proceed':
+    case 'coord:wait':
+    case 'coord:rate-grant':
+    case 'coord:rate-wait':
+    case 'coord:budget-stop':
+      handleCoordMessage(msg);
+      break;
+
     default:
       sendToParent({ type: 'error', message: `Unknown message type: ${msg.type}` });
   }
@@ -241,4 +325,4 @@ if (typeof process.send === 'function') {
 }
 
 // Export for testing
-export { handleMessage, startOrchestrator, stopOrchestrator };
+export { handleMessage, handleCoordMessage, startOrchestrator, stopOrchestrator };

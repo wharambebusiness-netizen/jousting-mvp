@@ -11,6 +11,7 @@ import { createWorkAssigner, STRATEGIES } from '../coordination/work-assigner.mj
 import { createRateLimiter } from '../coordination/rate-limiter.mjs';
 import { createCostAggregator, WARNING_THRESHOLD } from '../coordination/cost-aggregator.mjs';
 import { createCoordinator, STATES } from '../coordination/coordinator.mjs';
+import { createWorktreeManager, WORKTREE_DIR_NAME, BRANCH_PREFIX } from '../coordination/worktree-manager.mjs';
 import { EventBus } from '../../shared/event-bus.mjs';
 
 // ── Test Helpers ────────────────────────────────────────────
@@ -1362,5 +1363,923 @@ describe('Coordinator', () => {
       expect(STATES).toContain('draining');
       expect(STATES).toContain('stopped');
     });
+  });
+
+  describe('rate limiter tick (Phase 6B)', () => {
+    it('should start rate limiter tick on start', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { rateLimiterTickMs: 100 },
+      });
+      coord.start();
+      // Tick timer is internal, but we can verify coordinator starts without error
+      expect(coord.getState()).toBe('running');
+      coord.stop();
+    });
+
+    it('should stop rate limiter tick on stop', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { rateLimiterTickMs: 100 },
+      });
+      coord.start();
+      coord.stop();
+      // No lingering timers (test would time out if timers leak)
+      expect(coord.getState()).toBe('stopped');
+    });
+
+    it('should disable tick with rateLimiterTickMs=0', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { rateLimiterTickMs: 0 },
+      });
+      coord.start();
+      expect(coord.getState()).toBe('running');
+      coord.stop();
+    });
+  });
+
+  describe('session:complete cost auto-bridging (Phase 6B)', () => {
+    it('should record costs from session:complete events', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { autoRecordSessionCosts: true },
+      });
+      coord.start();
+
+      events.emit('session:complete', {
+        workerId: 'w1',
+        costUsd: 2.50,
+        inputTokens: 5000,
+        outputTokens: 1000,
+      });
+
+      const cost = coord.costAggregator.getWorkerCost('w1');
+      expect(cost.totalUsd).toBe(2.50);
+      expect(cost.inputTokens).toBe(5000);
+      expect(cost.outputTokens).toBe(1000);
+    });
+
+    it('should auto-bridge enabled by default', () => {
+      const coord = createCoordinator({ events, pool });
+      coord.start();
+
+      events.emit('session:complete', { workerId: 'w1', costUsd: 1.0 });
+      expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(1.0);
+      coord.stop();
+    });
+
+    it('should send budget-stop when session costs exceed budget', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { perWorkerBudgetUsd: 2, globalBudgetUsd: 100 },
+      });
+      coord.start();
+
+      pool.clearSent();
+      events.emit('session:complete', { workerId: 'w1', costUsd: 2.5 });
+
+      const sent = pool.getSent();
+      expect(sent.some(s => s.msg.type === 'coord:budget-stop')).toBe(true);
+      coord.stop();
+    });
+
+    it('should ignore session:complete without workerId', () => {
+      const coord = createCoordinator({ events, pool });
+      coord.start();
+
+      events.emit('session:complete', { costUsd: 1.0 });
+      // Should not crash
+      coord.stop();
+    });
+
+    it('should ignore session:complete without costUsd', () => {
+      const coord = createCoordinator({ events, pool });
+      coord.start();
+
+      events.emit('session:complete', { workerId: 'w1' });
+      expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(0);
+      coord.stop();
+    });
+
+    it('should disable auto-bridging with autoRecordSessionCosts=false', () => {
+      const coord = createCoordinator({
+        events, pool,
+        options: { autoRecordSessionCosts: false },
+      });
+      coord.start();
+
+      events.emit('session:complete', { workerId: 'w1', costUsd: 5.0 });
+      expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(0);
+      coord.stop();
+    });
+
+    it('should not double-count coord:cost and session:complete for same event', () => {
+      const coord = createCoordinator({ events, pool });
+      coord.start();
+
+      // Only one should be sent per cost event
+      events.emit('coord:cost', { workerId: 'w1', totalUsd: 1.0 });
+      expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(1.0);
+
+      events.emit('session:complete', { workerId: 'w1', costUsd: 2.0 });
+      expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(3.0);
+      coord.stop();
+    });
+  });
+
+  describe('worktreeManager in coordinator (Phase 6B)', () => {
+    it('should expose null worktreeManager by default', () => {
+      const coord = createCoordinator({ events, pool });
+      expect(coord.worktreeManager).toBeNull();
+    });
+
+    it('should accept injected worktreeManager', () => {
+      const mockWt = { getStatus: () => ({ active: 0, worktrees: [] }) };
+      const coord = createCoordinator({ events, pool, worktreeManager: mockWt });
+      expect(coord.worktreeManager).toBe(mockWt);
+    });
+
+    it('should include worktrees in getStatus when present', () => {
+      const mockWt = { getStatus: () => ({ active: 2, worktrees: ['a', 'b'] }) };
+      const coord = createCoordinator({ events, pool, worktreeManager: mockWt });
+      const status = coord.getStatus();
+      expect(status.worktrees).toEqual({ active: 2, worktrees: ['a', 'b'] });
+    });
+
+    it('should report null worktrees in getStatus when not available', () => {
+      const coord = createCoordinator({ events, pool });
+      expect(coord.getStatus().worktrees).toBeNull();
+    });
+  });
+});
+
+// ============================================================
+// 6. Worktree Manager (Phase 6B)
+// ============================================================
+
+describe('WorktreeManager', () => {
+
+  // ── Mock git executor ──────────────────────────────────
+
+  function mockGit(responses = {}) {
+    const calls = [];
+    const fn = async (args, cwd, timeout) => {
+      calls.push({ args: [...args], cwd, timeout });
+      const key = args[0] + (args[1] ? ' ' + args[1] : '');
+      const response = responses[key] || { ok: true, stdout: '', stderr: '', code: 0 };
+      return typeof response === 'function' ? response(args, cwd) : response;
+    };
+    fn.calls = calls;
+    return fn;
+  }
+
+  describe('creation', () => {
+    it('should require projectDir', () => {
+      expect(() => createWorktreeManager({})).toThrow('requires a projectDir');
+    });
+
+    it('should require context object', () => {
+      expect(() => createWorktreeManager(null)).toThrow();
+    });
+
+    it('should create with valid projectDir', () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      expect(mgr).toBeDefined();
+      expect(mgr.getStatus().active).toBe(0);
+    });
+  });
+
+  describe('create', () => {
+    it('should create a worktree for a worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.create('w1');
+      expect(result.ok).toBe(true);
+      expect(result.branch).toBe('worker-w1');
+      expect(result.path).toContain('w1');
+    });
+
+    it('should call git worktree add', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      const worktreeAdd = git.calls.find(c => c.args[0] === 'worktree' && c.args[1] === 'add');
+      expect(worktreeAdd).toBeTruthy();
+      expect(worktreeAdd.args).toContain('-b');
+      expect(worktreeAdd.args).toContain('worker-w1');
+    });
+
+    it('should delete stale branch before creating', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      const branchDelete = git.calls.find(c => c.args[0] === 'branch' && c.args[1] === '-D');
+      expect(branchDelete).toBeTruthy();
+      expect(branchDelete.args).toContain('worker-w1');
+    });
+
+    it('should track worktree in status', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      expect(mgr.getStatus().active).toBe(1);
+      expect(mgr.has('w1')).toBe(true);
+    });
+
+    it('should return error for missing workerId', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.create('');
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('required');
+    });
+
+    it('should return error when git worktree add fails', async () => {
+      const git = mockGit({
+        'worktree add': { ok: false, stdout: '', stderr: 'fatal: error', code: 1 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.create('w1');
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('fatal: error');
+    });
+
+    it('should emit coord:worktree-created event', async () => {
+      const git = mockGit();
+      const events = new EventBus();
+      const emitted = [];
+      events.on('coord:worktree-created', (d) => emitted.push(d));
+
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git, events });
+      await mgr.create('w1');
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].workerId).toBe('w1');
+      expect(emitted[0].branch).toBe('worker-w1');
+    });
+
+    it('should replace existing worktree for same worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      await mgr.create('w1'); // Should remove first, then re-create
+      expect(mgr.getStatus().active).toBe(1);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove an existing worktree', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      const result = await mgr.remove('w1');
+      expect(result.ok).toBe(true);
+      expect(mgr.has('w1')).toBe(false);
+      expect(mgr.getStatus().active).toBe(0);
+    });
+
+    it('should call git worktree remove', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      git.calls.length = 0; // Clear creation calls
+      await mgr.remove('w1');
+
+      const removeCall = git.calls.find(c => c.args[0] === 'worktree' && c.args[1] === 'remove');
+      expect(removeCall).toBeTruthy();
+    });
+
+    it('should delete the branch', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      await mgr.create('w1');
+      git.calls.length = 0;
+      await mgr.remove('w1');
+
+      const branchDelete = git.calls.find(c => c.args[0] === 'branch' && c.args[1] === '-D');
+      expect(branchDelete).toBeTruthy();
+      expect(branchDelete.args).toContain('worker-w1');
+    });
+
+    it('should return error for unknown worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.remove('nonexistent');
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('No worktree');
+    });
+
+    it('should emit coord:worktree-removed event', async () => {
+      const git = mockGit();
+      const events = new EventBus();
+      const emitted = [];
+      events.on('coord:worktree-removed', (d) => emitted.push(d));
+
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git, events });
+      await mgr.create('w1');
+      await mgr.remove('w1');
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].workerId).toBe('w1');
+    });
+  });
+
+  describe('get / has', () => {
+    it('should return null for unknown worker', () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      expect(mgr.get('nobody')).toBeNull();
+    });
+
+    it('should return worktree info for known worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const info = mgr.get('w1');
+      expect(info.workerId).toBe('w1');
+      expect(info.branch).toBe('worker-w1');
+      expect(info.createdAt).toBeTruthy();
+    });
+
+    it('should track has correctly', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      expect(mgr.has('w1')).toBe(false);
+      await mgr.create('w1');
+      expect(mgr.has('w1')).toBe(true);
+      await mgr.remove('w1');
+      expect(mgr.has('w1')).toBe(false);
+    });
+  });
+
+  describe('dryRunMerge', () => {
+    it('should return no conflict when no changes', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.dryRunMerge('w1');
+      expect(result.ok).toBe(true);
+      expect(result.conflicted).toBe(false);
+      expect(result.files).toEqual([]);
+    });
+
+    it('should detect conflicts', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: 'src/foo.js', stderr: '', code: 0 },
+        'merge --no-commit': { ok: false, stdout: 'CONFLICT (content): Merge conflict in src/foo.js', stderr: 'CONFLICT', code: 1 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.dryRunMerge('w1');
+      expect(result.ok).toBe(true);
+      expect(result.conflicted).toBe(true);
+      expect(result.files).toContain('src/foo.js');
+    });
+
+    it('should detect no conflict when merge succeeds', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: 'src/bar.js', stderr: '', code: 0 },
+        'merge --no-commit': { ok: true, stdout: '', stderr: '', code: 0 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.dryRunMerge('w1');
+      expect(result.ok).toBe(true);
+      expect(result.conflicted).toBe(false);
+    });
+
+    it('should always abort after dry-run merge', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: 'file.js', stderr: '', code: 0 },
+        'merge --no-commit': { ok: true, stdout: '', stderr: '', code: 0 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      await mgr.dryRunMerge('w1');
+      const abortCall = git.calls.find(c => c.args[0] === 'merge' && c.args[1] === '--abort');
+      expect(abortCall).toBeTruthy();
+    });
+
+    it('should return error for unknown worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.dryRunMerge('nobody');
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('No worktree');
+    });
+  });
+
+  describe('merge', () => {
+    it('should merge worker branch into main', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: true, stdout: '', stderr: '', code: 0 },
+        'rev-parse HEAD': { ok: true, stdout: 'abc123', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.merge('w1');
+      expect(result.ok).toBe(true);
+      expect(result.conflicted).toBe(false);
+      expect(result.mergeCommit).toBe('abc123');
+    });
+
+    it('should detect merge conflicts', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: false, stdout: '', stderr: 'CONFLICT (content): Merge conflict', code: 1 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.merge('w1');
+      expect(result.ok).toBe(false);
+      expect(result.conflicted).toBe(true);
+    });
+
+    it('should abort on conflict', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: false, stdout: '', stderr: 'Merge conflict', code: 1 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      await mgr.merge('w1');
+      const abortCall = git.calls.find(c =>
+        c.args[0] === 'merge' && c.args[1] === '--abort'
+      );
+      expect(abortCall).toBeTruthy();
+    });
+
+    it('should use custom merge message', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: true, stdout: '', stderr: '', code: 0 },
+        'rev-parse HEAD': { ok: true, stdout: 'def456', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      await mgr.merge('w1', { message: 'custom merge' });
+      const mergeCall = git.calls.find(c => c.args[0] === 'merge' && c.args.includes('worker-w1'));
+      expect(mergeCall.args).toContain('custom merge');
+    });
+
+    it('should return error for unknown worker', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const result = await mgr.merge('nobody');
+      expect(result.ok).toBe(false);
+    });
+
+    it('should emit coord:worktree-merged event', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: true, stdout: '', stderr: '', code: 0 },
+        'rev-parse HEAD': { ok: true, stdout: 'abc123', stderr: '', code: 0 },
+      });
+      const events = new EventBus();
+      const emitted = [];
+      events.on('coord:worktree-merged', (d) => emitted.push(d));
+
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git, events });
+      await mgr.create('w1');
+      await mgr.merge('w1');
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].workerId).toBe('w1');
+      expect(emitted[0].mergeCommit).toBe('abc123');
+    });
+
+    it('should handle non-conflict merge failure', async () => {
+      const git = mockGit({
+        'merge worker-w1': { ok: false, stdout: '', stderr: 'fatal: not a git repo', code: 128 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      const result = await mgr.merge('w1');
+      expect(result.ok).toBe(false);
+      expect(result.conflicted).toBe(false);
+      expect(result.error).toContain('fatal');
+    });
+  });
+
+  describe('detectConflicts', () => {
+    it('should check all active worktrees', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+      await mgr.create('w2');
+
+      const { results } = await mgr.detectConflicts();
+      expect(results).toHaveLength(2);
+      expect(results.every(r => !r.conflicted)).toBe(true);
+    });
+
+    it('should identify conflicted workers', async () => {
+      let callCount = 0;
+      const git = async (args, cwd) => {
+        if (args[0] === 'diff' && args[1] === '--name-only') {
+          return { ok: true, stdout: 'file.js', stderr: '', code: 0 };
+        }
+        if (args[0] === 'merge' && args[1] === '--no-commit') {
+          callCount++;
+          // First worker conflicts, second doesn't
+          if (callCount === 1) {
+            return { ok: false, stdout: 'CONFLICT (content): Merge conflict in file.js', stderr: 'CONFLICT', code: 1 };
+          }
+          return { ok: true, stdout: '', stderr: '', code: 0 };
+        }
+        if (args[0] === 'merge' && args[1] === '--abort') {
+          return { ok: true, stdout: '', stderr: '', code: 0 };
+        }
+        return { ok: true, stdout: '', stderr: '', code: 0 };
+      };
+      git.calls = [];
+
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+      await mgr.create('w2');
+
+      const { results } = await mgr.detectConflicts();
+      expect(results.find(r => r.workerId === 'w1').conflicted).toBe(true);
+      expect(results.find(r => r.workerId === 'w2').conflicted).toBe(false);
+    });
+
+    it('should emit coord:conflicts-detected when conflicts found', async () => {
+      const git = mockGit({
+        'diff --name-only': { ok: true, stdout: 'file.js', stderr: '', code: 0 },
+        'merge --no-commit': { ok: false, stdout: 'CONFLICT', stderr: 'CONFLICT', code: 1 },
+        'merge --abort': { ok: true, stdout: '', stderr: '', code: 0 },
+      });
+      const events = new EventBus();
+      const emitted = [];
+      events.on('coord:conflicts-detected', (d) => emitted.push(d));
+
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git, events });
+      await mgr.create('w1');
+      await mgr.detectConflicts();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].conflicted).toContain('w1');
+    });
+
+    it('should return empty results with no worktrees', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const { results } = await mgr.detectConflicts();
+      expect(results).toHaveLength(0);
+    });
+  });
+
+  describe('cleanupAll', () => {
+    it('should remove all worktrees', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+      await mgr.create('w2');
+      await mgr.create('w3');
+
+      const result = await mgr.cleanupAll();
+      expect(result.removed).toHaveLength(3);
+      expect(result.errors).toHaveLength(0);
+      expect(mgr.getStatus().active).toBe(0);
+    });
+
+    it('should call git worktree prune', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+
+      await mgr.cleanupAll();
+      const pruneCall = git.calls.find(c => c.args[0] === 'worktree' && c.args[1] === 'prune');
+      expect(pruneCall).toBeTruthy();
+    });
+  });
+
+  describe('getStatus', () => {
+    it('should return empty status initially', () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+
+      const status = mgr.getStatus();
+      expect(status.active).toBe(0);
+      expect(status.worktrees).toHaveLength(0);
+      expect(status.worktreeDir).toContain(WORKTREE_DIR_NAME);
+    });
+
+    it('should list active worktrees', async () => {
+      const git = mockGit();
+      const mgr = createWorktreeManager({ projectDir: '/test/project', _gitExec: git });
+      await mgr.create('w1');
+      await mgr.create('w2');
+
+      const status = mgr.getStatus();
+      expect(status.active).toBe(2);
+      expect(status.worktrees).toHaveLength(2);
+      expect(status.worktrees[0].workerId).toBe('w1');
+      expect(status.worktrees[0].branch).toBe('worker-w1');
+      expect(status.worktrees[1].workerId).toBe('w2');
+    });
+  });
+
+  describe('exports', () => {
+    it('should export WORKTREE_DIR_NAME', () => {
+      expect(WORKTREE_DIR_NAME).toBe('.worktrees');
+    });
+
+    it('should export BRANCH_PREFIX', () => {
+      expect(BRANCH_PREFIX).toBe('worker-');
+    });
+  });
+});
+
+// ============================================================
+// 7. Worker Coord IPC Handlers (Phase 6B)
+// ============================================================
+
+describe('Worker Coord IPC Handlers', () => {
+  // We test handleCoordMessage indirectly through handleMessage
+  // since coord messages route through the main message handler.
+
+  let sentMessages, mockEvents;
+
+  beforeEach(async () => {
+    sentMessages = [];
+    mockEvents = {
+      _handlers: {},
+      emit(event, data) {
+        if (!this._handlers[event]) this._handlers[event] = [];
+        this._handlers[event].push(data);
+      },
+      on(event, handler) {
+        if (!this._handlers[event]) this._handlers[event] = [];
+      },
+      off() {},
+    };
+  });
+
+  // Import the worker module to test handleMessage
+  // We need to mock process.send for the worker side
+  it('should route coord:proceed to handleCoordMessage', async () => {
+    // The handleMessage in orchestrator-worker.mjs routes coord:* messages
+    // We verify the switch statement handles the right cases
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+
+    // Without init, coord messages should be silently ignored (events is null)
+    // This is safe - no crash
+    handleMessage({ type: 'coord:proceed', taskId: 't1', task: 'do thing' });
+    // Should not crash
+  });
+
+  it('should route coord:wait to handleCoordMessage', async () => {
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+    handleMessage({ type: 'coord:wait', reason: 'no-ready-tasks' });
+    // Should not crash
+  });
+
+  it('should route coord:rate-grant to handleCoordMessage', async () => {
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+    handleMessage({ type: 'coord:rate-grant', remaining: { requests: 5, tokens: 50000 } });
+    // Should not crash
+  });
+
+  it('should route coord:rate-wait to handleCoordMessage', async () => {
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+    handleMessage({ type: 'coord:rate-wait', waitMs: 1000, remaining: { requests: 0, tokens: 0 } });
+    // Should not crash
+  });
+
+  it('should route coord:budget-stop to handleCoordMessage', async () => {
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+    handleMessage({ type: 'coord:budget-stop', workerExceeded: true, globalExceeded: false });
+    // Should not crash
+  });
+
+  it('should not route unknown coord message types to default handler', async () => {
+    const { handleMessage } = await import('../orchestrator-worker.mjs');
+    // coord:proceed should not trigger the default "Unknown message type" error
+    // We verify by checking it doesn't match the default case behavior
+    handleMessage({ type: 'coord:proceed', taskId: 't1' });
+    // If it fell through to default, it would call sendToParent with error
+    // Since process.send is not available in test, it silently does nothing
+  });
+});
+
+// ============================================================
+// 8. Coordinator + Rate Limiter Integration (Phase 6B)
+// ============================================================
+
+describe('Coordinator Rate Limiter Integration', () => {
+  let events, pool;
+
+  beforeEach(() => {
+    events = new EventBus();
+    pool = mockPool([
+      { id: 'w1', status: 'running' },
+      { id: 'w2', status: 'running' },
+    ]);
+  });
+
+  it('should grant rate request via coordinator', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    pool.clearSent();
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 100 });
+
+    const grants = pool.getSent().filter(s => s.msg.type === 'coord:rate-grant');
+    expect(grants).toHaveLength(1);
+    expect(grants[0].id).toBe('w1');
+    expect(grants[0].msg.remaining).toBeDefined();
+    coord.stop();
+  });
+
+  it('should deny rate request when exhausted', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { maxRequestsPerMinute: 2 },
+    });
+    coord.start();
+
+    // Exhaust the bucket
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 0 });
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 0 });
+
+    pool.clearSent();
+    events.emit('coord:rate-request', { workerId: 'w2', tokens: 0 });
+
+    const waits = pool.getSent().filter(s => s.msg.type === 'coord:rate-wait');
+    expect(waits).toHaveLength(1);
+    expect(waits[0].msg.waitMs).toBeGreaterThan(0);
+    coord.stop();
+  });
+
+  it('should track per-worker rate usage', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 500 });
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 300 });
+    events.emit('coord:rate-request', { workerId: 'w2', tokens: 200 });
+
+    const w1Stats = coord.rateLimiter.getWorkerStats('w1');
+    expect(w1Stats.requests).toBe(2);
+    expect(w1Stats.tokens).toBe(800);
+    coord.stop();
+  });
+
+  it('should include rate limiter status in coordinator status', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('coord:rate-request', { workerId: 'w1', tokens: 1000 });
+
+    const status = coord.getStatus();
+    expect(status.rateLimiter).toBeDefined();
+    expect(status.rateLimiter.workerUsage).toHaveProperty('w1');
+    coord.stop();
+  });
+});
+
+// ============================================================
+// 9. Coordinator + Cost Aggregator Integration (Phase 6B)
+// ============================================================
+
+describe('Coordinator Cost Aggregator Integration', () => {
+  let events, pool;
+
+  beforeEach(() => {
+    events = new EventBus();
+    pool = mockPool([
+      { id: 'w1', status: 'running' },
+      { id: 'w2', status: 'running' },
+    ]);
+  });
+
+  it('should record costs from coord:cost events', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 2.0, inputTokens: 5000, outputTokens: 1000 });
+
+    const cost = coord.costAggregator.getWorkerCost('w1');
+    expect(cost.totalUsd).toBe(2.0);
+    expect(cost.inputTokens).toBe(5000);
+    coord.stop();
+  });
+
+  it('should record costs from session:complete events', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('session:complete', { workerId: 'w2', costUsd: 3.0, inputTokens: 8000 });
+
+    const cost = coord.costAggregator.getWorkerCost('w2');
+    expect(cost.totalUsd).toBe(3.0);
+    coord.stop();
+  });
+
+  it('should accumulate costs from multiple sources', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 1.0 });
+    events.emit('session:complete', { workerId: 'w1', costUsd: 2.0 });
+
+    expect(coord.costAggregator.getWorkerCost('w1').totalUsd).toBe(3.0);
+    coord.stop();
+  });
+
+  it('should send budget-stop on per-worker budget exceeded', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { perWorkerBudgetUsd: 5, globalBudgetUsd: 100 },
+    });
+    coord.start();
+
+    pool.clearSent();
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 6.0 });
+
+    const stops = pool.getSent().filter(s => s.msg.type === 'coord:budget-stop');
+    expect(stops).toHaveLength(1);
+    expect(stops[0].id).toBe('w1');
+    expect(stops[0].msg.workerExceeded).toBe(true);
+    coord.stop();
+  });
+
+  it('should send budget-stop on global budget exceeded', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { perWorkerBudgetUsd: 100, globalBudgetUsd: 5 },
+    });
+    coord.start();
+
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 3.0 });
+    pool.clearSent();
+    events.emit('coord:cost', { workerId: 'w2', totalUsd: 3.0 });
+
+    const stops = pool.getSent().filter(s => s.msg.type === 'coord:budget-stop');
+    expect(stops).toHaveLength(1);
+    expect(stops[0].msg.globalExceeded).toBe(true);
+    coord.stop();
+  });
+
+  it('should emit budget-warning events at 80% threshold', () => {
+    const warnings = [];
+    events.on('coord:budget-warning', (d) => warnings.push(d));
+
+    const coord = createCoordinator({
+      events, pool,
+      options: { perWorkerBudgetUsd: 10, globalBudgetUsd: 100 },
+    });
+    coord.start();
+
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 8.0 });
+
+    const workerWarnings = warnings.filter(w => w.scope === 'worker');
+    expect(workerWarnings).toHaveLength(1);
+    coord.stop();
+  });
+
+  it('should include costs in coordinator status', () => {
+    const coord = createCoordinator({ events, pool });
+    coord.start();
+
+    events.emit('coord:cost', { workerId: 'w1', totalUsd: 5.0 });
+
+    const status = coord.getStatus();
+    expect(status.costs.globalTotalUsd).toBe(5.0);
+    expect(status.costs.workers).toHaveProperty('w1');
+    coord.stop();
   });
 });

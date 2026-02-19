@@ -17,6 +17,7 @@ import { createTaskQueue } from './task-queue.mjs';
 import { createWorkAssigner } from './work-assigner.mjs';
 import { createRateLimiter } from './rate-limiter.mjs';
 import { createCostAggregator } from './cost-aggregator.mjs';
+import { createWorktreeManager } from './worktree-manager.mjs';
 
 // ── Lifecycle States ────────────────────────────────────────
 
@@ -33,12 +34,23 @@ const STATES = new Set(['init', 'running', 'draining', 'stopped']);
  * @param {object} [ctx.workAssigner] - Injected work assigner (or created internally)
  * @param {object} [ctx.rateLimiter] - Injected rate limiter (or created internally)
  * @param {object} [ctx.costAggregator] - Injected cost aggregator (or created internally)
+ * @param {object} [ctx.worktreeManager] - Injected worktree manager (or created internally if projectDir given)
  * @param {object} [ctx.options] - Configuration options
  * @param {string} [ctx.options.strategy='round-robin'] - Work assignment strategy
  * @param {number} [ctx.options.globalBudgetUsd=100] - Global budget cap
  * @param {number} [ctx.options.perWorkerBudgetUsd=25] - Per-worker budget cap
  * @param {number} [ctx.options.maxRequestsPerMinute=60] - API rate limit
  * @param {number} [ctx.options.maxTokensPerMinute=1000000] - Token rate limit
+ * @param {number} [ctx.options.rateLimiterTickMs=5000] - Rate limiter waiter processing interval
+ * @param {boolean} [ctx.options.autoRecordSessionCosts=true] - Auto-record costs from session:complete events
+ * @param {boolean} [ctx.options.enableWorktrees=false] - Enable per-worker git worktree isolation
+ * @param {number} [ctx.options.minWorkers=0] - Minimum workers (auto-scale won't go below this)
+ * @param {number} [ctx.options.maxWorkers=8] - Maximum workers (auto-scale cap)
+ * @param {number} [ctx.options.scaleUpThreshold=3] - Pending tasks per worker before scaling up
+ * @param {number} [ctx.options.autoScaleCheckMs=10000] - Auto-scale check interval (0 = disabled)
+ * @param {number} [ctx.options.drainTimeoutMs=0] - Force-stop after drain timeout (0 = wait forever)
+ * @param {boolean} [ctx.options.budgetAutoDrain=true] - Auto-drain on global budget exceeded
+ * @param {Function} [ctx.options.workerConfigFactory] - Factory fn(workerId) returning config for auto-spawned workers
  * @param {Function} [ctx.log] - Logger
  * @returns {object} Coordinator methods
  */
@@ -76,6 +88,119 @@ export function createCoordinator(ctx) {
     events,
     log,
   });
+
+  const worktreeManager = ctx.worktreeManager || (
+    opts.enableWorktrees && ctx.projectDir
+      ? createWorktreeManager({ projectDir: ctx.projectDir, events, log })
+      : null
+  );
+
+  // ── Rate Limiter Tick ─────────────────────────────────────
+
+  const rateLimiterTickMs = opts.rateLimiterTickMs ?? 5000;
+  let rateLimiterTimer = null;
+
+  function startRateLimiterTick() {
+    if (rateLimiterTimer || rateLimiterTickMs <= 0) return;
+    rateLimiterTimer = setInterval(() => {
+      const granted = rateLimiter.processWaiters();
+      if (granted > 0) {
+        log(`[coord] Rate limiter tick: ${granted} waiters granted`);
+      }
+    }, rateLimiterTickMs);
+    if (rateLimiterTimer.unref) rateLimiterTimer.unref();
+  }
+
+  function stopRateLimiterTick() {
+    if (rateLimiterTimer) {
+      clearInterval(rateLimiterTimer);
+      rateLimiterTimer = null;
+    }
+  }
+
+  // ── Auto-Scale ─────────────────────────────────────────────
+
+  const minWorkers = opts.minWorkers ?? 0;
+  const maxWorkers = opts.maxWorkers ?? 8;
+  const scaleUpThreshold = opts.scaleUpThreshold ?? 3;
+  const autoScaleCheckMs = opts.autoScaleCheckMs ?? 0;  // 0 = disabled by default
+  const workerConfigFactory = opts.workerConfigFactory || ((id) => ({}));
+  let autoScaleTimer = null;
+  let autoScaleCounter = 0;  // For generating unique worker IDs
+
+  function startAutoScaleChecker() {
+    if (autoScaleTimer || autoScaleCheckMs <= 0) return;
+    autoScaleTimer = setInterval(() => {
+      if (state !== 'running') return;
+      checkAutoScale();
+    }, autoScaleCheckMs);
+    if (autoScaleTimer.unref) autoScaleTimer.unref();
+  }
+
+  function stopAutoScaleChecker() {
+    if (autoScaleTimer) {
+      clearInterval(autoScaleTimer);
+      autoScaleTimer = null;
+    }
+  }
+
+  /**
+   * Check if we need to scale up workers based on queue depth.
+   * Scale up when: pendingTasks / activeWorkers > scaleUpThreshold
+   * Only runs when auto-scale is enabled (autoScaleCheckMs > 0).
+   */
+  function checkAutoScale() {
+    if (autoScaleCheckMs <= 0) return; // Auto-scale disabled
+    const active = pool.activeCount();
+    if (active >= maxWorkers) return;
+
+    const progress = taskQueue.getProgress();
+    const pending = progress.pending + progress.assigned;
+    if (pending === 0) return;
+
+    // Scale up if pending tasks exceed threshold per worker
+    const ratio = active === 0 ? pending : pending / active;
+    if (ratio >= scaleUpThreshold) {
+      const newId = `auto-${++autoScaleCounter}`;
+      const config = workerConfigFactory(newId);
+      try {
+        pool.spawn(newId, config);
+        log(`[coord] Auto-scaled up: spawned worker ${newId} (${active + 1}/${maxWorkers}, ratio=${ratio.toFixed(1)})`);
+        events.emit('coord:scale-up', { workerId: newId, activeCount: active + 1, ratio });
+      } catch (err) {
+        log(`[coord] Auto-scale spawn failed: ${err.message}`);
+      }
+    }
+  }
+
+  // ── Drain Timeout ─────────────────────────────────────────
+
+  const drainTimeoutMs = opts.drainTimeoutMs ?? 0;
+  const budgetAutoDrain = opts.budgetAutoDrain !== false;
+  let drainTimer = null;
+
+  function startDrainTimeout() {
+    if (drainTimer || drainTimeoutMs <= 0) return;
+    drainTimer = setTimeout(() => {
+      if (state === 'draining') {
+        log(`[coord] Drain timeout (${drainTimeoutMs}ms) — force stopping`);
+        events.emit('coord:drain-timeout', { drainTimeoutMs });
+        stop();
+      }
+    }, drainTimeoutMs);
+    if (drainTimer.unref) drainTimer.unref();
+  }
+
+  function clearDrainTimeout() {
+    if (drainTimer) {
+      clearTimeout(drainTimer);
+      drainTimer = null;
+    }
+  }
+
+  // ── Session Cost Auto-Bridging ─────────────────────────────
+
+  const autoRecordSessionCosts = opts.autoRecordSessionCosts !== false;
 
   // ── Event Handlers ──────────────────────────────────────
 
@@ -202,11 +327,27 @@ export function createCoordinator(ctx) {
     const { workerId, totalUsd, inputTokens, outputTokens } = data;
     if (!workerId) return;
 
-    const result = costAggregator.record(workerId, {
-      totalUsd: totalUsd || 0,
-      inputTokens: inputTokens || 0,
-      outputTokens: outputTokens || 0,
-    });
+    recordCostAndCheck(workerId, totalUsd || 0, inputTokens || 0, outputTokens || 0);
+  };
+
+  /**
+   * Handle session:complete — auto-bridge session cost data to cost aggregator.
+   * Workers emit session:complete via IPCEventBus when a session finishes.
+   */
+  if (autoRecordSessionCosts) {
+    handlers['session:complete'] = (data) => {
+      const { workerId, costUsd, inputTokens, outputTokens } = data;
+      if (!workerId || !costUsd) return;
+
+      recordCostAndCheck(workerId, costUsd, inputTokens || 0, outputTokens || 0);
+    };
+  }
+
+  /**
+   * Shared cost recording helper — records cost and sends budget-stop if exceeded.
+   */
+  function recordCostAndCheck(workerId, totalUsd, inputTokens, outputTokens) {
+    const result = costAggregator.record(workerId, { totalUsd, inputTokens, outputTokens });
 
     if (!result.allowed) {
       pool.sendTo(workerId, {
@@ -216,8 +357,14 @@ export function createCoordinator(ctx) {
         workerTotal: result.workerTotal,
         globalTotal: result.globalTotal,
       });
+
+      // Auto-drain on global budget exceeded
+      if (result.globalExceeded && budgetAutoDrain && state === 'running') {
+        log('[coord] Global budget exceeded — auto-draining');
+        drain();
+      }
     }
-  };
+  }
 
   function checkCompletion() {
     const progress = taskQueue.getProgress();
@@ -254,6 +401,8 @@ export function createCoordinator(ctx) {
     if (state === 'running') return;
     if (state === 'stopped') throw new Error('Cannot restart a stopped coordinator');
     wireEvents();
+    startRateLimiterTick();
+    startAutoScaleChecker();
     state = 'running';
     log('[coord] Started');
     events.emit('coord:started', { state });
@@ -277,6 +426,8 @@ export function createCoordinator(ctx) {
   function drain() {
     if (state !== 'running') return;
     state = 'draining';
+    stopAutoScaleChecker();
+    startDrainTimeout();
     log('[coord] Draining...');
     events.emit('coord:draining', { state });
     checkCompletion();
@@ -287,6 +438,9 @@ export function createCoordinator(ctx) {
    */
   function stop() {
     unwireEvents();
+    stopRateLimiterTick();
+    stopAutoScaleChecker();
+    clearDrainTimeout();
     state = 'stopped';
     log('[coord] Stopped');
     events.emit('coord:stopped', { state });
@@ -321,6 +475,8 @@ export function createCoordinator(ctx) {
           metadata: a.task.metadata,
         });
       }
+      // Check if we need more workers
+      checkAutoScale();
     }
 
     return task;
@@ -345,6 +501,8 @@ export function createCoordinator(ctx) {
           metadata: a.task.metadata,
         });
       }
+      // Check if we need more workers
+      checkAutoScale();
     }
 
     return created;
@@ -365,6 +523,7 @@ export function createCoordinator(ctx) {
       rateLimiter: rateLimiter.getStatus(),
       costs: costAggregator.getStatus(),
       strategy: workAssigner.getStrategy(),
+      worktrees: worktreeManager ? worktreeManager.getStatus() : null,
     };
   }
 
@@ -384,6 +543,7 @@ export function createCoordinator(ctx) {
     workAssigner,
     rateLimiter,
     costAggregator,
+    worktreeManager,
 
     // Status
     getStatus,
