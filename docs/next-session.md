@@ -6,6 +6,72 @@ The game engine and React UI are feature-complete. All future sessions focus on 
 
 Read `CLAUDE.md` first (always), then this file.
 
+## PRIORITY: Project Review via Specialized Agents
+
+**The user wants a comprehensive project review using specialized skill-based agents before continuing feature work.** Spin up the following agents in parallel:
+
+### Existing Skills to Run
+
+1. **`/code-review`** — Review all S100 changes (P10 file explorer enhancements). Focus on the new file content API, git status integration, client-side search/collapse logic, and CSS additions.
+
+2. **`/security-scan`** — Full security audit. The project now has file system read access (content preview), git command execution, and path-traversal guards — all high-value attack surfaces that need verification.
+
+3. **`/orchestrator-status`** — Health check of the orchestrator system, agent sessions, and backlog state.
+
+### New Skills to Create
+
+The current skill set has gaps for a thorough project review. Create these new skills:
+
+4. **`performance-audit`** — Analyze the operator codebase for performance bottlenecks:
+   - Synchronous file reads (readdirSync, statSync, readFileSync) in request handlers that could block the event loop
+   - Large JSON registry loaded on every request (loadRegistry reads full file each time)
+   - Git subprocess spawning on every /views/projects load (getGitFileStatus runs `git status` per project)
+   - CSS file size (1766 lines in a single file) — consider if splitting is needed
+   - Client-side JS (664 lines) loaded on every page even when features aren't used
+
+5. **`accessibility-audit`** — Check all 6 HTML pages + HTMX fragments for accessibility:
+   - Semantic HTML, ARIA labels, keyboard navigation
+   - Color contrast ratios (dark theme with subtle borders/muted text)
+   - Screen reader compatibility with HTMX dynamic content swaps
+   - Focus management in the confirm dialog, file preview panel, and modals
+   - Form labels and error messaging
+
+6. **`dependency-audit`** — Review package health:
+   - Check for outdated runtime/dev dependencies (express v5, ws v8, vitest v4, vite v7)
+   - Look for known vulnerabilities via `npm audit`
+   - Evaluate whether any deps can be removed or replaced
+   - Check that zero-frontend-dep constraint is maintained (Pico CSS + HTMX via CDN only)
+
+7. **`test-coverage-audit`** — Analyze test gaps:
+   - Map which operator modules have tests vs untested code paths
+   - Check that file-watcher.mjs and ws.mjs have adequate coverage (currently no dedicated test files)
+   - Identify edge cases in the new P10 features that may not be tested
+   - Verify error paths and boundary conditions
+
+### Skill Creation Guide
+
+New skills go in `.claude/skills/<name>/SKILL.md`. Use this frontmatter format:
+
+```yaml
+---
+name: <skill-name>
+description: <one-line description>
+allowed-tools: Read, Glob, Grep, Bash
+model: sonnet
+context: fork
+agent: general-purpose
+---
+```
+
+Followed by detailed instructions for what the skill should do, input handling, and output format. See existing skills (`code-review`, `security-scan`) as templates.
+
+### Execution Plan
+
+1. Run `/code-review`, `/security-scan`, `/orchestrator-status` in parallel
+2. Create the 4 new skills (performance-audit, accessibility-audit, dependency-audit, test-coverage-audit)
+3. Run the new skills
+4. Consolidate all findings into a prioritized action plan
+
 ## Context: S100
 
 S100 added **P10 File Explorer Enhancement** — four cohesive improvements to the P9 file explorer:
