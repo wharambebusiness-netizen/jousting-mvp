@@ -90,29 +90,39 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [x] All existing tests must still pass (1604/1604)
 - [x] **Deliverable:** Registry, settings, and EventBus ready for multi-instance use
 
-### Phase 1: Process Pool + Multi-Instance Backend (S103) — ~1 session
+### Phase 1: Process Pool + Multi-Instance Backend (S104) — DONE
 **Goal:** Spawn and manage multiple orchestrator worker processes
 
-- [ ] Create `operator/process-pool.mjs` (~100 lines):
+- [x] Create `operator/process-pool.mjs` (~300 lines):
   - `spawn(workerId, config)` — fork worker with IPC channel
   - `kill(workerId)` — IPC shutdown message + force-kill timeout
   - `sendTo(workerId, msg)` — route commands to specific worker
   - `getStatus()` — all workers' status
   - `shutdownAll()` — graceful coordinated shutdown
-- [ ] Create `operator/orchestrator-worker.mjs` — child process entry point:
+  - `restart(workerId)` — re-spawn with original config
+  - `getWorker(workerId)` — single worker status
+  - `remove(workerId)` — remove stopped worker
+  - `activeCount()` — count of running/starting workers
+- [x] Create `operator/orchestrator-worker.mjs` — child process entry point:
   - Accepts commands via `process.on('message')`
   - Uses `IPCEventBus` (events forward to parent)
-  - Runs operator chain logic in isolation
-- [ ] Refactor `routes/orchestrator.mjs`:
-  - `orchestrators` Map (keyed by instance ID) instead of single `orchestratorStatus`
+  - Handles init, start, stop, ping, shutdown IPC messages
+  - Forks orchestrator.mjs as grandchild with stdout/stderr forwarding
+- [x] Refactor `routes/orchestrator.mjs` for multi-instance:
+  - `instances` Map (keyed by instance ID) with per-instance state + agent maps
   - `POST /api/orchestrator/:id/start` — start specific instance
   - `POST /api/orchestrator/:id/stop` — stop specific instance
   - `GET /api/orchestrator/instances` — list all instances
-  - `DELETE /api/orchestrator/:id` — remove instance
-- [ ] IPC bridge: worker IPC events → parent EventBus → ws.mjs (no ws.mjs changes needed)
-- [ ] Health check heartbeats (30s interval, 3 missed = restart)
-- [ ] Tests: process pool lifecycle, IPC bridge, multi-instance routes
-- [ ] **Deliverable:** 4 orchestrator workers can run concurrently, events flow to UI
+  - `DELETE /api/orchestrator/:id` — remove stopped instance
+  - Legacy single-instance endpoints preserved (use 'default' instance)
+  - Events routed by `workerId` field to correct instance
+  - Run history includes `instanceId`
+- [x] IPC bridge: worker IPC events → parent EventBus → ws.mjs
+  - Added 7 worker events to BRIDGED_EVENTS in ws.mjs
+- [x] Health check heartbeats (30s interval, 3 missed = restart)
+- [x] Server.mjs integration: pool option, shutdown cleanup, pool in return value
+- [x] Tests: 43 new tests (process pool lifecycle, IPC bridge, multi-instance routes, WS bridging)
+- [x] **Deliverable:** Multiple orchestrator workers can run concurrently, events flow to UI
 
 ### Phase 2: Multi-Terminal UI (S104) — ~1 session
 **Goal:** Tabbed terminal interface with per-orchestrator colors

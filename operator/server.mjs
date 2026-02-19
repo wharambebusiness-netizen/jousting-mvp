@@ -29,6 +29,7 @@ import { createSettingsRoutes } from './routes/settings.mjs';
 import { createFileRoutes } from './routes/files.mjs';
 import { createSettings } from './settings.mjs';
 import { createFileWatcher } from './file-watcher.mjs';
+import { createProcessPool } from './process-pool.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -63,8 +64,9 @@ function corsMiddleware(req, res, next) {
  * @param {string}   options.operatorDir  - Path to operator/ directory
  * @param {EventBus} [options.events]     - EventBus for real-time events
  * @param {object}   [options.runChainFn] - Function to start a chain (combined mode)
+ * @param {object}   [options.pool] - Process pool for multi-orchestrator (or true to auto-create)
  * @param {object}   [options.orchestratorCtx] - Orchestrator context (combined mode)
- * @returns {{ app: Express, server: http.Server, events: EventBus, wss: WebSocketServer }}
+ * @returns {{ app: Express, server: http.Server, events: EventBus, wss: WebSocketServer, pool: object }}
  */
 export function createApp(options = {}) {
   const operatorDir = options.operatorDir || resolve(import.meta.dirname || '.', '.');
@@ -125,9 +127,18 @@ export function createApp(options = {}) {
   // File system routes
   app.use('/api', createFileRoutes({ getAllowedRoots }));
 
+  // Process pool for multi-orchestrator mode
+  let pool = null;
+  if (options.pool === true) {
+    pool = createProcessPool({ events, projectDir, log: () => {} });
+  } else if (options.pool && typeof options.pool === 'object') {
+    pool = options.pool;
+  }
+
   const orchRouter = createOrchestratorRoutes({
     events,
     operatorDir,
+    pool,
     orchestratorCtx: options.orchestratorCtx || null,
   });
   app.use('/api', orchRouter);
@@ -218,6 +229,9 @@ export function createApp(options = {}) {
     if (shutdownCalled) return;
     shutdownCalled = true;
 
+    // Shut down process pool (graceful worker termination)
+    if (pool) pool.shutdownAll().catch(() => {});
+
     // Clean up file watchers
     if (fileWatcher) fileWatcher.unwatchAll();
 
@@ -252,7 +266,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, close };
+  return { app, server, events, wss, pool, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
