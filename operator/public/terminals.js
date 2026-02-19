@@ -6,7 +6,7 @@
 // a unique color theme, status bar, and WS event routing.
 // ============================================================
 
-/* global Terminal, FitAddon, createWS, showToast */
+/* global Terminal, FitAddon, SearchAddon, createWS, showToast */
 
 // ── Color Themes ─────────────────────────────────────────────
 var THEMES = [
@@ -61,7 +61,9 @@ var THEMES = [
 ];
 
 // ── State ────────────────────────────────────────────────────
-var instances = new Map(); // id → { id, theme, terminal, fitAddon, panel, tab, running, round, agents, cost, mission, model }
+// id → { id, theme, terminal, fitAddon, panel, tab, running, round, agents, cost, mission, model, coord }
+// coord: { tasks: {total,pending,assigned,running,complete,failed,cancelled}, rateLimitOk, costUsd, budgetUsd, worktree, budgetWarning }
+var instances = new Map();
 var activeTabId = null;
 var viewMode = localStorage.getItem('term-view') || 'tabs'; // 'tabs' | 'grid'
 var themeIndex = 0;
@@ -72,6 +74,9 @@ var panels = document.getElementById('term-panels');
 var emptyState = document.getElementById('term-empty');
 var viewToggle = document.getElementById('view-toggle-icon');
 
+// ── State: maximized panel ───────────────────────────────────
+var maximizedId = null; // id of maximized panel in grid mode, or null
+
 // ── Initialization ───────────────────────────────────────────
 (function init() {
   applyViewMode();
@@ -80,23 +85,121 @@ var viewToggle = document.getElementById('view-toggle-icon');
   connectWS();
   checkPendingProject();
 
-  // Keyboard shortcuts: Ctrl+1-4 to switch tabs
+  // ── Keyboard Shortcuts ──────────────────────────────────
   document.addEventListener('keydown', function(e) {
-    if (e.ctrlKey && e.key >= '1' && e.key <= '4') {
+    var tag = (e.target.tagName || '').toLowerCase();
+    var inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+    // Escape — close dialogs, search bars, dropdowns (always active)
+    if (e.key === 'Escape') {
+      var dialog = document.getElementById('new-instance-dialog');
+      if (dialog && dialog.open) { dialog.close(); e.preventDefault(); return; }
+      var dd = document.querySelector('.handoff-history__dropdown');
+      if (dd) { dd.remove(); e.preventDefault(); return; }
+      // Close search bar on active terminal
+      if (activeTabId) {
+        var inst = instances.get(activeTabId);
+        if (inst && inst.searchBar && inst.searchBar.style.display !== 'none') {
+          closeTerminalSearch(activeTabId);
+          e.preventDefault();
+          return;
+        }
+      }
+      return;
+    }
+
+    // Skip remaining shortcuts when in form fields
+    if (inInput) return;
+
+    // Ctrl+1-4: switch to Nth tab
+    if (e.ctrlKey && !e.shiftKey && e.key >= '1' && e.key <= '4') {
       e.preventDefault();
       var idx = parseInt(e.key) - 1;
       var ids = Array.from(instances.keys());
       if (ids[idx]) switchTab(ids[idx]);
+      return;
+    }
+
+    // Ctrl+N: new instance
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+      e.preventDefault();
+      addInstance();
+      return;
+    }
+
+    // Ctrl+W: close/remove active terminal
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'w' || e.key === 'W')) {
+      e.preventDefault();
+      if (activeTabId) removeInstance(activeTabId);
+      return;
+    }
+
+    // Ctrl+H: handoff active terminal
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'h' || e.key === 'H')) {
+      e.preventDefault();
+      if (activeTabId) handoffInstance(activeTabId);
+      return;
+    }
+
+    // Ctrl+F: open terminal search
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      if (activeTabId) openTerminalSearch(activeTabId);
+      return;
+    }
+
+    // Ctrl+Shift+Left/Right: navigate between tabs
+    if (e.ctrlKey && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      var allIds = Array.from(instances.keys());
+      if (allIds.length < 2) return;
+      var curIdx = allIds.indexOf(activeTabId);
+      if (curIdx === -1) return;
+      var newIdx;
+      if (e.key === 'ArrowLeft') {
+        newIdx = (curIdx - 1 + allIds.length) % allIds.length;
+      } else {
+        newIdx = (curIdx + 1) % allIds.length;
+      }
+      switchTab(allIds[newIdx]);
+      return;
+    }
+
+    // Ctrl+Shift+G: toggle grid/tab view
+    if (e.ctrlKey && e.shiftKey && (e.key === 'G' || e.key === 'g')) {
+      e.preventDefault();
+      toggleTerminalView();
+      return;
+    }
+
+    // Ctrl+Shift+M: maximize/restore panel in grid mode
+    if (e.ctrlKey && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+      e.preventDefault();
+      if (activeTabId) toggleMaximize(activeTabId);
+      return;
     }
   });
 })();
 
 // ── Load existing instances from API ─────────────────────────
 function loadInstances() {
+  // Show loading state
+  if (emptyState) {
+    emptyState.innerHTML = '<div class="term-loading"><div class="term-loading__spinner"></div><span>Loading instances...</span></div>';
+    emptyState.style.display = 'flex';
+  }
+
   fetch('/api/orchestrator/instances')
     .then(function(r) { return r.json(); })
     .then(function(list) {
-      if (!list || !list.length) return;
+      if (!list || !list.length) {
+        // Restore original empty state
+        if (emptyState) {
+          emptyState.innerHTML = '<p>No orchestrator instances running.</p><p>Click <strong>+ New Instance</strong> to start one, or go to the <a href="/orchestrator">Orchestrator</a> page to launch a mission.</p>';
+        }
+        updateEmptyState();
+        return;
+      }
       list.forEach(function(inst) {
         addTerminalInstance(inst.id, inst);
       });
@@ -109,7 +212,10 @@ function loadInstances() {
       }
     })
     .catch(function() {
-      // API not available, that's fine
+      if (emptyState) {
+        emptyState.innerHTML = '<p>No orchestrator instances running.</p><p>Click <strong>+ New Instance</strong> to start one, or go to the <a href="/orchestrator">Orchestrator</a> page to launch a mission.</p>';
+      }
+      updateEmptyState();
     });
 }
 
@@ -168,6 +274,13 @@ function addTerminalInstance(id, state) {
   var fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
 
+  // Search addon
+  var searchAddon = null;
+  if (typeof SearchAddon !== 'undefined' && SearchAddon.SearchAddon) {
+    searchAddon = new SearchAddon.SearchAddon();
+    term.loadAddon(searchAddon);
+  }
+
   // Create tab
   var tab = document.createElement('button');
   tab.className = 'term-tab';
@@ -207,8 +320,79 @@ function addTerminalInstance(id, state) {
       '<span class="handoff-history" style="position:relative;display:inline-block;">' +
         '<button class="term-status__btn" onclick="showHandoffHistory(\'' + escHtml(id) + '\', this)" data-action="history">History</button>' +
       '</span>' +
+      '<button class="term-status__btn" onclick="toggleMaximize(\'' + escHtml(id) + '\')" data-action="maximize" title="Maximize/Restore (Ctrl+Shift+M)">\u26F6</button>' +
     '</span>';
   panel.appendChild(statusBar);
+
+  // Coordination status bar (hidden by default, shown when coord events arrive)
+  var coordBar = document.createElement('div');
+  coordBar.className = 'term-coord';
+  coordBar.style.display = 'none';
+  coordBar.innerHTML =
+    '<span class="term-coord__tasks" data-coord="tasks" title="Task progress">' +
+      '<span class="term-coord__label">Tasks</span>' +
+      '<span class="term-coord__bar"><span class="term-coord__fill"></span></span>' +
+      '<span class="term-coord__count">0/0</span>' +
+    '</span>' +
+    '<span class="term-coord__rate" data-coord="rate" title="Rate limit status">' +
+      '<span class="term-coord__dot term-coord__dot--ok"></span>' +
+      '<span class="term-coord__label">Rate</span>' +
+    '</span>' +
+    '<span class="term-coord__cost" data-coord="cost" title="Cost tracking">' +
+      '<span class="term-coord__label">Cost</span>' +
+      '<span class="term-coord__value">$0.00</span>' +
+    '</span>' +
+    '<span class="term-coord__worktree" data-coord="worktree" style="display:none" title="Git worktree">' +
+      '<span class="term-coord__label">⎇</span>' +
+      '<span class="term-coord__value"></span>' +
+    '</span>';
+  panel.appendChild(coordBar);
+
+  // Search bar (hidden by default)
+  var searchBar = document.createElement('div');
+  searchBar.className = 'term-search';
+  searchBar.style.display = 'none';
+  searchBar.innerHTML =
+    '<input type="text" class="term-search__input" placeholder="Search terminal..." aria-label="Search terminal">' +
+    '<span class="term-search__count" data-search-count></span>' +
+    '<button class="term-search__btn" data-search-prev title="Previous (Shift+Enter)">\u2191</button>' +
+    '<button class="term-search__btn" data-search-next title="Next (Enter)">\u2193</button>' +
+    '<button class="term-search__btn term-search__close" data-search-close title="Close (Escape)">\u00d7</button>';
+  panel.appendChild(searchBar);
+
+  // Wire search bar events
+  (function(instanceId, sBar, sAddon) {
+    var input = sBar.querySelector('.term-search__input');
+    var countEl = sBar.querySelector('[data-search-count]');
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (sAddon) {
+          if (e.shiftKey) { sAddon.findPrevious(input.value); }
+          else { sAddon.findNext(input.value); }
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeTerminalSearch(instanceId);
+      }
+    });
+    input.addEventListener('input', function() {
+      if (sAddon && input.value) {
+        sAddon.findNext(input.value);
+      }
+      if (!input.value && countEl) countEl.textContent = '';
+    });
+    sBar.querySelector('[data-search-prev]').addEventListener('click', function() {
+      if (sAddon && input.value) sAddon.findPrevious(input.value);
+    });
+    sBar.querySelector('[data-search-next]').addEventListener('click', function() {
+      if (sAddon && input.value) sAddon.findNext(input.value);
+    });
+    sBar.querySelector('[data-search-close]').addEventListener('click', function() {
+      closeTerminalSearch(instanceId);
+    });
+  })(id, searchBar, searchAddon);
 
   // Terminal container
   var xtermContainer = document.createElement('div');
@@ -236,6 +420,8 @@ function addTerminalInstance(id, state) {
     theme: theme,
     terminal: term,
     fitAddon: fitAddon,
+    searchAddon: searchAddon,
+    searchBar: searchBar,
     panel: panel,
     tab: tab,
     running: state ? state.running : false,
@@ -244,6 +430,17 @@ function addTerminalInstance(id, state) {
     cost: state ? (state.cost || 0) : 0,
     mission: state ? state.mission : null,
     model: state ? state.model : null,
+    maximized: false,
+    coord: {
+      tasks: { total: 0, pending: 0, assigned: 0, running: 0, complete: 0, failed: 0, cancelled: 0 },
+      rateLimitOk: true,
+      costUsd: 0,
+      budgetUsd: 0,
+      worktree: null,
+      budgetWarning: false,
+      budgetExceeded: false,
+      active: false,
+    },
   });
 
   updateEmptyState();
@@ -320,6 +517,7 @@ function startInstance(id) {
     return;
   }
 
+  setBtnLoading(inst, 'start', true);
   fetch('/api/orchestrator/' + encodeURIComponent(id) + '/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -335,6 +533,9 @@ function startInstance(id) {
     })
     .catch(function(err) {
       showToast('Failed to start ' + id + ': ' + err.message, 'error');
+    })
+    .finally(function() {
+      setBtnLoading(inst, 'start', false);
     });
 }
 
@@ -347,6 +548,7 @@ function stopInstance(id) {
     return;
   }
 
+  setBtnLoading(inst, 'stop', true);
   fetch('/api/orchestrator/' + encodeURIComponent(id) + '/stop', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -361,6 +563,9 @@ function stopInstance(id) {
     })
     .catch(function(err) {
       showToast('Failed to stop ' + id + ': ' + err.message, 'error');
+    })
+    .finally(function() {
+      setBtnLoading(inst, 'stop', false);
     });
 }
 
@@ -449,16 +654,33 @@ function applyViewMode() {
   panels.classList.toggle('term-panels--tabs', !isGrid);
   viewToggle.textContent = isGrid ? '\u25A3' : '\u25A6\u25A6';
 
+  // Clear maximize state when switching to tabs
+  if (!isGrid && maximizedId) {
+    var maxInst = instances.get(maximizedId);
+    if (maxInst) {
+      maxInst.maximized = false;
+      maxInst.panel.classList.remove('term-panel--maximized');
+      var btn = maxInst.panel.querySelector('[data-action="maximize"]');
+      if (btn) btn.textContent = '\u26F6';
+    }
+    maximizedId = null;
+  }
+
   if (isGrid) {
-    // Show all panels in grid
+    // Show all panels in grid (unless one is maximized)
     instances.forEach(function(inst) {
       inst.panel.classList.add('term-panel--active');
-      inst.panel.style.display = 'flex';
+      if (maximizedId && inst.id !== maximizedId) {
+        inst.panel.style.display = 'none';
+      } else {
+        inst.panel.style.display = 'flex';
+      }
     });
   } else {
     // Show only active tab
     instances.forEach(function(inst, instId) {
       inst.panel.classList.toggle('term-panel--active', instId === activeTabId);
+      inst.panel.style.display = '';
     });
   }
 
@@ -478,6 +700,7 @@ function connectWS() {
     'agent:*',
     'round:*',
     'handoff:*',
+    'coord:*',
   ], function(msg) {
     if (!msg || !msg.event || !msg.data) return;
 
@@ -629,8 +852,224 @@ function connectWS() {
           showToast('Handoff restart for ' + instanceId, 'success');
         }
         break;
+
+      // ── Coordination Events ──────────────────────────────
+
+      case 'coord:started':
+        // Global event — show on all instances
+        instances.forEach(function(i) {
+          i.coord.active = true;
+          i.terminal.writeln('\x1b[35m[COORD] Coordinator started\x1b[0m');
+          showCoordBar(i.id);
+        });
+        break;
+
+      case 'coord:stopped':
+        instances.forEach(function(i) {
+          i.coord.active = false;
+          i.terminal.writeln('\x1b[35m[COORD] Coordinator stopped\x1b[0m');
+        });
+        break;
+
+      case 'coord:draining':
+        instances.forEach(function(i) {
+          i.terminal.writeln('\x1b[33m[COORD] Draining — no new tasks\x1b[0m');
+        });
+        break;
+
+      case 'coord:assigned':
+        if (inst) {
+          inst.coord.active = true;
+          showCoordBar(instanceId);
+          inst.terminal.writeln('\x1b[35m[COORD] Task assigned: ' + (msg.data.taskId || '?') + '\x1b[0m');
+          // Update task counts via progress fetch
+          fetchCoordProgress();
+        }
+        break;
+
+      case 'coord:task-complete':
+        if (inst) {
+          inst.terminal.writeln('\x1b[32m[COORD] Task complete: ' + (msg.data.taskId || '?') + '\x1b[0m');
+          fetchCoordProgress();
+        }
+        break;
+
+      case 'coord:task-failed':
+        if (inst) {
+          inst.terminal.writeln('\x1b[31m[COORD] Task failed: ' + (msg.data.taskId || '?') + ' — ' + (msg.data.error || 'unknown') + '\x1b[0m');
+          fetchCoordProgress();
+        }
+        break;
+
+      case 'coord:all-complete':
+        instances.forEach(function(i) {
+          var d = msg.data || {};
+          i.terminal.writeln('\x1b[32;1m[COORD] All tasks complete (' + (d.complete || 0) + '/' + (d.total || 0) + ')\x1b[0m');
+          fetchCoordProgress();
+        });
+        showToast('All coordination tasks complete', 'success');
+        break;
+
+      case 'coord:budget-warning':
+        if (msg.data.workerId && instances.has(msg.data.workerId)) {
+          var wi = instances.get(msg.data.workerId);
+          wi.coord.budgetWarning = true;
+          wi.terminal.writeln('\x1b[33;1m[COORD] Budget warning: $' + Number(msg.data.totalUsd || 0).toFixed(2) + ' / $' + Number(msg.data.budgetUsd || 0).toFixed(2) + '\x1b[0m');
+          updateCoordBar(msg.data.workerId);
+        } else {
+          instances.forEach(function(i) {
+            i.coord.budgetWarning = true;
+            i.terminal.writeln('\x1b[33;1m[COORD] Global budget warning: $' + Number(msg.data.totalUsd || 0).toFixed(2) + '\x1b[0m');
+            updateCoordBar(i.id);
+          });
+        }
+        break;
+
+      case 'coord:budget-exceeded':
+        if (msg.data.workerId && instances.has(msg.data.workerId)) {
+          var ei = instances.get(msg.data.workerId);
+          ei.coord.budgetExceeded = true;
+          ei.terminal.writeln('\x1b[31;1m[COORD] BUDGET EXCEEDED: $' + Number(msg.data.totalUsd || 0).toFixed(2) + '\x1b[0m');
+          updateCoordBar(msg.data.workerId);
+        } else {
+          instances.forEach(function(i) {
+            i.coord.budgetExceeded = true;
+            i.terminal.writeln('\x1b[31;1m[COORD] GLOBAL BUDGET EXCEEDED\x1b[0m');
+            updateCoordBar(i.id);
+          });
+        }
+        showToast('Budget exceeded!', 'error');
+        break;
+
+      case 'coord:worktree-created':
+        if (inst) {
+          inst.coord.worktree = { branch: msg.data.branch || '', path: msg.data.path || '' };
+          inst.terminal.writeln('\x1b[36m[COORD] Worktree created: ' + (msg.data.branch || '') + '\x1b[0m');
+          updateCoordBar(instanceId);
+        }
+        break;
+
+      case 'coord:worktree-removed':
+        if (inst) {
+          inst.coord.worktree = null;
+          inst.terminal.writeln('\x1b[36m[COORD] Worktree removed\x1b[0m');
+          updateCoordBar(instanceId);
+        }
+        break;
+
+      case 'coord:worktree-merged':
+        if (inst) {
+          inst.terminal.writeln('\x1b[32m[COORD] Worktree merged: ' + (msg.data.branch || '') + (msg.data.mergeCommit ? ' (' + msg.data.mergeCommit.slice(0, 7) + ')' : '') + '\x1b[0m');
+          inst.coord.worktree = null;
+          updateCoordBar(instanceId);
+        }
+        break;
+
+      case 'coord:conflicts-detected':
+        instances.forEach(function(i) {
+          var conflicts = msg.data.conflicted || [];
+          if (conflicts.length > 0) {
+            i.terminal.writeln('\x1b[31;1m[COORD] Merge conflicts detected: ' + conflicts.join(', ') + '\x1b[0m');
+          }
+        });
+        break;
     }
+  }, {
+    trackStatus: true,
+    onConnect: function() { setWsOverlay(true); },
+    onDisconnect: function() { setWsOverlay(false); },
   });
+}
+
+// ── Coordination Bar Helpers ─────────────────────────────────
+
+function showCoordBar(id) {
+  var inst = instances.get(id);
+  if (!inst) return;
+  var bar = inst.panel.querySelector('.term-coord');
+  if (bar) bar.style.display = 'flex';
+}
+
+function updateCoordBar(id) {
+  var inst = instances.get(id);
+  if (!inst) return;
+  var bar = inst.panel.querySelector('.term-coord');
+  if (!bar) return;
+
+  var c = inst.coord;
+
+  // Tasks progress
+  var tasksEl = bar.querySelector('[data-coord="tasks"]');
+  if (tasksEl) {
+    var pct = c.tasks.total > 0 ? ((c.tasks.complete / c.tasks.total) * 100) : 0;
+    var fill = tasksEl.querySelector('.term-coord__fill');
+    if (fill) fill.style.width = pct + '%';
+    var count = tasksEl.querySelector('.term-coord__count');
+    if (count) count.textContent = c.tasks.complete + '/' + c.tasks.total;
+  }
+
+  // Rate limit dot
+  var rateEl = bar.querySelector('[data-coord="rate"]');
+  if (rateEl) {
+    var dot = rateEl.querySelector('.term-coord__dot');
+    if (dot) {
+      dot.className = 'term-coord__dot ' + (c.rateLimitOk ? 'term-coord__dot--ok' : 'term-coord__dot--wait');
+    }
+  }
+
+  // Cost
+  var costEl = bar.querySelector('[data-coord="cost"]');
+  if (costEl) {
+    var val = costEl.querySelector('.term-coord__value');
+    if (val) {
+      var costStr = '$' + Number(c.costUsd || 0).toFixed(2);
+      if (c.budgetUsd > 0) costStr += ' / $' + Number(c.budgetUsd).toFixed(0);
+      val.textContent = costStr;
+    }
+    costEl.classList.toggle('term-coord__cost--warning', c.budgetWarning && !c.budgetExceeded);
+    costEl.classList.toggle('term-coord__cost--exceeded', c.budgetExceeded);
+  }
+
+  // Worktree
+  var wtEl = bar.querySelector('[data-coord="worktree"]');
+  if (wtEl) {
+    if (c.worktree) {
+      wtEl.style.display = '';
+      var wtVal = wtEl.querySelector('.term-coord__value');
+      if (wtVal) wtVal.textContent = c.worktree.branch || '';
+    } else {
+      wtEl.style.display = 'none';
+    }
+  }
+}
+
+var coordProgressDebounce = null;
+function fetchCoordProgress() {
+  // Debounce rapid progress fetches
+  if (coordProgressDebounce) return;
+  coordProgressDebounce = setTimeout(function() {
+    coordProgressDebounce = null;
+    fetch('/api/coordination/progress')
+      .then(function(r) { return r.json(); })
+      .then(function(progress) {
+        instances.forEach(function(inst) {
+          inst.coord.tasks = progress;
+          updateCoordBar(inst.id);
+        });
+      })
+      .catch(function() { /* coordination not active */ });
+    fetch('/api/coordination/costs')
+      .then(function(r) { return r.json(); })
+      .then(function(costs) {
+        instances.forEach(function(inst) {
+          var wCost = costs.workers && costs.workers[inst.id];
+          inst.coord.costUsd = wCost ? wCost.totalUsd : 0;
+          inst.coord.budgetUsd = costs.perWorkerBudgetUsd || 0;
+          updateCoordBar(inst.id);
+        });
+      })
+      .catch(function() { /* ignore */ });
+  }, 200);
 }
 
 // ── Write log text to terminal ───────────────────────────────
@@ -695,6 +1134,36 @@ function updateEmptyState() {
   if (emptyState) {
     emptyState.style.display = instances.size === 0 ? 'flex' : 'none';
   }
+}
+
+// ── Button Loading State ──────────────────────────────────────
+function setBtnLoading(inst, action, loading) {
+  if (!inst || !inst.panel) return;
+  var btn = inst.panel.querySelector('[data-action="' + action + '"]');
+  if (btn) {
+    btn.classList.toggle('term-status__btn--loading', loading);
+    btn.disabled = loading;
+  }
+}
+
+// ── WS Disconnect Overlay ────────────────────────────────────
+var wsConnected = true;
+function setWsOverlay(connected) {
+  wsConnected = connected;
+  instances.forEach(function(inst) {
+    var existing = inst.panel.querySelector('.term-panel__overlay');
+    if (!connected) {
+      if (!existing) {
+        var overlay = document.createElement('div');
+        overlay.className = 'term-panel__overlay';
+        overlay.innerHTML = '<div class="term-panel__overlay-msg"><div class="term-loading__spinner"></div>Connection lost — reconnecting...</div>';
+        inst.panel.style.position = 'relative';
+        inst.panel.appendChild(overlay);
+      }
+    } else {
+      if (existing) existing.remove();
+    }
+  });
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -800,6 +1269,85 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ── Terminal Search ───────────────────────────────────────────
+function openTerminalSearch(id) {
+  var inst = instances.get(id);
+  if (!inst || !inst.searchBar) return;
+  inst.searchBar.style.display = 'flex';
+  var input = inst.searchBar.querySelector('.term-search__input');
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function closeTerminalSearch(id) {
+  var inst = instances.get(id);
+  if (!inst || !inst.searchBar) return;
+  inst.searchBar.style.display = 'none';
+  if (inst.searchAddon) inst.searchAddon.clearDecorations();
+  var input = inst.searchBar.querySelector('.term-search__input');
+  if (input) input.value = '';
+  var count = inst.searchBar.querySelector('[data-search-count]');
+  if (count) count.textContent = '';
+}
+
+// ── Maximize / Restore Panel ─────────────────────────────────
+function toggleMaximize(id) {
+  if (viewMode !== 'grid') {
+    // In tabs mode, switch to grid first then maximize
+    viewMode = 'grid';
+    localStorage.setItem('term-view', viewMode);
+    applyViewMode();
+  }
+
+  var inst = instances.get(id);
+  if (!inst) return;
+
+  if (maximizedId === id) {
+    // Restore
+    maximizedId = null;
+    inst.maximized = false;
+    inst.panel.classList.remove('term-panel--maximized');
+    var maxBtn = inst.panel.querySelector('[data-action="maximize"]');
+    if (maxBtn) maxBtn.textContent = '\u26F6';
+    // Show all panels
+    instances.forEach(function(i) {
+      i.panel.style.display = 'flex';
+    });
+  } else {
+    // If another was maximized, restore it first
+    if (maximizedId) {
+      var prev = instances.get(maximizedId);
+      if (prev) {
+        prev.maximized = false;
+        prev.panel.classList.remove('term-panel--maximized');
+        var prevBtn = prev.panel.querySelector('[data-action="maximize"]');
+        if (prevBtn) prevBtn.textContent = '\u26F6';
+      }
+    }
+    // Maximize this one
+    maximizedId = id;
+    inst.maximized = true;
+    inst.panel.classList.add('term-panel--maximized');
+    var maxBtn2 = inst.panel.querySelector('[data-action="maximize"]');
+    if (maxBtn2) maxBtn2.textContent = '\u2716';
+    // Hide others
+    instances.forEach(function(i, iId) {
+      if (iId !== id) i.panel.style.display = 'none';
+    });
+  }
+
+  // Refit all visible terminals
+  setTimeout(function() {
+    instances.forEach(function(i) {
+      if (i.panel.style.display !== 'none') {
+        try { i.fitAddon.fit(); } catch (e) { /* ignore */ }
+      }
+    });
+  }, 50);
+}
+
 // ── Project-to-Terminal Completion ───────────────────────────
 function checkPendingProject() {
   var pending = sessionStorage.getItem('pending-terminal-project');
@@ -840,3 +1388,13 @@ window.stopInstance = stopInstance;
 window.submitNewInstance = submitNewInstance;
 window.handoffInstance = handoffInstance;
 window.showHandoffHistory = showHandoffHistory;
+window.toggleMaximize = toggleMaximize;
+window.openTerminalSearch = openTerminalSearch;
+window.closeTerminalSearch = closeTerminalSearch;
+window.toggleShortcutsHelp = toggleShortcutsHelp;
+
+function toggleShortcutsHelp() {
+  var dialog = document.getElementById('shortcuts-dialog');
+  if (!dialog) return;
+  if (dialog.open) { dialog.close(); } else { dialog.showModal(); }
+}
