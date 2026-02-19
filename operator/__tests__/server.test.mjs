@@ -1496,3 +1496,84 @@ describe('File Content API (P10)', () => {
     expect(status).toBe(400);
   });
 });
+
+// ── Terminals Page ──────────────────────────────────────────
+describe('Terminals Page', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /terminals serves terminals page HTML', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Terminals');
+    expect(text).toContain('term-tabs');
+    expect(text).toContain('term-panels');
+  });
+
+  it('terminals page includes xterm.js CDN links', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('xterm');
+    expect(text).toContain('addon-fit');
+  });
+
+  it('terminals page includes terminals.js script', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('terminals.js');
+  });
+
+  it('terminals page has new instance dialog', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('new-instance-dialog');
+    expect(text).toContain('new-instance-form');
+  });
+
+  it('GET /terminals.js serves the terminals script', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('addTerminalInstance');
+    expect(text).toContain('THEMES');
+    expect(text).toContain('createWS');
+  });
+});
+
+// ── Nav Links ───────────────────────────────────────────────
+describe('Nav Links', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  const pages = [
+    { path: '/', name: 'index' },
+    { path: '/orchestrator', name: 'orchestrator' },
+    { path: '/settings', name: 'settings' },
+    { path: '/analytics', name: 'analytics' },
+    { path: '/terminals', name: 'terminals' },
+  ];
+
+  for (const page of pages) {
+    it(`${page.name} page has Terminals nav link`, async () => {
+      const res = await fetch(`${baseUrl}${page.path}`);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('href="/terminals"');
+    });
+  }
+});

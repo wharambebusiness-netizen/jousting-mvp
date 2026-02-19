@@ -1766,6 +1766,280 @@ details[open] > .tree-summary .tree-icon--dir {
   margin-top: var(--sp-1);
 }
 
+/* === 41. Multi-Terminal UI === */
+
+/* Color themes per orchestrator instance */
+:root[data-theme="dark"] {
+  --orch-1-accent: #6366f1;
+  --orch-1-bg: #0d0d14;
+  --orch-2-accent: #10b981;
+  --orch-2-bg: #0a0f0d;
+  --orch-3-accent: #f59e0b;
+  --orch-3-bg: #0f0e0a;
+  --orch-4-accent: #f43f5e;
+  --orch-4-bg: #0f0a0c;
+}
+
+/* Terminals page layout */
+.terminals-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+}
+.terminals-page .page-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.page-header__actions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* Tab bar */
+.term-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+  background: var(--bg-root);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.term-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  position: relative;
+}
+.term-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.term-tab--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--tab-accent, var(--accent-primary));
+}
+.term-tab__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tab-accent, var(--accent-primary));
+  flex-shrink: 0;
+}
+.term-tab__dot--running {
+  box-shadow: 0 0 6px var(--tab-accent, var(--accent-primary));
+  animation: pulse 2s infinite;
+}
+.term-tab__dot--stopped {
+  opacity: 0.4;
+}
+.term-tab__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.term-tab:hover .term-tab__close {
+  opacity: 1;
+}
+.term-tab__close:hover {
+  color: var(--status-failed);
+}
+
+/* Terminal panels container */
+.term-panels {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-root);
+}
+.term-panels--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+}
+.term-panels--tabs .term-panel {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.term-panels--tabs .term-panel--active {
+  display: flex;
+}
+
+/* Individual terminal panel */
+.term-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg, var(--bg-root));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.term-panels--grid .term-panel {
+  border-radius: 0;
+}
+
+/* Terminal status bar */
+.term-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.term-status__id {
+  font-weight: 600;
+  color: var(--panel-accent, var(--accent-primary));
+}
+.term-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.term-status__dot--running {
+  background: var(--status-running);
+  box-shadow: 0 0 4px var(--status-running);
+}
+.term-status__dot--stopped {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+.term-status__spacer {
+  flex: 1;
+}
+.term-status__actions {
+  display: flex;
+  gap: var(--sp-1);
+}
+.term-status__btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  transition: all 0.15s;
+}
+.term-status__btn:hover {
+  border-color: var(--panel-accent, var(--accent-primary));
+  color: var(--panel-accent, var(--accent-primary));
+}
+.term-status__btn--danger:hover {
+  border-color: var(--status-failed);
+  color: var(--status-failed);
+}
+
+/* Terminal xterm container */
+.term-xterm {
+  flex: 1;
+  padding: var(--sp-1);
+  overflow: hidden;
+}
+
+/* Empty state */
+.term-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  text-align: center;
+  gap: var(--sp-2);
+}
+.term-empty p {
+  margin: 0;
+}
+
+/* New instance dialog */
+.term-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  max-width: 420px;
+  width: 90vw;
+}
+.term-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+.term-dialog article {
+  margin: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.term-dialog header {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--sp-3) var(--sp-4);
+}
+.term-dialog header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.term-dialog form {
+  padding: var(--sp-4);
+}
+.term-dialog label {
+  display: block;
+  margin-bottom: var(--sp-3);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.term-dialog input[type="text"],
+.term-dialog select {
+  width: 100%;
+  margin-top: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+.term-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* View toggle button */
+#view-toggle {
+  font-size: 1rem;
+  letter-spacing: -1px;
+}
+
 /* === 38. Responsive === */
 @media (max-width: 768px) {
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }

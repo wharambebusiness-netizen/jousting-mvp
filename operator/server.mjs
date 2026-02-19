@@ -191,6 +191,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'analytics.html'));
   });
 
+  // Terminals page
+  app.get('/terminals', (_req, res) => {
+    res.sendFile(join(publicDir, 'terminals.html'));
+  });
+
   // Static files (CSS, index.html for /)
   app.use(express.static(publicDir));
 
