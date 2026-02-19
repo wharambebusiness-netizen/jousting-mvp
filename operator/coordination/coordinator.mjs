@@ -14,6 +14,7 @@
 // ============================================================
 
 import { createTaskQueue } from './task-queue.mjs';
+import { createPersistentQueue } from './persistent-queue.mjs';
 import { createWorkAssigner } from './work-assigner.mjs';
 import { createRateLimiter } from './rate-limiter.mjs';
 import { createCostAggregator } from './cost-aggregator.mjs';
@@ -51,6 +52,7 @@ const STATES = new Set(['init', 'running', 'draining', 'stopped']);
  * @param {number} [ctx.options.drainTimeoutMs=0] - Force-stop after drain timeout (0 = wait forever)
  * @param {boolean} [ctx.options.budgetAutoDrain=true] - Auto-drain on global budget exceeded
  * @param {Function} [ctx.options.workerConfigFactory] - Factory fn(workerId) returning config for auto-spawned workers
+ * @param {string} [ctx.options.persistPath] - Path to persist task queue on disk (survives restarts)
  * @param {Function} [ctx.log] - Logger
  * @returns {object} Coordinator methods
  */
@@ -66,7 +68,12 @@ export function createCoordinator(ctx) {
 
   // ── Sub-systems ─────────────────────────────────────────
 
-  const taskQueue = ctx.taskQueue || createTaskQueue({ log });
+  const persistPath = opts.persistPath || null;
+  const taskQueue = ctx.taskQueue || (
+    persistPath
+      ? createPersistentQueue({ filePath: persistPath, log })
+      : createTaskQueue({ log })
+  );
 
   const workAssigner = ctx.workAssigner || createWorkAssigner({
     strategy: opts.strategy || 'round-robin',
@@ -400,6 +407,16 @@ export function createCoordinator(ctx) {
   function start() {
     if (state === 'running') return;
     if (state === 'stopped') throw new Error('Cannot restart a stopped coordinator');
+
+    // Load persisted queue if available
+    if (taskQueue.isPersistent && taskQueue.load) {
+      const loadResult = taskQueue.load();
+      if (loadResult.loaded) {
+        log(`[coord] Loaded ${loadResult.tasks} persisted tasks (${loadResult.reset} reset)`);
+        events.emit('coord:queue-loaded', loadResult);
+      }
+    }
+
     wireEvents();
     startRateLimiterTick();
     startAutoScaleChecker();
@@ -441,6 +458,12 @@ export function createCoordinator(ctx) {
     stopRateLimiterTick();
     stopAutoScaleChecker();
     clearDrainTimeout();
+
+    // Final save to disk
+    if (taskQueue.isPersistent && taskQueue.save) {
+      try { taskQueue.save(); } catch (_) { /* ignore */ }
+    }
+
     state = 'stopped';
     log('[coord] Stopped');
     events.emit('coord:stopped', { state });

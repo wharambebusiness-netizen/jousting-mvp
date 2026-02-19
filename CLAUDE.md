@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 2234 tests, 32 suites (all passing)
+npm test                                           # 2261 tests, 32 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -80,7 +80,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
   registry.mjs        Chain persistence (factory pattern, atomic writes, file locking, CRUD, archival)
   settings.mjs        Settings persistence (factory pattern, atomic writes, validation, clamping)
   errors.mjs          Error classification, retry logic, circuit breaker, handoff validation
-  ws.mjs              WebSocket event bridge (EventBus → clients, 39 bridged events)
+  ws.mjs              WebSocket event bridge (EventBus → clients, 46 bridged events)
   file-watcher.mjs    Real-time fs.watch for project directories (P9)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
@@ -125,7 +125,8 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
     cost-aggregator.mjs Cross-worker cost tracking with per-worker + global budget caps
     coordinator.mjs  Central broker: lifecycle, event routing, subsystem orchestration, rate limiter tick, session cost auto-bridging
     worktree-manager.mjs Per-worker git worktree isolation: create, remove, merge, dry-run conflict detection
-  __tests__/          873 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration)
+    persistent-queue.mjs Disk-backed task queue wrapper: atomic writes, crash recovery, in-flight reset (Phase 7b)
+  __tests__/          900 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -163,7 +164,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-2234 tests across 32 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (208), coordination-integration (22). Run `npm test` to verify.
+2261 tests across 32 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (235), coordination-integration (22). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

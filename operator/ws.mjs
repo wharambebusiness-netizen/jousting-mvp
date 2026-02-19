@@ -167,7 +167,7 @@ export function createWebSocketHandler({ server, events }) {
     'coord:started', 'coord:stopped', 'coord:draining',
     'coord:assigned', 'coord:task-complete', 'coord:task-failed',
     'coord:all-complete', 'coord:budget-warning', 'coord:budget-exceeded',
-    'coord:scale-up', 'coord:drain-timeout',
+    'coord:scale-up', 'coord:drain-timeout', 'coord:queue-loaded',
     'coord:worktree-created', 'coord:worktree-removed', 'coord:worktree-merged',
     'coord:conflicts-detected',
   ];

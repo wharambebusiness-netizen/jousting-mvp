@@ -5,14 +5,18 @@
 // aggregator, and coordinator.
 // ============================================================
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTaskQueue } from '../coordination/task-queue.mjs';
 import { createWorkAssigner, STRATEGIES } from '../coordination/work-assigner.mjs';
 import { createRateLimiter } from '../coordination/rate-limiter.mjs';
 import { createCostAggregator, WARNING_THRESHOLD } from '../coordination/cost-aggregator.mjs';
 import { createCoordinator, STATES } from '../coordination/coordinator.mjs';
 import { createWorktreeManager, WORKTREE_DIR_NAME, BRANCH_PREFIX } from '../coordination/worktree-manager.mjs';
+import { createPersistentQueue } from '../coordination/persistent-queue.mjs';
 import { EventBus } from '../../shared/event-bus.mjs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // ── Test Helpers ────────────────────────────────────────────
 
@@ -2281,5 +2285,510 @@ describe('Coordinator Cost Aggregator Integration', () => {
     expect(status.costs.globalTotalUsd).toBe(5.0);
     expect(status.costs.workers).toHaveProperty('w1');
     coord.stop();
+  });
+});
+
+// ============================================================
+// 10. Persistent Queue
+// ============================================================
+
+describe('PersistentQueue', () => {
+  let testDir;
+  let filePath;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `persist-queue-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(testDir, { recursive: true });
+    filePath = join(testDir, 'queue.json');
+  });
+
+  afterEach(() => {
+    try { rmSync(testDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+  });
+
+  it('should require filePath', () => {
+    expect(() => createPersistentQueue({})).toThrow('filePath');
+    expect(() => createPersistentQueue()).toThrow();
+  });
+
+  it('should have same API as createTaskQueue plus persistence methods', () => {
+    const pq = createPersistentQueue({ filePath });
+    // Core mutations
+    expect(typeof pq.add).toBe('function');
+    expect(typeof pq.remove).toBe('function');
+    expect(typeof pq.assign).toBe('function');
+    expect(typeof pq.start).toBe('function');
+    expect(typeof pq.complete).toBe('function');
+    expect(typeof pq.fail).toBe('function');
+    expect(typeof pq.cancel).toBe('function');
+    expect(typeof pq.retry).toBe('function');
+    // Reads
+    expect(typeof pq.get).toBe('function');
+    expect(typeof pq.getAll).toBe('function');
+    expect(typeof pq.getReady).toBe('function');
+    expect(typeof pq.getByWorker).toBe('function');
+    expect(typeof pq.getProgress).toBe('function');
+    expect(typeof pq.size).toBe('function');
+    // DAG
+    expect(typeof pq.topologicalSort).toBe('function');
+    expect(typeof pq.getLevels).toBe('function');
+    expect(typeof pq.validate).toBe('function');
+    // Serialization
+    expect(typeof pq.toJSON).toBe('function');
+    expect(typeof pq.fromJSON).toBe('function');
+    expect(typeof pq.clear).toBe('function');
+    // Persistence-specific
+    expect(typeof pq.load).toBe('function');
+    expect(typeof pq.save).toBe('function');
+    expect(pq.filePath).toBe(filePath);
+    expect(pq.isPersistent).toBe(true);
+  });
+
+  it('should auto-save on add', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test task' });
+
+    expect(existsSync(filePath)).toBe(true);
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(data.tasks).toHaveLength(1);
+    expect(data.tasks[0].id).toBe('t1');
+    expect(data.version).toBe(1);
+    expect(data.savedAt).toBeTruthy();
+  });
+
+  it('should auto-save on complete', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+    pq.assign('t1', 'w1'); // assign does NOT auto-save
+    pq.complete('t1', 'done');
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const t = data.tasks.find(t => t.id === 't1');
+    expect(t.status).toBe('complete');
+    expect(t.result).toBe('done');
+  });
+
+  it('should auto-save on fail', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+    pq.assign('t1', 'w1');
+    pq.fail('t1', 'oops');
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const t = data.tasks.find(t => t.id === 't1');
+    expect(t.status).toBe('failed');
+    expect(t.error).toBe('oops');
+  });
+
+  it('should auto-save on cancel', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Root' });
+    pq.add({ id: 't2', task: 'Dep', deps: ['t1'] });
+    pq.cancel('t1');
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(data.tasks.find(t => t.id === 't1').status).toBe('cancelled');
+    expect(data.tasks.find(t => t.id === 't2').status).toBe('cancelled');
+  });
+
+  it('should auto-save on retry', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+    pq.assign('t1', 'w1');
+    pq.fail('t1', 'err');
+    pq.retry('t1');
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(data.tasks.find(t => t.id === 't1').status).toBe('pending');
+  });
+
+  it('should auto-save on remove', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+    pq.add({ id: 't2', task: 'Keep' });
+    pq.remove('t1');
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(data.tasks).toHaveLength(1);
+    expect(data.tasks[0].id).toBe('t2');
+  });
+
+  it('should auto-save on clear', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+    pq.clear();
+
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(data.tasks).toHaveLength(0);
+  });
+
+  it('should NOT auto-save on assign or start (intermediate states)', () => {
+    const pq = createPersistentQueue({ filePath });
+    pq.add({ id: 't1', task: 'Test' });
+
+    // After add, file has pending task
+    const beforeAssign = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(beforeAssign.tasks[0].status).toBe('pending');
+
+    pq.assign('t1', 'w1');
+    // File should still show pending (assign didn't save)
+    const afterAssign = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(afterAssign.tasks[0].status).toBe('pending');
+
+    pq.start('t1');
+    // File should still show pending (start didn't save)
+    const afterStart = JSON.parse(readFileSync(filePath, 'utf-8'));
+    expect(afterStart.tasks[0].status).toBe('pending');
+  });
+
+  describe('load', () => {
+    it('should load tasks from disk', () => {
+      // Create and populate
+      const pq1 = createPersistentQueue({ filePath });
+      pq1.add({ id: 't1', task: 'Task 1' });
+      pq1.add({ id: 't2', task: 'Task 2', deps: ['t1'] });
+      pq1.assign('t1', 'w1');
+      pq1.complete('t1', 'result1');
+
+      // Create fresh queue and load
+      const pq2 = createPersistentQueue({ filePath });
+      const result = pq2.load();
+
+      expect(result.loaded).toBe(true);
+      expect(result.tasks).toBe(2);
+      expect(result.reset).toBe(0); // no in-flight tasks (t1 was completed)
+      expect(pq2.get('t1').status).toBe('complete');
+      expect(pq2.get('t2').status).toBe('pending');
+    });
+
+    it('should reset in-flight tasks to pending on load', () => {
+      // Write a file with assigned/running tasks directly
+      const data = {
+        version: 1,
+        tasks: [
+          { id: 't1', task: 'Assigned', status: 'assigned', deps: [], assignedTo: 'w1', assignedAt: '2024-01-01', startedAt: null, completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+          { id: 't2', task: 'Running', status: 'running', deps: [], assignedTo: 'w2', assignedAt: '2024-01-01', startedAt: '2024-01-01', completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+          { id: 't3', task: 'Pending', status: 'pending', deps: [], assignedTo: null, assignedAt: null, startedAt: null, completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+          { id: 't4', task: 'Complete', status: 'complete', deps: [], assignedTo: 'w1', assignedAt: '2024-01-01', startedAt: '2024-01-01', completedAt: '2024-01-01', result: 'ok', error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+        ],
+        savedAt: '2024-01-01',
+      };
+      writeFileSync(filePath, JSON.stringify(data));
+
+      const pq = createPersistentQueue({ filePath });
+      const result = pq.load();
+
+      expect(result.loaded).toBe(true);
+      expect(result.tasks).toBe(4);
+      expect(result.reset).toBe(2); // t1 (assigned) + t2 (running)
+
+      expect(pq.get('t1').status).toBe('pending');
+      expect(pq.get('t1').assignedTo).toBeNull();
+      expect(pq.get('t2').status).toBe('pending');
+      expect(pq.get('t2').assignedTo).toBeNull();
+      expect(pq.get('t2').startedAt).toBeNull();
+      expect(pq.get('t3').status).toBe('pending');
+      expect(pq.get('t4').status).toBe('complete');
+    });
+
+    it('should return loaded=false when no file exists', () => {
+      const pq = createPersistentQueue({ filePath });
+      const result = pq.load();
+
+      expect(result.loaded).toBe(false);
+      expect(result.tasks).toBe(0);
+      expect(pq.size()).toBe(0);
+    });
+
+    it('should recover from .tmp file when primary is missing', () => {
+      // Write directly to .tmp (simulating crash between write and rename)
+      const data = {
+        version: 1,
+        tasks: [
+          { id: 't1', task: 'Recovered', status: 'pending', deps: [], assignedTo: null, assignedAt: null, startedAt: null, completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+        ],
+        savedAt: '2024-01-01',
+      };
+      writeFileSync(filePath + '.tmp', JSON.stringify(data));
+
+      const pq = createPersistentQueue({ filePath });
+      const result = pq.load();
+
+      expect(result.loaded).toBe(true);
+      expect(result.recovered).toBe(true);
+      expect(result.tasks).toBe(1);
+      expect(pq.get('t1').task).toBe('Recovered');
+
+      // .tmp should have been promoted to primary
+      expect(existsSync(filePath)).toBe(true);
+    });
+
+    it('should handle corrupt primary file with .tmp fallback', () => {
+      writeFileSync(filePath, 'NOT VALID JSON{{{');
+      const data = {
+        version: 1,
+        tasks: [
+          { id: 't1', task: 'FromTmp', status: 'pending', deps: [], assignedTo: null, assignedAt: null, startedAt: null, completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+        ],
+        savedAt: '2024-01-01',
+      };
+      writeFileSync(filePath + '.tmp', JSON.stringify(data));
+
+      const pq = createPersistentQueue({ filePath });
+      const result = pq.load();
+
+      expect(result.loaded).toBe(true);
+      expect(result.recovered).toBe(true);
+      expect(pq.get('t1').task).toBe('FromTmp');
+    });
+
+    it('should return loaded=false when both primary and .tmp are corrupt', () => {
+      writeFileSync(filePath, 'CORRUPT');
+      writeFileSync(filePath + '.tmp', 'ALSO CORRUPT');
+
+      const pq = createPersistentQueue({ filePath });
+      const result = pq.load();
+
+      expect(result.loaded).toBe(false);
+      expect(result.tasks).toBe(0);
+    });
+  });
+
+  describe('round-trip persistence', () => {
+    it('should survive full round-trip with deps, priorities, and metadata', () => {
+      const pq1 = createPersistentQueue({ filePath });
+      pq1.add({ id: 'a', task: 'Alpha', priority: 10, category: 'code', metadata: { key: 'val' } });
+      pq1.add({ id: 'b', task: 'Beta', deps: ['a'], priority: 5 });
+      pq1.add({ id: 'c', task: 'Gamma', deps: ['a', 'b'], metadata: { nested: { x: 1 } } });
+      pq1.assign('a', 'w1');
+      pq1.complete('a', { output: 'done' });
+
+      // Load in fresh queue
+      const pq2 = createPersistentQueue({ filePath });
+      pq2.load();
+
+      expect(pq2.size()).toBe(3);
+      expect(pq2.get('a').status).toBe('complete');
+      expect(pq2.get('a').result).toEqual({ output: 'done' });
+      expect(pq2.get('a').priority).toBe(10);
+      expect(pq2.get('a').category).toBe('code');
+      expect(pq2.get('a').metadata).toEqual({ key: 'val' });
+      expect(pq2.get('b').status).toBe('pending');
+      expect(pq2.get('b').deps).toEqual(['a']);
+      expect(pq2.get('c').deps).toEqual(['a', 'b']);
+      expect(pq2.get('c').metadata).toEqual({ nested: { x: 1 } });
+
+      // b should now be ready (a is complete)
+      const ready = pq2.getReady();
+      expect(ready).toHaveLength(1);
+      expect(ready[0].id).toBe('b');
+    });
+
+    it('should handle multiple save/load cycles', () => {
+      const pq = createPersistentQueue({ filePath });
+      pq.add({ id: 't1', task: 'One' });
+
+      // Reload
+      const pq2 = createPersistentQueue({ filePath });
+      pq2.load();
+      pq2.add({ id: 't2', task: 'Two' });
+
+      // Reload again
+      const pq3 = createPersistentQueue({ filePath });
+      pq3.load();
+      expect(pq3.size()).toBe(2);
+      expect(pq3.get('t1')).toBeTruthy();
+      expect(pq3.get('t2')).toBeTruthy();
+    });
+  });
+
+  describe('read-through methods', () => {
+    it('should pass through getReady, getProgress, validate', () => {
+      const pq = createPersistentQueue({ filePath });
+      pq.add({ id: 't1', task: 'A' });
+      pq.add({ id: 't2', task: 'B', deps: ['t1'] });
+
+      const ready = pq.getReady();
+      expect(ready).toHaveLength(1);
+      expect(ready[0].id).toBe('t1');
+
+      const progress = pq.getProgress();
+      expect(progress.total).toBe(2);
+      expect(progress.pending).toBe(2);
+
+      const validation = pq.validate();
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should pass through getDependencyGraph and topologicalSort', () => {
+      const pq = createPersistentQueue({ filePath });
+      pq.add({ id: 'a', task: 'A' });
+      pq.add({ id: 'b', task: 'B', deps: ['a'] });
+
+      const graph = pq.getDependencyGraph();
+      expect(graph.nodes).toEqual(['a', 'b']);
+      expect(graph.edges).toEqual([{ from: 'a', to: 'b' }]);
+
+      const order = pq.topologicalSort();
+      expect(order).toEqual(['a', 'b']);
+    });
+  });
+});
+
+// ============================================================
+// 11. Coordinator with Persistent Queue
+// ============================================================
+
+describe('Coordinator with PersistentQueue', () => {
+  let events, pool, testDir, filePath;
+
+  beforeEach(() => {
+    events = new EventBus();
+    pool = mockPool([{ id: 'w1' }, { id: 'w2' }]);
+    testDir = join(tmpdir(), `coord-persist-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(testDir, { recursive: true });
+    filePath = join(testDir, 'coord-queue.json');
+  });
+
+  afterEach(() => {
+    try { rmSync(testDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+  });
+
+  it('should create persistent queue when persistPath is set', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+
+    expect(coord.taskQueue.isPersistent).toBe(true);
+    expect(coord.taskQueue.filePath).toBe(filePath);
+    coord.stop();
+  });
+
+  it('should create regular queue when persistPath is not set', () => {
+    const coord = createCoordinator({ events, pool });
+    expect(coord.taskQueue.isPersistent).toBeUndefined();
+    coord.stop();
+  });
+
+  it('should load persisted tasks on start', () => {
+    // Pre-populate the file
+    const data = {
+      version: 1,
+      tasks: [
+        { id: 't1', task: 'Persisted', status: 'pending', deps: [], assignedTo: null, assignedAt: null, startedAt: null, completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+        { id: 't2', task: 'Also persisted', status: 'complete', deps: [], assignedTo: 'w1', assignedAt: '2024-01-01', startedAt: '2024-01-01', completedAt: '2024-01-01', result: 'ok', error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+      ],
+      savedAt: '2024-01-01',
+    };
+    writeFileSync(filePath, JSON.stringify(data));
+
+    const coord = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+
+    const loaded = [];
+    events.on('coord:queue-loaded', (data) => loaded.push(data));
+
+    coord.start();
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].loaded).toBe(true);
+    expect(loaded[0].tasks).toBe(2);
+    expect(coord.taskQueue.size()).toBe(2);
+    // t1 was pending but got auto-assigned by workAssigner.assignAll() on start()
+    expect(coord.taskQueue.get('t1').status).toBe('assigned');
+    expect(coord.taskQueue.get('t2').status).toBe('complete');
+    coord.stop();
+  });
+
+  it('should reset in-flight tasks on start', () => {
+    const data = {
+      version: 1,
+      tasks: [
+        { id: 't1', task: 'Was running', status: 'running', deps: [], assignedTo: 'w1', assignedAt: '2024-01-01', startedAt: '2024-01-01', completedAt: null, result: null, error: null, createdAt: '2024-01-01', priority: 0, category: null, metadata: {} },
+      ],
+      savedAt: '2024-01-01',
+    };
+    writeFileSync(filePath, JSON.stringify(data));
+
+    const coord = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+
+    const loaded = [];
+    events.on('coord:queue-loaded', (data) => loaded.push(data));
+
+    coord.start();
+
+    expect(loaded[0].reset).toBe(1);
+    expect(coord.taskQueue.get('t1').status).toBe('assigned'); // pending → assigned by work assigner on start
+    coord.stop();
+  });
+
+  it('should emit no queue-loaded event when no file exists', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+
+    const loaded = [];
+    events.on('coord:queue-loaded', (data) => loaded.push(data));
+
+    coord.start();
+
+    expect(loaded).toHaveLength(0); // no file = no load event
+    coord.stop();
+  });
+
+  it('should persist tasks through coordinator lifecycle', () => {
+    // Create coordinator, add tasks, stop
+    const coord1 = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+    coord1.start();
+    coord1.addTask({ id: 'task-1', task: 'First task' });
+    coord1.addTask({ id: 'task-2', task: 'Second task' });
+    coord1.stop();
+
+    // File should exist with tasks
+    expect(existsSync(filePath)).toBe(true);
+
+    // Create new coordinator, should load persisted tasks
+    const events2 = new EventBus();
+    const pool2 = mockPool([{ id: 'w1' }, { id: 'w2' }]);
+    const coord2 = createCoordinator({
+      events: events2, pool: pool2,
+      options: { persistPath: filePath },
+    });
+    coord2.start();
+
+    expect(coord2.taskQueue.size()).toBe(2);
+    expect(coord2.taskQueue.get('task-1')).toBeTruthy();
+    expect(coord2.taskQueue.get('task-2')).toBeTruthy();
+    coord2.stop();
+  });
+
+  it('should persist completed state after task completion', () => {
+    const coord = createCoordinator({
+      events, pool,
+      options: { persistPath: filePath },
+    });
+    coord.start();
+    coord.addTask({ id: 'done', task: 'Will complete' });
+
+    // Simulate worker completing the task
+    events.emit('coord:complete', { workerId: 'w1', taskId: 'done', result: 'success' });
+
+    coord.stop();
+
+    // Verify on disk
+    const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const task = data.tasks.find(t => t.id === 'done');
+    expect(task.status).toBe('complete');
+    expect(task.result).toBe('success');
   });
 });
