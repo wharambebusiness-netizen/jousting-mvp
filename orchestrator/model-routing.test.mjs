@@ -65,15 +65,33 @@ describe('ROLE_MODEL_MAP', () => {
   it('has entries for coordination roles', () => {
     expect(ROLE_MODEL_MAP['producer']).toBe('haiku');
     expect(ROLE_MODEL_MAP['tech-lead']).toBe('haiku');
+    expect(ROLE_MODEL_MAP['docs-writer']).toBe('haiku');
+    expect(ROLE_MODEL_MAP['dependency-manager']).toBe('haiku');
   });
 
   it('has entries for code roles', () => {
     expect(ROLE_MODEL_MAP['ui-dev']).toBe('sonnet');
     expect(ROLE_MODEL_MAP['full-stack-dev']).toBe('sonnet');
+    expect(ROLE_MODEL_MAP['backend-dev']).toBe('sonnet');
+    expect(ROLE_MODEL_MAP['database-dev']).toBe('sonnet');
+    expect(ROLE_MODEL_MAP['integration-tester']).toBe('sonnet');
   });
 
   it('has entries for critical roles', () => {
     expect(ROLE_MODEL_MAP['debugger']).toBe('opus');
+    expect(ROLE_MODEL_MAP['refactorer']).toBe('opus');
     expect(ROLE_MODEL_MAP['security-auditor']).toBe('opus');
+  });
+
+  it('has entries for all 20 roles', () => {
+    const expectedRoles = [
+      'producer', 'tech-lead', 'self-reviewer', 'architect', 'docs-writer', 'dependency-manager',
+      'ui-dev', 'css-artist', 'engine-dev', 'qa-engineer', 'test-generator',
+      'full-stack-dev', 'backend-dev', 'database-dev', 'integration-tester', 'test-writer',
+      'debugger', 'refactorer', 'security-auditor', 'performance-analyst',
+    ];
+    for (const role of expectedRoles) {
+      expect(ROLE_MODEL_MAP[role]).toBeDefined();
+    }
   });
 });

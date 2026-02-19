@@ -1,0 +1,146 @@
+{
+  "name": "API Service Development",
+  "description": "Backend-focused team for API/service development: routes, database, security, integration tests, and documentation. No frontend agents.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 36000000,
+    "maxConcurrency": 4
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs and current backlog.json. Generate 3-5 new tasks for other agents. Prioritize: security fixes > test failures > API bugs > schema changes > features. Write status summary."
+      }
+    },
+    {
+      "id": "tech-lead",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["CLAUDE.md", "orchestrator/analysis/review-*.md"],
+      "tasks": {
+        "primary": "Review API design, code quality, and security patterns. Check for consistent error handling, proper validation, and RESTful conventions. Write review report."
+      }
+    },
+    {
+      "id": "backend",
+      "name": "Backend Developer",
+      "type": "continuous",
+      "role": "backend-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/server/**", "src/api/**", "src/services/**", "routes/**", "middleware/**"],
+      "tasks": {
+        "primary": "Implement API endpoints, middleware, and service logic. Follow RESTful conventions. Validate all inputs. Run tests before handoff."
+      }
+    },
+    {
+      "id": "database",
+      "name": "Database Developer",
+      "type": "continuous",
+      "role": "database-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["migrations/**", "prisma/**", "db/**", "src/models/**", "seeds/**"],
+      "tasks": {
+        "primary": "Design schemas, write migrations, optimize queries, manage indexes. Every migration has a rollback. Seed data for dev and CI. Run tests before handoff."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "src/**/*.test.mjs"],
+      "tasks": {
+        "primary": "Write unit tests for services, models, and middleware. Focus on edge cases, error paths, and boundary conditions. Fix broken assertions. Run full suite."
+      }
+    },
+    {
+      "id": "integration-tester",
+      "name": "Integration Tester",
+      "type": "continuous",
+      "role": "integration-tester",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["tests/integration/**", "tests/e2e/**", "*.spec.ts"],
+      "tasks": {
+        "primary": "Write API endpoint tests with supertest. Test full request/response cycles, authentication, authorization, error responses, and concurrent access patterns."
+      }
+    },
+    {
+      "id": "security",
+      "name": "Security Auditor",
+      "type": "continuous",
+      "role": "security-auditor",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/security-*.md"],
+      "tasks": {
+        "primary": "Scan API code for injection, auth bypass, path traversal, SSRF, and other OWASP vulnerabilities. Focus on changed files first. Write findings with severity and remediation steps."
+      }
+    },
+    {
+      "id": "docs-writer",
+      "name": "Documentation Writer",
+      "type": "continuous",
+      "role": "docs-writer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["docs/**", "README.md", "CHANGELOG.md"],
+      "tasks": {
+        "primary": "Document API endpoints (method, path, params, response, errors). Keep README and setup docs accurate. Write OpenAPI/Swagger specs if applicable."
+      }
+    }
+  ]
+}

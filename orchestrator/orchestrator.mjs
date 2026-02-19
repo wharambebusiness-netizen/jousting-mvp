@@ -901,9 +901,12 @@ async function main() {
 
   // v5/v6: Classify agent roles for two-phase rounds
   const CODE_AGENT_ROLES = new Set([
-    'balance-analyst', 'qa-engineer', 'test-writer', 'engine-dev', 'ui-dev', 'css-artist'
+    'balance-analyst', 'qa-engineer', 'test-writer', 'engine-dev', 'ui-dev', 'css-artist',
+    'backend-dev', 'full-stack-dev', 'database-dev', 'debugger', 'refactorer', 'integration-tester'
   ]);
-  const COORD_AGENT_ROLES = new Set(['producer', 'tech-lead', 'game-designer']);
+  const COORD_AGENT_ROLES = new Set([
+    'producer', 'tech-lead', 'game-designer', 'docs-writer', 'dependency-manager'
+  ]);
 
   // Round-level tracking for the overnight report
   const roundLog = []; // { round, agents: [{id, status, elapsed}], testsPassed, testCount, failCount }

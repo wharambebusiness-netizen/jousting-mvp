@@ -23,7 +23,7 @@ export const SPAWN_CONSTRAINTS = {
   maxBudgetPerSpawn: 2.0,
   defaultModel: 'haiku',
   defaultTimeoutMs: 10 * 60 * 1000, // 10 min
-  blockedRoles: new Set(['producer', 'tech-lead', 'game-designer']),
+  blockedRoles: new Set(['producer', 'tech-lead', 'game-designer', 'docs-writer', 'dependency-manager']),
 };
 
 /**

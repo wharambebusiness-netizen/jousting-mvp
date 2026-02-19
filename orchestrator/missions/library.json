@@ -1,0 +1,131 @@
+{
+  "name": "Library / Package Development",
+  "description": "Team for building reusable libraries and npm packages: core development, test coverage, documentation, performance analysis, and coordination.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 36000000,
+    "maxConcurrency": 3
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs and current backlog.json. Generate 3-5 new tasks. Prioritize: API breaking changes > test failures > bugs > features > docs > polish. Write status summary."
+      }
+    },
+    {
+      "id": "tech-lead",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["CLAUDE.md", "orchestrator/analysis/review-*.md"],
+      "tasks": {
+        "primary": "Review public API surface, type exports, backward compatibility. Ensure consistent naming, proper generics, and clean type inference. Write review report."
+      }
+    },
+    {
+      "id": "engine-dev",
+      "name": "Library Developer",
+      "type": "continuous",
+      "role": "engine-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.ts", "src/**/*.mjs"],
+      "tasks": {
+        "primary": "Implement library features. Maintain clean public API. All exports typed. No side effects in module scope. Run tests before handoff."
+      }
+    },
+    {
+      "id": "test-gen",
+      "name": "Test Generator",
+      "type": "continuous",
+      "role": "test-generator",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "tests/**"],
+      "tasks": {
+        "primary": "Systematically expand test coverage. Each round: analyze a source file for untested code paths. Write 5-10 focused tests covering boundary conditions, type coercion, and error paths."
+      }
+    },
+    {
+      "id": "docs-writer",
+      "name": "Documentation Writer",
+      "type": "continuous",
+      "role": "docs-writer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["docs/**", "README.md", "CHANGELOG.md", "CONTRIBUTING.md"],
+      "tasks": {
+        "primary": "Write API documentation with usage examples. Keep README current with installation, quick start, and API reference. Document breaking changes in CHANGELOG.md."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts"],
+      "tasks": {
+        "primary": "Hunt bugs and write regression tests. Focus on public API contract tests, property-based tests for invariants, and edge cases at type boundaries."
+      }
+    },
+    {
+      "id": "perf",
+      "name": "Performance Analyst",
+      "type": "continuous",
+      "role": "performance-analyst",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/performance-*.md"],
+      "tasks": {
+        "primary": "Profile library performance. Identify hot paths, memory allocation patterns, and opportunities for optimization. Write analysis with before/after benchmarks."
+      }
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "name": "Web Application Development",
+  "description": "Full web application team: frontend, backend, integration tests, documentation, and coordination. Suitable for any web app project with both client and server components.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 36000000,
+    "maxConcurrency": 4
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs and current backlog.json. Generate 3-5 new tasks for other agents. Prioritize: test failures > security fixes > bugs > features > polish. Write status summary to orchestrator/analysis/producer-status.md."
+      }
+    },
+    {
+      "id": "tech-lead",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["CLAUDE.md", "orchestrator/analysis/review-*.md"],
+      "tasks": {
+        "primary": "Review changes made by other agents. Read their handoffs and modified files. Check for type safety issues, pattern violations, missing error handling. Write review report to orchestrator/analysis/review-round-N.md."
+      }
+    },
+    {
+      "id": "self-reviewer",
+      "name": "Self-Reviewer",
+      "type": "continuous",
+      "role": "self-reviewer",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 0,
+      "minFrequencyRounds": 5,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/self-review-round-*.md"],
+      "tasks": {
+        "primary": "Analyze orchestrator health. Read round-decisions.json, session-changelog.md, backlog.json, and recent agent handoffs. Identify stuck agents, blocked tasks, role imbalance, rising failure rates. Write findings to orchestrator/analysis/self-review-round-{N}.md."
+      }
+    },
+    {
+      "id": "full-stack",
+      "name": "Full-Stack Developer",
+      "type": "continuous",
+      "role": "full-stack-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.mjs"],
+      "tasks": {
+        "primary": "Implement cross-cutting features end-to-end: API endpoint → service logic → UI component. Pick one feature from the backlog per round. Run tests before handoff."
+      }
+    },
+    {
+      "id": "backend",
+      "name": "Backend Developer",
+      "type": "continuous",
+      "role": "backend-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/server/**", "src/api/**", "src/services/**", "src/models/**", "routes/**"],
+      "tasks": {
+        "primary": "Implement server-side features: routes, middleware, services, data models. Follow backlog tasks. Validate inputs at API boundaries. Run tests before handoff."
+      }
+    },
+    {
+      "id": "ui-dev",
+      "name": "UI Developer",
+      "type": "continuous",
+      "role": "ui-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/ui/**", "src/components/**", "src/App.tsx", "src/App.css"],
+      "tasks": {
+        "primary": "Implement UI components and frontend logic. Pick one UI task from the backlog per round. Ensure responsive design. Run tests before handoff."
+      }
+    },
+    {
+      "id": "css-artist",
+      "name": "CSS Artist",
+      "type": "continuous",
+      "role": "css-artist",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["src/*.css", "src/**/*.css"],
+      "tasks": {
+        "primary": "Polish visual design: responsive layout, color consistency, spacing, typography, animations. One element per round. Coordinate with ui-dev on class names."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "tasks": {
+        "primary": "Write unit tests for changed areas. Focus on boundary conditions, edge cases, regression coverage. Fix broken test assertions caused by other agents' changes. Run full suite to verify no regressions."
+      }
+    },
+    {
+      "id": "integration-tester",
+      "name": "Integration Tester",
+      "type": "continuous",
+      "role": "integration-tester",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["tests/integration/**", "tests/e2e/**", "*.spec.ts"],
+      "tasks": {
+        "primary": "Write integration and E2E tests for cross-module workflows. Test API endpoints, authentication flows, and user journeys. Each test is independent with proper setup/teardown."
+      }
+    },
+    {
+      "id": "docs-writer",
+      "name": "Documentation Writer",
+      "type": "continuous",
+      "role": "docs-writer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["docs/**", "README.md", "CHANGELOG.md", "CONTRIBUTING.md"],
+      "tasks": {
+        "primary": "Keep documentation accurate and up-to-date. Read recent changes from session-changelog.md and update relevant docs. Focus on API docs, setup guides, and architecture docs."
+      }
+    }
+  ]
+}

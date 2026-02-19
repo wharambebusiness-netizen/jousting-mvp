@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1678 tests, 27 suites (all passing)
+npm test                                           # 1746 tests, 28 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -69,7 +69,7 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   agent-pool.mjs      Queue-drain concurrent agent pool
   checkpoint.mjs      Checkpoint/resume for crash recovery (M8)
   mock-runner.mjs     Dry-run mock agent/test/git execution
-  roles/              16 role templates
+  roles/              23 role templates (15 original + 8 Phase 4 general-purpose)
   missions/           Mission configs
 
 operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
@@ -108,7 +108,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
     style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports, terminal)
     app.js            Shared client JS: toast, progress, branch auto-gen, project filter, WS updates
     terminals.js      Terminal page JS: xterm.js instances, tab/grid views, WS event routing (Phase 2)
-  __tests__/          379 tests (registry, errors, server, views, file-watcher, process-pool)
+  __tests__/          410 tests (registry, errors, server, views, file-watcher, process-pool)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -146,7 +146,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1678 tests across 26 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37). Operator: registry (21), errors (43), server (116), views (162), file-watcher (16), process-pool (43). Run `npm test` to verify.
+1746 tests across 28 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (162), file-watcher (16), process-pool (43). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

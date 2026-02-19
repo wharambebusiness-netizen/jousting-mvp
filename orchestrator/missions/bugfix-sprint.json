@@ -1,0 +1,114 @@
+{
+  "name": "Bugfix Sprint",
+  "description": "Fast bug triage and fix team: two debuggers for parallel investigation, QA for regression tests, integration tester for cross-module verification, and coordination.",
+  "config": {
+    "maxRounds": 30,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 21600000,
+    "maxConcurrency": 3
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs and bug reports. Triage and prioritize bugs by severity. Assign bugs to debugger-1 or debugger-2 based on their current workload. Generate fix-verification tasks for QA."
+      }
+    },
+    {
+      "id": "self-reviewer",
+      "name": "Self-Reviewer",
+      "type": "continuous",
+      "role": "self-reviewer",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 0,
+      "minFrequencyRounds": 5,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/self-review-round-*.md"],
+      "tasks": {
+        "primary": "Monitor fix velocity and regression rate. Flag if debuggers are stuck on the same bug for 2+ rounds. Identify patterns in bugs (same module, same root cause type)."
+      }
+    },
+    {
+      "id": "debugger-1",
+      "name": "Debugger Alpha",
+      "type": "continuous",
+      "role": "debugger",
+      "model": "opus",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 8,
+      "fileOwnership": ["src/**"],
+      "tasks": {
+        "primary": "Pick highest-priority bug from backlog. Reproduce, isolate root cause, write minimal fix. Document root cause and fix in handoff. Remove all debug logging before handoff."
+      }
+    },
+    {
+      "id": "debugger-2",
+      "name": "Debugger Beta",
+      "type": "continuous",
+      "role": "debugger",
+      "model": "opus",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 8,
+      "fileOwnership": ["src/**"],
+      "tasks": {
+        "primary": "Pick second-priority bug from backlog (debugger-1 takes first). Reproduce, isolate root cause, write minimal fix. Document root cause and fix in handoff."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "src/**/*.test.mjs"],
+      "tasks": {
+        "primary": "Write regression tests for every bug fix. Verify the fix actually resolves the reported issue. Write tests that would have caught the bug before it shipped."
+      }
+    },
+    {
+      "id": "integration-tester",
+      "name": "Integration Tester",
+      "type": "continuous",
+      "role": "integration-tester",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["tests/integration/**", "tests/e2e/**"],
+      "tasks": {
+        "primary": "Verify bug fixes don't break cross-module workflows. Write integration tests for complex bugs that span multiple modules. Test the full user flow around each fix."
+      }
+    }
+  ]
+}

@@ -176,7 +176,7 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] Tests: handoff generation, multi-step workflow, context passing
 - [ ] **Deliverable:** One-click handoff per terminal, seamless context continuation
 
-### Phase 4: General-Purpose Agent Roster (S108-S109) — ~2 sessions
+### Phase 4: General-Purpose Agent Roster (S108-S110) — DONE
 **Goal:** Expand from 15 game-specific roles to a universal agent roster that can tackle any development project
 
 The current roles are heavily coupled to the Jousting game (engine-dev, balance-analyst, game-designer, etc.). For a general-purpose orchestrator, we need roles that work across any codebase — web apps, APIs, CLIs, libraries, data pipelines, etc.
@@ -375,10 +375,9 @@ This plan was developed in **S102** (research session). Implementation begins in
 | S103 | Phase 0: Foundation cleanup | ~60k tokens | DONE |
 | S104 | Phase 1: Process pool + multi-instance backend | ~60k tokens | DONE |
 | S106 | Phase 2: Multi-terminal UI | ~60k tokens | DONE |
-| S107 | Phase 3: Handoff workflow | ~60k tokens | |
-| S108 | Phase 4a: Agent roster — core builder roles (8 new roles) | ~60k tokens | |
-| S109 | Phase 4b: Agent roster — mission templates + composition | ~60k tokens | |
-| S110 | Phase 5a: Skill registry + manifests | ~60k tokens | |
+| S107-S109 | Phase 3: Handoff workflow + model routing + CLI parsing | ~180k tokens | DONE |
+| S110 | Phase 4: Agent roster (8 roles + 6 missions + 67 tests) | ~60k tokens | DONE |
+| S111 | Phase 5a: Skill registry + manifests | ~60k tokens | |
 | S111 | Phase 5b: Skill selection + agent profiles | ~60k tokens | |
 | S112 | Phase 6: Inter-orchestrator coordination | ~60k tokens | |
 | S113 | Phase 7a: UX polish | ~60k tokens | |

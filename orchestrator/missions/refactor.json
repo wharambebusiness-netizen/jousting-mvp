@@ -1,0 +1,113 @@
+{
+  "name": "Code Refactoring",
+  "description": "Code modernization team: refactorer drives pattern changes, QA and test-generator maintain test coverage, architect provides guidance, and coordination keeps things on track.",
+  "config": {
+    "maxRounds": 40,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 28800000,
+    "maxConcurrency": 3
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Track refactoring progress. Break large refactors into incremental phases. Ensure tests pass between phases. Generate tasks for test updates needed after pattern changes."
+      }
+    },
+    {
+      "id": "tech-lead",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["CLAUDE.md", "orchestrator/analysis/review-*.md"],
+      "tasks": {
+        "primary": "Review refactoring changes for correctness. Verify public API contracts are preserved. Check that backward compatibility is maintained during transition. Validate naming consistency."
+      }
+    },
+    {
+      "id": "architect",
+      "name": "Architect",
+      "type": "continuous",
+      "role": "architect",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/architecture-*.md"],
+      "tasks": {
+        "primary": "Define target architecture for the refactoring effort. Identify dependency cycles, coupling hotspots, and abstraction opportunities. Guide the refactorer on migration ordering and risk areas."
+      }
+    },
+    {
+      "id": "refactorer",
+      "name": "Refactorer",
+      "type": "continuous",
+      "role": "refactorer",
+      "model": "opus",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 8,
+      "fileOwnership": ["src/**"],
+      "tasks": {
+        "primary": "Execute one refactoring phase per round. Modify patterns, update all callers, run tests. Preserve backward compatibility during transition. Document what changed and what's left in handoff."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "src/**/*.test.mjs"],
+      "tasks": {
+        "primary": "Update tests broken by refactoring changes. Write new tests for refactored code. Ensure test coverage doesn't decrease. Verify behavioral equivalence of refactored code."
+      }
+    },
+    {
+      "id": "test-gen",
+      "name": "Test Generator",
+      "type": "continuous",
+      "role": "test-generator",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "tests/**"],
+      "tasks": {
+        "primary": "Write characterization tests before refactoring starts (capture current behavior). After refactoring, verify tests still pass unchanged. Fill coverage gaps in refactored modules."
+      }
+    }
+  ]
+}

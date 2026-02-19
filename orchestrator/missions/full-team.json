@@ -1,0 +1,227 @@
+{
+  "name": "Full Development Team",
+  "description": "Kitchen-sink team for large projects: all major roles including full-stack, backend, database, UI, security, debugging, documentation, and coordination. Use maxConcurrency to control parallelism.",
+  "config": {
+    "maxRounds": 50,
+    "agentTimeoutMs": 1200000,
+    "maxRuntimeMs": 43200000,
+    "maxConcurrency": 4
+  },
+  "qualityGates": [
+    { "preset": "typescript" },
+    { "preset": "vitest" }
+  ],
+  "agents": [
+    {
+      "id": "producer",
+      "name": "Producer",
+      "type": "continuous",
+      "role": "producer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/backlog.json", "orchestrator/analysis/producer-status.md"],
+      "tasks": {
+        "primary": "Read all agent handoffs and current backlog.json. Generate 3-5 new tasks. Prioritize: security > test failures > bugs > features > docs > polish. Balance workload across all 13 agents."
+      }
+    },
+    {
+      "id": "tech-lead",
+      "name": "Tech Lead",
+      "type": "continuous",
+      "role": "tech-lead",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 2,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["CLAUDE.md", "orchestrator/analysis/review-*.md"],
+      "tasks": {
+        "primary": "Review all agents' changes. Check for type safety, pattern consistency, error handling, and architectural alignment. Write review report with findings for each agent."
+      }
+    },
+    {
+      "id": "architect",
+      "name": "Architect",
+      "type": "continuous",
+      "role": "architect",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/architecture-*.md"],
+      "tasks": {
+        "primary": "Review system architecture. Identify coupling violations, missing abstractions, and structural improvements. Write architecture notes and proposals for other agents to implement."
+      }
+    },
+    {
+      "id": "self-reviewer",
+      "name": "Self-Reviewer",
+      "type": "continuous",
+      "role": "self-reviewer",
+      "model": "haiku",
+      "maxModel": "sonnet",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 0,
+      "minFrequencyRounds": 5,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["orchestrator/analysis/self-review-round-*.md"],
+      "tasks": {
+        "primary": "Monitor orchestrator health with 13 agents. Flag stuck agents, imbalanced workloads, rising costs, and coordination gaps. Write findings with severity levels."
+      }
+    },
+    {
+      "id": "full-stack",
+      "name": "Full-Stack Developer",
+      "type": "continuous",
+      "role": "full-stack-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.mjs"],
+      "tasks": {
+        "primary": "Implement cross-cutting features end-to-end. Coordinate with backend and ui-dev on shared boundaries. Run tests before handoff."
+      }
+    },
+    {
+      "id": "backend",
+      "name": "Backend Developer",
+      "type": "continuous",
+      "role": "backend-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/server/**", "src/api/**", "src/services/**", "routes/**", "middleware/**"],
+      "tasks": {
+        "primary": "Implement server-side features: routes, middleware, services. Validate inputs at API boundaries. Run tests before handoff."
+      }
+    },
+    {
+      "id": "ui-dev",
+      "name": "UI Developer",
+      "type": "continuous",
+      "role": "ui-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/ui/**", "src/components/**", "src/App.tsx", "src/App.css"],
+      "tasks": {
+        "primary": "Implement UI components and frontend logic. Ensure responsive design and accessibility. Run tests before handoff."
+      }
+    },
+    {
+      "id": "database",
+      "name": "Database Developer",
+      "type": "continuous",
+      "role": "database-dev",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["migrations/**", "prisma/**", "db/**", "src/models/**", "seeds/**"],
+      "tasks": {
+        "primary": "Design schemas, write migrations, optimize queries. Every migration has a rollback. Seed data for dev and CI."
+      }
+    },
+    {
+      "id": "qa",
+      "name": "QA Engineer",
+      "type": "continuous",
+      "role": "qa-engineer",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "tasks": {
+        "primary": "Write unit tests for changed areas. Focus on boundary conditions, edge cases, and regression coverage. Fix broken assertions."
+      }
+    },
+    {
+      "id": "integration-tester",
+      "name": "Integration Tester",
+      "type": "continuous",
+      "role": "integration-tester",
+      "model": "sonnet",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 5,
+      "fileOwnership": ["tests/integration/**", "tests/e2e/**", "*.spec.ts"],
+      "tasks": {
+        "primary": "Write integration and E2E tests for cross-module workflows. Test API endpoints, user journeys, and concurrent access patterns."
+      }
+    },
+    {
+      "id": "debugger",
+      "name": "Debugger",
+      "type": "continuous",
+      "role": "debugger",
+      "model": "opus",
+      "maxModel": "opus",
+      "timeoutMs": 1200000,
+      "maxTasksPerRound": 2,
+      "minFrequencyRounds": 0,
+      "maxBudgetUsd": 8,
+      "fileOwnership": ["src/**"],
+      "tasks": {
+        "primary": "Fix bugs from the backlog. Reproduce, isolate root cause, write minimal fix. Document root cause in handoff. Remove debug logging before handoff."
+      }
+    },
+    {
+      "id": "security",
+      "name": "Security Auditor",
+      "type": "continuous",
+      "role": "security-auditor",
+      "model": "sonnet",
+      "maxModel": "sonnet",
+      "timeoutMs": 900000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 3,
+      "fileOwnership": ["orchestrator/analysis/security-*.md"],
+      "tasks": {
+        "primary": "Scan for OWASP vulnerabilities in changed files. Check for injection, auth bypass, path traversal, SSRF. Write findings with severity and remediation."
+      }
+    },
+    {
+      "id": "docs-writer",
+      "name": "Documentation Writer",
+      "type": "continuous",
+      "role": "docs-writer",
+      "model": "haiku",
+      "maxModel": "haiku",
+      "claudeMdPath": "CLAUDE-lite.md",
+      "timeoutMs": 600000,
+      "maxTasksPerRound": 1,
+      "minFrequencyRounds": 3,
+      "maxBudgetUsd": 2,
+      "fileOwnership": ["docs/**", "README.md", "CHANGELOG.md", "CONTRIBUTING.md"],
+      "tasks": {
+        "primary": "Keep all documentation accurate. Update API docs, architecture docs, and setup guides. Document breaking changes in CHANGELOG.md."
+      }
+    }
+  ]
+}
