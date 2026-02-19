@@ -103,14 +103,26 @@ export function createApp(options = {}) {
     runChainFn: options.runChainFn || null,
   }));
 
+  // Build allowed-roots callback from registry project directories
+  function getAllowedRoots() {
+    try {
+      const reg = loadRegistry();
+      const roots = new Set();
+      for (const chain of reg.chains || []) {
+        if (chain.projectDir) roots.add(resolve(chain.projectDir));
+      }
+      return roots;
+    } catch { return new Set(); }
+  }
+
   // Git routes
-  app.use('/api', createGitRoutes({ projectDir }));
+  app.use('/api', createGitRoutes({ projectDir, getAllowedRoots }));
 
   // Settings routes
   app.use('/api', createSettingsRoutes());
 
   // File system routes
-  app.use('/api', createFileRoutes());
+  app.use('/api', createFileRoutes({ getAllowedRoots }));
 
   const orchRouter = createOrchestratorRoutes({
     events,

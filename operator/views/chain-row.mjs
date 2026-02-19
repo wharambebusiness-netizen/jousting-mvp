@@ -30,7 +30,7 @@ export function renderChainRow(chain) {
 
   return `<tr>
     <td class="bulk-col"><input type="checkbox" class="chain-check" value="${chain.id}" onchange="updateBulkBar()"></td>
-    <td><span class="status-dot status-dot--${chain.status}"></span> ${statusLabel(chain.status)}</td>
+    <td><span class="status-dot status-dot--${chain.status}" aria-hidden="true"></span> ${statusLabel(chain.status)}</td>
     <td><a href="/chains/${chain.id}">${task}</a></td>
     <td>${escapeHtml(chain.config?.model || 'sonnet')}</td>
     <td>${chain.sessions ?? 0}</td>

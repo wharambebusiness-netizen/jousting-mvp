@@ -68,6 +68,30 @@
   --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-slow: 300ms;
+
+  /* Aliases (used by sections 39-40) */
+  --bg-card:       var(--bg-surface);
+  --bg-elevated:   var(--bg-overlay);
+  --border-hover:  var(--border-strong);
+  --font-mono:     'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --accent-primary: var(--accent);
+  --status-running:  var(--status-success);
+  --status-complete: var(--status-info);
+  --status-failed:   var(--status-error);
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* === 2. Pico CSS Overrides === */

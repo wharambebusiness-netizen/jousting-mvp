@@ -1,7 +1,7 @@
 // Server tests (M4)
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import WebSocket from 'ws';
 import { createApp } from '../server.mjs';
 import {
@@ -1371,6 +1371,10 @@ describe('Projects Page', () => {
   beforeAll(async () => {
     setupTestDir();
     seedRegistry();
+    // Register the test parent dir as a project so root validation passes
+    const reg = loadRegistry();
+    createChain(reg, { task: 'test files', config: { model: 'sonnet' }, projectDir: resolve(TEST_DIR, '..') });
+    saveRegistry(reg);
     await startServer();
   });
   afterAll(async () => {
@@ -1438,6 +1442,10 @@ describe('File Content API (P10)', () => {
     writeFileSync(join(contentDir, 'sample.js'), 'const x = 1;\n');
     writeFileSync(join(contentDir, 'binary.dat'), Buffer.from([0x00, 0xFF, 0x00]));
     mkdirSync(join(contentDir, 'sub'));
+    // Register contentDir as a project so root validation passes
+    const reg = loadRegistry();
+    createChain(reg, { task: 'test content', config: { model: 'sonnet' }, projectDir: resolve(contentDir) });
+    saveRegistry(reg);
     await startServer();
   });
   afterAll(async () => {

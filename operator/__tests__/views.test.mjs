@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { createApp } from '../server.mjs';
 import { initRegistry, loadRegistry, createChain, recordSession, updateChainStatus, saveRegistry, getChainLineage } from '../registry.mjs';
 
@@ -1578,6 +1578,10 @@ describe('File Content API — /api/files/content route', () => {
     writeFileSync(join(CONTENT_DIR, 'code.js'), 'const x = 42;\nconsole.log(x);\n');
     writeFileSync(join(CONTENT_DIR, 'binary.dat'), Buffer.from([0x00, 0xFF, 0x00, 0xFF]));
     mkdirSync(join(CONTENT_DIR, 'subdir'));
+    // Register CONTENT_DIR as a project so root validation passes
+    const reg = loadRegistry();
+    createChain(reg, { task: 'test content', config: { model: 'sonnet' }, projectDir: resolve(CONTENT_DIR) });
+    saveRegistry(reg);
   });
 
   afterEach(function() {

@@ -1,203 +1,55 @@
-# Next Session Instructions (S101)
+# S101 Handoff Summary
 
-## PIVOT: Operator Dashboard is Now the Primary Focus
+**Session 101** — Project Review + Tier 1 Critical Fixes
+**Tests:** 1604 passing across 25 suites (was 1588/24)
+**Artifacts:** `docs/s101-project-review.md` (full audit report)
 
-The game engine and React UI are feature-complete. All future sessions focus on developing the **operator web dashboard** — the HTMX-based interface for managing the multi-agent orchestrator and chain automation system.
+## What Was Done
 
-Read `CLAUDE.md` first (always), then this file.
+### 7-Audit Review
+Ran comprehensive parallel audits: code-review, security-scan, orchestrator-status, performance, accessibility, dependency, test-coverage. Consolidated 105 findings into `docs/s101-project-review.md` organized in 4 tiers.
 
-## PRIORITY: Project Review via Specialized Agents
+### 4 New Audit Skills Created
+- `.claude/skills/performance-audit/SKILL.md`
+- `.claude/skills/accessibility-audit/SKILL.md`
+- `.claude/skills/dependency-audit/SKILL.md`
+- `.claude/skills/test-coverage-audit/SKILL.md`
 
-**The user wants a comprehensive project review using specialized skill-based agents before continuing feature work.** Spin up the following agents in parallel:
+### Tier 1 Fixes (All 6 Complete)
 
-### Existing Skills to Run
+| Fix | Files Modified |
+|-----|---------------|
+| **T1-1** Restrict /api/files root param to registry project dirs | `routes/files.mjs` (getAllowedRoots callback), `routes/git.mjs` (same pattern), `server.mjs` (wired getAllowedRoots), `server.test.mjs` + `views.test.mjs` (register test dirs) |
+| **T1-2** Define 9 missing CSS custom properties | `style.css` (aliases in :root) |
+| **T1-3** Registry mtime-based cache with write-through | `registry.mjs` (_cache + _cacheMtimeMs + statSync) |
+| **T1-4** File watcher tests | New `__tests__/file-watcher.test.mjs` (16 tests) |
+| **T1-5** Keyboard-accessible file tree | `views/projects.mjs` (tabindex, role), `app.js` (keydown handler) |
+| **T1-6** Accessible status indicators | `chain-row.mjs`, `agent-card.mjs`, `session-card.mjs` (aria-hidden), `projects.mjs` (aria-label on buttons/search), all 6 HTML pages (ws-dot role=status), `style.css` (.sr-only class), `app.js` (aria-expanded on toggle) |
 
-1. **`/code-review`** — Review all S100 changes (P10 file explorer enhancements). Focus on the new file content API, git status integration, client-side search/collapse logic, and CSS additions.
+## What's Next — Tier 2 (from s101-project-review.md)
 
-2. **`/security-scan`** — Full security audit. The project now has file system read access (content preview), git command execution, and path-traversal guards — all high-value attack surfaces that need verification.
+Priority order for the next session:
 
-3. **`/orchestrator-status`** — Health check of the orchestrator system, agent sessions, and backlog state.
+1. **T2-11: Refactor gitExec() to use array args** — `operator.mjs:169-183` uses `spawn('cmd', ['/c', cmd], { shell: true })` which is a latent injection surface. Change to `execFile('git', [...args])`.
 
-### New Skills to Create
+2. **T2-1: WebSocket origin validation** — `ws.mjs:82-92` accepts connections from any origin. Add `Origin` header validation against localhost.
 
-The current skill set has gaps for a thorough project review. Create these new skills:
+3. **T2-2: Convert scanDirectory() to async** — `routes/files.mjs:53-107` uses 200+ sync I/O calls per project. Rewrite with `fs.promises`.
 
-4. **`performance-audit`** — Analyze the operator codebase for performance bottlenecks:
-   - Synchronous file reads (readdirSync, statSync, readFileSync) in request handlers that could block the event loop
-   - Large JSON registry loaded on every request (loadRegistry reads full file each time)
-   - Git subprocess spawning on every /views/projects load (getGitFileStatus runs `git status` per project)
-   - CSS file size (1766 lines in a single file) — consider if splitting is needed
-   - Client-side JS (664 lines) loaded on every page even when features aren't used
+4. **T2-3: Cache git status per project** — TTL cache (10s) in `getGitFileStatus()`, invalidated by file watcher events.
 
-5. **`accessibility-audit`** — Check all 6 HTML pages + HTMX fragments for accessibility:
-   - Semantic HTML, ARIA labels, keyboard navigation
-   - Color contrast ratios (dark theme with subtle borders/muted text)
-   - Screen reader compatibility with HTMX dynamic content swaps
-   - Focus management in the confirm dialog, file preview panel, and modals
-   - Form labels and error messaging
+5. **T2-4: Batch-delete + export tests** — Two endpoints with zero tests. ~10 tests in server.test.mjs.
 
-6. **`dependency-audit`** — Review package health:
-   - Check for outdated runtime/dev dependencies (express v5, ws v8, vitest v4, vite v7)
-   - Look for known vulnerabilities via `npm audit`
-   - Evaluate whether any deps can be removed or replaced
-   - Check that zero-frontend-dep constraint is maintained (Pico CSS + HTMX via CDN only)
+6. **T2-5: getGitFileStatus() tests** — Function imported but never invoked in tests. ~5 tests.
 
-7. **`test-coverage-audit`** — Analyze test gaps:
-   - Map which operator modules have tests vs untested code paths
-   - Check that file-watcher.mjs and ws.mjs have adequate coverage (currently no dedicated test files)
-   - Identify edge cases in the new P10 features that may not be tested
-   - Verify error paths and boundary conditions
+7. **T2-6: 413 file size limit test** — Security guard with zero tests. 1 test creating file > 100KB.
 
-### Skill Creation Guide
+8. **T2-7: Fix heading hierarchy** — `<p class="section__title">` → `<h2>`, add `<h1>` to chain.html.
 
-New skills go in `.claude/skills/<name>/SKILL.md`. Use this frontmatter format:
+9. **T2-8: Form labels and button labels** — `aria-label` on remaining search inputs and icon buttons.
 
-```yaml
----
-name: <skill-name>
-description: <one-line description>
-allowed-tools: Read, Glob, Grep, Bash
-model: sonnet
-context: fork
-agent: general-purpose
----
-```
+10. **T2-9: Fix color contrast** — Lighten `--text-muted` to #8a8a96, fix line-num opacity.
 
-Followed by detailed instructions for what the skill should do, input handling, and output format. See existing skills (`code-review`, `security-scan`) as templates.
+11. **T2-10: Add CSP headers** — Content-Security-Policy middleware in server.mjs.
 
-### Execution Plan
-
-1. Run `/code-review`, `/security-scan`, `/orchestrator-status` in parallel
-2. Create the 4 new skills (performance-audit, accessibility-audit, dependency-audit, test-coverage-audit)
-3. Run the new skills
-4. Consolidate all findings into a prioritized action plan
-
-## Context: S100
-
-S100 added **P10 File Explorer Enhancement** — four cohesive improvements to the P9 file explorer:
-
-### What Was Built
-
-1. **File content preview** (`files.mjs` + `app.js`) — Click any file in the tree to open a side panel with read-only content, line numbers, and syntax-appropriate display. New `GET /api/files/content?root=...&path=...` endpoint with:
-   - 100KB file size limit (413 for oversized files)
-   - Binary detection via null-byte scan + known text extension whitelist
-   - Path-traversal protection
-   - Returns `{path, size, content, lines}`
-   - Client-side line numbering with `<span class="line-num">` elements
-   - Fixed right-side panel (50vw, max 700px) with close button
-
-2. **Git status indicators** (`git.mjs` + `projects.mjs`) — File tree entries now show git status badges (M/A/D/R/?/U) with color-coded styling. Directories with modified files show a yellow dot. New `GET /api/git/file-status?root=...` endpoint + `getGitFileStatus()` exported helper.
-   - Badges: Modified (yellow), Added (green), Deleted (red), Renamed (indigo), Untracked (gray), Conflict (red bold)
-   - Directory change dot: yellow 6px circle next to dirs containing changes
-   - Project card stats show "N changed" count when git changes exist
-   - Git status fetched in parallel (non-blocking, fail-safe) during project panel render
-
-3. **File search** (`app.js` + `projects.mjs`) — Search input at top of each project card's file tree. Client-side filtering with 150ms debounce:
-   - Filters files by name match (case-insensitive)
-   - Auto-opens directories that contain matches
-   - Shows/hides directories based on whether they contain visible children
-   - Preserved across tree refresh and lazy-load events
-
-4. **Collapsible project cards** (`app.js` + `projects.mjs`) — Toggle button (▾/▸) on each project card to collapse/expand the card body (stats + search + tree). State persisted in localStorage (`proj-collapsed` key). Restored after HTMX swap via `htmx:afterSwap` listener.
-
-**35 new tests. 1588 total, 24 suites, all passing.**
-
-### Files Changed
-
-```
-EDIT: operator/routes/files.mjs         + readFileSync import, MAX_FILE_SIZE, TEXT_EXTS, isBinary(), GET /api/files/content endpoint
-EDIT: operator/routes/git.mjs           + getGitFileStatus() exported, GET /api/git/file-status endpoint
-EDIT: operator/routes/views.mjs         + getGitFileStatus import, async /views/projects route, gitStatusMap passed to renderers
-EDIT: operator/views/projects.mjs       + git badges, clickable files, search input, collapse toggle, preview panel, gitStatusMap support
-EDIT: operator/public/app.js            + previewFile(), closePreview(), filterTree(), toggleProjectCard(), collapsed state restore
-EDIT: operator/public/style.css         + Section 40: git badges, file preview panel, search input, collapse toggle, active file, responsive
-EDIT: operator/__tests__/views.test.mjs + 29 tests: isBinary, TEXT_EXTS, content API, git badges, clickable files, card enhancements, panel
-EDIT: operator/__tests__/server.test.mjs + 6 tests: content API (success, binary, 404, traversal, directory, missing params)
-EDIT: CLAUDE.md                         Updated test counts (1588), architecture notes (P10 additions)
-```
-
-## Milestone Status
-
-- **M1-M6**: Core operator system — DONE
-- **P1-P7**: Polish & enhancements — DONE (S90-S97)
-- **P8**: Analytics dashboard — DONE (S98)
-- **P9**: Projects file explorer — DONE (S99)
-- **P10**: File explorer enhancement — DONE (S100)
-
-## Recommended Next Steps — Operator Interface Improvements
-
-### Priority 1: UX Polish & Functional Gaps
-
-1. **Analytics enhancements** — Time range picker (7d/14d/30d/90d/all), drill-down from chart elements to filtered chain list, cost forecasting based on recent trends, token efficiency metrics (cost per output token).
-
-2. **File content syntax highlighting** — The preview panel shows plain text with line numbers. Could add lightweight syntax highlighting (e.g., highlight keywords, strings, comments) for common languages (JS/TS/JSON/CSS/HTML) without external dependencies.
-
-3. **File tree git status auto-refresh** — Currently git status is fetched once on page load. Could periodically refresh or trigger on file change events.
-
-4. **Server-side file search** — Current search is client-side (filters loaded entries). A server-side recursive search API (`GET /api/files/search?root=...&q=...`) would find files in collapsed/unloaded directories.
-
-### Priority 2: Performance & Reliability
-
-5. **Virtual scrolling for chain list** — The chain table loads all rows at once. For users with 100+ chains, implement windowed rendering or server-side pagination improvements.
-
-6. **Indexed persistence** — The JSON-file registry works but doesn't scale. Consider SQLite (via `better-sqlite3`) for indexed queries, especially for analytics aggregation across many chains.
-
-7. **File watcher robustness** — `fs.watch({recursive: true})` works on Windows/macOS but is unreliable on Linux. Add a fallback using polling or consider optional `chokidar` dependency for cross-platform support.
-
-### Priority 3: New Capabilities
-
-8. **Alerting system** — Email/Slack webhook notifications on chain failures, budget overruns, or orchestrator errors.
-
-9. **Multi-user support** — Session-based auth, user roles (admin/viewer), shared dashboards.
-
-10. **Mobile/PWA** — Add web app manifest, service worker for offline dashboard viewing, push notifications for chain completion.
-
-11. **Diff viewer** — Compare file states between chain sessions. Useful for reviewing what an agent actually changed.
-
-## Key Architecture Notes
-
-- **File content API** is in `files.mjs` alongside `scanDirectory` — same path-traversal guards, same router.
-- **getGitFileStatus** exported from `git.mjs` — runs `git status --porcelain -uall`, returns `{filePath: statusCode}` map.
-- **Git status in views** — fetched in parallel via `Promise.all` in the `/views/projects` route, fail-safe (catches errors silently for non-git dirs).
-- **renderFileTree** now accepts optional 3rd param `gitStatus` — backward compatible, renders badges when provided.
-- **renderProjectCard** now accepts optional 3rd param `gitStatus` — shows "N changed" stat when changes exist.
-- **renderProjectsPanel** now accepts optional 3rd param `gitStatusMap` — Map of projectDir → gitStatus.
-- **File preview panel** rendered once in `renderProjectsPanel`, hidden by default, toggled by `previewFile()/closePreview()` JS.
-- **Tree search** is client-side only (150ms debounce) — filters `.tree-file` and `.tree-dir` display, auto-opens matching dirs.
-- **Collapsed cards** state in `localStorage` key `proj-collapsed` — object of `{root: true}` for collapsed projects.
-- **CSS section 40** contains all P10 styles (git badges, file preview, search, collapse, active file).
-
-## Codebase Stats
-
-```
-Operator: 20 source files, ~5,500 lines code + ~4,100 lines tests
-Routes:   31 API endpoints, 15 view fragment routes, 6 page routes, 1 WebSocket
-Events:   17 bridged WS events, pattern-based subscriptions
-Tests:    305 operator tests (server 106, views 162, errors 43, registry 21)
-Total:    1588 tests across 24 suites (8 engine + 12 orchestrator + 4 operator)
-```
-
-## Running the Operator
-
-```bash
-node operator/server.mjs                    # API server on http://127.0.0.1:3100
-node operator/server.mjs --port 8080        # Custom port
-node operator/server.mjs --operator         # Combined mode: API + chain execution
-```
-
-Dashboard at http://127.0.0.1:3100, Projects at /projects, Analytics at /analytics, Orchestrator at /orchestrator, Settings at /settings.
-
-## Working Style Reminder
-
-- **Use Task subagents aggressively** for research/exploration (they CANNOT write/edit)
-- Do all edits yourself in the main context
-- Full autonomy — make decisions, don't ask for approval
-- Full permissions granted — no pausing for confirmations
-- Run `npm test` to verify after changes (1588 tests, 24 suites)
-
-## Reference
-
-- Operator plan: `docs/operator-plan.md` (M1-M6 specs)
-- Design reference: `memory/web-design.md`
-- Session history: `docs/session-history.md`
-- CLAUDE.md has all commands, architecture, gotchas
+See full details in `docs/s101-project-review.md` Tiers 2-4.

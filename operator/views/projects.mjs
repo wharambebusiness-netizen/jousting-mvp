@@ -76,7 +76,7 @@ function renderFileEntry(entry, _root, gitStatus) {
     const ePath = escapeHtml(entry.path);
     const countLabel = entry.children === 1 ? '1 item' : `${entry.children} items`;
     const dirChanged = dirHasChanges(entry.path, gitStatus);
-    const changeDot = dirChanged ? '<span class="git-dir-dot" title="Contains changes"></span>' : '';
+    const changeDot = dirChanged ? '<span class="git-dir-dot" title="Contains changes" aria-label="Contains changes"></span>' : '';
     return `<details class="tree-dir" data-path="${ePath}" ontoggle="loadTreeNode(this)">
       <summary class="tree-summary tree-summary--dir">
         <span class="tree-icon tree-icon--dir">📁</span>
@@ -90,8 +90,8 @@ function renderFileEntry(entry, _root, gitStatus) {
 
   const ePath = escapeHtml(entry.path);
   const badge = gitBadge(entry.path, gitStatus);
-  return `<div class="tree-file tree-file--clickable" data-path="${ePath}" onclick="previewFile(this)">
-    <span class="tree-icon">${fileIcon(entry.name)}</span>
+  return `<div class="tree-file tree-file--clickable" data-path="${ePath}" onclick="previewFile(this)" tabindex="0" role="button" aria-label="Preview ${escapeHtml(entry.name)}">
+    <span class="tree-icon" aria-hidden="true">${fileIcon(entry.name)}</span>
     <span class="tree-name">${escapeHtml(entry.name)}</span>
     ${badge}
     <span class="tree-meta">${formatSize(entry.size)}</span>
@@ -149,8 +149,8 @@ export function renderProjectCard(project, rootEntries, gitStatus) {
         ${displayPath ? `<span class="project-card__path">${displayPath}</span>` : ''}
       </div>
       <div class="project-card__actions">
-        <button class="project-card__refresh" onclick="refreshProjectTree(this.closest('.project-card'))" title="Refresh file tree">↻</button>
-        <button class="project-card__toggle" onclick="toggleProjectCard(this.closest('.project-card'))" title="Collapse/expand">▾</button>
+        <button class="project-card__refresh" onclick="refreshProjectTree(this.closest('.project-card'))" title="Refresh file tree" aria-label="Refresh file tree">↻</button>
+        <button class="project-card__toggle" onclick="toggleProjectCard(this.closest('.project-card'))" title="Collapse/expand" aria-label="Collapse/expand project" aria-expanded="true">▾</button>
       </div>
     </div>
     <div class="project-card__body">
@@ -162,7 +162,7 @@ export function renderProjectCard(project, rootEntries, gitStatus) {
         <span class="proj-stat proj-stat--time">${lastAct}</span>
       </div>
       <div class="project-card__search">
-        <input type="search" class="tree-search" placeholder="Search files…" oninput="filterTree(this)" autocomplete="off">
+        <input type="search" class="tree-search" placeholder="Search files…" oninput="filterTree(this)" autocomplete="off" aria-label="Search files in project">
       </div>
       <div class="project-tree" data-root="${eDir}">
         ${dir === '(default)' ? '<div class="tree-empty">No project directory set</div>' : renderFileTree(rootEntries, dir, gitStatus)}
@@ -201,7 +201,7 @@ export function renderProjectsPanel(projects, rootEntriesMap, gitStatusMap) {
   const previewPanel = `<div id="file-preview" class="file-preview" style="display:none">
     <div class="file-preview__header">
       <span class="file-preview__path"></span>
-      <button class="file-preview__close" onclick="closePreview()" title="Close preview">✕</button>
+      <button class="file-preview__close" onclick="closePreview()" title="Close preview" aria-label="Close file preview">✕</button>
     </div>
     <div class="file-preview__content">
       <pre class="file-preview__code"><code></code></pre>

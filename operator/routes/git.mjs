@@ -28,6 +28,7 @@ function run(cmd, args, cwd) {
  * Create git integration routes.
  * @param {object} ctx
  * @param {string} ctx.projectDir - Project root directory
+ * @param {Function} [ctx.getAllowedRoots] - Returns Set of allowed root directories
  */
 /**
  * Run git status --porcelain on an arbitrary directory.
@@ -59,6 +60,18 @@ export { getGitFileStatus };
 export function createGitRoutes(ctx) {
   const router = Router();
   const projectDir = ctx.projectDir || process.cwd();
+  const getAllowedRoots = ctx.getAllowedRoots || null;
+
+  function validateRoot(resolvedRoot, res) {
+    if (!getAllowedRoots) return true;
+    const allowed = getAllowedRoots();
+    const normalised = resolvedRoot.replace(/\\/g, '/');
+    for (const root of allowed) {
+      if (normalised === root.replace(/\\/g, '/')) return true;
+    }
+    res.status(403).json({ error: 'Root directory not in allowed project list' });
+    return false;
+  }
 
   // ── GET /api/git/file-status ────────────────────────────
   // Returns per-file git status for a project directory (used by file tree)
@@ -69,6 +82,7 @@ export function createGitRoutes(ctx) {
     }
     try {
       const resolvedRoot = resolve(root);
+      if (!validateRoot(resolvedRoot, res)) return;
       const statusMap = await getGitFileStatus(resolvedRoot);
       res.json({ root: resolvedRoot.replace(/\\/g, '/'), files: statusMap });
     } catch (err) {

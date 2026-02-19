@@ -110,10 +110,24 @@ export function scanDirectory(root, subPath = '') {
 
 /**
  * Create file system routes.
+ * @param {object} [opts]
+ * @param {Function} [opts.getAllowedRoots] - Returns Set of allowed root directories. If null, all roots allowed.
  * @returns {Router}
  */
-export function createFileRoutes() {
+export function createFileRoutes(opts = {}) {
   const router = Router();
+  const getAllowedRoots = opts.getAllowedRoots || null;
+
+  function validateRoot(resolvedRoot, res) {
+    if (!getAllowedRoots) return true;
+    const allowed = getAllowedRoots();
+    const normalised = resolvedRoot.replace(/\\/g, '/');
+    for (const root of allowed) {
+      if (normalised === root.replace(/\\/g, '/')) return true;
+    }
+    res.status(403).json({ error: 'Root directory not in allowed project list' });
+    return false;
+  }
 
   // GET /api/files?root=<abs-path>&path=<sub-path>
   router.get('/files', (req, res) => {
@@ -125,6 +139,10 @@ export function createFileRoutes() {
     }
 
     const resolvedRoot = resolve(root);
+
+    // Validate root against allowed project directories
+    if (!validateRoot(resolvedRoot, res)) return;
+
     const resolvedFull = resolve(resolvedRoot, subPath);
 
     // Path-traversal guard
@@ -150,6 +168,10 @@ export function createFileRoutes() {
     }
 
     const resolvedRoot = resolve(root);
+
+    // Validate root against allowed project directories
+    if (!validateRoot(resolvedRoot, res)) return;
+
     const resolvedFull = resolve(resolvedRoot, filePath);
 
     // Path-traversal guard

@@ -22,7 +22,7 @@ export function renderAgentCard(agent) {
 
   return `<article class="agent-card agent-${status}">
     <header>
-      <span class="status-dot status-dot--${status}"></span>
+      <span class="status-dot status-dot--${status}" aria-hidden="true"></span>
       ${id}
       <small>${statusLabel(status)}</small>
     </header>

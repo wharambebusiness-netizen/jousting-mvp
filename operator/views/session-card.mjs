@@ -28,7 +28,7 @@ export function renderSessionCard(session) {
 
   return `<article class="session-card session-${status}">
     <header>
-      <span class="status-dot status-dot--${status}"></span>
+      <span class="status-dot status-dot--${status}" aria-hidden="true"></span>
       Session ${(session.index ?? 0) + 1} &mdash; ${statusLabel(status)}
     </header>
     <div class="session-meta">

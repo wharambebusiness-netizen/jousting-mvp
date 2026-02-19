@@ -8,12 +8,16 @@
 // Schema: see docs/operator-plan.md §2a
 // ============================================================
 
-import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync, mkdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { randomUUID } from 'crypto';
 
 const REGISTRY_VERSION = 1;
 const MAX_CHAINS = 50;
+
+// ── In-Memory Cache ──────────────────────────────────────────
+let _cache = null;
+let _cacheMtimeMs = 0;
 
 // ── Defaults ─────────────────────────────────────────────────
 
@@ -63,6 +67,14 @@ function atomicWrite(filePath, data) {
  * Load registry from disk. Returns empty registry if none exists or corrupt.
  */
 export function loadRegistry() {
+  // Check mtime-based cache: skip disk read if file hasn't changed
+  if (_cache && registryPath) {
+    try {
+      const st = statSync(registryPath);
+      if (st.mtimeMs === _cacheMtimeMs) return _cache;
+    } catch { /* file missing — fall through to full load */ }
+  }
+
   const tmpFile = registryPath + '.tmp';
 
   // Try primary file
@@ -72,6 +84,9 @@ export function loadRegistry() {
       if (data && data.version === REGISTRY_VERSION) {
         // Clean up stale tmp
         if (existsSync(tmpFile)) try { unlinkSync(tmpFile); } catch (_) {}
+        // Populate cache
+        try { _cacheMtimeMs = statSync(registryPath).mtimeMs; } catch { _cacheMtimeMs = 0; }
+        _cache = data;
         return data;
       }
       logFn(`  Registry version mismatch (expected ${REGISTRY_VERSION}, got ${data?.version})`);
@@ -87,6 +102,8 @@ export function loadRegistry() {
       if (data && data.version === REGISTRY_VERSION) {
         logFn('  Recovered registry from .tmp file');
         try { renameSync(tmpFile, registryPath); } catch (_) {}
+        _cache = data;
+        _cacheMtimeMs = 0; // unknown mtime after rename
         return data;
       }
     } catch (err) {
@@ -108,6 +125,10 @@ export function saveRegistry(registry) {
   if (registry.chains.length > MAX_CHAINS) {
     archiveOldChains(registry);
   }
+
+  // Invalidate cache before write (saveRegistry may be called from other modules)
+  _cache = null;
+  _cacheMtimeMs = 0;
 
   atomicWrite(registryPath, registry);
 }

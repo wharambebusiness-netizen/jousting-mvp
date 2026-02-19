@@ -464,6 +464,14 @@ window.refreshProjectTree = refreshProjectTree;
 
 // ── File Preview ────────────────────────────────────────────────
 
+// Keyboard support for clickable file tree entries
+document.addEventListener('keydown', function(e) {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('tree-file--clickable')) {
+    e.preventDefault();
+    previewFile(e.target);
+  }
+});
+
 function previewFile(el) {
   var card = el.closest('.project-card');
   var root = card ? card.dataset.root : '';
@@ -585,7 +593,10 @@ function toggleProjectCard(card) {
 
   var collapsed = body.style.display === 'none';
   body.style.display = collapsed ? '' : 'none';
-  if (btn) btn.textContent = collapsed ? '▾' : '▸';
+  if (btn) {
+    btn.textContent = collapsed ? '▾' : '▸';
+    btn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+  }
 
   // Persist state
   var root = card.dataset.root || '';
@@ -610,7 +621,7 @@ window.toggleProjectCard = toggleProjectCard;
           var body = cards[i].querySelector('.project-card__body');
           var btn = cards[i].querySelector('.project-card__toggle');
           if (body) body.style.display = 'none';
-          if (btn) btn.textContent = '▸';
+          if (btn) { btn.textContent = '▸'; btn.setAttribute('aria-expanded', 'false'); }
         }
       }
     } catch (_) {}
