@@ -1,0 +1,32 @@
+{
+  "id": "test-coverage-audit",
+  "name": "Test Coverage Audit",
+  "version": "1.0.0",
+  "description": "Map tested vs untested modules, check test quality, identify missing edge cases, analyze error path coverage, WebSocket coverage, and file watcher coverage across all route handlers",
+  "shortDescription": "Analyze test gaps and coverage",
+  "category": "audit",
+  "tags": ["test", "coverage", "quality", "audit", "gaps", "edge-cases"],
+  "triggerExamples": [
+    "check test coverage",
+    "find untested code",
+    "audit test quality",
+    "what needs more tests",
+    "identify test gaps",
+    "analyze error path coverage"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory to audit" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read", "codebase-search"],
+  "conflicts": [],
+  "enhancedBy": ["test-runner"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 60000
+}

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skill Manifest",
+  "description": "JSON schema for skill pool manifests used by the orchestrator system",
+  "type": "object",
+  "required": ["id", "name", "version", "description", "category", "tags"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique kebab-case identifier"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable display name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g. 1.0.0)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Detailed description of what this skill does"
+    },
+    "shortDescription": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "One-line summary for listings"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["git", "code", "research", "audit", "testing", "deployment", "analysis"],
+      "description": "Primary category for coarse filtering"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Searchable tags for skill discovery"
+    },
+    "triggerExamples": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 15,
+      "description": "Example phrases that would trigger this skill (5-10 recommended)"
+    },
+    "parameters": {
+      "type": "object",
+      "description": "JSON Schema describing the skill's input parameters",
+      "properties": {
+        "type": { "const": "object" },
+        "properties": { "type": "object" },
+        "required": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "requires": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Skill IDs that must be available when this skill runs"
+    },
+    "conflicts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Skill IDs that cannot be used alongside this skill"
+    },
+    "enhancedBy": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Skill IDs that improve this skill's effectiveness when available"
+    },
+    "sideEffects": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this skill modifies files, state, or external systems"
+    },
+    "idempotent": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether running this skill multiple times produces the same result"
+    },
+    "requiresConfirmation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this skill should prompt for user confirmation before execution"
+    },
+    "handler": {
+      "type": "string",
+      "description": "Module path for the skill handler (relative to skills directory)"
+    },
+    "model": {
+      "type": "string",
+      "enum": ["haiku", "sonnet", "opus"],
+      "description": "Recommended model tier for executing this skill"
+    },
+    "estimatedDurationMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Estimated execution time in milliseconds"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,31 @@
+{
+  "id": "agent-report",
+  "name": "Agent Report",
+  "version": "1.0.0",
+  "description": "Generate a comprehensive agent capability and effectiveness report from mission configs, role templates, handoffs, cost logs, and backlog data — covering inventory, capability matrix, skill gaps, and cost efficiency",
+  "shortDescription": "Report on agent capabilities",
+  "category": "analysis",
+  "tags": ["agent", "report", "capability", "analysis", "effectiveness", "cost"],
+  "triggerExamples": [
+    "generate agent report",
+    "show agent capabilities",
+    "analyze agent effectiveness",
+    "what can agents do",
+    "report on agent cost efficiency"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read", "codebase-search"],
+  "conflicts": [],
+  "enhancedBy": [],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 60000
+}

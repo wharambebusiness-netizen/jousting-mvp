@@ -1,0 +1,33 @@
+{
+  "id": "codebase-search",
+  "name": "Codebase Search",
+  "version": "1.0.0",
+  "description": "Search through the project codebase using glob patterns and regex to find files, functions, classes, imports, and usage patterns across the source tree",
+  "shortDescription": "Search codebase for patterns",
+  "category": "research",
+  "tags": ["search", "grep", "find", "codebase", "pattern", "source"],
+  "triggerExamples": [
+    "find where this function is used",
+    "search for this pattern",
+    "find all files matching",
+    "where is this defined",
+    "grep the codebase for"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project root directory" },
+      "pattern": { "type": "string", "description": "Regex or glob pattern" },
+      "fileGlob": { "type": "string", "description": "File pattern filter (e.g. *.mjs)" }
+    },
+    "required": ["directory", "pattern"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["file-read"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 3000
+}

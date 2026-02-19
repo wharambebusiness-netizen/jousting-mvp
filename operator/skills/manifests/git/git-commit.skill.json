@@ -1,0 +1,33 @@
+{
+  "id": "git-commit",
+  "name": "Git Commit",
+  "version": "1.0.0",
+  "description": "Stage and commit changes to the git repository with a descriptive commit message, supporting both staged-only and all-changes modes",
+  "shortDescription": "Commit changes to git",
+  "category": "git",
+  "tags": ["git", "commit", "vcs", "save", "checkpoint"],
+  "triggerExamples": [
+    "commit the changes",
+    "save progress to git",
+    "create a commit",
+    "commit with message",
+    "stage and commit all changes"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" },
+      "message": { "type": "string", "description": "Commit message" },
+      "files": { "type": "array", "items": { "type": "string" }, "description": "Specific files to stage (empty = all)" }
+    },
+    "required": ["directory", "message"]
+  },
+  "requires": ["git-status"],
+  "conflicts": [],
+  "enhancedBy": ["git-push"],
+  "sideEffects": true,
+  "idempotent": false,
+  "requiresConfirmation": true,
+  "model": "haiku",
+  "estimatedDurationMs": 5000
+}

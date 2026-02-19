@@ -1,0 +1,31 @@
+{
+  "id": "orchestrator-status",
+  "name": "Orchestrator Status",
+  "version": "1.0.0",
+  "description": "Quick health check of orchestrator state — runs tests, reads backlog, parses agent handoff metadata, checks balance state, session changelog, and overnight report for a concise dashboard",
+  "shortDescription": "Check orchestrator health",
+  "category": "analysis",
+  "tags": ["orchestrator", "status", "health", "dashboard", "monitoring"],
+  "triggerExamples": [
+    "check orchestrator status",
+    "orchestrator health check",
+    "show system dashboard",
+    "how is the orchestrator doing",
+    "quick status check"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read"],
+  "conflicts": [],
+  "enhancedBy": ["test-runner", "codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 30000
+}

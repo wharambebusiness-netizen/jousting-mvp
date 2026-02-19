@@ -1,0 +1,31 @@
+{
+  "id": "git-status",
+  "name": "Git Status",
+  "version": "1.0.0",
+  "description": "Check the working tree status of a git repository, showing staged, unstaged, and untracked files with their modification state",
+  "shortDescription": "Show git working tree status",
+  "category": "git",
+  "tags": ["git", "status", "vcs", "diff", "changes"],
+  "triggerExamples": [
+    "check git status",
+    "what files have changed",
+    "show uncommitted changes",
+    "are there any modified files",
+    "what's the current repo state"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory to check" }
+    },
+    "required": ["directory"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["git-commit", "git-push"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 2000
+}

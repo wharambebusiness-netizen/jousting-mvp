@@ -1,0 +1,32 @@
+{
+  "id": "web-search",
+  "name": "Web Search",
+  "version": "1.0.0",
+  "description": "Search the web for documentation, API references, error solutions, library usage examples, and technical information relevant to the current task",
+  "shortDescription": "Search web for technical info",
+  "category": "research",
+  "tags": ["search", "web", "documentation", "api", "reference", "lookup"],
+  "triggerExamples": [
+    "search for documentation",
+    "look up this API",
+    "find examples of",
+    "search for error solution",
+    "research how to implement"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "Search query" },
+      "domain": { "type": "string", "description": "Restrict to specific domain" }
+    },
+    "required": ["query"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 5000
+}

@@ -1,0 +1,33 @@
+{
+  "id": "accessibility-audit",
+  "name": "Accessibility Audit",
+  "version": "1.0.0",
+  "description": "Audit HTML pages and HTMX fragments for accessibility compliance covering WCAG 2.1 Level A/AA — semantic HTML, ARIA labels, keyboard navigation, color contrast, dynamic content, forms, and focus management",
+  "shortDescription": "Audit UI for accessibility compliance",
+  "category": "audit",
+  "tags": ["accessibility", "a11y", "wcag", "audit", "html", "aria"],
+  "triggerExamples": [
+    "check accessibility",
+    "audit a11y compliance",
+    "run WCAG audit",
+    "check ARIA labels",
+    "audit keyboard navigation",
+    "check color contrast"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory to audit" },
+      "pages": { "type": "array", "items": { "type": "string" }, "description": "Specific HTML pages to audit" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read"],
+  "conflicts": [],
+  "enhancedBy": ["codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 60000
+}

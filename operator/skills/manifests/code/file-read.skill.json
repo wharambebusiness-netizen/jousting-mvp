@@ -1,0 +1,33 @@
+{
+  "id": "file-read",
+  "name": "File Read",
+  "version": "1.0.0",
+  "description": "Read file contents from the project filesystem with support for line ranges, encoding detection, and binary file identification",
+  "shortDescription": "Read file contents",
+  "category": "code",
+  "tags": ["file", "read", "filesystem", "content", "source"],
+  "triggerExamples": [
+    "read this file",
+    "show file contents",
+    "what's in this file",
+    "open the source code",
+    "display file content"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "File path to read" },
+      "startLine": { "type": "integer", "description": "Starting line number (1-based)" },
+      "endLine": { "type": "integer", "description": "Ending line number (inclusive)" }
+    },
+    "required": ["path"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 1000
+}

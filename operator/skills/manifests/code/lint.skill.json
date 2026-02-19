@@ -1,0 +1,33 @@
+{
+  "id": "lint",
+  "name": "Linter",
+  "version": "1.0.0",
+  "description": "Run code linting tools (eslint, prettier, ruff, etc.) on the project to detect style violations, potential bugs, and formatting issues",
+  "shortDescription": "Run code linting checks",
+  "category": "code",
+  "tags": ["lint", "eslint", "prettier", "style", "formatting", "quality"],
+  "triggerExamples": [
+    "lint the code",
+    "check for style issues",
+    "run eslint",
+    "format the code",
+    "check code quality"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" },
+      "fix": { "type": "boolean", "description": "Auto-fix fixable issues" },
+      "files": { "type": "array", "items": { "type": "string" }, "description": "Specific files to lint" }
+    },
+    "required": ["directory"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["file-read"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 15000
+}

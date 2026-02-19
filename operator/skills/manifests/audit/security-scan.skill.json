@@ -1,0 +1,33 @@
+{
+  "id": "security-scan",
+  "name": "Security Scan",
+  "version": "1.0.0",
+  "description": "Scan codebase for security vulnerabilities including secret detection, dependency CVEs, OWASP Top 10 code issues, and configuration security problems",
+  "shortDescription": "Scan for security vulnerabilities",
+  "category": "audit",
+  "tags": ["security", "vulnerability", "owasp", "secrets", "audit", "cve"],
+  "triggerExamples": [
+    "scan for security issues",
+    "check for vulnerabilities",
+    "find exposed secrets",
+    "run security audit",
+    "check for injection flaws",
+    "audit OWASP compliance"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory to scan" },
+      "scope": { "type": "string", "enum": ["full", "secrets", "dependencies", "code", "config"], "description": "Scan scope" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read", "codebase-search"],
+  "conflicts": [],
+  "enhancedBy": [],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 90000
+}

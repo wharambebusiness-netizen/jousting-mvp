@@ -1,0 +1,34 @@
+{
+  "id": "test-runner",
+  "name": "Test Runner",
+  "version": "1.0.0",
+  "description": "Execute the project test suite using the configured test runner (vitest, jest, pytest, etc.), with optional filtering by test file, suite name, or pattern",
+  "shortDescription": "Run project test suite",
+  "category": "testing",
+  "tags": ["test", "testing", "vitest", "jest", "pytest", "runner", "quality"],
+  "triggerExamples": [
+    "run the tests",
+    "execute test suite",
+    "run vitest",
+    "check if tests pass",
+    "run tests for this file",
+    "test the changes"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" },
+      "pattern": { "type": "string", "description": "Test file or name pattern filter" },
+      "watch": { "type": "boolean", "description": "Run in watch mode" }
+    },
+    "required": ["directory"]
+  },
+  "requires": [],
+  "conflicts": [],
+  "enhancedBy": ["file-read", "codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 30000
+}

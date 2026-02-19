@@ -1,0 +1,33 @@
+{
+  "id": "git-push",
+  "name": "Git Push",
+  "version": "1.0.0",
+  "description": "Push committed changes to the remote repository, with optional branch specification and force-push protection",
+  "shortDescription": "Push commits to remote",
+  "category": "git",
+  "tags": ["git", "push", "vcs", "remote", "deploy"],
+  "triggerExamples": [
+    "push to remote",
+    "push changes",
+    "git push origin",
+    "push to main branch",
+    "sync with remote"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory" },
+      "branch": { "type": "string", "description": "Branch to push (default: current)" },
+      "force": { "type": "boolean", "description": "Force push (requires confirmation)" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["git-status"],
+  "conflicts": [],
+  "enhancedBy": [],
+  "sideEffects": true,
+  "idempotent": false,
+  "requiresConfirmation": true,
+  "model": "haiku",
+  "estimatedDurationMs": 10000
+}

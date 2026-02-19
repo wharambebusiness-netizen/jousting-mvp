@@ -1,0 +1,31 @@
+{
+  "id": "project-detect",
+  "name": "Project Detection",
+  "version": "1.0.0",
+  "description": "Auto-detect project type, language, framework, test runner, build system, and linter by scanning for package.json, Cargo.toml, pyproject.toml, go.mod, and other config files",
+  "shortDescription": "Detect project tech stack",
+  "category": "research",
+  "tags": ["detect", "project", "framework", "language", "stack", "config"],
+  "triggerExamples": [
+    "detect project type",
+    "what framework is this",
+    "identify the tech stack",
+    "scan project configuration",
+    "what language is this project"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project root directory" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read"],
+  "conflicts": [],
+  "enhancedBy": ["codebase-search"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "haiku",
+  "estimatedDurationMs": 10000
+}

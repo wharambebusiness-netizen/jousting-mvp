@@ -1,0 +1,32 @@
+{
+  "id": "dependency-audit",
+  "name": "Dependency Audit",
+  "version": "1.0.0",
+  "description": "Review package health, outdated dependencies, security vulnerabilities via npm audit, zero-frontend-dependency constraint verification, and lock file health",
+  "shortDescription": "Audit package dependencies",
+  "category": "audit",
+  "tags": ["dependency", "npm", "package", "audit", "outdated", "vulnerability"],
+  "triggerExamples": [
+    "check dependencies",
+    "audit packages",
+    "find outdated deps",
+    "run npm audit",
+    "check lock file health",
+    "verify frontend dep constraint"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory with package.json" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read"],
+  "conflicts": [],
+  "enhancedBy": ["security-scan"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 45000
+}

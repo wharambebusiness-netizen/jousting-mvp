@@ -1,0 +1,32 @@
+{
+  "id": "performance-audit",
+  "name": "Performance Audit",
+  "version": "1.0.0",
+  "description": "Analyze codebase for performance bottlenecks including synchronous I/O in handlers, registry loading patterns, subprocess spawning, asset sizes, HTML fragments, WebSocket efficiency, and file watcher resources",
+  "shortDescription": "Analyze code for performance issues",
+  "category": "audit",
+  "tags": ["performance", "optimization", "bottleneck", "audit", "profiling"],
+  "triggerExamples": [
+    "check for performance issues",
+    "find bottlenecks",
+    "audit performance",
+    "optimize the code",
+    "check asset sizes",
+    "find slow code paths"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "Project directory to audit" }
+    },
+    "required": ["directory"]
+  },
+  "requires": ["file-read", "codebase-search"],
+  "conflicts": [],
+  "enhancedBy": ["test-runner"],
+  "sideEffects": false,
+  "idempotent": true,
+  "requiresConfirmation": false,
+  "model": "sonnet",
+  "estimatedDurationMs": 60000
+}
