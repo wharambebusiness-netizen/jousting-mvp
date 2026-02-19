@@ -78,6 +78,7 @@ var viewToggle = document.getElementById('view-toggle-icon');
   loadInstances();
   loadMissions();
   connectWS();
+  checkPendingProject();
 
   // Keyboard shortcuts: Ctrl+1-4 to switch tabs
   document.addEventListener('keydown', function(e) {
@@ -202,6 +203,10 @@ function addTerminalInstance(id, state) {
     '<span class="term-status__actions">' +
       '<button class="term-status__btn" onclick="startInstance(\'' + escHtml(id) + '\')" data-action="start">Start</button>' +
       '<button class="term-status__btn term-status__btn--danger" onclick="stopInstance(\'' + escHtml(id) + '\')" data-action="stop">Stop</button>' +
+      '<button class="term-status__btn btn--accent" onclick="handoffInstance(\'' + escHtml(id) + '\')" data-action="handoff"' + (state && state.running ? '' : ' disabled') + '>Handoff</button>' +
+      '<span class="handoff-history" style="position:relative;display:inline-block;">' +
+        '<button class="term-status__btn" onclick="showHandoffHistory(\'' + escHtml(id) + '\', this)" data-action="history">History</button>' +
+      '</span>' +
     '</span>';
   panel.appendChild(statusBar);
 
@@ -363,10 +368,12 @@ function stopInstance(id) {
 function submitNewInstance(e) {
   e.preventDefault();
   var form = e.target;
+  var dialog = document.getElementById('new-instance-dialog');
   var id = form.instanceId.value.trim();
   var mission = form.mission.value;
   var model = form.model.value;
   var dryRun = form.dryRun.checked;
+  var projectDir = dialog.dataset.projectDir || undefined;
 
   if (!id) {
     showToast('Instance ID is required', 'error');
@@ -385,7 +392,12 @@ function submitNewInstance(e) {
   fetch('/api/orchestrator/' + encodeURIComponent(id) + '/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mission: mission || undefined, model: model, dryRun: dryRun }),
+    body: JSON.stringify({
+      mission: mission || undefined,
+      model: model,
+      dryRun: dryRun,
+      projectDir: projectDir,
+    }),
   })
     .then(function(r) {
       if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Start failed'); });
@@ -402,7 +414,8 @@ function submitNewInstance(e) {
       showToast('Failed to start ' + id + ': ' + err.message, 'error');
     });
 
-  document.getElementById('new-instance-dialog').close();
+  delete dialog.dataset.projectDir; // clear pending project
+  dialog.close();
   form.reset();
   switchTab(id);
   return false;
@@ -464,6 +477,7 @@ function connectWS() {
     'orchestrator:*',
     'agent:*',
     'round:*',
+    'handoff:*',
   ], function(msg) {
     if (!msg || !msg.event || !msg.data) return;
 
@@ -598,6 +612,23 @@ function connectWS() {
           inst.terminal.writeln('\x1b[33m↻ Agent continuation: ' + agentId4 + '\x1b[0m');
         }
         break;
+
+      case 'handoff:generated':
+        if (inst) {
+          inst.terminal.writeln('\x1b[35;1m📋 Handoff generated: ' + (msg.data.summary || '') + '\x1b[0m');
+          showToast('Handoff generated for ' + instanceId, 'success');
+        }
+        break;
+
+      case 'handoff:restart':
+        if (inst) {
+          inst.terminal.writeln('\x1b[35;1m🔄 Handoff restart — context preserved\x1b[0m');
+          inst.running = true;
+          updateStatusBar(instanceId);
+          updateTabDot(instanceId);
+          showToast('Handoff restart for ' + instanceId, 'success');
+        }
+        break;
     }
   });
 }
@@ -640,11 +671,13 @@ function updateStatusBar(id) {
   var agentsEl = statusBar.querySelector('[data-field="agents"]');
   if (agentsEl) agentsEl.textContent = 'A:' + (inst.agents ? inst.agents.length : 0);
 
-  // Disable/enable start/stop buttons
+  // Disable/enable start/stop/handoff buttons
   var startBtn = statusBar.querySelector('[data-action="start"]');
   var stopBtn = statusBar.querySelector('[data-action="stop"]');
+  var handoffBtn = statusBar.querySelector('[data-action="handoff"]');
   if (startBtn) startBtn.disabled = inst.running;
   if (stopBtn) stopBtn.disabled = !inst.running;
+  if (handoffBtn) handoffBtn.disabled = !inst.running;
 }
 
 // ── Update tab dot (running/stopped) ─────────────────────────
@@ -683,6 +716,110 @@ function ansiColorCode(hex) {
   return map[hex] || '37';
 }
 
+// ── Handoff Instance ─────────────────────────────────────────
+function handoffInstance(id) {
+  var inst = instances.get(id);
+  if (!inst) return;
+  if (!inst.running) {
+    showToast(id + ' is not running', 'info');
+    return;
+  }
+
+  var term = inst.terminal;
+  var accent = ansiColorCode(inst.theme.accent);
+
+  // 5-step ANSI progress
+  term.writeln('');
+  term.writeln('\x1b[1;' + accent + 'm═══ Handoff Restart ═══\x1b[0m');
+  term.writeln('\x1b[' + accent + 'm  [1/5] Generating handoff document...\x1b[0m');
+
+  fetch('/api/orchestrator/' + encodeURIComponent(id) + '/handoff-restart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Handoff failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      term.writeln('\x1b[' + accent + 'm  [2/5] Handoff saved: ' + (data.handoffFile || '').split(/[/\\]/).pop() + '\x1b[0m');
+      term.writeln('\x1b[' + accent + 'm  [3/5] Stopping instance...\x1b[0m');
+      term.writeln('\x1b[' + accent + 'm  [4/5] Restarting with context...\x1b[0m');
+      term.writeln('\x1b[32;1m  [5/5] Complete! Context preserved.\x1b[0m');
+      term.writeln('');
+      showToast('Handoff restart complete for ' + id, 'success');
+    })
+    .catch(function(err) {
+      term.writeln('\x1b[31;1m  [✗] Handoff failed: ' + err.message + '\x1b[0m');
+      term.writeln('');
+      showToast('Handoff failed: ' + err.message, 'error');
+    });
+}
+
+// ── Show Handoff History Dropdown ────────────────────────────
+function showHandoffHistory(id, triggerBtn) {
+  // Close any existing dropdown
+  var existing = document.querySelector('.handoff-history__dropdown');
+  if (existing) { existing.remove(); return; }
+
+  fetch('/api/orchestrator/' + encodeURIComponent(id) + '/handoffs')
+    .then(function(r) { return r.json(); })
+    .then(function(files) {
+      if (!files || !files.length) {
+        showToast('No handoff history for ' + id, 'info');
+        return;
+      }
+
+      var dropdown = document.createElement('div');
+      dropdown.className = 'handoff-history__dropdown';
+      var html = '<div class="handoff-history__title">Handoff History</div>';
+      files.forEach(function(f) {
+        var sizeKb = (f.size / 1024).toFixed(1);
+        html += '<div class="handoff-history__item">' +
+          '<span class="handoff-history__file">' + escHtml(f.file) + '</span>' +
+          '<span class="handoff-history__meta">' + sizeKb + ' KB</span>' +
+          '</div>';
+      });
+      dropdown.innerHTML = html;
+
+      // Position relative to trigger
+      var wrapper = triggerBtn.closest('.handoff-history');
+      if (wrapper) wrapper.appendChild(dropdown);
+    })
+    .catch(function() {
+      showToast('Failed to load handoff history', 'error');
+    });
+}
+
+// Close handoff dropdown on click outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.handoff-history')) {
+    var dd = document.querySelector('.handoff-history__dropdown');
+    if (dd) dd.remove();
+  }
+});
+
+// ── Project-to-Terminal Completion ───────────────────────────
+function checkPendingProject() {
+  var pending = sessionStorage.getItem('pending-terminal-project');
+  if (!pending) return;
+  sessionStorage.removeItem('pending-terminal-project');
+
+  var nextNum = instances.size + 1;
+  var defaultId = 'worker-' + nextNum;
+  while (instances.has(defaultId)) {
+    nextNum++;
+    defaultId = 'worker-' + nextNum;
+  }
+
+  var dialog = document.getElementById('new-instance-dialog');
+  var form = document.getElementById('new-instance-form');
+  form.instanceId.value = defaultId;
+  dialog.dataset.projectDir = pending;
+  dialog.showModal();
+}
+
 // ── Window resize handler ────────────────────────────────────
 var resizeTimeout;
 window.addEventListener('resize', function() {
@@ -701,3 +838,5 @@ window.removeInstance = removeInstance;
 window.startInstance = startInstance;
 window.stopInstance = stopInstance;
 window.submitNewInstance = submitNewInstance;
+window.handoffInstance = handoffInstance;
+window.showHandoffHistory = showHandoffHistory;

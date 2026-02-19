@@ -1577,3 +1577,112 @@ describe('Nav Links', () => {
     });
   }
 });
+
+// ── Handoff API Tests (Phase 3) ──────────────────────────────
+
+describe('Handoff API', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/orchestrator/:id/handoff returns 404 for unknown instance', async () => {
+    const { status, body } = await api('/api/orchestrator/nonexistent/handoff', {
+      method: 'POST',
+    });
+    expect(status).toBe(404);
+    expect(body.error).toContain('not found');
+  });
+
+  it('POST /api/orchestrator/:id/handoff returns 409 when not running', async () => {
+    // Create a stopped instance via start+stop events
+    events.emit('orchestrator:started', { workerId: 'handoff-test-1' });
+    events.emit('orchestrator:stopped', { workerId: 'handoff-test-1' });
+
+    const { status, body } = await api('/api/orchestrator/handoff-test-1/handoff', {
+      method: 'POST',
+    });
+    expect(status).toBe(409);
+    expect(body.error).toContain('not running');
+  });
+
+  it('POST /api/orchestrator/:id/handoff generates handoff for running instance', async () => {
+    events.emit('orchestrator:started', { workerId: 'handoff-test-2' });
+    events.emit('agent:start', { workerId: 'handoff-test-2', agentId: 'dev-1', model: 'sonnet' });
+
+    const { status, body } = await api('/api/orchestrator/handoff-test-2/handoff', {
+      method: 'POST',
+    });
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.handoffFile).toBeTruthy();
+    expect(body.summary).toBeTruthy();
+
+    // Verify file was written
+    expect(existsSync(body.handoffFile)).toBe(true);
+  });
+
+  it('GET /api/orchestrator/:id/handoffs lists handoff files', async () => {
+    const { status, body } = await api('/api/orchestrator/handoff-test-2/handoffs');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBeGreaterThanOrEqual(1);
+    expect(body[0]).toHaveProperty('file');
+    expect(body[0]).toHaveProperty('size');
+    expect(body[0].file).toContain('orch-handoff-test-2');
+  });
+
+  it('GET /api/orchestrator/:id/handoffs returns [] for no history', async () => {
+    const { status, body } = await api('/api/orchestrator/no-history/handoffs');
+    expect(status).toBe(200);
+    expect(body).toEqual([]);
+  });
+
+  it('POST /api/orchestrator/:id/handoff-restart returns 404 for unknown', async () => {
+    const { status } = await api('/api/orchestrator/ghost/handoff-restart', {
+      method: 'POST',
+    });
+    expect(status).toBe(404);
+  });
+
+  it('POST /api/orchestrator/:id/handoff-restart returns 409 when not running', async () => {
+    events.emit('orchestrator:started', { workerId: 'handoff-test-3' });
+    events.emit('orchestrator:stopped', { workerId: 'handoff-test-3' });
+
+    const { status } = await api('/api/orchestrator/handoff-test-3/handoff-restart', {
+      method: 'POST',
+    });
+    expect(status).toBe(409);
+  });
+
+  it('POST /api/orchestrator/:id/handoff-restart generates file and returns success', async () => {
+    events.emit('orchestrator:started', { workerId: 'handoff-test-4' });
+
+    const { status, body } = await api('/api/orchestrator/handoff-test-4/handoff-restart', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.handoffFile).toBeTruthy();
+    expect(existsSync(body.handoffFile)).toBe(true);
+    expect(body.newInstanceStatus).toBeTruthy();
+  });
+
+  it('handoff:generated event is emitted', async () => {
+    const received = [];
+    events.on('handoff:generated', (data) => received.push(data));
+
+    events.emit('orchestrator:started', { workerId: 'handoff-test-5' });
+    await api('/api/orchestrator/handoff-test-5/handoff', { method: 'POST' });
+
+    expect(received.length).toBeGreaterThanOrEqual(1);
+    expect(received[0].workerId).toBe('handoff-test-5');
+    expect(received[0].handoffFile).toBeTruthy();
+  });
+});

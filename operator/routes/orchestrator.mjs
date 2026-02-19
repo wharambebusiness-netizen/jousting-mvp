@@ -423,6 +423,164 @@ export function createOrchestratorRoutes(ctx) {
     res.json({ message: `Instance ${instanceId} removed` });
   });
 
+  // ── Handoff Helpers ──────────────────────────────────────
+
+  const handoffsDir = operatorDir ? join(operatorDir, 'handoffs') : null;
+
+  /**
+   * Generate a markdown handoff document for an instance.
+   * @param {string} instanceId
+   * @returns {{ handoffFile: string, summary: string, timestamp: string }}
+   */
+  function generateHandoffDoc(instanceId) {
+    const state = instances.get(instanceId);
+    const agentMap = instanceAgentMaps.get(instanceId);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `orch-${instanceId}-${timestamp}.md`;
+
+    if (!handoffsDir) throw new Error('operatorDir not configured');
+    mkdirSync(handoffsDir, { recursive: true });
+    const filePath = join(handoffsDir, fileName);
+
+    // Build markdown
+    const lines = [
+      `# Handoff: ${instanceId}`,
+      `> Generated at ${new Date().toISOString()}`,
+      '',
+      '## Instance State',
+      `- **Running**: ${state?.running ?? false}`,
+      `- **Round**: ${state?.round ?? 0}`,
+      `- **Mission**: ${state?.mission ?? 'none'}`,
+      `- **Model**: ${state?.model ?? 'default'}`,
+      `- **Started**: ${state?.startedAt ?? 'never'}`,
+      '',
+    ];
+
+    if (agentMap && agentMap.size > 0) {
+      lines.push('## Agents', '');
+      for (const [agentId, info] of agentMap) {
+        lines.push(`### ${agentId}`);
+        lines.push(`- **Status**: ${info.status || 'unknown'}`);
+        lines.push(`- **Model**: ${info.model || 'default'}`);
+        if (info.cost != null) lines.push(`- **Cost**: $${info.cost.toFixed(4)}`);
+        if (info.elapsedMs != null) lines.push(`- **Elapsed**: ${(info.elapsedMs / 1000).toFixed(1)}s`);
+        lines.push('');
+      }
+    }
+
+    writeFileSync(filePath, lines.join('\n'), 'utf8');
+
+    const summary = `Round ${state?.round ?? 0}, ${agentMap?.size ?? 0} agents`;
+    return { handoffFile: filePath, summary, timestamp };
+  }
+
+  // ── POST /api/orchestrator/:id/handoff ─────────────────
+  router.post('/orchestrator/:id/handoff', (req, res) => {
+    const instanceId = req.params.id;
+    const state = instances.get(instanceId);
+    if (!state) {
+      return res.status(404).json({ error: `Instance ${instanceId} not found` });
+    }
+    if (!state.running) {
+      return res.status(409).json({ error: `Instance ${instanceId} is not running` });
+    }
+
+    try {
+      const result = generateHandoffDoc(instanceId);
+      ctx.events.emit('handoff:generated', { workerId: instanceId, ...result });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/orchestrator/:id/handoffs ─────────────────
+  router.get('/orchestrator/:id/handoffs', (req, res) => {
+    const instanceId = req.params.id;
+    if (!handoffsDir || !existsSync(handoffsDir)) {
+      return res.json([]);
+    }
+
+    const prefix = `orch-${instanceId}-`;
+    const files = readdirSync(handoffsDir)
+      .filter(f => f.startsWith(prefix) && f.endsWith('.md'))
+      .map(f => {
+        const fp = join(handoffsDir, f);
+        const st = statSync(fp);
+        // Extract timestamp from filename: orch-<id>-<timestamp>.md
+        const tsRaw = f.slice(prefix.length, -3).replace(/-/g, (m, i) => {
+          // Restore ISO-ish timestamp for display
+          return i < 13 ? '-' : (i < 16 ? ':' : '.');
+        });
+        return { file: f, timestamp: tsRaw, size: st.size };
+      })
+      .sort((a, b) => b.file.localeCompare(a.file)); // newest first
+
+    res.json(files);
+  });
+
+  // ── POST /api/orchestrator/:id/handoff-restart ─────────
+  router.post('/orchestrator/:id/handoff-restart', async (req, res) => {
+    const instanceId = req.params.id;
+    const state = instances.get(instanceId);
+    if (!state) {
+      return res.status(404).json({ error: `Instance ${instanceId} not found` });
+    }
+    if (!state.running) {
+      return res.status(409).json({ error: `Instance ${instanceId} is not running` });
+    }
+
+    try {
+      // 1. Generate handoff
+      const result = generateHandoffDoc(instanceId);
+
+      // 2. Kill instance
+      if (pool) {
+        pool.kill(instanceId);
+      } else {
+        const proc = directProcesses.get(instanceId);
+        if (proc && !proc.killed) proc.kill('SIGTERM');
+      }
+
+      // 3. Wait for exit
+      await new Promise(r => setTimeout(r, 300));
+
+      // 4. Respawn with handoff context
+      const { model, dryRun, mission } = req.body || {};
+      const respawnModel = model || state.model;
+      const respawnMission = mission || state.mission;
+      const respawnDryRun = dryRun != null ? dryRun : state.dryRun;
+
+      if (pool) {
+        try { pool.remove(instanceId); } catch { /* ok */ }
+        pool.spawn(instanceId, { mission: respawnMission, dryRun: respawnDryRun, model: respawnModel });
+        pool.sendTo(instanceId, {
+          type: 'start',
+          mission: respawnMission || null,
+          dryRun: respawnDryRun || false,
+          model: respawnModel || null,
+          handoffFile: result.handoffFile,
+        });
+      } else {
+        directForkOrchestrator(instanceId, {
+          mission: respawnMission,
+          dryRun: respawnDryRun,
+          model: respawnModel,
+        });
+      }
+
+      ctx.events.emit('handoff:restart', { workerId: instanceId, ...result });
+
+      res.json({
+        success: true,
+        handoffFile: result.handoffFile,
+        newInstanceStatus: getInstanceState(instanceId),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ══════════════════════════════════════════════════════════
   // Legacy Single-Instance Endpoints (backward compatible)
   // ══════════════════════════════════════════════════════════

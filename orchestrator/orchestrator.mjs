@@ -23,6 +23,7 @@ import { isSDKAvailable, getRunAgent, SDK_MODE, runAgentViaSDK, createAgentOptio
 import { createObservability } from './observability.mjs';
 import { DAGScheduler, createDAGFromWorkflow, createDAGFromConfig } from './dag-scheduler.mjs';
 import { PluginManager } from './plugin-system.mjs';
+import { resolveAgentModel } from './model-routing.mjs';
 // Extracted modules (S63)
 import { initBalanceAnalyzer, getParamSearchResults, setParamSearchResults, runBalanceSim, runBalanceSims, loadBalanceState, saveBalanceState, updateBalanceState, loadExperimentLog, saveExperimentLog, parseBalanceConfigDiff, logExperiment, buildExperimentContext, detectBalanceRegressions, checkConvergence, buildBalanceContext, generateBalanceBacklog, getNextBacklogId, runParameterSearch, buildParamSearchContext } from './balance-analyzer.mjs';
 import { initGitOps, gitBackup as realGitBackup, tagRoundStart as realTagRoundStart, gitRevertToTag, gitRevertFiles, smartRevert as realSmartRevert, invalidateRevertedSessions as realInvalidateRevertedSessions, gitExec as realGitExec, createWorktree as realCreateWorktree, mergeWorktreeBranch as realMergeWorktreeBranch, removeWorktree, cleanupAllWorktrees as realCleanupAllWorktrees, getHeadSha as realGetHeadSha, smartRevertWorktrees as realSmartRevertWorktrees, verifyAgentOutput as realVerifyAgentOutput } from './git-ops.mjs';
@@ -160,6 +161,14 @@ const CONFIG = {
 const dryRunArg = process.argv.find(a => a === '--dry-run' || a.startsWith('--dry-run='));
 const DRY_RUN = !!dryRunArg;
 const DRY_RUN_PRESET = dryRunArg?.includes('=') ? dryRunArg.split('=')[1] : null;
+
+// Phase 3: --model override from CLI (passed by orchestrator-worker.mjs)
+const modelArg = process.argv.find(a => a === '--model');
+const MODEL_OVERRIDE = modelArg ? process.argv[process.argv.indexOf(modelArg) + 1] : null;
+
+// Phase 3: --handoff-file for context continuation
+const handoffArg = process.argv.find(a => a.startsWith('--handoff-file='));
+const HANDOFF_FILE = handoffArg ? handoffArg.split('=')[1] : null;
 if (DRY_RUN_PRESET && !PRESET_NAMES.has(DRY_RUN_PRESET)) {
   console.error(`Unknown dry-run preset: "${DRY_RUN_PRESET}" (available: ${[...PRESET_NAMES].join(', ')})`);
   process.exit(1);
@@ -310,7 +319,7 @@ function loadMission(missionPath) {
     role: a.role || null,
     handoff: join(HANDOFF_DIR, `${a.id}.md`),
     fileOwnership: a.fileOwnership || [],
-    model: a.model || null,                        // v5: per-agent model (sonnet, haiku, etc.)
+    model: a.model || MODEL_OVERRIDE || (a.role ? resolveAgentModel(a.role, CONFIG.model || 'sonnet') : null),
     maxModel: a.maxModel || null,                  // v6: max model tier for escalation (haiku/sonnet/opus)
     timeoutMs: a.timeoutMs || null,                // v5: per-agent timeout override
     maxTasksPerRound: a.maxTasksPerRound ?? 1,     // v6: batch task injection (0 = no backlog tasks)

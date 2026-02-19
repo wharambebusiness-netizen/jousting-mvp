@@ -162,6 +162,7 @@ export function createWebSocketHandler({ server, events }) {
     'project:files-changed',
     'worker:spawned', 'worker:ready', 'worker:exit',
     'worker:error', 'worker:log', 'worker:unhealthy', 'worker:restarted',
+    'handoff:generated', 'handoff:restart',
   ];
 
   const bridgeHandlers = [];
