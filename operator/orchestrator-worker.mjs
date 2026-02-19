@@ -22,7 +22,7 @@
 // ============================================================
 
 import { fork } from 'child_process';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import { existsSync } from 'fs';
 import { IPCEventBus } from '../shared/event-bus.mjs';
 
@@ -190,7 +190,7 @@ function handleMessage(msg) {
       break;
 
     case 'start':
-      if (!events) {
+      if (!events || !projectDir) {
         sendToParent({ type: 'error', message: 'Not initialized' });
         return;
       }

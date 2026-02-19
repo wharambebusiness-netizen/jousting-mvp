@@ -306,6 +306,8 @@ export function createProcessPool(ctx) {
    * @returns {boolean} true if message was sent
    */
   function handoff(workerId, handoffFile) {
+    const entry = workers.get(workerId);
+    if (!entry || entry.status !== 'running') return false;
     return sendTo(workerId, { type: 'start', handoffFile });
   }
 

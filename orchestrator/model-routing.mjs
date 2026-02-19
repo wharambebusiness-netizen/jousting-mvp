@@ -43,10 +43,11 @@ export const ROLE_MODEL_MAP = {
  * @returns {string} Resolved model name (haiku, sonnet, or opus)
  */
 export function resolveAgentModel(role, userModel) {
+  const effectiveUserModel = MODEL_TIERS[userModel] ? userModel : 'sonnet';
   const roleDefault = ROLE_MODEL_MAP[role] || 'sonnet';
   const roleTier = MODEL_TIERS[roleDefault] || 2;
-  const userTier = MODEL_TIERS[userModel] || 2;
+  const userTier = MODEL_TIERS[effectiveUserModel];
   // User's model is the ceiling — never exceed it
   if (roleTier <= userTier) return roleDefault;
-  return userModel;
+  return effectiveUserModel;
 }
