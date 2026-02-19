@@ -792,5 +792,77 @@ export function createViewRoutes(ctx) {
     }
   });
 
+  // ── Orchestrator Summary Fragment (dashboard integration) ────
+  router.get('/orch-summary', (_req, res) => {
+    try {
+      const getInstances = ctx.getOrchInstances;
+      if (!getInstances) {
+        // No pool mode — return empty
+        return res.type('text/html').send('');
+      }
+
+      const allInstances = getInstances();
+      if (!allInstances || allInstances.length === 0) {
+        return res.type('text/html').send('');
+      }
+
+      const running = allInstances.filter(i => i.running);
+      const totalCost = allInstances.reduce((sum, i) => sum + (i.cost || 0), 0);
+      const totalRounds = allInstances.reduce((sum, i) => sum + (i.round || 0), 0);
+
+      // Coordination info (if available)
+      let coordHtml = '';
+      if (ctx.coordinator) {
+        const coord = ctx.coordinator;
+        const progress = typeof coord.getProgress === 'function' ? coord.getProgress() : null;
+        if (progress && progress.total > 0) {
+          const pct = progress.total > 0 ? Math.round((progress.complete / progress.total) * 100) : 0;
+          coordHtml = `
+            <div class="orch-summary__coord">
+              <span class="orch-summary__label">Tasks</span>
+              <div class="orch-summary__progress-bar"><div class="orch-summary__progress-fill" style="width:${pct}%"></div></div>
+              <span>${progress.complete}/${progress.total}</span>
+            </div>`;
+        }
+      }
+
+      // Build instance cards
+      const cards = allInstances.map(inst => {
+        const dot = inst.running
+          ? '<span class="dot dot--running"></span>'
+          : '<span class="dot dot--stopped"></span>';
+        const mission = inst.mission ? `<span class="badge badge--neutral">${escapeHtml(inst.mission)}</span>` : '';
+        const model = inst.model ? `<span class="badge badge--info">${escapeHtml(inst.model)}</span>` : '';
+        const cost = inst.cost ? `<span class="mono" style="color:var(--text-muted)">$${Number(inst.cost).toFixed(4)}</span>` : '';
+        return `
+          <a href="/terminals" class="orch-summary__card" title="Open in Terminals">
+            ${dot}
+            <span class="orch-summary__id">${escapeHtml(inst.id)}</span>
+            ${mission}${model}
+            <span class="orch-summary__meta">R:${inst.round || 0}</span>
+            ${cost}
+          </a>`;
+      }).join('');
+
+      const html = `
+        <div class="orch-summary">
+          <div class="orch-summary__header">
+            <h3 class="section__title">Orchestrators</h3>
+            <div class="orch-summary__stats">
+              <span class="badge badge--success">${running.length} running</span>
+              <span class="badge badge--neutral">${allInstances.length} total</span>
+              <span class="mono" style="font-size:0.8125rem">$${formatCost(totalCost)} &middot; ${totalRounds} rounds</span>
+            </div>
+          </div>
+          ${coordHtml}
+          <div class="orch-summary__grid">${cards}</div>
+        </div>`;
+
+      res.type('text/html').send(html);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
   return router;
 }

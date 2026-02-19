@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
 </head>
 <body hx-boost="true">
   <div class="htmx-progress" id="progress-bar"></div>
@@ -34,10 +35,11 @@
     <div class="page-header">
       <h1>Terminals</h1>
       <div class="page-header__actions">
-        <button class="btn btn--sm btn--ghost" id="view-toggle" onclick="toggleTerminalView()" title="Toggle grid/tab view" aria-label="Toggle grid/tab view">
+        <button class="btn btn--sm btn--ghost" id="shortcuts-help" title="Keyboard Shortcuts" aria-label="Show keyboard shortcuts" onclick="toggleShortcutsHelp()">?</button>
+        <button class="btn btn--sm btn--ghost" id="view-toggle" onclick="toggleTerminalView()" title="Toggle grid/tab view (Ctrl+Shift+G)" aria-label="Toggle grid/tab view">
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
-        <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance" aria-label="Add instance">+ New Instance</button>
+        <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance (Ctrl+N)" aria-label="Add instance">+ New Instance</button>
       </div>
     </div>
 
@@ -93,6 +95,27 @@
       </article>
     </dialog>
   </main>
+
+  <!-- Keyboard Shortcuts Help -->
+  <dialog class="term-dialog shortcuts-dialog" id="shortcuts-dialog">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('shortcuts-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Keyboard Shortcuts</h3>
+      </header>
+      <div class="shortcuts-grid">
+        <kbd>Ctrl+1-4</kbd><span>Switch to terminal 1-4</span>
+        <kbd>Ctrl+Shift+&larr;/&rarr;</kbd><span>Previous / next terminal</span>
+        <kbd>Ctrl+N</kbd><span>New instance</span>
+        <kbd>Ctrl+W</kbd><span>Close active terminal</span>
+        <kbd>Ctrl+H</kbd><span>Handoff active terminal</span>
+        <kbd>Ctrl+F</kbd><span>Search in terminal</span>
+        <kbd>Ctrl+Shift+G</kbd><span>Toggle grid / tab view</span>
+        <kbd>Ctrl+Shift+M</kbd><span>Maximize / restore panel</span>
+        <kbd>Escape</kbd><span>Close dialog / search</span>
+      </div>
+    </article>
+  </dialog>
 
   <div id="toast-container"></div>
   <script src="/app.js"></script>

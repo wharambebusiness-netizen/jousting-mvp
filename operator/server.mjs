@@ -172,6 +172,9 @@ export function createApp(options = {}) {
     settings,
     getOrchStatus: orchRouter.getStatus || null,
     getOrchHistory: orchRouter.getHistory || null,
+    getOrchInstances: orchRouter.getInstances || null,
+    pool,
+    coordinator,
     missionsDir,
     projectDir,
   }));

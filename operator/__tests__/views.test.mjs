@@ -1807,3 +1807,46 @@ describe('P10 — renderProjectsPanel with gitStatusMap', () => {
     expect(html).not.toContain('git-badge');
   });
 });
+
+// ── Orchestrator Summary Fragment (Phase 7a) ─────────────────
+
+describe('View Routes — Orch Summary (Phase 7a)', () => {
+  beforeEach(setupApp);
+  afterEach(teardownApp);
+
+  it('GET /views/orch-summary returns empty when no pool mode', async () => {
+    const res = await get('/views/orch-summary');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('');
+  });
+
+  it('GET /views/orch-summary returns empty when no instances exist', async () => {
+    // Start via event to register instance, then stop and remove it
+    const res = await get('/views/orch-summary');
+    expect(res.status).toBe(200);
+    // Without pool mode, should be empty
+    expect(res.text).toBe('');
+  });
+
+  it('GET /views/orch-summary shows instances after orchestrator events', async () => {
+    // Emit orchestrator:started to create instance state
+    appCtx.events.emit('orchestrator:started', {
+      workerId: 'test-1',
+      mission: 'balance-fix',
+      model: 'sonnet',
+      dryRun: false,
+    });
+    appCtx.events.emit('round:start', { workerId: 'test-1', round: 1 });
+
+    const res = await get('/views/orch-summary');
+    expect(res.status).toBe(200);
+    // getOrchInstances tracks instances via events even without pool
+    expect(res.text).toContain('orch-summary');
+    expect(res.text).toContain('test-1');
+    expect(res.text).toContain('balance-fix');
+    expect(res.text).toContain('sonnet');
+    expect(res.text).toContain('Orchestrators');
+    expect(res.text).toContain('1 running');
+    expect(res.text).toContain('R:1');
+  });
+});

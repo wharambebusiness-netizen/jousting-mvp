@@ -73,6 +73,7 @@ function createWS(subscriptions, onMessage, opts) {
       backoff = 1000;
       updateDot('connected');
       ws.send(JSON.stringify({ subscribe: subscriptions }));
+      if (opts.onConnect) opts.onConnect();
     };
 
     ws.onmessage = function(e) {
@@ -81,6 +82,7 @@ function createWS(subscriptions, onMessage, opts) {
 
     ws.onclose = function() {
       updateDot('disconnected');
+      if (opts.onDisconnect) opts.onDisconnect();
       if (!closed) {
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, maxBackoff);

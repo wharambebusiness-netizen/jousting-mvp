@@ -46,6 +46,13 @@
       </div>
     </div>
 
+    <!-- Orchestrator Summary (pool mode only, auto-hides when empty) -->
+    <div class="section" id="orch-summary-section"
+         hx-get="/views/orch-summary"
+         hx-trigger="load, every 10s"
+         hx-swap="innerHTML">
+    </div>
+
     <!-- Quick Start Form -->
     <div class="section">
       <details class="quick-start" open>
