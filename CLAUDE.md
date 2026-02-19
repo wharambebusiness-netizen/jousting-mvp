@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 1979 tests, 30 suites (all passing)
+npm test                                           # 2115 tests, 31 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -72,7 +72,7 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   roles/              23 role templates (15 original + 8 Phase 4 general-purpose)
   missions/           Mission configs
 
-operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
+operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
   operator.mjs        CLI daemon: SDK query → context monitor → handoff → auto-commit → chain
   server.mjs          HTTP API + Web UI server (Express + WebSocket, M4+M5)
   process-pool.mjs    Multi-orchestrator worker process management (fork, IPC, heartbeat, restart)
@@ -80,11 +80,12 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
   registry.mjs        Chain persistence (factory pattern, atomic writes, file locking, CRUD, archival)
   settings.mjs        Settings persistence (factory pattern, atomic writes, validation, clamping)
   errors.mjs          Error classification, retry logic, circuit breaker, handoff validation
-  ws.mjs              WebSocket event bridge (EventBus → clients, 26 bridged events)
+  ws.mjs              WebSocket event bridge (EventBus → clients, 35 bridged events)
   file-watcher.mjs    Real-time fs.watch for project directories (P9)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
     orchestrator.mjs  Multi-instance orchestrator status/control + mission listing + reports (M6a+Phase1)
+    coordination.mjs  Coordination REST API: tasks, progress, rate-limit, costs, lifecycle (Phase 6)
     git.mjs           Git status, push, commit, PR creation, file-status (M6d+P10)
     settings.mjs      Settings GET/PUT API routes
     files.mjs         File system scanning + content preview API (P9+P10)
@@ -117,7 +118,13 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1)
     assignment.mjs   Role-to-skills mapping, profile detection, reassignment
     schema/          JSON Schema for skill manifests
     manifests/       17 skill manifests in git/, code/, research/, audit/ subdirs
-  __tests__/          643 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b)
+  coordination/       Inter-orchestrator coordination (Phase 6)
+    task-queue.mjs   DAG-based task queue with deps, priorities, worker assignment
+    work-assigner.mjs Multi-strategy assignment: round-robin, capability, work-stealing
+    rate-limiter.mjs Token bucket shared rate limiter for API calls
+    cost-aggregator.mjs Cross-worker cost tracking with per-worker + global budget caps
+    coordinator.mjs  Central broker: lifecycle, event routing, subsystem orchestration
+  __tests__/          779 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -155,7 +162,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-1979 tests across 30 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (162), file-watcher (16), process-pool (43), skills (158), skills-5b (75). Run `npm test` to verify.
+2115 tests across 31 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (125), views (162), file-watcher (16), process-pool (43), skills (158), skills-5b (75), coordination (136). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

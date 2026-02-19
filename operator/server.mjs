@@ -23,6 +23,7 @@ import { createRegistry } from './registry.mjs';
 import { createChainRoutes } from './routes/chains.mjs';
 import { createOrchestratorRoutes } from './routes/orchestrator.mjs';
 import { createGitRoutes } from './routes/git.mjs';
+import { createCoordinationRoutes } from './routes/coordination.mjs';
 import { createViewRoutes } from './routes/views.mjs';
 import { createWebSocketHandler } from './ws.mjs';
 import { createSettingsRoutes } from './routes/settings.mjs';
@@ -30,6 +31,7 @@ import { createFileRoutes } from './routes/files.mjs';
 import { createSettings } from './settings.mjs';
 import { createFileWatcher } from './file-watcher.mjs';
 import { createProcessPool } from './process-pool.mjs';
+import { createCoordinator } from './coordination/coordinator.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -135,13 +137,29 @@ export function createApp(options = {}) {
     pool = options.pool;
   }
 
+  // Coordinator for inter-orchestrator coordination (requires pool)
+  let coordinator = null;
+  if (pool && options.coordination !== false) {
+    const coordOpts = typeof options.coordination === 'object' ? options.coordination : {};
+    coordinator = createCoordinator({
+      events,
+      pool,
+      options: coordOpts,
+      log: () => {},
+    });
+  }
+
   const orchRouter = createOrchestratorRoutes({
     events,
     operatorDir,
     pool,
+    coordinator,
     orchestratorCtx: options.orchestratorCtx || null,
   });
   app.use('/api', orchRouter);
+
+  // Coordination routes (task queue, rate limiter, costs)
+  app.use('/api', createCoordinationRoutes({ coordinator }));
 
   // Resolve missions dir
   const missionsDir = join(projectDir, 'orchestrator', 'missions');
@@ -234,6 +252,11 @@ export function createApp(options = {}) {
     if (shutdownCalled) return;
     shutdownCalled = true;
 
+    // Stop coordinator before pool shutdown
+    if (coordinator && coordinator.getState() !== 'stopped') {
+      coordinator.stop();
+    }
+
     // Shut down process pool (graceful worker termination)
     if (pool) pool.shutdownAll().catch(() => {});
 
@@ -271,7 +294,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, pool, close };
+  return { app, server, events, wss, pool, coordinator, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────

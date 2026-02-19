@@ -163,6 +163,9 @@ export function createWebSocketHandler({ server, events }) {
     'worker:spawned', 'worker:ready', 'worker:exit',
     'worker:error', 'worker:log', 'worker:unhealthy', 'worker:restarted',
     'handoff:generated', 'handoff:restart',
+    'coord:started', 'coord:stopped', 'coord:draining',
+    'coord:assigned', 'coord:task-complete', 'coord:task-failed',
+    'coord:all-complete', 'coord:budget-warning', 'coord:budget-exceeded',
   ];
 
   const bridgeHandlers = [];
