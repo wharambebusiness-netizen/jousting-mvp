@@ -4,12 +4,14 @@
 
 Transform the single-orchestrator operator into a **multi-orchestrator command center** with:
 - 4+ concurrent orchestrator instances with unique colored terminals
+- **General-purpose agent roster** — 23+ roles covering any development project (web apps, APIs, libraries, data pipelines, etc.)
 - Shared project directory accessible by any/all orchestrators
 - Inter-orchestrator communication and coordination
 - Intelligent skill selection from a shared pool
 - One-click handoff/continuation per terminal
 - Tab navigation + 2x2 shared view
 - Scalable architecture (4→N orchestrators)
+- Pre-built mission templates for common project types (web-app, api-service, library, bugfix-sprint, refactor)
 
 ---
 
@@ -174,10 +176,61 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] Tests: handoff generation, multi-step workflow, context passing
 - [ ] **Deliverable:** One-click handoff per terminal, seamless context continuation
 
-### Phase 4: Skill Pool System (S106-S107) — ~2 sessions
+### Phase 4: General-Purpose Agent Roster (S108-S109) — ~2 sessions
+**Goal:** Expand from 15 game-specific roles to a universal agent roster that can tackle any development project
+
+The current roles are heavily coupled to the Jousting game (engine-dev, balance-analyst, game-designer, etc.). For a general-purpose orchestrator, we need roles that work across any codebase — web apps, APIs, CLIs, libraries, data pipelines, etc.
+
+**Session A — Core Builder Roles (S108):**
+
+New code-writing roles:
+
+- [ ] **`backend-dev`** — Server-side code: routes, middleware, services, models, database queries, auth. Framework-agnostic (Express, Fastify, Django, Rails, etc.). Owns `src/server/`, `src/api/`, `src/services/`, `src/models/`, `routes/`
+- [ ] **`full-stack-dev`** — Cross-cutting features spanning frontend and backend. Implements features end-to-end: API endpoint → service logic → UI component → tests. Broader file ownership than frontend-only or backend-only roles. Best for small-to-medium features that touch multiple layers
+- [ ] **`database-dev`** — Schema design, migrations, query optimization, ORM models, seed data, index management. Owns migration files, schema definitions, seed scripts. Understands SQL, ORMs (Prisma, Sequelize, TypeORM, Drizzle), and database-specific patterns
+- [ ] **`docs-writer`** — Technical documentation: README, API docs, architecture docs, changelogs, inline JSDoc/TSDoc, user guides. Never writes application code. Reads the codebase and produces clear, accurate documentation. Owns `docs/`, `*.md`, `CHANGELOG.md`
+- [ ] **`debugger`** — Bug reproduction and root cause analysis specialist. Reads error logs, stack traces, and failing tests. Adds strategic logging, writes minimal reproduction cases, isolates the fault, then writes a targeted fix. Excels at "I don't know why this is broken" tasks
+- [ ] **`refactorer`** — Large-scale code modernization: dependency upgrades, API migrations, pattern changes (callbacks→async/await, class→functional, CommonJS→ESM). Plans migration in phases, preserves backward compat during transition, validates with tests at each step
+
+New analysis/coordination roles:
+
+- [ ] **`integration-tester`** — E2E and integration tests: API endpoint tests (supertest), browser automation (Playwright), workflow tests that cross module boundaries. Complements unit-focused qa-engineer. Owns `tests/integration/`, `tests/e2e/`, `*.spec.ts`
+- [ ] **`dependency-manager`** — Package auditing, version bumps, vulnerability remediation, license compliance, bundle size analysis. Runs `npm audit`, evaluates upgrade paths, handles breaking changes in dependencies. Read-mostly with targeted `package.json` edits
+
+- [ ] Create role template files in `orchestrator/roles/` for all 8 new roles
+- [ ] Follow existing template structure: identity, rules, file ownership patterns, task format, handoff format, common-rules injection
+- [ ] Each template includes 5-10 example task descriptions for the role
+- [ ] Update `CODE_AGENT_ROLES` and `COORD_AGENT_ROLES` sets in orchestrator.mjs
+- [ ] Add new roles to spawn system's allowed spawn list where appropriate
+- [ ] Tests: role registry loads new roles, RoleRegistry metadata correct
+
+**Session B — Mission Templates + Role Composition (S109):**
+
+General-purpose mission configs that compose these roles for common project types:
+
+- [ ] **`missions/web-app.json`** — Full web application development: full-stack-dev, backend-dev, ui-dev, css-artist, qa-engineer, integration-tester, docs-writer, producer, tech-lead, self-reviewer (~10 agents)
+- [ ] **`missions/api-service.json`** — Backend API development: backend-dev, database-dev, qa-engineer, integration-tester, security-auditor, docs-writer, producer, tech-lead (~8 agents)
+- [ ] **`missions/library.json`** — Reusable library/package: engine-dev (renamed to `library-dev` alias), test-generator, docs-writer, qa-engineer, performance-analyst, producer, tech-lead (~7 agents)
+- [ ] **`missions/bugfix-sprint.json`** — Bug triage and fix: debugger ×2, qa-engineer, integration-tester, producer, self-reviewer (~6 agents, fast iteration)
+- [ ] **`missions/refactor.json`** — Code modernization: refactorer, qa-engineer, test-generator, architect, tech-lead, producer (~6 agents)
+- [ ] **`missions/full-team.json`** — Kitchen-sink team for large projects: full-stack-dev, backend-dev, ui-dev, database-dev, qa-engineer, integration-tester, debugger, docs-writer, security-auditor, producer, tech-lead, architect, self-reviewer (~13 agents, maxConcurrency: 4)
+
+Role composition principles:
+- [ ] Every mission includes at least: producer (task management) + tech-lead (code review) + self-reviewer (health monitoring)
+- [ ] Code agents outnumber coordination agents ~2:1
+- [ ] Budget defaults scale with team size: 6 agents = $10, 10 agents = $20, 13 agents = $30
+- [ ] Model defaults: coordination agents get haiku (cheap), code agents get sonnet (balanced), critical-path agents can escalate to opus
+- [ ] Document agent composition guidelines for users creating custom missions
+
+**Agent Profile System (ties into Phase 5 skill pool):**
+- [ ] Define capability tags per role: `[writes-code, reads-tests, runs-tests, reads-docs, writes-docs, git-operations, file-system, database, browser, network]`
+- [ ] Agent profiles used by Phase 6's capability-based work assignment
+- [ ] Profile metadata in role templates (structured YAML frontmatter or JSON sidecar)
+
+### Phase 5: Skill Pool System (S110-S111) — ~2 sessions
 **Goal:** Shared skill registry with intelligent selection
 
-**S106 — Skill Registry + Manifests:**
+**S110 — Skill Registry + Manifests:**
 - [ ] Create `operator/skills/` directory structure:
   ```
   operator/skills/
@@ -209,7 +262,7 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] Migrate existing `.claude/skills/` to new manifest format
 - [ ] Tests: registry loading, manifest validation, dependency resolution
 
-**S107 — Skill Selection + Agent Profiles:**
+**S111 — Skill Selection + Agent Profiles:**
 - [ ] Two-stage selector:
   - Stage 1: Category-based coarse filter (keyword matching, tag intersection)
   - Stage 2: If >10 candidates, LLM-based fine selection (cheap model call)
@@ -225,7 +278,7 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] Tests: selection pipeline, agent profiles, mid-task discovery
 - [ ] **Deliverable:** Skills are selected per-task (3-8 from 50+ pool), not bulk-loaded
 
-### Phase 5: Inter-Orchestrator Coordination (S108) — ~1 session
+### Phase 6: Inter-Orchestrator Coordination (S112) — ~1 session
 **Goal:** Orchestrators cooperate on shared projects
 
 - [ ] Task queue with dependency graph:
@@ -245,10 +298,10 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] Tests: task queue, dependency resolution, conflict detection
 - [ ] **Deliverable:** Orchestrators can coordinate on the same project without conflicts
 
-### Phase 6: Polish + Scaling (S109-S110) — ~2 sessions
+### Phase 7: Polish + Scaling (S113-S114) — ~2 sessions
 **Goal:** Production-ready multi-orchestrator system
 
-**S109 — UX Polish:**
+**S113 — UX Polish:**
 - [ ] Keyboard shortcuts: Ctrl+1-4 for tab switching, Ctrl+H for handoff
 - [ ] Terminal search (xterm.js search addon)
 - [ ] Orchestrator config panel (model, budget, skills per instance)
@@ -256,7 +309,7 @@ From the project structure review, these singleton patterns block multi-orchestr
 - [ ] 2x2 grid: per-terminal handoff button, minimize/maximize
 - [ ] Loading states and error recovery in terminal UI
 
-**S110 — Scaling + Robustness:**
+**S114 — Scaling + Robustness:**
 - [ ] Auto-scale: spawn workers when queue depth exceeds threshold
 - [ ] Auto-kill: idle workers after configurable timeout
 - [ ] Circuit breaker per worker (3 consecutive failures → offline)
@@ -316,18 +369,20 @@ The game engine is already cleanly separated. The orchestrator↔operator coupli
 
 This plan was developed in **S102** (research session). Implementation begins in S103.
 
-| Session | Focus | Estimated Effort |
-|---------|-------|-----------------|
-| S102 | Research + plan (this document) | Done |
-| S103 | Phase 0: Foundation cleanup | ~60k tokens |
-| S104 | Phase 1: Process pool + multi-instance backend | ~60k tokens |
-| S105 | Phase 2: Multi-terminal UI | ~60k tokens |
-| S106 | Phase 3: Handoff workflow | ~60k tokens |
-| S107 | Phase 4a: Skill registry + manifests | ~60k tokens |
-| S108 | Phase 4b: Skill selection + agent profiles | ~60k tokens |
-| S109 | Phase 5: Inter-orchestrator coordination | ~60k tokens |
-| S110 | Phase 6a: UX polish | ~60k tokens |
-| S111 | Phase 6b: Scaling + robustness | ~60k tokens |
+| Session | Focus | Estimated Effort | Status |
+|---------|-------|-----------------|--------|
+| S102 | Research + plan (this document) | Done | DONE |
+| S103 | Phase 0: Foundation cleanup | ~60k tokens | DONE |
+| S104 | Phase 1: Process pool + multi-instance backend | ~60k tokens | DONE |
+| S106 | Phase 2: Multi-terminal UI | ~60k tokens | DONE |
+| S107 | Phase 3: Handoff workflow | ~60k tokens | |
+| S108 | Phase 4a: Agent roster — core builder roles (8 new roles) | ~60k tokens | |
+| S109 | Phase 4b: Agent roster — mission templates + composition | ~60k tokens | |
+| S110 | Phase 5a: Skill registry + manifests | ~60k tokens | |
+| S111 | Phase 5b: Skill selection + agent profiles | ~60k tokens | |
+| S112 | Phase 6: Inter-orchestrator coordination | ~60k tokens | |
+| S113 | Phase 7a: UX polish | ~60k tokens | |
+| S114 | Phase 7b: Scaling + robustness | ~60k tokens | |
 
 ---
 
