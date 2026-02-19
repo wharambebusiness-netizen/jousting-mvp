@@ -6,8 +6,8 @@
 // automatically propagate to the parent's EventBus.
 //
 // IPC Protocol (parent → worker):
-//   { type: 'init', workerId, config, projectDir }
-//   { type: 'start', mission?, dryRun?, model? }
+//   { type: 'init', workerId, config, projectDir, handoffFile? }
+//   { type: 'start', mission?, dryRun?, model?, handoffFile? }
 //   { type: 'stop' }
 //   { type: 'shutdown' }
 //   { type: 'ping' }
@@ -31,6 +31,7 @@ import { IPCEventBus } from '../shared/event-bus.mjs';
 let workerId = process.env.WORKER_ID || 'unknown';
 let projectDir = null;
 let config = {};
+let handoffFile = null;
 let events = null;
 let orchProcess = null;
 let running = false;
@@ -63,6 +64,8 @@ function startOrchestrator(opts = {}) {
   }
 
   const { mission, dryRun, model } = opts;
+  // Use handoffFile from start message, falling back to init-level handoffFile
+  const resolvedHandoffFile = opts.handoffFile || handoffFile;
 
   const orchPath = join(projectDir, 'orchestrator', 'orchestrator.mjs');
   if (!existsSync(orchPath)) {
@@ -80,6 +83,7 @@ function startOrchestrator(opts = {}) {
   }
   if (dryRun) args.push('--dry-run');
   if (model) args.push('--model', model);
+  if (resolvedHandoffFile) args.push(`--handoff-file=${resolvedHandoffFile}`);
 
   // Emit started event via IPCEventBus (propagates to parent)
   events.emit('orchestrator:started', {
@@ -178,6 +182,8 @@ function handleMessage(msg) {
       workerId = msg.workerId || workerId;
       projectDir = msg.projectDir || projectDir;
       config = msg.config || config;
+      // Store init-level handoff file path (can be overridden per-start)
+      if (msg.handoffFile) handoffFile = msg.handoffFile;
       // Create IPCEventBus with worker ID for event tagging
       events = new IPCEventBus({ workerId });
       sendToParent({ type: 'ready' });

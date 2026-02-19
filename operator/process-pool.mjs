@@ -127,6 +127,7 @@ export function createProcessPool(ctx) {
    * @param {string} [config.model] - Model to use
    * @param {string} [config.mission] - Mission file path
    * @param {boolean} [config.dryRun] - Dry run mode
+   * @param {string} [config.handoffFile] - Path to handoff context file
    * @returns {object} Worker entry
    */
   function spawn(workerId, config = {}) {
@@ -206,7 +207,7 @@ export function createProcessPool(ctx) {
 
     // Send initial config
     try {
-      child.send({ type: 'init', workerId, config, projectDir });
+      child.send({ type: 'init', workerId, config, projectDir, handoffFile: config.handoffFile || null });
     } catch (err) {
       log(`[pool] Failed to send init to worker ${workerId}: ${err.message}`);
     }
@@ -296,6 +297,16 @@ export function createProcessPool(ctx) {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Send a handoff context file to a specific worker, triggering a start with that context.
+   * @param {string} workerId
+   * @param {string} handoffFile - Path to handoff context file
+   * @returns {boolean} true if message was sent
+   */
+  function handoff(workerId, handoffFile) {
+    return sendTo(workerId, { type: 'start', handoffFile });
   }
 
   /**
@@ -410,6 +421,7 @@ export function createProcessPool(ctx) {
     kill,
     restart: restartWorker,
     sendTo,
+    handoff,
     getStatus,
     getWorker,
     remove,

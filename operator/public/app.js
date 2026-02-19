@@ -673,3 +673,11 @@ window.toggleProjectCard = toggleProjectCard;
     }
   });
 })();
+
+// ── Open Project in Terminal ─────────────────────────────────
+
+function openProjectInTerminal(projectDir) {
+  sessionStorage.setItem('pending-terminal-project', projectDir);
+  window.location.href = '/terminals';
+}
+window.openProjectInTerminal = openProjectInTerminal;

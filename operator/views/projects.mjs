@@ -149,6 +149,7 @@ export function renderProjectCard(project, rootEntries, gitStatus) {
         ${displayPath ? `<span class="project-card__path">${displayPath}</span>` : ''}
       </div>
       <div class="project-card__actions">
+        <button class="btn btn--sm btn--primary" onclick="openProjectInTerminal('${eDir}')" title="Open in Terminal" aria-label="Open project in terminal">&#x2328; Terminal</button>
         <button class="project-card__refresh" onclick="refreshProjectTree(this.closest('.project-card'))" title="Refresh file tree" aria-label="Refresh file tree">↻</button>
         <button class="project-card__toggle" onclick="toggleProjectCard(this.closest('.project-card'))" title="Collapse/expand" aria-label="Collapse/expand project" aria-expanded="true">▾</button>
       </div>
