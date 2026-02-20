@@ -2646,11 +2646,14 @@ function _doFilterSidebar(input) {
 
 function setupDragOnTreeFiles(container) {
   container.addEventListener('dragstart', function(e) {
-    var fileEl = e.target.closest('.tree-file');
-    if (!fileEl) return;
-    var path = fileEl.dataset.path;
+    // Support both files and folder drag handles
+    var el = e.target.closest('.tree-file') || e.target.closest('.tree-drag-handle');
+    if (!el) return;
+    var path = el.dataset.path;
     if (!path) return;
+    var itemType = el.dataset.type === 'dir' ? 'dir' : 'file';
     e.dataTransfer.setData('text/plain', path);
+    e.dataTransfer.setData('application/x-tree-type', itemType);
     e.dataTransfer.effectAllowed = 'copy';
   });
 }
@@ -2701,14 +2704,21 @@ function setupDropTargets() {
     if (!inst) return;
 
     if (inst.type === 'claude' && inst.binaryWs && inst.binaryWs.readyState === 1) {
-      // Send /add command to the Claude terminal
       var fullPath = sidebarRoot ? sidebarRoot.replace(/\\/g, '/') + '/' + filePath : filePath;
-      inst.binaryWs.send('/add ' + fullPath + '\r');
-      showToast('Added ' + filePath + ' to ' + termId, 'success');
+      var itemType = e.dataTransfer.getData('application/x-tree-type');
+      if (itemType === 'dir') {
+        // Send cd command for folders
+        inst.binaryWs.send('cd ' + fullPath + '\r');
+        showToast('cd ' + filePath + ' in ' + termId, 'success');
+      } else {
+        // Send /add command for files
+        inst.binaryWs.send('/add ' + fullPath + '\r');
+        showToast('Added ' + filePath + ' to ' + termId, 'success');
+      }
     } else if (inst.type === 'claude') {
       showToast('Terminal ' + termId + ' is not connected', 'error');
     } else {
-      showToast('Can only drop files on Claude terminals', 'error');
+      showToast('Can only drop files/folders on Claude terminals', 'error');
     }
   });
 }

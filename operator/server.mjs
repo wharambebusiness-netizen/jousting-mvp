@@ -369,7 +369,7 @@ if (isMain) {
   const args = parseCliArgs();
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 
-  const appOptions = { operatorDir, _registerSignalHandlers: true };
+  const appOptions = { operatorDir, _registerSignalHandlers: true, claudePool: true };
 
   // Pool mode: enable process pool + coordinator for task board / multi-orchestrator
   if (args.pool) {

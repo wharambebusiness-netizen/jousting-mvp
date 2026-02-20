@@ -1571,6 +1571,17 @@ input::placeholder { color: var(--text-muted); }
   font-weight: 600;
   color: var(--text-primary);
 }
+.tree-drag-handle {
+  cursor: grab;
+  opacity: 0.3;
+  font-size: 0.75rem;
+  padding: 0 2px;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+.tree-drag-handle:hover {
+  opacity: 0.8;
+}
 .tree-file {
   display: flex;
   align-items: center;
@@ -2467,6 +2478,15 @@ details[open] > .tree-summary .tree-icon--dir {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.875rem;
+}
+.term-dialog label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+.term-dialog label:has(input[type="checkbox"]) input {
+  margin: 0;
 }
 .term-dialog footer {
   display: flex;

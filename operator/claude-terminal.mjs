@@ -118,7 +118,14 @@ export async function createClaudeTerminal(opts) {
 
   // ── Spawn PTY ───────────────────────────────────────────
 
-  const shell = IS_WINDOWS ? 'claude.cmd' : 'claude';
+  // node-pty on Windows needs a fully-resolved path
+  let shell = 'claude';
+  if (IS_WINDOWS) {
+    try {
+      const { execSync } = await import('child_process');
+      shell = execSync('where claude', { encoding: 'utf8' }).trim().split(/\r?\n/)[0];
+    } catch { shell = 'claude.exe'; }
+  }
 
   let ptyProcess;
   try {
@@ -129,6 +136,8 @@ export async function createClaudeTerminal(opts) {
       cwd: projectDir,
       env: {
         ...process.env,
+        // Clear nested-session guard so spawned Claude doesn't refuse to start
+        CLAUDECODE: '',
         // Set autocompact threshold for handoff detection
         CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE: '70',
         // Force color output

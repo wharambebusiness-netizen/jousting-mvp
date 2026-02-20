@@ -79,6 +79,7 @@ function renderFileEntry(entry, _root, gitStatus) {
     const changeDot = dirChanged ? '<span class="git-dir-dot" title="Contains changes" aria-label="Contains changes"></span>' : '';
     return `<details class="tree-dir" data-path="${ePath}" ontoggle="loadTreeNode(this)">
       <summary class="tree-summary tree-summary--dir">
+        <span class="tree-drag-handle" draggable="true" data-path="${ePath}" data-type="dir" title="Drag to terminal to cd">⠿</span>
         <span class="tree-icon tree-icon--dir">📁</span>
         <span class="tree-name">${escapeHtml(entry.name)}/</span>
         ${changeDot}
