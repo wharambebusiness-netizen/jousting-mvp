@@ -76,13 +76,22 @@ var viewToggle = document.getElementById('view-toggle-icon');
 
 // ── State: maximized panel ───────────────────────────────────
 var maximizedId = null; // id of maximized panel in grid mode, or null
+var wsHandle = null;    // WebSocket connection handle for cleanup
 
 // ── Initialization ───────────────────────────────────────────
 (function init() {
   applyViewMode();
   loadInstances();
   loadMissions();
+  // Close previous WS connection (HTMX boost re-runs scripts without full page unload)
+  if (wsHandle) { wsHandle.close(); wsHandle = null; }
   connectWS();
+  // Register cleanup for HTMX navigation away
+  if (typeof onPageCleanup === 'function') {
+    onPageCleanup(function() {
+      if (wsHandle) { wsHandle.close(); wsHandle = null; }
+    });
+  }
   checkPendingProject();
 
   // ── Keyboard Shortcuts ──────────────────────────────────
@@ -695,7 +704,7 @@ function applyViewMode() {
 
 // ── WebSocket event routing ──────────────────────────────────
 function connectWS() {
-  createWS([
+  wsHandle = createWS([
     'worker:*',
     'orchestrator:*',
     'agent:*',

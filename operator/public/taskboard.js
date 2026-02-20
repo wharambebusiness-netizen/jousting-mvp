@@ -21,6 +21,7 @@
   var tasks = {};           // id → task object
   var draggedId = null;     // currently dragged task id
   var refreshTimer = null;
+  var wsHandle = null;      // WS connection handle for cleanup
   var selected = {};        // id → true for selected tasks
   var filterText = '';      // current search text
   var filterStatus = '';    // current status filter
@@ -810,7 +811,7 @@
   // ── WebSocket Real-Time Updates ─────────────────────────────
 
   if (typeof createWS === 'function') {
-    createWS(['coord:*'], function (msg) {
+    wsHandle = createWS(['coord:*'], function (msg) {
       var ev = msg.event;
       var data = msg.data || {};
 
@@ -861,8 +862,16 @@
     loadStatus();
   }, 10000);
 
-  // Cleanup on page unload (SPA navigation)
+  // Cleanup on page unload (full navigation)
   window.addEventListener('beforeunload', function () {
     if (refreshTimer) clearInterval(refreshTimer);
+    if (wsHandle) { wsHandle.close(); wsHandle = null; }
   });
+  // Cleanup on HTMX navigation (SPA boost)
+  if (typeof onPageCleanup === 'function') {
+    onPageCleanup(function () {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      if (wsHandle) { wsHandle.close(); wsHandle = null; }
+    });
+  }
 })();

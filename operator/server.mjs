@@ -314,6 +314,7 @@ function parseCliArgs() {
       port:     { type: 'string', default: String(DEFAULT_PORT) },
       host:     { type: 'string', default: DEFAULT_HOST },
       operator: { type: 'boolean', default: false },
+      pool:     { type: 'boolean', default: false },
       help:     { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
@@ -330,6 +331,7 @@ Options:
   --port N        Port to listen on (default: ${DEFAULT_PORT})
   --host HOST     Host to bind to (default: ${DEFAULT_HOST})
   --operator      Combined mode: also run operator daemon
+  --pool          Enable process pool + coordinator (task board, multi-orchestrator)
   -h, --help      Show this help
 `);
     process.exit(0);
@@ -339,6 +341,7 @@ Options:
     port: parseInt(values.port, 10),
     host: values.host,
     operator: values.operator,
+    pool: values.pool,
   };
 }
 
@@ -351,6 +354,11 @@ if (isMain) {
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 
   const appOptions = { operatorDir, _registerSignalHandlers: true };
+
+  // Pool mode: enable process pool + coordinator for task board / multi-orchestrator
+  if (args.pool) {
+    appOptions.pool = true;
+  }
 
   // Combined mode: wire up chain execution via operator's runChain
   if (args.operator) {
@@ -386,6 +394,9 @@ if (isMain) {
     console.log(`WebSocket available at ws://${args.host}:${args.port}/ws`);
     if (args.operator) {
       console.log('Combined mode: operator daemon active');
+    }
+    if (args.pool) {
+      console.log('Pool mode: process pool + coordinator active');
     }
   });
 }

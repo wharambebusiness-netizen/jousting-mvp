@@ -94,6 +94,19 @@ function createWS(subscriptions, onMessage, opts) {
   return { close: function() { closed = true; if (ws) ws.close(); } };
 }
 
+// ── Page Cleanup on HTMX Navigation ─────────────────────────
+// Pages register cleanup callbacks (e.g. WS close, interval clear).
+// HTMX boost re-runs scripts without full page unload, so we need
+// to clean up previous page state before the new page initializes.
+var _pageCleanups = [];
+function onPageCleanup(fn) { _pageCleanups.push(fn); }
+document.body.addEventListener('htmx:beforeSwap', function () {
+  for (var i = 0; i < _pageCleanups.length; i++) {
+    try { _pageCleanups[i](); } catch (_) {}
+  }
+  _pageCleanups = [];
+});
+
 // ── Branch Name Auto-Generation ──────────────────────────────
 
 function slugify(text) {

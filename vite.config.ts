@@ -10,4 +10,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  test: {
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.worktrees/**',
+      '**/__test_tmp_*/**',
+    ],
+  },
 })
