@@ -83,71 +83,9 @@
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
         <button class="btn btn--sm btn--ghost" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle file sidebar (Ctrl+B)" aria-label="Toggle file sidebar">&#128193;</button>
-        <button class="btn btn--sm btn--primary" id="add-claude-btn" onclick="addClaudeTerminal()" title="New Claude terminal (Ctrl+Shift+C)" aria-label="New Claude terminal">+ Claude</button>
-        <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance (Ctrl+N)" aria-label="Add instance">+ Orchestrator</button>
+        <button class="btn btn--sm btn--primary" id="add-terminal-btn" onclick="openNewTerminal()" title="New terminal" aria-label="New terminal">+ New</button>
       </div>
     </div>
-
-    <!-- Worker Health Panel (collapsible) -->
-    <details class="term-health" id="term-health">
-      <summary class="term-health__toggle">
-        <span class="term-health__title">Worker Health</span>
-        <span class="term-health__badge" id="health-badge" title="Total workers">0</span>
-      </summary>
-      <div class="term-health__grid" id="health-grid">
-        <!-- Health cards rendered dynamically by terminals.js -->
-        <div class="term-health__empty" id="health-empty">No workers in pool</div>
-      </div>
-    </details>
-
-    <!-- Coordination Metrics Panel (collapsible) -->
-    <details class="term-metrics" id="term-metrics">
-      <summary class="term-metrics__toggle">
-        <span class="term-metrics__title">Coordination Metrics</span>
-        <span class="term-metrics__badge" id="metrics-state-badge" title="Coordinator state">--</span>
-        <button class="btn btn--xs btn--ghost term-metrics__config-btn" id="coord-config-btn" onclick="event.stopPropagation(); openCoordConfigDialog()" title="Configure rate limits &amp; budgets">&#9881;</button>
-      </summary>
-      <div class="term-metrics__content" id="metrics-content">
-        <div class="term-metrics__grid" id="metrics-grid">
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Throughput</span>
-            <span class="term-metrics__value" id="metric-throughput">--</span>
-            <span class="term-metrics__sub">tasks / min</span>
-          </div>
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Avg Completion</span>
-            <span class="term-metrics__value" id="metric-avg-time">--</span>
-            <span class="term-metrics__sub">duration</span>
-          </div>
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Utilization</span>
-            <span class="term-metrics__value" id="metric-utilization">--</span>
-            <span class="term-metrics__sub" id="metric-util-bar-wrap"><span class="term-metrics__util-bar"><span class="term-metrics__util-fill" id="metric-util-fill"></span></span></span>
-          </div>
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Completed</span>
-            <span class="term-metrics__value term-metrics__value--success" id="metric-complete">0</span>
-            <span class="term-metrics__sub" id="metric-complete-recent">0 in 5m window</span>
-          </div>
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Failed</span>
-            <span class="term-metrics__value term-metrics__value--error" id="metric-failed">0</span>
-            <span class="term-metrics__sub" id="metric-failed-recent">0 in 5m window</span>
-          </div>
-          <div class="term-metrics__card">
-            <span class="term-metrics__label">Pending / Running</span>
-            <span class="term-metrics__value" id="metric-pending-running">0 / 0</span>
-            <span class="term-metrics__sub" id="metric-cancelled">0 cancelled</span>
-          </div>
-          <div class="term-metrics__card" id="metric-adaptive-card">
-            <span class="term-metrics__label">Rate Limit</span>
-            <span class="term-metrics__value" id="metric-adaptive-pct">100%</span>
-            <span class="term-metrics__sub"><span class="term-metrics__adaptive-badge" id="metric-adaptive-state">normal</span></span>
-          </div>
-        </div>
-        <div class="term-metrics__empty" id="metrics-empty" style="display:none">Coordination not active</div>
-      </div>
-    </details>
 
     <!-- Tab Bar -->
     <div class="term-tabs" id="term-tabs" role="tablist" aria-label="Orchestrator instances">
@@ -173,10 +111,32 @@
         <!-- Terminal panels rendered dynamically by terminals.js -->
         <div class="term-empty" id="term-empty">
           <p>No terminals running.</p>
-          <p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>
+          <p>Click <strong>+ New</strong> to start a terminal session.</p>
         </div>
       </div>
     </div>
+
+    <!-- Terminal Type Chooser -->
+    <dialog class="term-dialog" id="new-terminal-chooser">
+      <article>
+        <header>
+          <button class="btn btn--sm btn--ghost" onclick="document.getElementById('new-terminal-chooser').close()" aria-label="Close" style="float:right">&times;</button>
+          <h3>New Terminal</h3>
+        </header>
+        <div class="chooser-cards">
+          <button class="chooser-card" onclick="document.getElementById('new-terminal-chooser').close(); addClaudeTerminal()">
+            <span class="chooser-card__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 8l3 2.5L6 13"/><line x1="11" y1="13" x2="14" y2="13"/></svg></span>
+            <span class="chooser-card__title">Interactive Session</span>
+            <span class="chooser-card__desc">Chat with Claude directly. Type prompts, get responses. Like having Claude Code in your browser.</span>
+          </button>
+          <button class="chooser-card" onclick="document.getElementById('new-terminal-chooser').close(); addInstance()">
+            <span class="chooser-card__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 3v2m0 10v2M3 10h2m10 0h2m-1.5-5.5L14 6m-8 8l-1.5 1.5m0-11L6 6m8 8l1.5 1.5"/></svg></span>
+            <span class="chooser-card__title">Automated Worker</span>
+            <span class="chooser-card__desc">Runs missions and tasks automatically. Output-only &mdash; you watch it work.</span>
+          </button>
+        </div>
+      </article>
+    </dialog>
 
     <!-- New Instance Dialog -->
     <dialog class="term-dialog" id="new-instance-dialog">
@@ -286,38 +246,6 @@
     </article>
   </dialog>
 
-  <!-- Coordination Config Dialog -->
-  <dialog class="term-dialog coord-config-dialog" id="coord-config-dialog">
-    <article>
-      <header>
-        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('coord-config-dialog').close()" aria-label="Close" style="float:right">&times;</button>
-        <h3>Coordination Settings</h3>
-      </header>
-      <form id="coord-config-form" onsubmit="return submitCoordConfig(event)">
-        <label>
-          Max Requests / min
-          <input type="number" name="maxRequestsPerMinute" id="coord-max-rpm" min="1" max="10000" step="1" value="60" placeholder="e.g. 60">
-        </label>
-        <label>
-          Max Tokens / min
-          <input type="number" name="maxTokensPerMinute" id="coord-max-tpm" min="1000" max="10000000" step="1000" value="100000" placeholder="e.g. 100000">
-        </label>
-        <label>
-          Global Budget (USD)
-          <input type="number" name="globalBudgetUsd" id="coord-global-budget" min="0" max="1000" step="0.5" value="50" placeholder="e.g. 50.00">
-        </label>
-        <label>
-          Per-Worker Budget (USD)
-          <input type="number" name="perWorkerBudgetUsd" id="coord-worker-budget" min="0" max="500" step="0.5" value="10" placeholder="e.g. 10.00">
-        </label>
-        <footer>
-          <button type="button" class="btn btn--ghost" onclick="document.getElementById('coord-config-dialog').close()">Cancel</button>
-          <button type="submit" class="btn btn--primary">Apply</button>
-        </footer>
-      </form>
-    </article>
-  </dialog>
-
   <!-- Keyboard Shortcuts Help -->
   <dialog class="term-dialog shortcuts-dialog" id="shortcuts-dialog">
     <article>
@@ -328,8 +256,8 @@
       <div class="shortcuts-grid">
         <kbd>Ctrl+1-4</kbd><span>Switch to terminal 1-4</span>
         <kbd>Ctrl+Shift+&larr;/&rarr;</kbd><span>Previous / next terminal</span>
-        <kbd>Ctrl+Shift+C</kbd><span>New Claude terminal</span>
-        <kbd>Ctrl+N</kbd><span>New orchestrator instance</span>
+        <kbd>Ctrl+Shift+C</kbd><span>New interactive session</span>
+        <kbd>Ctrl+N</kbd><span>New automated worker</span>
         <kbd>Ctrl+W</kbd><span>Close active terminal</span>
         <kbd>Ctrl+H</kbd><span>Handoff active terminal</span>
         <kbd>Ctrl+F</kbd><span>Search in terminal</span>

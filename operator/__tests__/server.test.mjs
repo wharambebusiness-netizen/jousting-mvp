@@ -1547,12 +1547,12 @@ describe('Terminals Page', () => {
     expect(text).toContain('createWS');
   });
 
-  it('terminals page has worker health panel (Phase 8)', async () => {
+  it('terminals page has terminal type chooser (replaces health panel)', async () => {
     const res = await fetch(`${baseUrl}/terminals`);
     const text = await res.text();
-    expect(text).toContain('term-health');
-    expect(text).toContain('health-grid');
-    expect(text).toContain('Worker Health');
+    expect(text).toContain('new-terminal-chooser');
+    expect(text).toContain('chooser-card');
+    expect(text).toContain('Interactive Session');
   });
 
   it('terminals page has config dialog (Phase 8)', async () => {
@@ -2081,24 +2081,22 @@ describe('Terminals Page Phase 10 Elements', () => {
     teardownTestDir();
   });
 
-  it('terminals page has metrics panel (Phase 10)', async () => {
+  it('terminals page has unified new terminal button (replaces metrics panel)', async () => {
     const res = await fetch(`${baseUrl}/terminals`);
     const text = await res.text();
-    expect(text).toContain('term-metrics');
-    expect(text).toContain('metrics-grid');
-    expect(text).toContain('Coordination Metrics');
-    expect(text).toContain('metric-throughput');
-    expect(text).toContain('metric-utilization');
+    expect(text).toContain('add-terminal-btn');
+    expect(text).toContain('openNewTerminal()');
+    expect(text).toContain('+ New');
   });
 
-  it('terminals page has coordination config dialog (Phase 10)', async () => {
+  it('terminals page has chooser with both terminal types', async () => {
     const res = await fetch(`${baseUrl}/terminals`);
     const text = await res.text();
-    expect(text).toContain('coord-config-dialog');
-    expect(text).toContain('coord-config-form');
-    expect(text).toContain('coord-max-rpm');
-    expect(text).toContain('coord-global-budget');
-    expect(text).toContain('Coordination Settings');
+    expect(text).toContain('Interactive Session');
+    expect(text).toContain('Automated Worker');
+    expect(text).toContain('new-terminal-chooser');
+    expect(text).toContain('new-claude-dialog');
+    expect(text).toContain('new-instance-dialog');
   });
 
   it('terminals.js includes metrics panel functions (Phase 10)', async () => {
@@ -2143,13 +2141,12 @@ describe('Terminals Page Phase 11 Elements', () => {
     teardownTestDir();
   });
 
-  it('terminals page has adaptive rate limit card (Phase 11)', async () => {
+  it('terminals page has updated shortcut labels (Phase 11)', async () => {
     const res = await fetch(`${baseUrl}/terminals`);
     const text = await res.text();
-    expect(text).toContain('metric-adaptive-card');
-    expect(text).toContain('metric-adaptive-pct');
-    expect(text).toContain('metric-adaptive-state');
-    expect(text).toContain('Rate Limit');
+    expect(text).toContain('New interactive session');
+    expect(text).toContain('New automated worker');
+    expect(text).toContain('shortcuts-dialog');
   });
 
   it('terminals.js includes adaptive rate functions (Phase 11)', async () => {

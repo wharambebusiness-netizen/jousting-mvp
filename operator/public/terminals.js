@@ -602,6 +602,12 @@ function connectClaudeBinaryWs(inst) {
   });
 }
 
+// ── New terminal chooser ─────────────────────────────────────
+function openNewTerminal() {
+  var dialog = document.getElementById('new-terminal-chooser');
+  if (dialog) dialog.showModal();
+}
+
 // ── Add Claude terminal button handler ───────────────────────
 function addClaudeTerminal() {
   var dialog = document.getElementById('new-claude-dialog');

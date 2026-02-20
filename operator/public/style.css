@@ -200,7 +200,7 @@ h3 { font-size: 1rem; font-weight: 600; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--sp-2) var(--sp-2);
+  padding: var(--sp-2) 0;
   list-style: none;
   margin: 0;
   overflow-y: auto;
@@ -209,7 +209,7 @@ h3 { font-size: 1rem; font-weight: 600; }
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 14px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
   text-decoration: none;
@@ -302,7 +302,8 @@ h3 { font-size: 1rem; font-weight: 600; }
 
 /* Body layout: offset by sidebar */
 body.has-sidebar {
-  margin-left: var(--sidebar-width-collapsed);
+  padding-left: var(--sidebar-width-collapsed);
+  box-sizing: border-box;
 }
 
 /* === 5. Layout === */
@@ -2683,6 +2684,54 @@ details[open] > .tree-summary .tree-icon--dir {
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border-subtle);
+}
+
+/* Terminal type chooser cards */
+.chooser-cards {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+}
+.chooser-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+.chooser-card:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px rgba(99,102,241,0.15);
+  color: var(--text-primary);
+}
+.chooser-card__icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.6;
+}
+.chooser-card:hover .chooser-card__icon {
+  opacity: 1;
+}
+.chooser-card__icon svg {
+  width: 32px;
+  height: 32px;
+}
+.chooser-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.chooser-card__desc {
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 /* View toggle button */
