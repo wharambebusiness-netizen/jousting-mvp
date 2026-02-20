@@ -2153,6 +2153,25 @@ details[open] > .tree-summary .tree-icon--dir {
   padding: 0 var(--sp-1);
 }
 
+/* Auto-handoff badge + toggle (Phase 15E) */
+.term-status__handoff-badge {
+  font-size: 0.7rem;
+  padding: 1px var(--sp-1);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  background: rgba(255,255,255,0.04);
+  opacity: 0.5;
+}
+.term-status__handoff-badge--active {
+  color: var(--status-info, #22d3ee);
+  background: rgba(34,211,238,0.1);
+  opacity: 1;
+}
+.term-status__btn--active {
+  color: var(--status-info, #22d3ee) !important;
+  background: rgba(34,211,238,0.12);
+}
+
 /* Terminal xterm container */
 .term-xterm {
   flex: 1;

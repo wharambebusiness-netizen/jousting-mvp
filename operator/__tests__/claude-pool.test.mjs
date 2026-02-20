@@ -9,7 +9,7 @@ import { EventBus } from '../../shared/event-bus.mjs';
 // ── Fake terminal factory ──────────────────────────────────
 
 function createFakeTerminal(id, pid = 100) {
-  const listeners = { data: [], exit: [], error: [] };
+  const listeners = { data: [], exit: [], error: [], 'context-warning': [] };
   let status = 'running';
   let exitCode = null;
   let exitSignal = null;
@@ -60,15 +60,22 @@ function createFakeTerminal(id, pid = 100) {
     _triggerError(err) {
       for (const fn of listeners.error) fn(err);
     },
+    _triggerContextWarning(info) {
+      for (const fn of listeners['context-warning']) fn(info);
+    },
   };
 }
 
 // ── Mock claude-terminal.mjs ───────────────────────────────
 
-vi.mock('../claude-terminal.mjs', () => ({
-  createClaudeTerminal: vi.fn(),
-  isNodePtyAvailable: vi.fn().mockResolvedValue(true),
-}));
+vi.mock('../claude-terminal.mjs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    createClaudeTerminal: vi.fn(),
+    isNodePtyAvailable: vi.fn().mockResolvedValue(true),
+  };
+});
 
 const { createClaudePool, MAX_TERMINALS } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
@@ -386,6 +393,78 @@ describe('createClaudePool', () => {
     });
   });
 
+  // ── auto-handoff (Phase 15E) ─────────────────────
+
+  describe('auto-handoff', () => {
+    it('setAutoHandoff enables/disables on a terminal', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').autoHandoff).toBe(false);
+      pool.setAutoHandoff('t1', true);
+      expect(pool.getTerminal('t1').autoHandoff).toBe(true);
+      pool.setAutoHandoff('t1', false);
+      expect(pool.getTerminal('t1').autoHandoff).toBe(false);
+    });
+
+    it('setAutoHandoff returns false for nonexistent', () => {
+      expect(pool.setAutoHandoff('nope', true)).toBe(false);
+    });
+
+    it('spawn tracks autoHandoff from opts', async () => {
+      await pool.spawn('t1', { autoHandoff: true });
+      expect(pool.getTerminal('t1').autoHandoff).toBe(true);
+    });
+
+    it('spawn defaults autoHandoff to false', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').autoHandoff).toBe(false);
+    });
+
+    it('handoffCount starts at 0', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').handoffCount).toBe(0);
+    });
+
+    it('handoffCount carries forward from _handoffCount opt', async () => {
+      await pool.spawn('t1', { _handoffCount: 3 });
+      expect(pool.getTerminal('t1').handoffCount).toBe(3);
+    });
+
+    it('does not auto-handoff when disabled', async () => {
+      const handoffs = [];
+      events.on('claude-terminal:handoff', (d) => handoffs.push(d));
+      await pool.spawn('t1', { autoHandoff: false });
+      pool.getTerminalHandle('t1')._triggerExit(0);
+      await new Promise(r => setTimeout(r, 50));
+      expect(handoffs.length).toBe(0);
+    });
+
+    it('does not auto-handoff on non-zero exit', async () => {
+      const handoffs = [];
+      events.on('claude-terminal:handoff', (d) => handoffs.push(d));
+      await pool.spawn('t1', { autoHandoff: true });
+      pool.getTerminalHandle('t1')._triggerExit(1);
+      await new Promise(r => setTimeout(r, 50));
+      expect(handoffs.length).toBe(0);
+    });
+
+    it('forwards context-warning events from terminal', async () => {
+      const warnings = [];
+      events.on('claude-terminal:context-warning', (d) => warnings.push(d));
+      await pool.spawn('t1', { autoHandoff: true });
+      pool.getTerminalHandle('t1')._triggerContextWarning({ pattern: 'auto[- ]?compact' });
+      expect(warnings.length).toBe(1);
+      expect(warnings[0].terminalId).toBe('t1');
+      expect(warnings[0].autoHandoff).toBe(true);
+    });
+
+    it('formatEntry includes autoHandoff and handoffCount', async () => {
+      await pool.spawn('t1', { autoHandoff: true });
+      const t = pool.getTerminal('t1');
+      expect(t).toHaveProperty('autoHandoff', true);
+      expect(t).toHaveProperty('handoffCount', 0);
+    });
+  });
+
   // ── MAX_TERMINALS export ──────────────────────────
 
   it('exports MAX_TERMINALS constant', () => {
@@ -431,6 +510,8 @@ function createMockClaudePool() {
         projectDir: opts.projectDir || '/tmp/test',
         model: opts.model || null,
         dangerouslySkipPermissions: !!opts.dangerouslySkipPermissions,
+        autoHandoff: !!opts.autoHandoff,
+        handoffCount: opts._handoffCount || 0,
         cols: opts.cols || 120,
         rows: opts.rows || 30,
         spawnedAt: new Date().toISOString(),
@@ -467,6 +548,12 @@ function createMockClaudePool() {
       };
       terminals.set(id, entry);
       return { id, pid: entry.pid, status: 'running' };
+    }),
+    setAutoHandoff: vi.fn((id, enabled) => {
+      const t = terminals.get(id);
+      if (!t) return false;
+      t.autoHandoff = !!enabled;
+      return true;
     }),
     activeCount: () => [...terminals.values()].filter(t => t.status === 'running').length,
     shutdownAll: vi.fn(async () => {}),
@@ -724,6 +811,41 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
         body: {},
       });
       expect(status).toBe(400);
+    });
+
+    // ── POST toggle-auto-handoff (Phase 15E) ─────
+
+    it('POST toggle-auto-handoff toggles state', async () => {
+      const ahEvents = [];
+      routeEvents.on('claude-terminal:auto-handoff-changed', (d) => ahEvents.push(d));
+
+      const { status, body } = await api('/api/claude-terminals/rt1/toggle-auto-handoff', {
+        method: 'POST',
+      });
+      expect(status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(typeof body.autoHandoff).toBe('boolean');
+      expect(mockPool.setAutoHandoff).toHaveBeenCalled();
+      expect(ahEvents.length).toBe(1);
+      expect(ahEvents[0].terminalId).toBe('rt1');
+    });
+
+    it('POST toggle-auto-handoff returns 404 for unknown', async () => {
+      const { status } = await api('/api/claude-terminals/nonexistent/toggle-auto-handoff', {
+        method: 'POST',
+      });
+      expect(status).toBe(404);
+    });
+
+    it('POST create accepts autoHandoff option', async () => {
+      const { status } = await api('/api/claude-terminals', {
+        method: 'POST',
+        body: { id: 'ah-test', autoHandoff: true },
+      });
+      expect(status).toBe(201);
+      expect(mockPool.spawn).toHaveBeenCalledWith('ah-test', expect.objectContaining({
+        autoHandoff: true,
+      }));
     });
 
     // ── DELETE ────────────────────────────────────

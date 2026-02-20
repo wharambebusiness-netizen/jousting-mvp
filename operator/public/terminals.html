@@ -198,6 +198,10 @@
             <input type="checkbox" name="dangerouslySkipPermissions" style="width:auto;margin-right:var(--sp-1)">
             Skip Permissions
           </label>
+          <label>
+            <input type="checkbox" name="autoHandoff" checked style="width:auto;margin-right:var(--sp-1)">
+            Auto-Handoff <small>(auto-continue on context exhaustion)</small>
+          </label>
           <footer>
             <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-claude-dialog').close()">Cancel</button>
             <button type="submit" class="btn btn--primary">Start Terminal</button>
@@ -290,6 +294,7 @@
         <kbd>Ctrl+Shift+G</kbd><span>Toggle grid / tab view</span>
         <kbd>Ctrl+Shift+M</kbd><span>Maximize / restore panel</span>
         <kbd>Ctrl+B</kbd><span>Toggle file sidebar</span>
+        <kbd>Ctrl+Shift+A</kbd><span>Toggle auto-handoff</span>
         <kbd>Escape</kbd><span>Close dialog / search</span>
       </div>
     </article>

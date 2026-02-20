@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 2398 tests, 32 suites (all passing)
+npm test                                           # 2520 tests, 34 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -77,18 +77,18 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase1
   server.mjs          HTTP API + Web UI server (Express + WebSocket, M4+M5+Phase15)
   process-pool.mjs    Multi-orchestrator worker process management (fork, IPC, heartbeat, restart)
   orchestrator-worker.mjs  Child process entry point (IPC protocol, IPCEventBus, orchestrator fork)
-  claude-terminal.mjs Single PTY process manager: node-pty spawn, resize, kill, dynamic import fallback (Phase 15A)
-  claude-pool.mjs     Multi-terminal pool: spawn, kill, resize, respawn, shutdownAll (Phase 15A)
+  claude-terminal.mjs Single PTY process manager: node-pty spawn, resize, kill, dynamic import fallback, context pressure detection (Phase 15A+15E)
+  claude-pool.mjs     Multi-terminal pool: spawn, kill, resize, respawn, setAutoHandoff, shutdownAll, auto-handoff on exit (Phase 15A+15E)
   registry.mjs        Chain persistence (factory pattern, atomic writes, file locking, CRUD, archival)
   settings.mjs        Settings persistence (factory pattern, atomic writes, validation, clamping)
   errors.mjs          Error classification, retry logic, circuit breaker, handoff validation
-  ws.mjs              WebSocket event bridge (EventBus → clients, 54 bridged events) + binary WS for Claude terminals (Phase 15B)
+  ws.mjs              WebSocket event bridge (EventBus → clients, 57 bridged events) + binary WS for Claude terminals (Phase 15B+15E)
   file-watcher.mjs    Real-time fs.watch for project directories (P9)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
     orchestrator.mjs  Multi-instance orchestrator status/control + mission listing + reports (M6a+Phase1)
     coordination.mjs  Coordination REST API: tasks CRUD+PATCH, progress, graph, templates, rate-limit, costs, lifecycle (Phase 6+13+14)
-    claude-terminals.mjs  Claude terminal REST API: list, spawn, resize, toggle-permissions, respawn, kill (Phase 15C)
+    claude-terminals.mjs  Claude terminal REST API: list, spawn, resize, toggle-permissions, toggle-auto-handoff, respawn, kill (Phase 15C+15E)
     git.mjs           Git status, push, commit, PR creation, file-status (M6d+P10)
     settings.mjs      Settings GET/PUT API routes
     files.mjs         File system scanning + content preview API (P9+P10)
@@ -112,7 +112,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase1
     settings.html     Settings page: model, limits, preferences
     style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports, terminal, task board)
     app.js            Shared client JS: toast, progress, branch auto-gen, project filter, WS updates
-    terminals.js      Terminal page JS: dual terminal types (orchestrator output-only + Claude interactive PTY), 8 color themes, binary WS, tab/grid views, search, keyboard shortcuts (Phase 2+7a+15C)
+    terminals.js      Terminal page JS: dual terminal types (orchestrator output-only + Claude interactive PTY), 8 color themes, binary WS, tab/grid views, search, keyboard shortcuts, auto-handoff (Phase 2+7a+15C+15E)
     taskboard.js      Task board JS: Kanban + DAG view rendering, drag-and-drop, WS real-time updates, add/cancel/retry, filter/search, keyboard shortcuts, detail/edit dialog, batch operations, task templates (Phase 12-14)
   skills/             Skill pool system (Phase 5)
     registry.mjs     Skill registry — load, validate, index, search, get
@@ -132,7 +132,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase1
     adaptive-limiter.mjs Adaptive rate limiting: 429 detection, exponential backoff, gradual recovery
     worktree-manager.mjs Per-worker git worktree isolation: create, remove, merge, dry-run conflict detection
     persistent-queue.mjs Disk-backed task queue wrapper: atomic writes, crash recovery, in-flight reset (Phase 7b)
-  __tests__/          938 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration)
+  __tests__/          1049 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration, claude-terminals, claude-pool)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -170,7 +170,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-2398 tests across 32 suites. Engine: calculator (207), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (225), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (187), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (303), coordination-integration (22). Run `npm test` to verify.
+2520 tests across 34 suites. Engine: calculator (207), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (225), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (195), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (303), coordination-integration (22), claude-terminals (38), claude-pool (73). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

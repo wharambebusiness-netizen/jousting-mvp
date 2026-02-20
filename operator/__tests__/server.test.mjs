@@ -2651,3 +2651,87 @@ describe('Phase 14 — DAG + Templates', () => {
     expect(routeSource).toContain('/coordination/templates');
   });
 });
+
+// ── Phase 15E: Auto-Handoff UI Elements ─────────────────────
+
+describe('Phase 15E: Auto-Handoff', () => {
+  let appInstance, baseUrl, events;
+
+  beforeAll(async () => {
+    setupTestDir();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('terminals.html has auto-handoff checkbox in new Claude dialog', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('name="autoHandoff"');
+    expect(text).toContain('Auto-Handoff');
+  });
+
+  it('terminals.html has Ctrl+Shift+A shortcut in shortcuts dialog', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('Ctrl+Shift+A');
+    expect(text).toContain('Toggle auto-handoff');
+  });
+
+  it('terminals.js includes toggleAutoHandoff function', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    const text = await res.text();
+    expect(text).toContain('function toggleAutoHandoff');
+    expect(text).toContain('toggle-auto-handoff');
+    expect(text).toContain('window.toggleAutoHandoff');
+  });
+
+  it('terminals.js handles claude-terminal:handoff WS event', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    const text = await res.text();
+    expect(text).toContain("case 'claude-terminal:handoff'");
+    expect(text).toContain('AUTO-HANDOFF');
+  });
+
+  it('terminals.js handles claude-terminal:context-warning WS event', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    const text = await res.text();
+    expect(text).toContain("case 'claude-terminal:context-warning'");
+    expect(text).toContain('CONTEXT');
+  });
+
+  it('style.css includes auto-handoff badge styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.term-status__handoff-badge');
+    expect(text).toContain('.term-status__handoff-badge--active');
+    expect(text).toContain('.term-status__btn--active');
+  });
+
+  it('ws.mjs bridges auto-handoff events', async () => {
+    const wsSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'ws.mjs'), 'utf-8'
+    );
+    expect(wsSource).toContain('claude-terminal:handoff');
+    expect(wsSource).toContain('claude-terminal:context-warning');
+    expect(wsSource).toContain('claude-terminal:auto-handoff-changed');
+  });
+
+  it('claude-terminal routes include toggle-auto-handoff endpoint', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'claude-terminals.mjs'), 'utf-8'
+    );
+    expect(routeSource).toContain('toggle-auto-handoff');
+    expect(routeSource).toContain('setAutoHandoff');
+  });
+});

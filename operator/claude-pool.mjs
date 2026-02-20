@@ -9,9 +9,10 @@
 // Events from terminals are re-emitted on the parent EventBus.
 //
 // Phase 15A: Pool management layer.
+// Phase 15E: Auto-handoff on context exhaustion.
 // ============================================================
 
-import { createClaudeTerminal, isNodePtyAvailable } from './claude-terminal.mjs';
+import { createClaudeTerminal, isNodePtyAvailable, MIN_UPTIME_FOR_HANDOFF_MS } from './claude-terminal.mjs';
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -100,6 +101,8 @@ export function createClaudePool(ctx) {
       config: { ...opts },
       spawnedAt: new Date().toISOString(),
       stoppedAt: null,
+      autoHandoff: !!opts.autoHandoff,
+      handoffCount: opts._handoffCount || 0,
     };
 
     terminals.set(terminalId, entry);
@@ -121,12 +124,25 @@ export function createClaudePool(ctx) {
         exitCode,
         signal,
       });
+
+      // Auto-handoff: respawn with -c on clean exit
+      maybeAutoHandoff(entry, exitCode);
     });
 
     terminal.on('error', (err) => {
       events.emit('claude-terminal:error', {
         terminalId,
         error: err.message || String(err),
+      });
+    });
+
+    // Context pressure warning from terminal output scanning
+    terminal.on('context-warning', (info) => {
+      events.emit('claude-terminal:context-warning', {
+        terminalId,
+        pattern: info.pattern,
+        handoffCount: entry.handoffCount,
+        autoHandoff: entry.autoHandoff,
       });
     });
 
@@ -137,6 +153,70 @@ export function createClaudePool(ctx) {
     });
 
     return { id: terminalId, pid: terminal.pid, status: 'running' };
+  }
+
+  // ── Auto-Handoff ────────────────────────────────────────
+
+  /**
+   * Attempt auto-handoff when a terminal exits cleanly.
+   * Respawns with -c (continue last session) if conditions are met.
+   */
+  function maybeAutoHandoff(entry, exitCode) {
+    if (!entry.autoHandoff) return;
+    if (exitCode !== 0) return;
+
+    // Check minimum uptime to prevent rapid restart loops
+    const uptime = Date.now() - new Date(entry.spawnedAt).getTime();
+    if (uptime < MIN_UPTIME_FOR_HANDOFF_MS) {
+      log(`[claude-pool] ${entry.id} exited too quickly (${uptime}ms) — skipping auto-handoff`);
+      return;
+    }
+
+    const newCount = entry.handoffCount + 1;
+    log(`[claude-pool] ${entry.id} auto-handoff #${newCount} — respawning with -c`);
+
+    // Respawn with continueSession=true, carrying forward config
+    const config = {
+      ...entry.config,
+      continueSession: true,
+      resumeSessionId: undefined, // -c takes precedence
+      autoHandoff: true,
+      _handoffCount: newCount,
+    };
+
+    // Remove old entry and spawn new (async, fire-and-forget)
+    terminals.delete(entry.id);
+
+    spawn(entry.id, config)
+      .then(() => {
+        events.emit('claude-terminal:handoff', {
+          terminalId: entry.id,
+          handoffCount: newCount,
+        });
+      })
+      .catch((err) => {
+        log(`[claude-pool] ${entry.id} auto-handoff failed: ${err.message}`);
+        events.emit('claude-terminal:error', {
+          terminalId: entry.id,
+          error: `Auto-handoff failed: ${err.message}`,
+        });
+      });
+  }
+
+  // ── Set Auto-Handoff ──────────────────────────────────
+
+  /**
+   * Enable or disable auto-handoff for a terminal.
+   * @param {string} terminalId
+   * @param {boolean} enabled
+   * @returns {boolean} true if updated
+   */
+  function setAutoHandoff(terminalId, enabled) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.autoHandoff = !!enabled;
+    entry.config.autoHandoff = !!enabled;
+    return true;
   }
 
   // ── Write ─────────────────────────────────────────────
@@ -328,6 +408,8 @@ export function createClaudePool(ctx) {
       projectDir: termStatus.projectDir,
       model: termStatus.model,
       dangerouslySkipPermissions: termStatus.dangerouslySkipPermissions,
+      autoHandoff: entry.autoHandoff,
+      handoffCount: entry.handoffCount,
       cols: termStatus.cols,
       rows: termStatus.rows,
       spawnedAt: entry.spawnedAt,
@@ -344,6 +426,7 @@ export function createClaudePool(ctx) {
     kill,
     remove,
     respawn,
+    setAutoHandoff,
     getStatus,
     getTerminal,
     getTerminalHandle,

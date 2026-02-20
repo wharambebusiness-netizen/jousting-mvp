@@ -248,6 +248,8 @@ export function createWebSocketHandler({ server, events, claudePool }) {
     'claude-terminal:spawned', 'claude-terminal:exit',
     'claude-terminal:error', 'claude-terminal:removed',
     'claude-terminal:respawned', 'claude-terminal:permission-changed',
+    'claude-terminal:handoff', 'claude-terminal:context-warning',
+    'claude-terminal:auto-handoff-changed',
   ];
 
   const bridgeHandlers = [];

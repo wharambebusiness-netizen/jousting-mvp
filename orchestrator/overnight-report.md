@@ -1,14 +1,14 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-20 04:27:45
+> Generated: 2026-02-20 07:16:13
 > Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-20 04:27:45
-- **Ended**: 2026-02-20 04:27:45
+- **Started**: 2026-02-20 07:16:13
+- **Ended**: 2026-02-20 07:16:13
 - **Total runtime**: 0.0 minutes (0.0 hours)
 - **Rounds completed**: 1
 - **Stop reason**: all agents exhausted their task lists
-- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771561663491\coord-mission.json
+- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771571771639\coord-mission.json
 - **Final test status**: ALL PASSING (1123 tests)
 
 ## Agent Results
@@ -55,8 +55,8 @@
 
 | Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
 |-------|--------|------------|-------|-------------|-----------|----------|-------|
-| dev | 1 | 1 | 1 | 18246 | $0.1404 | 0.0m | 100% |
-| lead | 1 | 1 | 1 | 12571 | $0.0967 | 0.0m | 100% |
+| dev | 1 | 1 | 1 | 8994 | $0.0692 | 0.0m | 100% |
+| lead | 1 | 1 | 1 | 14415 | $0.1109 | 0.0m | 100% |
 
 > **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
 
@@ -83,11 +83,11 @@
 
 | Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
 |-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
-| lead | default | 1 | 9.7k | 2.9k | $0.0967 | $0.0967 | 0 |
-| dev | default | 1 | 14.0k | 4.2k | $0.1404 | $0.1404 | 0 |
-| **TOTAL** | | **2** | **23.7k** | **7.1k** | **$0.2371** | **$0.1185** | **0** |
+| lead | default | 1 | 11.1k | 3.3k | $0.1109 | $0.1109 | 0 |
+| dev | default | 1 | 6.9k | 2.1k | $0.0692 | $0.0692 | 0 |
+| **TOTAL** | | **2** | **18.0k** | **5.4k** | **$0.1801** | **$0.0900** | **0** |
 
-- **Cost per successful agent-round**: $0.1185
+- **Cost per successful agent-round**: $0.0900
 - **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
 - **Note**: Costs are estimates from token counts if CLI did not report direct cost
 

@@ -30,6 +30,8 @@ const {
   buildCliArgs,
   createClaudeTerminal,
   isNodePtyAvailable,
+  stripAnsi,
+  CONTEXT_PATTERNS,
   DEFAULT_COLS,
   DEFAULT_ROWS,
 } = await import('../claude-terminal.mjs');
@@ -286,5 +288,88 @@ describe('createClaudeTerminal', () => {
     await createClaudeTerminal({ projectDir: '/tmp/test' });
     const call = mockPtySpawn.mock.calls[0];
     expect(call[2].env.FORCE_COLOR).toBe('1');
+  });
+
+  // Phase 15E: context-warning event
+  it('emits context-warning when PTY output contains autocompact pattern', async () => {
+    const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+    const warnings = [];
+    term.on('context-warning', (info) => warnings.push(info));
+    mockPty._emitData('Some text... Auto-compact triggered ...');
+    expect(warnings.length).toBe(1);
+    expect(warnings[0].pattern).toBeTruthy();
+  });
+
+  it('emits context-warning only once (dedup)', async () => {
+    const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+    const warnings = [];
+    term.on('context-warning', (info) => warnings.push(info));
+    mockPty._emitData('Auto-compact running...');
+    mockPty._emitData('Auto-compact again...');
+    expect(warnings.length).toBe(1);
+  });
+
+  it('does not emit context-warning for normal output', async () => {
+    const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+    const warnings = [];
+    term.on('context-warning', (info) => warnings.push(info));
+    mockPty._emitData('Hello world, just regular output');
+    expect(warnings.length).toBe(0);
+  });
+
+  it('detects context-warning through ANSI codes', async () => {
+    const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+    const warnings = [];
+    term.on('context-warning', (info) => warnings.push(info));
+    mockPty._emitData('\x1b[1;33mAuto-compact\x1b[0m running...');
+    expect(warnings.length).toBe(1);
+  });
+});
+
+// ============================================================
+// stripAnsi
+// ============================================================
+
+describe('stripAnsi', () => {
+  it('removes standard color codes', () => {
+    expect(stripAnsi('\x1b[31mhello\x1b[0m')).toBe('hello');
+  });
+
+  it('removes bold and reset', () => {
+    expect(stripAnsi('\x1b[1;36mfoo\x1b[0m')).toBe('foo');
+  });
+
+  it('preserves plain text', () => {
+    expect(stripAnsi('just text')).toBe('just text');
+  });
+});
+
+// ============================================================
+// CONTEXT_PATTERNS
+// ============================================================
+
+describe('CONTEXT_PATTERNS', () => {
+  it('matches "Auto-compact"', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('Auto-compact triggered'))).toBe(true);
+  });
+
+  it('matches "auto compact" (case insensitive)', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('auto compact started'))).toBe(true);
+  });
+
+  it('matches "compressing conversation"', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('Compressing conversation...'))).toBe(true);
+  });
+
+  it('matches "context window is nearly full"', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('context window is nearly full'))).toBe(true);
+  });
+
+  it('matches "summarizing prior conversation"', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('Summarizing prior conversation...'))).toBe(true);
+  });
+
+  it('does not match regular text', () => {
+    expect(CONTEXT_PATTERNS.some(p => p.test('Hello world'))).toBe(false);
   });
 });

@@ -264,6 +264,13 @@ var sidebarFilterTimer = null;
       toggleSidebar();
       return;
     }
+
+    // Ctrl+Shift+A: toggle auto-handoff on active Claude terminal
+    if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      e.preventDefault();
+      if (activeTabId) toggleAutoHandoff(activeTabId);
+      return;
+    }
   });
 })();
 
@@ -355,6 +362,8 @@ function addClaudeTerminalInstance(id, state) {
       existing.running = state.status === 'running';
       existing.model = state.model;
       existing.dangerouslySkipPermissions = state.dangerouslySkipPermissions;
+      if (typeof state.autoHandoff !== 'undefined') existing.autoHandoff = !!state.autoHandoff;
+      if (typeof state.handoffCount !== 'undefined') existing.handoffCount = state.handoffCount;
     }
     updateStatusBar(id);
     updateTabDot(id);
@@ -407,8 +416,10 @@ function addClaudeTerminalInstance(id, state) {
   panel.style.setProperty('--panel-accent', theme.accent);
   panel.style.setProperty('--panel-bg', theme.bg);
 
-  // Status bar (Claude-specific: permission toggle instead of handoff/config)
+  // Status bar (Claude-specific: permission toggle, auto-handoff, kill, maximize)
   var permLabel = state && state.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
+  var isAutoHandoff = state && state.autoHandoff;
+  var handoffCount = (state && state.handoffCount) || 0;
   var statusBar = document.createElement('div');
   statusBar.className = 'term-status';
   statusBar.innerHTML =
@@ -416,8 +427,13 @@ function addClaudeTerminalInstance(id, state) {
     '<span class="term-status__id">\u2728 ' + escHtml(id) + '</span>' +
     '<span data-field="model">' + (state && state.model ? escHtml(state.model) : '') + '</span>' +
     '<span data-field="permissions" class="' + (state && state.dangerouslySkipPermissions ? 'term-status__perm--danger' : 'term-status__perm--safe') + '">' + permLabel + '</span>' +
+    '<span data-field="handoff-badge" class="term-status__handoff-badge' + (isAutoHandoff ? ' term-status__handoff-badge--active' : '') + '" title="Auto-handoff ' + (isAutoHandoff ? 'ON' : 'OFF') + (handoffCount > 0 ? ' (' + handoffCount + ' handoffs)' : '') + '">' +
+      (isAutoHandoff ? '\u21BB' : '\u21BB') +
+      (handoffCount > 0 ? ' ' + handoffCount : '') +
+    '</span>' +
     '<span class="term-status__spacer"></span>' +
     '<span class="term-status__actions">' +
+      '<button class="term-status__btn' + (isAutoHandoff ? ' term-status__btn--active' : '') + '" onclick="toggleAutoHandoff(\'' + escHtml(id) + '\')" data-action="toggle-handoff" title="Toggle auto-handoff (Ctrl+Shift+A)">\u21BB</button>' +
       '<button class="term-status__btn" onclick="toggleClaudePermissions(\'' + escHtml(id) + '\')" data-action="toggle-perms" title="Toggle permission mode">\u{1F512}</button>' +
       '<button class="term-status__btn term-status__btn--danger" onclick="killClaudeInstance(\'' + escHtml(id) + '\')" data-action="kill">Kill</button>' +
       '<button class="term-status__btn" onclick="toggleMaximize(\'' + escHtml(id) + '\')" data-action="maximize" title="Maximize/Restore">\u26F6</button>' +
@@ -502,6 +518,8 @@ function addClaudeTerminalInstance(id, state) {
     model: state ? state.model : null,
     maximized: false,
     dangerouslySkipPermissions: state ? !!state.dangerouslySkipPermissions : false,
+    autoHandoff: state ? !!state.autoHandoff : false,
+    handoffCount: state ? (state.handoffCount || 0) : 0,
     binaryWs: null,
     coord: {
       tasks: { total: 0, pending: 0, assigned: 0, running: 0, complete: 0, failed: 0, cancelled: 0 },
@@ -593,6 +611,7 @@ function submitNewClaude(e) {
   var id = form.terminalId.value.trim();
   var model = form.model.value;
   var skipPerms = form.dangerouslySkipPermissions.checked;
+  var autoHandoff = form.autoHandoff.checked;
 
   if (!id) {
     showToast('Terminal ID is required', 'error');
@@ -612,6 +631,7 @@ function submitNewClaude(e) {
       id: id,
       model: model || undefined,
       dangerouslySkipPermissions: skipPerms,
+      autoHandoff: autoHandoff,
     }),
   })
     .then(function(r) {
@@ -624,6 +644,7 @@ function submitNewClaude(e) {
         status: 'running',
         model: model,
         dangerouslySkipPermissions: skipPerms,
+        autoHandoff: autoHandoff,
       });
       switchTab(id);
       showToast('Claude terminal ' + id + ' started', 'success');
@@ -736,6 +757,31 @@ function toggleClaudePermissions(id) {
     })
     .catch(function(err) {
       showToast('Failed to toggle permissions: ' + err.message, 'error');
+    });
+}
+
+// ── Toggle Claude terminal auto-handoff ─────────────────────
+function toggleAutoHandoff(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') return;
+
+  fetch('/api/claude-terminals/' + encodeURIComponent(id) + '/toggle-auto-handoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Toggle failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      inst.autoHandoff = data.autoHandoff;
+      updateStatusBar(id);
+      var label = data.autoHandoff ? 'enabled' : 'disabled';
+      inst.terminal.writeln('\r\n\x1b[33m[AUTO-HANDOFF] ' + label + '\x1b[0m');
+      showToast(id + ' auto-handoff ' + label, 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to toggle auto-handoff: ' + err.message, 'error');
     });
 }
 
@@ -1597,6 +1643,46 @@ function connectWS() {
         }
         break;
       }
+
+      case 'claude-terminal:handoff': {
+        var hId = msg.data.terminalId;
+        var hInst = instances.get(hId);
+        if (hInst && hInst.type === 'claude') {
+          hInst.handoffCount = msg.data.handoffCount || 0;
+          hInst.running = true;
+          hInst.terminal.writeln('\r\n\x1b[1;36m[AUTO-HANDOFF] Session #' + hInst.handoffCount + ' — continuing with -c\x1b[0m');
+          updateStatusBar(hId);
+          updateTabDot(hId);
+          // Reconnect binary WS for new PTY process
+          if (hInst.binaryWs) {
+            try { hInst.binaryWs.close(); } catch(e) { /* noop */ }
+            hInst.binaryWs = null;
+          }
+          connectClaudeBinaryWs(hInst);
+          showToast(hId + ' auto-handoff #' + hInst.handoffCount, 'success');
+        }
+        break;
+      }
+
+      case 'claude-terminal:context-warning': {
+        var cwId = msg.data.terminalId;
+        var cwInst = instances.get(cwId);
+        if (cwInst && cwInst.type === 'claude') {
+          cwInst.terminal.writeln('\r\n\x1b[1;33m[CONTEXT] Approaching context limit — ' + (cwInst.autoHandoff ? 'auto-handoff will continue session' : 'consider saving work') + '\x1b[0m');
+          showToast(cwId + ': context pressure detected', 'warning');
+        }
+        break;
+      }
+
+      case 'claude-terminal:auto-handoff-changed': {
+        var ahId = msg.data.terminalId;
+        var ahInst = instances.get(ahId);
+        if (ahInst && ahInst.type === 'claude') {
+          ahInst.autoHandoff = !!msg.data.autoHandoff;
+          updateStatusBar(ahId);
+        }
+        break;
+      }
     }
   }, {
     trackStatus: true,
@@ -1734,13 +1820,26 @@ function updateStatusBar(id) {
   var agentsEl = statusBar.querySelector('[data-field="agents"]');
   if (agentsEl) agentsEl.textContent = 'A:' + (inst.agents ? inst.agents.length : 0);
 
-  // Claude terminal: update permissions field
+  // Claude terminal: update permissions, auto-handoff, kill
   if (inst.type === 'claude') {
     var permEl = statusBar.querySelector('[data-field="permissions"]');
     if (permEl) {
       var permLabel = inst.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
       permEl.textContent = permLabel;
       permEl.className = inst.dangerouslySkipPermissions ? 'term-status__perm--danger' : 'term-status__perm--safe';
+    }
+    // Update auto-handoff badge
+    var handoffBadge = statusBar.querySelector('[data-field="handoff-badge"]');
+    if (handoffBadge) {
+      var isAH = inst.autoHandoff;
+      handoffBadge.className = 'term-status__handoff-badge' + (isAH ? ' term-status__handoff-badge--active' : '');
+      handoffBadge.title = 'Auto-handoff ' + (isAH ? 'ON' : 'OFF') + (inst.handoffCount > 0 ? ' (' + inst.handoffCount + ' handoffs)' : '');
+      handoffBadge.textContent = '\u21BB' + (inst.handoffCount > 0 ? ' ' + inst.handoffCount : '');
+    }
+    // Update auto-handoff toggle button active state
+    var handoffToggle = statusBar.querySelector('[data-action="toggle-handoff"]');
+    if (handoffToggle) {
+      handoffToggle.className = 'term-status__btn' + (inst.autoHandoff ? ' term-status__btn--active' : '');
     }
     var killBtn = statusBar.querySelector('[data-action="kill"]');
     if (killBtn) killBtn.disabled = !inst.running;
@@ -2636,6 +2735,7 @@ window.submitNewClaude = submitNewClaude;
 window.killClaudeInstance = killClaudeInstance;
 window.removeClaudeInstance = removeClaudeInstance;
 window.toggleClaudePermissions = toggleClaudePermissions;
+window.toggleAutoHandoff = toggleAutoHandoff;
 window.toggleSidebar = toggleSidebar;
 window.refreshSidebarTree = refreshSidebarTree;
 window.filterSidebarTree = filterSidebarTree;

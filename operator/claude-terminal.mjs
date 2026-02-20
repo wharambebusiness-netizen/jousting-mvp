@@ -11,6 +11,7 @@
 // native module is not installed.
 //
 // Phase 15A: PTY infrastructure layer.
+// Phase 15E: Context-aware auto-handoff detection.
 // ============================================================
 
 import { randomUUID } from 'crypto';
@@ -62,6 +63,21 @@ const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 30;
 const FORCE_KILL_TIMEOUT_MS = 5000;
 const IS_WINDOWS = process.platform === 'win32';
+
+// Context-pressure detection patterns (matched against ANSI-stripped PTY output)
+const CONTEXT_PATTERNS = [
+  /auto[- ]?compact/i,
+  /compressing conversation/i,
+  /context window (?:is )?(?:nearly |almost )?(?:full|exhausted|at capacity)/i,
+  /conversation (?:is )?(?:too )?long/i,
+  /summarizing prior conversation/i,
+];
+
+// Ring buffer size for PTY output scanning (bytes)
+const OUTPUT_BUFFER_SIZE = 8192;
+
+// Minimum uptime before auto-handoff triggers (ms) — prevents rapid restart loops
+const MIN_UPTIME_FOR_HANDOFF_MS = 10000;
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -148,6 +164,7 @@ export async function createClaudeTerminal(opts) {
     data: [],
     exit: [],
     error: [],
+    'context-warning': [],
   };
 
   function emit(event, ...args) {
@@ -156,8 +173,35 @@ export async function createClaudeTerminal(opts) {
     }
   }
 
+  // ── Context Detection ─────────────────────────────────
+
+  let outputBuffer = '';
+  let contextWarningEmitted = false;
+
+  function checkContextPressure(chunk) {
+    // Append to ring buffer, keep last OUTPUT_BUFFER_SIZE chars
+    outputBuffer += chunk;
+    if (outputBuffer.length > OUTPUT_BUFFER_SIZE) {
+      outputBuffer = outputBuffer.slice(-OUTPUT_BUFFER_SIZE);
+    }
+
+    // Only scan the new chunk (stripped of ANSI codes)
+    const stripped = stripAnsi(chunk);
+    for (const pattern of CONTEXT_PATTERNS) {
+      if (pattern.test(stripped)) {
+        if (!contextWarningEmitted) {
+          contextWarningEmitted = true;
+          emit('context-warning', { pattern: pattern.source });
+          log(`[claude-terminal] ${id} context pressure detected: ${pattern.source}`);
+        }
+        return;
+      }
+    }
+  }
+
   // PTY data output
   ptyProcess.onData((data) => {
+    checkContextPressure(data);
     emit('data', data);
     if (opts.onData) {
       try { opts.onData(data); } catch { /* noop */ }
@@ -270,6 +314,18 @@ export async function createClaudeTerminal(opts) {
 
 // ── Helpers ─────────────────────────────────────────────────
 
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[()][A-Za-z0-9]|\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
+
+/**
+ * Strip ANSI escape codes from a string.
+ * @param {string} str
+ * @returns {string}
+ */
+export function stripAnsi(str) {
+  return str.replace(ANSI_RE, '');
+}
+
 /**
  * Build CLI arguments for the Claude command.
  * @param {object} opts - Terminal options
@@ -303,5 +359,8 @@ export {
   DEFAULT_COLS,
   DEFAULT_ROWS,
   FORCE_KILL_TIMEOUT_MS,
+  CONTEXT_PATTERNS,
+  OUTPUT_BUFFER_SIZE,
+  MIN_UPTIME_FOR_HANDOFF_MS,
   loadNodePty,
 };
