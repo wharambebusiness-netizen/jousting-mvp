@@ -2058,3 +2058,65 @@ describe('Coordination Metrics & Config Endpoints (Phase 9)', () => {
     expect(configStatus).toBe(503);
   });
 });
+
+// ── Terminals Phase 10 UI Tests ──────────────────────────────
+
+describe('Terminals Page Phase 10 Elements', () => {
+  let appInstance, baseUrl, events;
+
+  beforeAll(async () => {
+    setupTestDir();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('terminals page has metrics panel (Phase 10)', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('term-metrics');
+    expect(text).toContain('metrics-grid');
+    expect(text).toContain('Coordination Metrics');
+    expect(text).toContain('metric-throughput');
+    expect(text).toContain('metric-utilization');
+  });
+
+  it('terminals page has coordination config dialog (Phase 10)', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('coord-config-dialog');
+    expect(text).toContain('coord-config-form');
+    expect(text).toContain('coord-max-rpm');
+    expect(text).toContain('coord-global-budget');
+    expect(text).toContain('Coordination Settings');
+  });
+
+  it('terminals.js includes metrics panel functions (Phase 10)', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    const text = await res.text();
+    expect(text).toContain('loadCoordMetrics');
+    expect(text).toContain('updateMetricsCards');
+    expect(text).toContain('openCoordConfigDialog');
+    expect(text).toContain('submitCoordConfig');
+    expect(text).toContain('formatDurationMs');
+  });
+
+  it('style.css includes metrics panel styles (Phase 10)', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.term-metrics');
+    expect(text).toContain('.term-metrics__grid');
+    expect(text).toContain('.term-metrics__card');
+    expect(text).toContain('.term-metrics__util-bar');
+  });
+});

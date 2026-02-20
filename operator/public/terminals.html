@@ -55,6 +55,50 @@
       </div>
     </details>
 
+    <!-- Coordination Metrics Panel (collapsible) -->
+    <details class="term-metrics" id="term-metrics">
+      <summary class="term-metrics__toggle">
+        <span class="term-metrics__title">Coordination Metrics</span>
+        <span class="term-metrics__badge" id="metrics-state-badge" title="Coordinator state">--</span>
+        <button class="btn btn--xs btn--ghost term-metrics__config-btn" id="coord-config-btn" onclick="event.stopPropagation(); openCoordConfigDialog()" title="Configure rate limits &amp; budgets">&#9881;</button>
+      </summary>
+      <div class="term-metrics__content" id="metrics-content">
+        <div class="term-metrics__grid" id="metrics-grid">
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Throughput</span>
+            <span class="term-metrics__value" id="metric-throughput">--</span>
+            <span class="term-metrics__sub">tasks / min</span>
+          </div>
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Avg Completion</span>
+            <span class="term-metrics__value" id="metric-avg-time">--</span>
+            <span class="term-metrics__sub">duration</span>
+          </div>
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Utilization</span>
+            <span class="term-metrics__value" id="metric-utilization">--</span>
+            <span class="term-metrics__sub" id="metric-util-bar-wrap"><span class="term-metrics__util-bar"><span class="term-metrics__util-fill" id="metric-util-fill"></span></span></span>
+          </div>
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Completed</span>
+            <span class="term-metrics__value term-metrics__value--success" id="metric-complete">0</span>
+            <span class="term-metrics__sub" id="metric-complete-recent">0 in 5m window</span>
+          </div>
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Failed</span>
+            <span class="term-metrics__value term-metrics__value--error" id="metric-failed">0</span>
+            <span class="term-metrics__sub" id="metric-failed-recent">0 in 5m window</span>
+          </div>
+          <div class="term-metrics__card">
+            <span class="term-metrics__label">Pending / Running</span>
+            <span class="term-metrics__value" id="metric-pending-running">0 / 0</span>
+            <span class="term-metrics__sub" id="metric-cancelled">0 cancelled</span>
+          </div>
+        </div>
+        <div class="term-metrics__empty" id="metrics-empty" style="display:none">Coordination not active</div>
+      </div>
+    </details>
+
     <!-- Tab Bar -->
     <div class="term-tabs" id="term-tabs" role="tablist" aria-label="Orchestrator instances">
       <!-- Tabs rendered dynamically by terminals.js -->
@@ -135,6 +179,38 @@
         </label>
         <footer>
           <button type="button" class="btn btn--ghost" onclick="document.getElementById('config-dialog').close()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Apply</button>
+        </footer>
+      </form>
+    </article>
+  </dialog>
+
+  <!-- Coordination Config Dialog -->
+  <dialog class="term-dialog coord-config-dialog" id="coord-config-dialog">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('coord-config-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Coordination Settings</h3>
+      </header>
+      <form id="coord-config-form" onsubmit="return submitCoordConfig(event)">
+        <label>
+          Max Requests / min
+          <input type="number" name="maxRequestsPerMinute" id="coord-max-rpm" min="1" max="10000" step="1" value="60" placeholder="e.g. 60">
+        </label>
+        <label>
+          Max Tokens / min
+          <input type="number" name="maxTokensPerMinute" id="coord-max-tpm" min="1000" max="10000000" step="1000" value="100000" placeholder="e.g. 100000">
+        </label>
+        <label>
+          Global Budget (USD)
+          <input type="number" name="globalBudgetUsd" id="coord-global-budget" min="0" max="1000" step="0.5" value="50" placeholder="e.g. 50.00">
+        </label>
+        <label>
+          Per-Worker Budget (USD)
+          <input type="number" name="perWorkerBudgetUsd" id="coord-worker-budget" min="0" max="500" step="0.5" value="10" placeholder="e.g. 10.00">
+        </label>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('coord-config-dialog').close()">Cancel</button>
           <button type="submit" class="btn btn--primary">Apply</button>
         </footer>
       </form>

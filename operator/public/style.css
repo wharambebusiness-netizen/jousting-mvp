@@ -2647,3 +2647,136 @@ details[open] > .tree-summary .tree-icon--dir {
 .shortcuts-grid span {
   color: var(--text-secondary);
 }
+
+/* ── 45. Coordination Metrics Panel (Phase 10) ───────────── */
+
+.term-metrics {
+  margin: 0 0 var(--sp-2) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+}
+.term-metrics > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  list-style: none;
+}
+.term-metrics > summary::-webkit-details-marker { display: none; }
+.term-metrics > summary::before {
+  content: '\25B6';
+  font-size: 0.5rem;
+  transition: transform 0.15s;
+  color: var(--text-muted);
+}
+.term-metrics[open] > summary::before {
+  transform: rotate(90deg);
+}
+.term-metrics__title {
+  flex: 1;
+}
+.term-metrics__badge {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.term-metrics__badge--running {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+.term-metrics__badge--draining {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+.term-metrics__badge--stopped {
+  color: var(--text-muted);
+}
+.term-metrics__config-btn {
+  padding: 0 4px;
+  font-size: 0.875rem;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.term-metrics__config-btn:hover {
+  opacity: 1;
+}
+.term-metrics__content {
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.term-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-2);
+}
+.term-metrics__card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: border-color 0.15s;
+}
+.term-metrics__card:hover {
+  border-color: var(--border-default);
+}
+.term-metrics__label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.term-metrics__value {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.term-metrics__value--success {
+  color: var(--status-success);
+}
+.term-metrics__value--error {
+  color: var(--status-error);
+}
+.term-metrics__sub {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+.term-metrics__empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  padding: var(--sp-4) 0;
+}
+.term-metrics__util-bar {
+  display: inline-block;
+  width: 60px;
+  height: 6px;
+  background: var(--bg-overlay);
+  border-radius: 3px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.term-metrics__util-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  width: 0%;
+}

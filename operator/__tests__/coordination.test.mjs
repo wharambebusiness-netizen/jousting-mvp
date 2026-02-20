@@ -3082,3 +3082,49 @@ describe('Process Pool updateConfig', () => {
     expect(pool.updateConfig('no-such-worker', { model: 'opus' })).toBe(false);
   });
 });
+
+// ============================================================
+// Phase 10 — WebSocket Bridged Events includes coord:config-updated
+// ============================================================
+
+describe('WebSocket Bridged Events (Phase 10)', () => {
+  it('should include coord:config-updated in bridged events list', async () => {
+    // Read the ws.mjs source and verify the event is listed
+    const { readFileSync } = await import('fs');
+    const wsSource = readFileSync(join(import.meta.dirname, '..', 'ws.mjs'), 'utf-8');
+    expect(wsSource).toContain("'coord:config-updated'");
+  });
+});
+
+// ============================================================
+// Phase 10 — Coordinator emits coord:config-updated on updateOptions
+// ============================================================
+
+describe('Coordinator updateOptions emits config-updated', () => {
+  it('should emit coord:config-updated with the updates', () => {
+    const events = new EventBus();
+    const mockPool = {
+      getStatus: () => [],
+      activeCount: () => 0,
+    };
+    const coordinator = createCoordinator({
+      events,
+      pool: mockPool,
+      rateLimiter: createRateLimiter({ maxRequestsPerMinute: 60, maxTokensPerMinute: 100000 }),
+      costAggregator: createCostAggregator({ globalBudgetUsd: 50, perWorkerBudgetUsd: 10 }),
+    });
+
+    coordinator.start();
+
+    const emitted = [];
+    events.on('coord:config-updated', (data) => emitted.push(data));
+
+    coordinator.updateOptions({ maxRequestsPerMinute: 120, globalBudgetUsd: 200 });
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0].maxRequestsPerMinute).toBe(120);
+    expect(emitted[0].globalBudgetUsd).toBe(200);
+
+    coordinator.stop();
+  });
+});

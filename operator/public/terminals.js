@@ -1018,6 +1018,12 @@ function connectWS() {
           }
         });
         break;
+
+      case 'coord:config-updated':
+        // Refresh metrics panel if open
+        var metricsPanel = document.getElementById('term-metrics');
+        if (metricsPanel && metricsPanel.open) loadCoordMetrics();
+        break;
     }
   }, {
     trackStatus: true,
@@ -1562,6 +1568,160 @@ function updateHealthFromEvent(workerId, updates) {
   renderHealthCard(w);
 }
 
+// ── Coordination Metrics Panel ──────────────────────────────
+
+var metricsStateBadge = document.getElementById('metrics-state-badge');
+var metricsGrid = document.getElementById('metrics-grid');
+var metricsEmpty = document.getElementById('metrics-empty');
+
+function loadCoordMetrics() {
+  fetch('/api/coordination/metrics')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (metricsGrid) metricsGrid.style.display = '';
+      if (metricsEmpty) metricsEmpty.style.display = 'none';
+      updateMetricsCards(data);
+    })
+    .catch(function() {
+      if (metricsGrid) metricsGrid.style.display = 'none';
+      if (metricsEmpty) { metricsEmpty.style.display = 'block'; metricsEmpty.textContent = 'Coordination not active'; }
+    });
+
+  // Also fetch coordinator state for badge
+  fetch('/api/coordination/status')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (metricsStateBadge) {
+        metricsStateBadge.textContent = data.state || '--';
+        metricsStateBadge.className = 'term-metrics__badge';
+        if (data.state === 'running') metricsStateBadge.className += ' term-metrics__badge--running';
+        else if (data.state === 'draining') metricsStateBadge.className += ' term-metrics__badge--draining';
+        else metricsStateBadge.className += ' term-metrics__badge--stopped';
+      }
+    })
+    .catch(function() {
+      if (metricsStateBadge) {
+        metricsStateBadge.textContent = '--';
+        metricsStateBadge.className = 'term-metrics__badge term-metrics__badge--stopped';
+      }
+    });
+}
+
+function updateMetricsCards(data) {
+  var throughputEl = document.getElementById('metric-throughput');
+  var avgTimeEl = document.getElementById('metric-avg-time');
+  var utilEl = document.getElementById('metric-utilization');
+  var utilFill = document.getElementById('metric-util-fill');
+  var completeEl = document.getElementById('metric-complete');
+  var completeRecentEl = document.getElementById('metric-complete-recent');
+  var failedEl = document.getElementById('metric-failed');
+  var failedRecentEl = document.getElementById('metric-failed-recent');
+  var pendingRunningEl = document.getElementById('metric-pending-running');
+  var cancelledEl = document.getElementById('metric-cancelled');
+
+  if (throughputEl) throughputEl.textContent = data.throughputPerMinute != null ? data.throughputPerMinute.toFixed(2) : '--';
+  if (avgTimeEl) avgTimeEl.textContent = data.avgCompletionMs != null ? formatDurationMs(data.avgCompletionMs) : '--';
+  if (utilEl) utilEl.textContent = data.workerUtilization != null ? Math.round(data.workerUtilization * 100) + '%' : '--';
+  if (utilFill) utilFill.style.width = (data.workerUtilization != null ? Math.round(data.workerUtilization * 100) : 0) + '%';
+  if (completeEl && data.outcomes) completeEl.textContent = data.outcomes.complete || 0;
+  if (completeRecentEl) completeRecentEl.textContent = (data.recentCompletions || 0) + ' in 5m window';
+  if (failedEl && data.outcomes) failedEl.textContent = data.outcomes.failed || 0;
+  if (failedRecentEl) failedRecentEl.textContent = (data.recentFailures || 0) + ' in 5m window';
+  if (pendingRunningEl && data.outcomes) pendingRunningEl.textContent = (data.outcomes.pending || 0) + ' / ' + (data.outcomes.running || 0);
+  if (cancelledEl && data.outcomes) cancelledEl.textContent = (data.outcomes.cancelled || 0) + ' cancelled';
+}
+
+function formatDurationMs(ms) {
+  if (ms < 1000) return ms + 'ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  if (ms < 3600000) return (ms / 60000).toFixed(1) + 'm';
+  return (ms / 3600000).toFixed(1) + 'h';
+}
+
+// Refresh metrics every 10 seconds when panel is open
+setInterval(function() {
+  var details = document.getElementById('term-metrics');
+  if (details && details.open) loadCoordMetrics();
+}, 10000);
+
+// Load metrics when panel is opened
+(function() {
+  var details = document.getElementById('term-metrics');
+  if (details) {
+    details.addEventListener('toggle', function() {
+      if (details.open) loadCoordMetrics();
+    });
+  }
+})();
+
+// ── Coordination Config Dialog ──────────────────────────────
+
+function openCoordConfigDialog() {
+  var dialog = document.getElementById('coord-config-dialog');
+  if (!dialog) return;
+
+  // Pre-fill with current values from API
+  fetch('/api/coordination/rate-limit')
+    .then(function(r) { return r.json(); })
+    .then(function(rl) {
+      var rpmInput = document.getElementById('coord-max-rpm');
+      var tpmInput = document.getElementById('coord-max-tpm');
+      if (rpmInput && rl.maxRequestsPerMinute) rpmInput.value = rl.maxRequestsPerMinute;
+      if (tpmInput && rl.maxTokensPerMinute) tpmInput.value = rl.maxTokensPerMinute;
+    })
+    .catch(function() {});
+
+  fetch('/api/coordination/costs')
+    .then(function(r) { return r.json(); })
+    .then(function(costs) {
+      var globalInput = document.getElementById('coord-global-budget');
+      var workerInput = document.getElementById('coord-worker-budget');
+      if (globalInput && costs.globalBudgetUsd != null) globalInput.value = costs.globalBudgetUsd;
+      if (workerInput && costs.perWorkerBudgetUsd != null) workerInput.value = costs.perWorkerBudgetUsd;
+    })
+    .catch(function() {});
+
+  dialog.showModal();
+}
+
+function submitCoordConfig(e) {
+  e.preventDefault();
+  var form = e.target;
+  var body = {};
+
+  var rpm = parseInt(form.maxRequestsPerMinute.value);
+  var tpm = parseInt(form.maxTokensPerMinute.value);
+  var globalBudget = parseFloat(form.globalBudgetUsd.value);
+  var workerBudget = parseFloat(form.perWorkerBudgetUsd.value);
+
+  if (rpm > 0) body.maxRequestsPerMinute = rpm;
+  if (tpm > 0) body.maxTokensPerMinute = tpm;
+  if (globalBudget > 0) body.globalBudgetUsd = globalBudget;
+  if (workerBudget > 0) body.perWorkerBudgetUsd = workerBudget;
+
+  fetch('/api/coordination/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Config update failed'); });
+      return r.json();
+    })
+    .then(function() {
+      showToast('Coordination config updated', 'success');
+      document.getElementById('coord-config-dialog').close();
+      // Refresh metrics to reflect new settings
+      var details = document.getElementById('term-metrics');
+      if (details && details.open) loadCoordMetrics();
+    })
+    .catch(function(err) {
+      showToast('Config update failed: ' + err.message, 'error');
+    });
+
+  return false;
+}
+
 // ── Config Dialog ────────────────────────────────────────────
 
 function openConfigDialog(id) {
@@ -1635,6 +1795,8 @@ window.closeTerminalSearch = closeTerminalSearch;
 window.toggleShortcutsHelp = toggleShortcutsHelp;
 window.openConfigDialog = openConfigDialog;
 window.submitConfig = submitConfig;
+window.openCoordConfigDialog = openCoordConfigDialog;
+window.submitCoordConfig = submitCoordConfig;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

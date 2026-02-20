@@ -102,6 +102,29 @@ process.on('SIGTERM', () => {
   process.exit(1);
 });
 
+// Phase 10: IPC config handler — receives runtime config updates from orchestrator-worker.mjs
+// Completes the IPC chain: UI → REST → pool → worker → orchestrator
+if (typeof process.send === 'function') {
+  process.on('message', (msg) => {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'config') {
+      const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      if (msg.model) {
+        MODEL_OVERRIDE = msg.model;
+        console.log(`[${ts}] Config update: model → ${msg.model}`);
+      }
+      if (msg.maxBudgetUsd != null) {
+        CONFIG.maxAgentChainCostUsd = msg.maxBudgetUsd;
+        console.log(`[${ts}] Config update: maxAgentChainCostUsd → ${msg.maxBudgetUsd}`);
+      }
+      if (msg.maxTurns != null) {
+        CONFIG.maxAgentTurns = msg.maxTurns;
+        console.log(`[${ts}] Config update: maxAgentTurns → ${msg.maxTurns}`);
+      }
+    }
+  });
+}
+
 // ============================================================
 // Configuration
 // ============================================================
@@ -163,8 +186,9 @@ const DRY_RUN = !!dryRunArg;
 const DRY_RUN_PRESET = dryRunArg?.includes('=') ? dryRunArg.split('=')[1] : null;
 
 // Phase 3: --model override from CLI (passed by orchestrator-worker.mjs)
+// Phase 10: let instead of const — hot-reconfiguration via IPC can update model at runtime
 const modelArg = process.argv.find(a => a === '--model');
-const MODEL_OVERRIDE = modelArg ? process.argv[process.argv.indexOf(modelArg) + 1] : null;
+let MODEL_OVERRIDE = modelArg ? process.argv[process.argv.indexOf(modelArg) + 1] : null;
 
 // Phase 3: --handoff-file for context continuation
 const handoffArg = process.argv.find(a => a.startsWith('--handoff-file='));
