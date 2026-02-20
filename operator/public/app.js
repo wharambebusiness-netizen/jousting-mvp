@@ -202,7 +202,7 @@ document.body.addEventListener('htmx:afterSwap', function(evt) {
 function onProjectChange(value) {
   localStorage.setItem('operator-project', value);
   // Reload all HTMX-driven panels
-  var targets = ['#chain-table', '#cost-summary-grid', '#git-panel', '#orch-content', '#mission-launcher', '#report-viewer', '#projects-panel'];
+  var targets = ['#chain-table', '#cost-summary-grid', '#git-panel', '#analytics-panel', '#report-viewer', '#projects-panel'];
   for (var i = 0; i < targets.length; i++) {
     var el = document.querySelector(targets[i]);
     if (el) htmx.trigger(el, 'reload');

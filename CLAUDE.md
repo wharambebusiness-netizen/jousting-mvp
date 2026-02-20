@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 2520 tests, 34 suites (all passing)
+npm test                                           # 2522 tests, 34 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -101,12 +101,10 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase1
     terminal.mjs      ANSI-to-HTML terminal viewer renderer
     analytics.mjs     SVG chart renderers (cost timeline, status donut, model bars, top chains)
     projects.mjs      Project card + file tree + git badges + preview renderers (P9+P10)
-  public/             Static HTML pages (M5+P3+P9)
-    index.html        Dashboard: chain list, cost summary, quick-start form, project filter, orchestrator summary
+  public/             Static HTML pages (M5+P3+P9+S133)
+    index.html        Dashboard: chains, cost summary, quick-start, orch summary, analytics, reports (S133: merged analytics+reports)
     chain.html        Chain detail: timeline, sessions, handoffs, real-time WS updates
     projects.html     Projects: file explorer with real-time updates (P9)
-    analytics.html    Analytics: cost trends, status donut, model usage, top chains
-    orchestrator.html Orchestrator status + agent cards
     terminals.html    Multi-terminal xterm.js interface for orchestrator instances (Phase 2)
     taskboard.html    Kanban task board for coordination tasks (Phase 12+13)
     settings.html     Settings page: model, limits, preferences
@@ -132,7 +130,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase1
     adaptive-limiter.mjs Adaptive rate limiting: 429 detection, exponential backoff, gradual recovery
     worktree-manager.mjs Per-worker git worktree isolation: create, remove, merge, dry-run conflict detection
     persistent-queue.mjs Disk-backed task queue wrapper: atomic writes, crash recovery, in-flight reset (Phase 7b)
-  __tests__/          1049 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration, claude-terminals, claude-pool)
+  __tests__/          1051 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration, claude-terminals, claude-pool)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -170,7 +168,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-2520 tests across 34 suites. Engine: calculator (207), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (225), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (195), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (303), coordination-integration (22), claude-terminals (38), claude-pool (73). Run `npm test` to verify.
+2522 tests across 34 suites. Engine: calculator (207), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (225), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (195), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (303), coordination-integration (22), claude-terminals (38), claude-pool (73). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

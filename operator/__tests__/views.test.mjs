@@ -429,10 +429,23 @@ describe('View Routes — Page Routes', () => {
     expect(res.text).toContain('htmx');
   });
 
-  it('GET /orchestrator serves orchestrator HTML', async () => {
+  it('GET /orchestrator returns 404 (page removed)', async () => {
     const res = await get('/orchestrator');
+    expect(res.status).toBe(404);
+  });
+
+  it('dashboard contains analytics panel (merged from analytics page)', async () => {
+    const res = await get('/');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('Orchestrator');
+    expect(res.text).toContain('analytics-panel');
+    expect(res.text).toContain('/views/analytics');
+  });
+
+  it('dashboard contains report viewer (merged from orchestrator page)', async () => {
+    const res = await get('/');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('report-viewer');
+    expect(res.text).toContain('/views/report-viewer');
   });
 
   it('GET /chains/:id serves chain detail HTML with ID injected', async () => {

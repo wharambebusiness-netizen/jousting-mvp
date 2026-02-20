@@ -1204,9 +1204,9 @@ describe('Settings Page', () => {
   });
 });
 
-// ── Analytics Page Tests (P8) ────────────────────────────────
+// ── Analytics (merged into Dashboard) Tests (P8) ────────────
 
-describe('Analytics Page', () => {
+describe('Analytics (merged into Dashboard)', () => {
   beforeAll(async () => {
     setupTestDir();
     seedRegistry();
@@ -1217,12 +1217,12 @@ describe('Analytics Page', () => {
     teardownTestDir();
   });
 
-  it('GET /analytics serves analytics page HTML', async () => {
-    const res = await fetch(`${baseUrl}/analytics`);
+  it('dashboard contains analytics panel', async () => {
+    const res = await fetch(`${baseUrl}/`);
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toContain('Analytics');
     expect(text).toContain('analytics-panel');
+    expect(text).toContain('/views/analytics');
   });
 
   it('GET /views/analytics returns analytics fragment', async () => {
@@ -1590,10 +1590,10 @@ describe('Nav Links', () => {
 
   const pages = [
     { path: '/', name: 'index' },
-    { path: '/orchestrator', name: 'orchestrator' },
     { path: '/settings', name: 'settings' },
-    { path: '/analytics', name: 'analytics' },
     { path: '/terminals', name: 'terminals' },
+    { path: '/taskboard', name: 'taskboard' },
+    { path: '/projects', name: 'projects' },
   ];
 
   for (const page of pages) {
@@ -2286,7 +2286,7 @@ describe('Task Board Page (Phase 12)', () => {
   });
 
   it('all existing pages have Tasks nav link', async () => {
-    const pages = ['/', '/analytics', '/orchestrator', '/terminals', '/settings'];
+    const pages = ['/', '/terminals', '/settings', '/taskboard', '/projects'];
     for (const page of pages) {
       const res = await fetch(`${baseUrl}${page}`);
       const text = await res.text();

@@ -205,11 +205,6 @@ export function createApp(options = {}) {
     }
   });
 
-  // Orchestrator page
-  app.get('/orchestrator', (_req, res) => {
-    res.sendFile(join(publicDir, 'orchestrator.html'));
-  });
-
   // Settings page
   app.get('/settings', (_req, res) => {
     res.sendFile(join(publicDir, 'settings.html'));
@@ -218,11 +213,6 @@ export function createApp(options = {}) {
   // Projects page
   app.get('/projects', (_req, res) => {
     res.sendFile(join(publicDir, 'projects.html'));
-  });
-
-  // Analytics page
-  app.get('/analytics', (_req, res) => {
-    res.sendFile(join(publicDir, 'analytics.html'));
   });
 
   // Terminals page
