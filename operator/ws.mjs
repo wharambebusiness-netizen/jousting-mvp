@@ -1,15 +1,24 @@
 // ============================================================
-// WebSocket Event Bridge (M4)
+// WebSocket Event Bridge (M4 + Phase 15B)
 // ============================================================
 // Bridges EventBus events to connected WebSocket clients.
 // Clients subscribe to event patterns (e.g. "chain:*") and
 // receive real-time JSON messages.
 //
-// Protocol:
+// Phase 15B: Binary WebSocket for Claude terminals.
+// Path /ws/claude-terminal/:id carries raw PTY I/O.
+// Control messages use \x01 prefix (e.g. resize).
+//
+// Protocol (JSON bridge — /ws):
 //   Client → Server: { "subscribe": ["chain:*", "session:*"] }
 //   Client → Server: { "unsubscribe": ["session:*"] }
 //   Server → Client: { "event": "chain:started", "data": { ... } }
 //   Server → Client: { "type": "subscribed", "patterns": ["chain:*"] }
+//
+// Protocol (binary terminal — /ws/claude-terminal/:id):
+//   Client → Server: raw input text (typed by user)
+//   Client → Server: \x01{"type":"resize","cols":N,"rows":N}
+//   Server → Client: raw PTY output data
 //
 // ============================================================
 
@@ -67,10 +76,14 @@ function createThrottle(intervalMs) {
  * @param {object} options
  * @param {http.Server} options.server - HTTP server for upgrade
  * @param {EventBus}    options.events - EventBus to bridge
+ * @param {object}      [options.claudePool] - Claude terminal pool (Phase 15B)
  * @returns {WebSocketServer}
  */
-export function createWebSocketHandler({ server, events }) {
+export function createWebSocketHandler({ server, events, claudePool }) {
   const wss = new WebSocketServer({ noServer: true });
+
+  // Binary terminal WSS for PTY I/O (Phase 15B)
+  const termWss = new WebSocketServer({ noServer: true });
 
   // Output throttle: 1 message per second per client
   const outputThrottle = createThrottle(1000);
@@ -78,17 +91,78 @@ export function createWebSocketHandler({ server, events }) {
   // Track client subscriptions
   const clientSubscriptions = new WeakMap();
 
-  // Handle upgrade requests
+  // Handle upgrade requests — route by path
   server.on('upgrade', (request, socket, head) => {
-    // Only handle /ws path
     const url = new URL(request.url, `http://${request.headers.host}`);
-    if (url.pathname !== '/ws') {
+
+    if (url.pathname === '/ws') {
+      // JSON event bridge
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else if (url.pathname.startsWith('/ws/claude-terminal/') && claudePool) {
+      // Binary terminal I/O
+      const terminalId = decodeURIComponent(url.pathname.split('/').pop());
+      termWss.handleUpgrade(request, socket, head, (ws) => {
+        termWss.emit('connection', ws, request, terminalId);
+      });
+    } else {
       socket.destroy();
+    }
+  });
+
+  // ── Binary Terminal Handler (Phase 15B) ─────────────────
+
+  termWss.on('connection', (ws, _request, terminalId) => {
+    const handle = claudePool ? claudePool.getTerminalHandle(terminalId) : null;
+    if (!handle) {
+      ws.close(4404, 'Terminal not found');
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
+    // PTY → WS (output data)
+    const dataHandler = (data) => {
+      try {
+        if (ws.readyState === 1) { // OPEN
+          ws.send(data);
+        }
+      } catch { /* noop */ }
+    };
+    handle.on('data', dataHandler);
+
+    // WS → PTY (user input + control messages)
+    ws.on('message', (raw) => {
+      const str = raw.toString();
+
+      // Control message prefix: \x01
+      if (str.charCodeAt(0) === 1) {
+        try {
+          const ctrl = JSON.parse(str.slice(1));
+          if (ctrl.type === 'resize' && ctrl.cols > 0 && ctrl.rows > 0) {
+            handle.resize(ctrl.cols, ctrl.rows);
+          }
+        } catch { /* ignore bad control message */ }
+        return;
+      }
+
+      // Regular input
+      handle.write(str);
+    });
+
+    // Close WS when PTY exits
+    const exitHandler = () => {
+      try {
+        if (ws.readyState === 1) {
+          ws.close(1000, 'Terminal exited');
+        }
+      } catch { /* noop */ }
+    };
+    handle.on('exit', exitHandler);
+
+    // Cleanup on WS close
+    ws.on('close', () => {
+      handle.off('data', dataHandler);
+      handle.off('exit', exitHandler);
     });
   });
 
@@ -171,6 +245,9 @@ export function createWebSocketHandler({ server, events }) {
     'coord:worktree-created', 'coord:worktree-removed', 'coord:worktree-merged',
     'coord:conflicts-detected', 'coord:config-updated',
     'coord:rate-adjusted',
+    'claude-terminal:spawned', 'claude-terminal:exit',
+    'claude-terminal:error', 'claude-terminal:removed',
+    'claude-terminal:respawned', 'claude-terminal:permission-changed',
   ];
 
   const bridgeHandlers = [];
@@ -204,7 +281,15 @@ export function createWebSocketHandler({ server, events }) {
       events.off(eventName, handler);
     }
     bridgeHandlers.length = 0;
+
+    // Close binary terminal WS connections
+    for (const client of termWss.clients) {
+      client.close(1001, 'Server shutting down');
+    }
   };
+
+  // Expose terminal WSS for tests/inspection
+  wss.termWss = termWss;
 
   return wss;
 }

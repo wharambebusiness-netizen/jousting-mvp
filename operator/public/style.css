@@ -2040,6 +2040,19 @@ details[open] > .tree-summary .tree-icon--dir {
   color: var(--status-failed);
 }
 
+/* Claude terminal permission badges */
+.term-status__perm--safe {
+  color: var(--status-success);
+  font-size: 0.75rem;
+  padding: 0 var(--sp-1);
+}
+.term-status__perm--danger {
+  color: var(--status-failed);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0 var(--sp-1);
+}
+
 /* Terminal xterm container */
 .term-xterm {
   flex: 1;

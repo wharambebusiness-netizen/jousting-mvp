@@ -32,6 +32,8 @@ import { createSettings } from './settings.mjs';
 import { createFileWatcher } from './file-watcher.mjs';
 import { createProcessPool } from './process-pool.mjs';
 import { createCoordinator } from './coordination/coordinator.mjs';
+import { createClaudePool } from './claude-pool.mjs';
+import { createClaudeTerminalRoutes } from './routes/claude-terminals.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -161,6 +163,17 @@ export function createApp(options = {}) {
   // Coordination routes (task queue, rate limiter, costs)
   app.use('/api', createCoordinationRoutes({ coordinator }));
 
+  // Claude terminal pool (Phase 15)
+  let claudePool = null;
+  if (options.claudePool === true) {
+    claudePool = createClaudePool({ events, projectDir, log: () => {} });
+  } else if (options.claudePool && typeof options.claudePool === 'object') {
+    claudePool = options.claudePool;
+  }
+
+  // Claude terminal routes
+  app.use('/api', createClaudeTerminalRoutes({ claudePool, events }));
+
   // Resolve missions dir
   const missionsDir = join(projectDir, 'orchestrator', 'missions');
 
@@ -228,8 +241,8 @@ export function createApp(options = {}) {
   // Create HTTP server (needed for WebSocket upgrade)
   const server = http.createServer(app);
 
-  // WebSocket
-  const wss = createWebSocketHandler({ server, events });
+  // WebSocket (JSON bridge + binary terminal WS)
+  const wss = createWebSocketHandler({ server, events, claudePool });
 
   // File watcher for real-time project file updates
   const fileWatcher = options.enableFileWatcher !== false
@@ -268,6 +281,9 @@ export function createApp(options = {}) {
     // Shut down process pool (graceful worker termination)
     if (pool) pool.shutdownAll().catch(() => {});
 
+    // Shut down Claude terminal pool
+    if (claudePool) claudePool.shutdownAll().catch(() => {});
+
     // Clean up file watchers
     if (fileWatcher) fileWatcher.unwatchAll();
 
@@ -302,7 +318,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────

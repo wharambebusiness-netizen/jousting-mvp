@@ -58,6 +58,54 @@ var THEMES = [
       brightCyan: '#67e8f9', brightWhite: '#f8fafc',
     }
   },
+  {
+    id: 5, name: 'Violet', accent: '#a78bfa', bg: '#0e0b14',
+    xterm: {
+      background: '#0e0b14', foreground: '#e2e8f0', cursor: '#a78bfa',
+      cursorAccent: '#0e0b14', selectionBackground: 'rgba(167,139,250,0.3)',
+      black: '#1e1e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
+      brightBlack: '#4a4a5a', brightRed: '#fb7185', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
+      brightCyan: '#67e8f9', brightWhite: '#f8fafc',
+    }
+  },
+  {
+    id: 6, name: 'Cyan', accent: '#22d3ee', bg: '#0a0e10',
+    xterm: {
+      background: '#0a0e10', foreground: '#e2e8f0', cursor: '#22d3ee',
+      cursorAccent: '#0a0e10', selectionBackground: 'rgba(34,211,238,0.3)',
+      black: '#1e2e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
+      brightBlack: '#4a5a5a', brightRed: '#fb7185', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
+      brightCyan: '#67e8f9', brightWhite: '#f8fafc',
+    }
+  },
+  {
+    id: 7, name: 'Pink', accent: '#ec4899', bg: '#100a0e',
+    xterm: {
+      background: '#100a0e', foreground: '#e2e8f0', cursor: '#ec4899',
+      cursorAccent: '#100a0e', selectionBackground: 'rgba(236,72,153,0.3)',
+      black: '#2e1e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#ec4899', cyan: '#22d3ee', white: '#e2e8f0',
+      brightBlack: '#5a4a5a', brightRed: '#fb7185', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#f9a8d4',
+      brightCyan: '#67e8f9', brightWhite: '#f8fafc',
+    }
+  },
+  {
+    id: 8, name: 'Lime', accent: '#84cc16', bg: '#0b0f0a',
+    xterm: {
+      background: '#0b0f0a', foreground: '#e2e8f0', cursor: '#84cc16',
+      cursorAccent: '#0b0f0a', selectionBackground: 'rgba(132,204,22,0.3)',
+      black: '#1e2e1e', red: '#f43f5e', green: '#84cc16', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
+      brightBlack: '#4a5a4a', brightRed: '#fb7185', brightGreen: '#a3e635',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
+      brightCyan: '#67e8f9', brightWhite: '#f8fafc',
+    }
+  },
 ];
 
 // ── State ────────────────────────────────────────────────────
@@ -82,6 +130,7 @@ var wsHandle = null;    // WebSocket connection handle for cleanup
 (function init() {
   applyViewMode();
   loadInstances();
+  loadClaudeTerminals();
   loadMissions();
   // Close previous WS connection (HTMX boost re-runs scripts without full page unload)
   if (wsHandle) { wsHandle.close(); wsHandle = null; }
@@ -90,6 +139,12 @@ var wsHandle = null;    // WebSocket connection handle for cleanup
   if (typeof onPageCleanup === 'function') {
     onPageCleanup(function() {
       if (wsHandle) { wsHandle.close(); wsHandle = null; }
+      // Close all Claude terminal binary WS connections
+      instances.forEach(function(inst) {
+        if (inst.type === 'claude' && inst.binaryWs) {
+          try { inst.binaryWs.close(); } catch(e) { /* noop */ }
+        }
+      });
     });
   }
   checkPendingProject();
@@ -103,6 +158,8 @@ var wsHandle = null;    // WebSocket connection handle for cleanup
     if (e.key === 'Escape') {
       var dialog = document.getElementById('new-instance-dialog');
       if (dialog && dialog.open) { dialog.close(); e.preventDefault(); return; }
+      var claudeDialog = document.getElementById('new-claude-dialog');
+      if (claudeDialog && claudeDialog.open) { claudeDialog.close(); e.preventDefault(); return; }
       var dd = document.querySelector('.handoff-history__dropdown');
       if (dd) { dd.remove(); e.preventDefault(); return; }
       // Close search bar on active terminal
@@ -187,6 +244,13 @@ var wsHandle = null;    // WebSocket connection handle for cleanup
       if (activeTabId) toggleMaximize(activeTabId);
       return;
     }
+
+    // Ctrl+Shift+C: new Claude terminal
+    if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+      e.preventDefault();
+      addClaudeTerminal();
+      return;
+    }
   });
 })();
 
@@ -204,7 +268,7 @@ function loadInstances() {
       if (!list || !list.length) {
         // Restore original empty state
         if (emptyState) {
-          emptyState.innerHTML = '<p>No orchestrator instances running.</p><p>Click <strong>+ New Instance</strong> to start one, or go to the <a href="/orchestrator">Orchestrator</a> page to launch a mission.</p>';
+          emptyState.innerHTML = '<p>No terminals running.</p><p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>';
         }
         updateEmptyState();
         return;
@@ -222,7 +286,7 @@ function loadInstances() {
     })
     .catch(function() {
       if (emptyState) {
-        emptyState.innerHTML = '<p>No orchestrator instances running.</p><p>Click <strong>+ New Instance</strong> to start one, or go to the <a href="/orchestrator">Orchestrator</a> page to launch a mission.</p>';
+        emptyState.innerHTML = '<p>No terminals running.</p><p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>';
       }
       updateEmptyState();
     });
@@ -249,7 +313,413 @@ function loadMissions() {
     });
 }
 
-// ── Add a terminal instance ──────────────────────────────────
+// ── Load existing Claude terminals from API ──────────────────
+function loadClaudeTerminals() {
+  fetch('/api/claude-terminals')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data || !data.terminals || !data.terminals.length) return;
+      data.terminals.forEach(function(t) {
+        addClaudeTerminalInstance(t.id, t);
+      });
+    })
+    .catch(function() { /* Claude terminals not available */ });
+}
+
+// ── Add a Claude terminal instance (interactive PTY) ─────────
+function addClaudeTerminalInstance(id, state) {
+  if (instances.has(id)) {
+    // Update existing
+    var existing = instances.get(id);
+    if (state) {
+      existing.running = state.status === 'running';
+      existing.model = state.model;
+      existing.dangerouslySkipPermissions = state.dangerouslySkipPermissions;
+    }
+    updateStatusBar(id);
+    updateTabDot(id);
+    return;
+  }
+
+  var theme = THEMES[themeIndex % THEMES.length];
+  themeIndex++;
+
+  // Create xterm.js Terminal — interactive (disableStdin: false)
+  var term = new Terminal({
+    theme: theme.xterm,
+    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+    fontSize: 13,
+    lineHeight: 1.3,
+    cursorBlink: true,
+    scrollback: 10000,
+    convertEol: true,
+    disableStdin: false,
+  });
+
+  var fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+
+  var searchAddon = null;
+  if (typeof SearchAddon !== 'undefined' && SearchAddon.SearchAddon) {
+    searchAddon = new SearchAddon.SearchAddon();
+    term.loadAddon(searchAddon);
+  }
+
+  // Create tab (with Claude badge)
+  var tab = document.createElement('button');
+  tab.className = 'term-tab';
+  tab.setAttribute('role', 'tab');
+  tab.setAttribute('aria-selected', 'false');
+  tab.style.setProperty('--tab-accent', theme.accent);
+  tab.dataset.instanceId = id;
+  var isRunning = state && state.status === 'running';
+  tab.innerHTML =
+    '<span class="term-tab__dot' + (isRunning ? ' term-tab__dot--running' : ' term-tab__dot--stopped') + '"></span>' +
+    '<span class="term-tab__label">' + escHtml(id) + '</span>' +
+    '<button class="term-tab__close" onclick="event.stopPropagation(); removeClaudeInstance(\'' + escHtml(id) + '\')" title="Remove" aria-label="Remove ' + escHtml(id) + '">&times;</button>';
+  tab.addEventListener('click', function() { switchTab(id); });
+  tabBar.appendChild(tab);
+
+  // Create panel
+  var panel = document.createElement('div');
+  panel.className = 'term-panel';
+  panel.dataset.instanceId = id;
+  panel.style.setProperty('--panel-accent', theme.accent);
+  panel.style.setProperty('--panel-bg', theme.bg);
+
+  // Status bar (Claude-specific: permission toggle instead of handoff/config)
+  var permLabel = state && state.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
+  var statusBar = document.createElement('div');
+  statusBar.className = 'term-status';
+  statusBar.innerHTML =
+    '<span class="term-status__dot ' + (isRunning ? 'term-status__dot--running' : 'term-status__dot--stopped') + '"></span>' +
+    '<span class="term-status__id">\u2728 ' + escHtml(id) + '</span>' +
+    '<span data-field="model">' + (state && state.model ? escHtml(state.model) : '') + '</span>' +
+    '<span data-field="permissions" class="' + (state && state.dangerouslySkipPermissions ? 'term-status__perm--danger' : 'term-status__perm--safe') + '">' + permLabel + '</span>' +
+    '<span class="term-status__spacer"></span>' +
+    '<span class="term-status__actions">' +
+      '<button class="term-status__btn" onclick="toggleClaudePermissions(\'' + escHtml(id) + '\')" data-action="toggle-perms" title="Toggle permission mode">\u{1F512}</button>' +
+      '<button class="term-status__btn term-status__btn--danger" onclick="killClaudeInstance(\'' + escHtml(id) + '\')" data-action="kill">Kill</button>' +
+      '<button class="term-status__btn" onclick="toggleMaximize(\'' + escHtml(id) + '\')" data-action="maximize" title="Maximize/Restore">\u26F6</button>' +
+    '</span>';
+  panel.appendChild(statusBar);
+
+  // Search bar (hidden by default)
+  var searchBar = document.createElement('div');
+  searchBar.className = 'term-search';
+  searchBar.style.display = 'none';
+  searchBar.innerHTML =
+    '<input type="text" class="term-search__input" placeholder="Search terminal..." aria-label="Search terminal">' +
+    '<span class="term-search__count" data-search-count></span>' +
+    '<button class="term-search__btn" data-search-prev title="Previous (Shift+Enter)">\u2191</button>' +
+    '<button class="term-search__btn" data-search-next title="Next (Enter)">\u2193</button>' +
+    '<button class="term-search__btn term-search__close" data-search-close title="Close (Escape)">\u00d7</button>';
+  panel.appendChild(searchBar);
+
+  // Wire search bar events
+  (function(instanceId, sBar, sAddon) {
+    var input = sBar.querySelector('.term-search__input');
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (sAddon) {
+          if (e.shiftKey) { sAddon.findPrevious(input.value); }
+          else { sAddon.findNext(input.value); }
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeTerminalSearch(instanceId);
+      }
+    });
+    input.addEventListener('input', function() {
+      if (sAddon && input.value) sAddon.findNext(input.value);
+    });
+    sBar.querySelector('[data-search-prev]').addEventListener('click', function() {
+      if (sAddon && input.value) sAddon.findPrevious(input.value);
+    });
+    sBar.querySelector('[data-search-next]').addEventListener('click', function() {
+      if (sAddon && input.value) sAddon.findNext(input.value);
+    });
+    sBar.querySelector('[data-search-close]').addEventListener('click', function() {
+      closeTerminalSearch(instanceId);
+    });
+  })(id, searchBar, searchAddon);
+
+  // Terminal container
+  var xtermContainer = document.createElement('div');
+  xtermContainer.className = 'term-xterm';
+  panel.appendChild(xtermContainer);
+
+  panels.appendChild(panel);
+  term.open(xtermContainer);
+
+  setTimeout(function() {
+    try { fitAddon.fit(); } catch (e) { /* ignore */ }
+  }, 50);
+
+  // Write welcome message
+  term.writeln('\x1b[1;' + ansiColorCode(theme.accent) + 'm' + '\u2728 Claude Terminal: ' + id + '\x1b[0m');
+  term.writeln('\x1b[90mInteractive Claude Code session.' + (isRunning ? ' Connected.' : ' Waiting for connection.') + '\x1b[0m');
+  term.writeln('');
+
+  // Store instance
+  var inst = {
+    id: id,
+    type: 'claude',
+    theme: theme,
+    terminal: term,
+    fitAddon: fitAddon,
+    searchAddon: searchAddon,
+    searchBar: searchBar,
+    panel: panel,
+    tab: tab,
+    running: isRunning,
+    round: 0,
+    agents: [],
+    cost: 0,
+    mission: null,
+    model: state ? state.model : null,
+    maximized: false,
+    dangerouslySkipPermissions: state ? !!state.dangerouslySkipPermissions : false,
+    binaryWs: null,
+    coord: {
+      tasks: { total: 0, pending: 0, assigned: 0, running: 0, complete: 0, failed: 0, cancelled: 0 },
+      rateLimitOk: true, costUsd: 0, budgetUsd: 0, worktree: null,
+      budgetWarning: false, budgetExceeded: false, active: false,
+    },
+  };
+  instances.set(id, inst);
+
+  // Connect binary WS for PTY I/O
+  if (isRunning) {
+    connectClaudeBinaryWs(inst);
+  }
+
+  updateEmptyState();
+  applyViewMode();
+
+  if (!activeTabId) {
+    switchTab(id);
+  }
+}
+
+// ── Binary WebSocket for Claude terminal PTY I/O ─────────────
+function connectClaudeBinaryWs(inst) {
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(inst.id);
+  var ws = new WebSocket(url);
+
+  ws.onopen = function() {
+    inst.terminal.writeln('\x1b[32m--- Connected ---\x1b[0m');
+
+    // Send resize on connect
+    var dims = inst.fitAddon.proposeDimensions();
+    if (dims) {
+      ws.send('\x01' + JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+    }
+  };
+
+  ws.onmessage = function(evt) {
+    // Raw PTY output → write to xterm
+    inst.terminal.write(evt.data);
+  };
+
+  ws.onclose = function() {
+    inst.terminal.writeln('\r\n\x1b[31m--- Disconnected ---\x1b[0m');
+    inst.binaryWs = null;
+  };
+
+  ws.onerror = function() {
+    inst.terminal.writeln('\r\n\x1b[31m--- WebSocket Error ---\x1b[0m');
+  };
+
+  inst.binaryWs = ws;
+
+  // User input → WS → PTY
+  inst.terminal.onData(function(data) {
+    if (ws.readyState === 1) { // OPEN
+      ws.send(data);
+    }
+  });
+
+  // Resize → WS control message
+  inst.terminal.onResize(function(size) {
+    if (ws.readyState === 1) {
+      ws.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+    }
+  });
+}
+
+// ── Add Claude terminal button handler ───────────────────────
+function addClaudeTerminal() {
+  var dialog = document.getElementById('new-claude-dialog');
+  var nextNum = 1;
+  var defaultId = 'claude-' + nextNum;
+  while (instances.has(defaultId)) {
+    nextNum++;
+    defaultId = 'claude-' + nextNum;
+  }
+  var form = document.getElementById('new-claude-form');
+  form.terminalId.value = defaultId;
+  dialog.showModal();
+}
+
+// ── Submit new Claude terminal from dialog ───────────────────
+function submitNewClaude(e) {
+  e.preventDefault();
+  var form = e.target;
+  var dialog = document.getElementById('new-claude-dialog');
+  var id = form.terminalId.value.trim();
+  var model = form.model.value;
+  var skipPerms = form.dangerouslySkipPermissions.checked;
+
+  if (!id) {
+    showToast('Terminal ID is required', 'error');
+    return false;
+  }
+
+  if (instances.has(id)) {
+    showToast('Terminal "' + id + '" already exists', 'error');
+    return false;
+  }
+
+  // Spawn via API
+  fetch('/api/claude-terminals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: id,
+      model: model || undefined,
+      dangerouslySkipPermissions: skipPerms,
+    }),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Spawn failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      // Create the interactive terminal instance
+      addClaudeTerminalInstance(id, {
+        status: 'running',
+        model: model,
+        dangerouslySkipPermissions: skipPerms,
+      });
+      switchTab(id);
+      showToast('Claude terminal ' + id + ' started', 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to start Claude terminal: ' + err.message, 'error');
+    });
+
+  dialog.close();
+  form.reset();
+  return false;
+}
+
+// ── Kill Claude terminal ─────────────────────────────────────
+function killClaudeInstance(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') return;
+
+  // Close binary WS
+  if (inst.binaryWs) {
+    try { inst.binaryWs.close(); } catch(e) { /* noop */ }
+    inst.binaryWs = null;
+  }
+
+  // Kill via API
+  fetch('/api/claude-terminals/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) {
+      if (!r.ok && r.status !== 404) throw new Error('Kill failed');
+      inst.running = false;
+      inst.terminal.writeln('\r\n\x1b[31m--- Killed ---\x1b[0m');
+      updateStatusBar(id);
+      updateTabDot(id);
+      showToast(id + ' killed', 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to kill ' + id + ': ' + err.message, 'error');
+    });
+}
+
+// ── Remove Claude terminal (from DOM + pool) ─────────────────
+function removeClaudeInstance(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') {
+    // Fall back to orchestrator remove
+    removeInstance(id);
+    return;
+  }
+
+  if (inst.running) {
+    showToast('Kill the terminal before removing it', 'error');
+    return;
+  }
+
+  // Close binary WS if still open
+  if (inst.binaryWs) {
+    try { inst.binaryWs.close(); } catch(e) { /* noop */ }
+  }
+
+  // DELETE from API
+  fetch('/api/claude-terminals/' + encodeURIComponent(id), { method: 'DELETE' })
+    .catch(function() { /* ignore */ });
+
+  // Clean up DOM
+  inst.terminal.dispose();
+  inst.tab.remove();
+  inst.panel.remove();
+  instances.delete(id);
+
+  if (activeTabId === id) {
+    activeTabId = null;
+    var remaining = Array.from(instances.keys());
+    if (remaining.length > 0) switchTab(remaining[0]);
+  }
+  updateEmptyState();
+}
+
+// ── Toggle Claude terminal permissions ───────────────────────
+function toggleClaudePermissions(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') return;
+
+  var newSkip = !inst.dangerouslySkipPermissions;
+  var label = newSkip ? 'skip permissions (dangerous)' : 'safe mode';
+
+  inst.terminal.writeln('\r\n\x1b[33m[PERMISSIONS] Restarting with ' + label + '...\x1b[0m');
+
+  // Close existing binary WS
+  if (inst.binaryWs) {
+    try { inst.binaryWs.close(); } catch(e) { /* noop */ }
+    inst.binaryWs = null;
+  }
+
+  // Toggle via API (respawns with new config)
+  fetch('/api/claude-terminals/' + encodeURIComponent(id) + '/toggle-permissions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Toggle failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      inst.dangerouslySkipPermissions = data.dangerouslySkipPermissions;
+      inst.running = true;
+      updateStatusBar(id);
+      updateTabDot(id);
+      // Reconnect binary WS
+      connectClaudeBinaryWs(inst);
+      showToast(id + ' restarted with ' + label, 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to toggle permissions: ' + err.message, 'error');
+    });
+}
+
+// ── Add a terminal instance (orchestrator) ───────────────────
 function addTerminalInstance(id, state) {
   if (instances.has(id)) {
     // Update existing instance state
@@ -427,6 +897,7 @@ function addTerminalInstance(id, state) {
   // Store instance
   instances.set(id, {
     id: id,
+    type: 'orchestrator',
     theme: theme,
     terminal: term,
     fitAddon: fitAddon,
@@ -488,6 +959,12 @@ function switchTab(id) {
 function removeInstance(id) {
   var inst = instances.get(id);
   if (!inst) return;
+
+  // Claude terminals have their own removal flow
+  if (inst.type === 'claude') {
+    removeClaudeInstance(id);
+    return;
+  }
 
   if (inst.running) {
     showToast('Stop the instance before removing it', 'error');
@@ -711,6 +1188,7 @@ function connectWS() {
     'round:*',
     'handoff:*',
     'coord:*',
+    'claude-terminal:*',
   ], function(msg) {
     if (!msg || !msg.event || !msg.data) return;
 
@@ -1038,6 +1516,62 @@ function connectWS() {
         // Update adaptive rate card directly from WS data (no extra fetch)
         updateAdaptiveCard({ enabled: true, state: msg.data.state, factor: msg.data.factor });
         break;
+
+      // ── Claude Terminal Events ─────────────────────────────
+
+      case 'claude-terminal:spawned': {
+        var cId = msg.data.terminalId;
+        if (cId && !instances.has(cId)) {
+          addClaudeTerminalInstance(cId, {
+            status: 'running',
+            model: msg.data.config ? msg.data.config.model : null,
+            dangerouslySkipPermissions: msg.data.config ? msg.data.config.dangerouslySkipPermissions : false,
+          });
+        }
+        break;
+      }
+
+      case 'claude-terminal:exit': {
+        var cId2 = msg.data.terminalId;
+        var cInst = instances.get(cId2);
+        if (cInst && cInst.type === 'claude') {
+          cInst.running = false;
+          updateStatusBar(cId2);
+          updateTabDot(cId2);
+        }
+        break;
+      }
+
+      case 'claude-terminal:error': {
+        var cId3 = msg.data.terminalId;
+        var cInst3 = instances.get(cId3);
+        if (cInst3 && cInst3.type === 'claude') {
+          cInst3.terminal.writeln('\r\n\x1b[31m[ERROR] ' + (msg.data.error || 'Unknown error') + '\x1b[0m');
+        }
+        break;
+      }
+
+      case 'claude-terminal:removed': {
+        var cId4 = msg.data.terminalId;
+        // If still in instances, mark as removed
+        var cInst4 = instances.get(cId4);
+        if (cInst4 && cInst4.type === 'claude') {
+          cInst4.running = false;
+          updateStatusBar(cId4);
+          updateTabDot(cId4);
+        }
+        break;
+      }
+
+      case 'claude-terminal:permission-changed': {
+        var cId5 = msg.data.terminalId;
+        var cInst5 = instances.get(cId5);
+        if (cInst5 && cInst5.type === 'claude') {
+          cInst5.dangerouslySkipPermissions = !!msg.data.dangerouslySkipPermissions;
+          updateStatusBar(cId5);
+        }
+        break;
+      }
     }
   }, {
     trackStatus: true,
@@ -1175,7 +1709,20 @@ function updateStatusBar(id) {
   var agentsEl = statusBar.querySelector('[data-field="agents"]');
   if (agentsEl) agentsEl.textContent = 'A:' + (inst.agents ? inst.agents.length : 0);
 
-  // Disable/enable start/stop/handoff buttons
+  // Claude terminal: update permissions field
+  if (inst.type === 'claude') {
+    var permEl = statusBar.querySelector('[data-field="permissions"]');
+    if (permEl) {
+      var permLabel = inst.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
+      permEl.textContent = permLabel;
+      permEl.className = inst.dangerouslySkipPermissions ? 'term-status__perm--danger' : 'term-status__perm--safe';
+    }
+    var killBtn = statusBar.querySelector('[data-action="kill"]');
+    if (killBtn) killBtn.disabled = !inst.running;
+    return;
+  }
+
+  // Orchestrator: disable/enable start/stop/handoff buttons
   var startBtn = statusBar.querySelector('[data-action="start"]');
   var stopBtn = statusBar.querySelector('[data-action="stop"]');
   var handoffBtn = statusBar.querySelector('[data-action="handoff"]');
@@ -1242,10 +1789,14 @@ function ansiColorCode(hex) {
   // Map theme accent to nearest ANSI 256 foreground code
   // Simplified: just use bright versions of known colors
   var map = {
-    '#6366f1': '34', // blue
-    '#10b981': '32', // green
-    '#f59e0b': '33', // yellow
-    '#f43f5e': '31', // red
+    '#6366f1': '34', // blue (Indigo)
+    '#10b981': '32', // green (Emerald)
+    '#f59e0b': '33', // yellow (Amber)
+    '#f43f5e': '31', // red (Rose)
+    '#a78bfa': '35', // magenta (Violet)
+    '#22d3ee': '36', // cyan (Cyan)
+    '#ec4899': '35', // magenta (Pink)
+    '#84cc16': '32', // green (Lime)
   };
   return map[hex] || '37';
 }
@@ -1844,6 +2395,11 @@ window.openConfigDialog = openConfigDialog;
 window.submitConfig = submitConfig;
 window.openCoordConfigDialog = openCoordConfigDialog;
 window.submitCoordConfig = submitCoordConfig;
+window.addClaudeTerminal = addClaudeTerminal;
+window.submitNewClaude = submitNewClaude;
+window.killClaudeInstance = killClaudeInstance;
+window.removeClaudeInstance = removeClaudeInstance;
+window.toggleClaudePermissions = toggleClaudePermissions;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

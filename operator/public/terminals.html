@@ -40,7 +40,8 @@
         <button class="btn btn--sm btn--ghost" id="view-toggle" onclick="toggleTerminalView()" title="Toggle grid/tab view (Ctrl+Shift+G)" aria-label="Toggle grid/tab view">
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
-        <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance (Ctrl+N)" aria-label="Add instance">+ New Instance</button>
+        <button class="btn btn--sm btn--primary" id="add-claude-btn" onclick="addClaudeTerminal()" title="New Claude terminal (Ctrl+Shift+C)" aria-label="New Claude terminal">+ Claude</button>
+        <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance (Ctrl+N)" aria-label="Add instance">+ Orchestrator</button>
       </div>
     </div>
 
@@ -114,8 +115,8 @@
     <div class="term-panels" id="term-panels">
       <!-- Terminal panels rendered dynamically by terminals.js -->
       <div class="term-empty" id="term-empty">
-        <p>No orchestrator instances running.</p>
-        <p>Click <strong>+ New Instance</strong> to start one, or go to the <a href="/orchestrator">Orchestrator</a> page to launch a mission.</p>
+        <p>No terminals running.</p>
+        <p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>
       </div>
     </div>
 
@@ -152,6 +153,38 @@
           <footer>
             <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-instance-dialog').close()">Cancel</button>
             <button type="submit" class="btn btn--primary">Start Instance</button>
+          </footer>
+        </form>
+      </article>
+    </dialog>
+    <!-- New Claude Terminal Dialog -->
+    <dialog class="term-dialog" id="new-claude-dialog">
+      <article>
+        <header>
+          <button class="btn btn--sm btn--ghost" onclick="document.getElementById('new-claude-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+          <h3>New Claude Terminal</h3>
+        </header>
+        <form id="new-claude-form" onsubmit="return submitNewClaude(event)">
+          <label>
+            Terminal ID
+            <input type="text" name="terminalId" placeholder="e.g. claude-1" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens, underscores">
+          </label>
+          <label>
+            Model
+            <select name="model">
+              <option value="">Default</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="opus">Opus</option>
+              <option value="haiku">Haiku</option>
+            </select>
+          </label>
+          <label>
+            <input type="checkbox" name="dangerouslySkipPermissions" style="width:auto;margin-right:var(--sp-1)">
+            Skip Permissions
+          </label>
+          <footer>
+            <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-claude-dialog').close()">Cancel</button>
+            <button type="submit" class="btn btn--primary">Start Terminal</button>
           </footer>
         </form>
       </article>
@@ -233,7 +266,8 @@
       <div class="shortcuts-grid">
         <kbd>Ctrl+1-4</kbd><span>Switch to terminal 1-4</span>
         <kbd>Ctrl+Shift+&larr;/&rarr;</kbd><span>Previous / next terminal</span>
-        <kbd>Ctrl+N</kbd><span>New instance</span>
+        <kbd>Ctrl+Shift+C</kbd><span>New Claude terminal</span>
+        <kbd>Ctrl+N</kbd><span>New orchestrator instance</span>
         <kbd>Ctrl+W</kbd><span>Close active terminal</span>
         <kbd>Ctrl+H</kbd><span>Handoff active terminal</span>
         <kbd>Ctrl+F</kbd><span>Search in terminal</span>

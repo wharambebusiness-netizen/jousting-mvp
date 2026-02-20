@@ -72,20 +72,23 @@ orchestrator/         Multi-agent system (v27, 22 modules)
   roles/              23 role templates (15 original + 8 Phase 4 general-purpose)
   missions/           Mission configs
 
-operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
+operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6+Phase15)
   operator.mjs        CLI daemon: SDK query → context monitor → handoff → auto-commit → chain
-  server.mjs          HTTP API + Web UI server (Express + WebSocket, M4+M5)
+  server.mjs          HTTP API + Web UI server (Express + WebSocket, M4+M5+Phase15)
   process-pool.mjs    Multi-orchestrator worker process management (fork, IPC, heartbeat, restart)
   orchestrator-worker.mjs  Child process entry point (IPC protocol, IPCEventBus, orchestrator fork)
+  claude-terminal.mjs Single PTY process manager: node-pty spawn, resize, kill, dynamic import fallback (Phase 15A)
+  claude-pool.mjs     Multi-terminal pool: spawn, kill, resize, respawn, shutdownAll (Phase 15A)
   registry.mjs        Chain persistence (factory pattern, atomic writes, file locking, CRUD, archival)
   settings.mjs        Settings persistence (factory pattern, atomic writes, validation, clamping)
   errors.mjs          Error classification, retry logic, circuit breaker, handoff validation
-  ws.mjs              WebSocket event bridge (EventBus → clients, 48 bridged events)
+  ws.mjs              WebSocket event bridge (EventBus → clients, 54 bridged events) + binary WS for Claude terminals (Phase 15B)
   file-watcher.mjs    Real-time fs.watch for project directories (P9)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
     orchestrator.mjs  Multi-instance orchestrator status/control + mission listing + reports (M6a+Phase1)
     coordination.mjs  Coordination REST API: tasks CRUD+PATCH, progress, graph, templates, rate-limit, costs, lifecycle (Phase 6+13+14)
+    claude-terminals.mjs  Claude terminal REST API: list, spawn, resize, toggle-permissions, respawn, kill (Phase 15C)
     git.mjs           Git status, push, commit, PR creation, file-status (M6d+P10)
     settings.mjs      Settings GET/PUT API routes
     files.mjs         File system scanning + content preview API (P9+P10)
@@ -109,7 +112,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
     settings.html     Settings page: model, limits, preferences
     style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports, terminal, task board)
     app.js            Shared client JS: toast, progress, branch auto-gen, project filter, WS updates
-    terminals.js      Terminal page JS: xterm.js instances, tab/grid views, WS event routing, search, keyboard shortcuts (Phase 2+7a)
+    terminals.js      Terminal page JS: dual terminal types (orchestrator output-only + Claude interactive PTY), 8 color themes, binary WS, tab/grid views, search, keyboard shortcuts (Phase 2+7a+15C)
     taskboard.js      Task board JS: Kanban + DAG view rendering, drag-and-drop, WS real-time updates, add/cancel/retry, filter/search, keyboard shortcuts, detail/edit dialog, batch operations, task templates (Phase 12-14)
   skills/             Skill pool system (Phase 5)
     registry.mjs     Skill registry — load, validate, index, search, get

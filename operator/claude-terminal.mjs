@@ -1,0 +1,307 @@
+// ============================================================
+// Claude Terminal — Single PTY Process Manager
+// ============================================================
+// Manages a single interactive Claude Code CLI session via PTY.
+// Uses node-pty for pseudo-terminal support (ConPTY on Windows).
+//
+// Factory pattern: createClaudeTerminal(opts) returns terminal
+// methods for lifecycle management + data I/O.
+//
+// Dynamic import of node-pty with graceful fallback if the
+// native module is not installed.
+//
+// Phase 15A: PTY infrastructure layer.
+// ============================================================
+
+import { randomUUID } from 'crypto';
+
+// ── Dynamic node-pty Import ─────────────────────────────────
+
+let nodePty = null;
+let nodePtyError = null;
+
+/**
+ * Lazily load node-pty. Returns the module or throws.
+ * @returns {Promise<object>}
+ */
+async function loadNodePty() {
+  if (nodePty) return nodePty;
+  if (nodePtyError) throw nodePtyError;
+
+  try {
+    // Dynamic import so the rest of the codebase works even
+    // if the native module isn't installed.
+    const mod = await import('node-pty');
+    nodePty = mod.default || mod;
+    return nodePty;
+  } catch (err) {
+    nodePtyError = new Error(
+      `node-pty is not available: ${err.message}. ` +
+      'Install it with: npm install node-pty'
+    );
+    throw nodePtyError;
+  }
+}
+
+/**
+ * Check if node-pty is available without throwing.
+ * @returns {Promise<boolean>}
+ */
+export async function isNodePtyAvailable() {
+  try {
+    await loadNodePty();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Constants ───────────────────────────────────────────────
+
+const DEFAULT_COLS = 120;
+const DEFAULT_ROWS = 30;
+const FORCE_KILL_TIMEOUT_MS = 5000;
+const IS_WINDOWS = process.platform === 'win32';
+
+// ── Factory ─────────────────────────────────────────────────
+
+/**
+ * Create a Claude terminal — a PTY-based interactive Claude CLI session.
+ *
+ * @param {object} opts
+ * @param {string}   opts.projectDir - Working directory for the Claude session
+ * @param {string}   [opts.id] - Terminal identifier (auto-generated if omitted)
+ * @param {string}   [opts.model] - Model to use (e.g., 'sonnet', 'opus')
+ * @param {boolean}  [opts.dangerouslySkipPermissions] - Skip permission prompts
+ * @param {string}   [opts.systemPrompt] - Append to system prompt
+ * @param {string}   [opts.resumeSessionId] - Resume a previous session (-r flag)
+ * @param {boolean}  [opts.continueSession] - Continue last session (-c flag)
+ * @param {number}   [opts.cols] - Terminal columns (default 120)
+ * @param {number}   [opts.rows] - Terminal rows (default 30)
+ * @param {Function} [opts.onData] - Callback for PTY output data
+ * @param {Function} [opts.onExit] - Callback for process exit
+ * @param {Function} [opts.log] - Logger function
+ * @returns {Promise<object>} Terminal control object
+ */
+export async function createClaudeTerminal(opts) {
+  const pty = await loadNodePty();
+
+  const id = opts.id || `claude-${randomUUID().slice(0, 8)}`;
+  const projectDir = opts.projectDir;
+  const log = opts.log || (() => {});
+  const cols = opts.cols || DEFAULT_COLS;
+  const rows = opts.rows || DEFAULT_ROWS;
+
+  if (!projectDir) {
+    throw new Error('projectDir is required');
+  }
+
+  // ── Build CLI args ──────────────────────────────────────
+
+  const cliArgs = buildCliArgs(opts);
+
+  // ── Spawn PTY ───────────────────────────────────────────
+
+  const shell = IS_WINDOWS ? 'claude.cmd' : 'claude';
+
+  let ptyProcess;
+  try {
+    ptyProcess = pty.spawn(shell, cliArgs, {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: projectDir,
+      env: {
+        ...process.env,
+        // Set autocompact threshold for handoff detection
+        CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE: '70',
+        // Force color output
+        FORCE_COLOR: '1',
+      },
+    });
+  } catch (err) {
+    throw new Error(`Failed to spawn Claude PTY: ${err.message}`);
+  }
+
+  // ── State ───────────────────────────────────────────────
+
+  const state = {
+    id,
+    pid: ptyProcess.pid,
+    status: 'running',     // running | stopped
+    projectDir,
+    model: opts.model || null,
+    dangerouslySkipPermissions: !!opts.dangerouslySkipPermissions,
+    resumeSessionId: opts.resumeSessionId || null,
+    continueSession: !!opts.continueSession,
+    systemPrompt: opts.systemPrompt || null,
+    cols,
+    rows,
+    spawnedAt: new Date().toISOString(),
+    exitCode: null,
+    exitSignal: null,
+  };
+
+  // ── Event Handlers ──────────────────────────────────────
+
+  const listeners = {
+    data: [],
+    exit: [],
+    error: [],
+  };
+
+  function emit(event, ...args) {
+    for (const fn of listeners[event] || []) {
+      try { fn(...args); } catch (e) { log(`[claude-terminal] listener error: ${e.message}`); }
+    }
+  }
+
+  // PTY data output
+  ptyProcess.onData((data) => {
+    emit('data', data);
+    if (opts.onData) {
+      try { opts.onData(data); } catch { /* noop */ }
+    }
+  });
+
+  // PTY exit
+  ptyProcess.onExit(({ exitCode, signal }) => {
+    state.status = 'stopped';
+    state.exitCode = exitCode;
+    state.exitSignal = signal;
+    log(`[claude-terminal] ${id} exited (code=${exitCode}, signal=${signal})`);
+
+    emit('exit', exitCode, signal);
+    if (opts.onExit) {
+      try { opts.onExit(exitCode, signal); } catch { /* noop */ }
+    }
+  });
+
+  log(`[claude-terminal] ${id} spawned (pid=${ptyProcess.pid}, cols=${cols}, rows=${rows})`);
+
+  // ── Public API ──────────────────────────────────────────
+
+  /**
+   * Write data to the PTY (user input).
+   * @param {string} data - Input data to send
+   */
+  function write(data) {
+    if (state.status !== 'running') return;
+    ptyProcess.write(data);
+  }
+
+  /**
+   * Resize the PTY terminal.
+   * @param {number} newCols
+   * @param {number} newRows
+   */
+  function resize(newCols, newRows) {
+    if (state.status !== 'running') return;
+    state.cols = newCols;
+    state.rows = newRows;
+    ptyProcess.resize(newCols, newRows);
+  }
+
+  /**
+   * Kill the PTY process.
+   * Sends SIGTERM first, then SIGKILL after timeout.
+   */
+  function kill() {
+    if (state.status !== 'running') return;
+
+    try {
+      ptyProcess.kill();
+    } catch { /* already dead */ }
+
+    // Force kill after timeout
+    const timer = setTimeout(() => {
+      try {
+        if (state.status === 'running') {
+          ptyProcess.kill('SIGKILL');
+        }
+      } catch { /* already dead */ }
+    }, FORCE_KILL_TIMEOUT_MS);
+    timer.unref();
+  }
+
+  /**
+   * Get current terminal status.
+   * @returns {object}
+   */
+  function getStatus() {
+    return { ...state };
+  }
+
+  /**
+   * Register an event listener.
+   * @param {'data'|'exit'|'error'} event
+   * @param {Function} handler
+   */
+  function on(event, handler) {
+    if (listeners[event]) {
+      listeners[event].push(handler);
+    }
+  }
+
+  /**
+   * Remove an event listener.
+   * @param {'data'|'exit'|'error'} event
+   * @param {Function} handler
+   */
+  function off(event, handler) {
+    const list = listeners[event];
+    if (list) {
+      const idx = list.indexOf(handler);
+      if (idx !== -1) list.splice(idx, 1);
+    }
+  }
+
+  return {
+    id,
+    pid: ptyProcess.pid,
+    write,
+    resize,
+    kill,
+    getStatus,
+    on,
+    off,
+  };
+}
+
+// ── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Build CLI arguments for the Claude command.
+ * @param {object} opts - Terminal options
+ * @returns {string[]}
+ */
+export function buildCliArgs(opts) {
+  const args = [];
+
+  if (opts.dangerouslySkipPermissions) {
+    args.push('--dangerously-skip-permissions');
+  }
+
+  if (opts.model) {
+    args.push('--model', opts.model);
+  }
+
+  if (opts.systemPrompt) {
+    args.push('--append-system-prompt', opts.systemPrompt);
+  }
+
+  if (opts.resumeSessionId) {
+    args.push('-r', opts.resumeSessionId);
+  } else if (opts.continueSession) {
+    args.push('-c');
+  }
+
+  return args;
+}
+
+export {
+  DEFAULT_COLS,
+  DEFAULT_ROWS,
+  FORCE_KILL_TIMEOUT_MS,
+  loadNodePty,
+};
