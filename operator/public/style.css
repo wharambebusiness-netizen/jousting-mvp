@@ -3166,3 +3166,165 @@ details[open] > .tree-summary .tree-icon--dir {
   align-items: center;
   gap: var(--sp-3);
 }
+
+/* ── 48. Task Board Enhancements (Phase 13) ─────────────── */
+
+/* Filter Bar */
+.task-board__filters {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+.task-board__search {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+.task-board__search:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.task-board__search::placeholder {
+  color: var(--text-muted);
+}
+.task-board__filter-select {
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin: 0;
+}
+.task-board__filter-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.task-board__filter-count {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Batch Action Bar */
+.task-board__batch-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: var(--sp-3);
+  animation: fadeIn 0.15s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.task-board__batch-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: auto;
+}
+.task-board__batch-cancel {
+  color: var(--status-error) !important;
+  border-color: rgba(244, 63, 94, 0.3) !important;
+}
+.task-board__batch-cancel:hover {
+  background: rgba(244, 63, 94, 0.1) !important;
+}
+.task-board__batch-retry {
+  color: var(--status-success) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+.task-board__batch-retry:hover {
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+
+/* Card Selection */
+.task-card--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.task-card__checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.task-card:hover .task-card__checkbox,
+.task-card--selected .task-card__checkbox {
+  opacity: 1;
+}
+
+/* Detail Dialog */
+.task-board__dialog--detail {
+  max-width: 540px;
+}
+.task-board__detail-field {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.task-board__detail-field strong {
+  min-width: 90px;
+  color: var(--text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.task-board__detail-mono {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.task-board__detail-error {
+  color: var(--status-error);
+  word-break: break-all;
+}
+
+/* Shortcuts Dialog */
+.task-board__dialog--help {
+  max-width: 360px;
+}
+.task-board__shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.task-board__shortcuts-table td {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.8125rem;
+  border: none;
+}
+.task-board__shortcuts-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+.task-board__key {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-overlay);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  text-align: center;
+  min-width: 28px;
+  display: inline-block;
+}

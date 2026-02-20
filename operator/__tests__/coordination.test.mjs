@@ -252,6 +252,75 @@ describe('TaskQueue', () => {
     });
   });
 
+  // ── Update (Phase 13) ────────────────────────────────
+
+  describe('update', () => {
+    it('should update description on pending task', () => {
+      queue.add({ id: 'a', task: 'old desc', priority: 0 });
+      const updated = queue.update('a', { task: 'new desc' });
+      expect(updated.task).toBe('new desc');
+      expect(queue.get('a').task).toBe('new desc');
+    });
+
+    it('should update priority on pending task', () => {
+      queue.add({ id: 'a', task: 'test', priority: 0 });
+      queue.update('a', { priority: 10 });
+      expect(queue.get('a').priority).toBe(10);
+    });
+
+    it('should update category on pending task', () => {
+      queue.add({ id: 'a', task: 'test' });
+      queue.update('a', { category: 'code' });
+      expect(queue.get('a').category).toBe('code');
+    });
+
+    it('should merge metadata on pending task', () => {
+      queue.add({ id: 'a', task: 'test', metadata: { foo: 1 } });
+      queue.update('a', { metadata: { bar: 2 } });
+      const t = queue.get('a');
+      expect(t.metadata.foo).toBe(1);
+      expect(t.metadata.bar).toBe(2);
+    });
+
+    it('should update assigned task', () => {
+      queue.add({ id: 'a', task: 'test' });
+      queue.assign('a', 'w1');
+      queue.update('a', { task: 'updated desc' });
+      expect(queue.get('a').task).toBe('updated desc');
+    });
+
+    it('should not update running task', () => {
+      queue.add({ id: 'a', task: 'test' });
+      queue.assign('a', 'w1');
+      queue.start('a');
+      expect(() => queue.update('a', { task: 'nope' })).toThrow('must be pending or assigned');
+    });
+
+    it('should not update complete task', () => {
+      queue.add({ id: 'a', task: 'test' });
+      queue.assign('a', 'w1');
+      queue.complete('a');
+      expect(() => queue.update('a', { task: 'nope' })).toThrow('must be pending or assigned');
+    });
+
+    it('should not update failed task', () => {
+      queue.add({ id: 'a', task: 'test' });
+      queue.assign('a', 'w1');
+      queue.fail('a', 'err');
+      expect(() => queue.update('a', { task: 'nope' })).toThrow('must be pending or assigned');
+    });
+
+    it('should throw for unknown task', () => {
+      expect(() => queue.update('x', { task: 'nope' })).toThrow('not found');
+    });
+
+    it('should clear category when set to empty string', () => {
+      queue.add({ id: 'a', task: 'test', category: 'code' });
+      queue.update('a', { category: '' });
+      expect(queue.get('a').category).toBeNull();
+    });
+  });
+
   // ── Query Operations ──────────────────────────────────
 
   describe('getReady', () => {

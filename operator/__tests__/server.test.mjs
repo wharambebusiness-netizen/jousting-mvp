@@ -2316,3 +2316,164 @@ describe('Task Board Page (Phase 12)', () => {
     expect(text).toContain('.task-card__priority--low');
   });
 });
+
+// ============================================================
+// Task Board Enhancements (Phase 13)
+// ============================================================
+
+describe('Task Board Enhancements (Phase 13)', () => {
+  let baseUrl, appInstance, events;
+
+  beforeAll(async () => {
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+  });
+  afterAll(async () => {
+    if (appInstance) await appInstance.close();
+  });
+
+  // ── HTML structure tests ──────────────────────────────
+
+  it('task board has filter bar with search and dropdowns', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('board-search');
+    expect(text).toContain('filter-status');
+    expect(text).toContain('filter-priority');
+    expect(text).toContain('filter-category');
+    expect(text).toContain('board-filters');
+  });
+
+  it('task board has batch action bar', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('batch-bar');
+    expect(text).toContain('batch-count');
+    expect(text).toContain('batch-cancel');
+    expect(text).toContain('batch-retry');
+    expect(text).toContain('batch-select-all');
+    expect(text).toContain('batch-clear');
+  });
+
+  it('task board has detail/edit dialog', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('detail-dialog');
+    expect(text).toContain('detail-form');
+    expect(text).toContain('detail-save-btn');
+    expect(text).toContain('detail-task-input');
+    expect(text).toContain('detail-priority-input');
+    expect(text).toContain('detail-category-input');
+  });
+
+  it('task board has keyboard shortcuts dialog', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('shortcuts-dialog');
+    expect(text).toContain('Keyboard Shortcuts');
+    expect(text).toContain('task-board__key');
+    expect(text).toContain('shortcuts-close');
+  });
+
+  // ── JS content tests ─────────────────────────────────
+
+  it('taskboard.js has filter/search functions', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('matchesFilter');
+    expect(text).toContain('getFilteredTasks');
+    expect(text).toContain('updateCategoryDropdown');
+    expect(text).toContain('filterText');
+  });
+
+  it('taskboard.js has keyboard shortcut handler', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain("document.addEventListener('keydown'");
+    expect(text).toContain('shortcutsDialog');
+    expect(text).toContain("e.key === '?'");
+    expect(text).toContain("e.key === '/'");
+    expect(text).toContain("e.key === 'n'");
+  });
+
+  it('taskboard.js has detail/edit dialog functions', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('openDetail');
+    expect(text).toContain('saveDetail');
+    expect(text).toContain('updateTask');
+    expect(text).toContain("method: 'PATCH'");
+  });
+
+  it('taskboard.js has batch selection functions', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('toggleSelect');
+    expect(text).toContain('clearSelection');
+    expect(text).toContain('selectAllVisible');
+    expect(text).toContain('batchCancel');
+    expect(text).toContain('batchRetry');
+  });
+
+  it('taskboard.js has checkbox in card rendering', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('task-card__checkbox');
+    expect(text).toContain('data-select');
+    expect(text).toContain('task-card--selected');
+  });
+
+  // ── CSS content tests ─────────────────────────────────
+
+  it('style.css has Phase 13 filter bar styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-board__filters');
+    expect(text).toContain('.task-board__search');
+    expect(text).toContain('.task-board__filter-select');
+    expect(text).toContain('.task-board__filter-count');
+  });
+
+  it('style.css has batch bar and selection styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-board__batch-bar');
+    expect(text).toContain('.task-board__batch-count');
+    expect(text).toContain('.task-card--selected');
+    expect(text).toContain('.task-card__checkbox');
+  });
+
+  it('style.css has detail dialog and shortcuts styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-board__dialog--detail');
+    expect(text).toContain('.task-board__detail-field');
+    expect(text).toContain('.task-board__dialog--help');
+    expect(text).toContain('.task-board__key');
+    expect(text).toContain('.task-board__shortcuts-table');
+  });
+
+  // ── Coordination PATCH endpoint ───────────────────────
+
+  it('task-queue update method exists in coordination module', async () => {
+    const { createTaskQueue } = await import('../../operator/coordination/task-queue.mjs');
+    const q = createTaskQueue();
+    expect(typeof q.update).toBe('function');
+  });
+
+  it('task-queue update modifies mutable fields', async () => {
+    const { createTaskQueue } = await import('../../operator/coordination/task-queue.mjs');
+    const q = createTaskQueue();
+    q.add({ id: 'test-1', task: 'original', priority: 0, category: 'code' });
+    const updated = q.update('test-1', { task: 'updated', priority: 10, category: 'review' });
+    expect(updated.task).toBe('updated');
+    expect(updated.priority).toBe(10);
+    expect(updated.category).toBe('review');
+  });
+});

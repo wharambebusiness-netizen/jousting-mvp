@@ -30,7 +30,7 @@ import { lockSync, unlockSync } from 'proper-lockfile';
 // assign/start are skipped — they're intermediate states that
 // get reset to pending on recovery anyway.
 const SAVE_METHODS = new Set([
-  'add', 'remove', 'complete', 'fail', 'cancel', 'retry', 'clear',
+  'add', 'remove', 'complete', 'fail', 'cancel', 'update', 'retry', 'clear',
 ]);
 
 // ── Factory ─────────────────────────────────────────────────

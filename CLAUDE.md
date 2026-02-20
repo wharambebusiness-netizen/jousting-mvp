@@ -7,7 +7,7 @@ Gigaverse integration is tabled — do not work on it unless explicitly asked.
 ## Commands
 
 ```bash
-npm test                                           # 2342 tests, 32 suites (all passing)
+npm test                                           # 2366 tests, 32 suites (all passing)
 npm run dev                                        # Dev server
 npx tsx src/tools/simulate.ts --summary            # Multi-tier balance summary
 npx tsx src/tools/simulate.ts bare --matches 500   # Single-tier high-precision sim
@@ -85,7 +85,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
   routes/
     chains.mjs        Chain CRUD, session detail, cost summary, project listing
     orchestrator.mjs  Multi-instance orchestrator status/control + mission listing + reports (M6a+Phase1)
-    coordination.mjs  Coordination REST API: tasks, progress, rate-limit, costs, lifecycle (Phase 6)
+    coordination.mjs  Coordination REST API: tasks CRUD+PATCH, progress, rate-limit, costs, lifecycle (Phase 6+13)
     git.mjs           Git status, push, commit, PR creation, file-status (M6d+P10)
     settings.mjs      Settings GET/PUT API routes
     files.mjs         File system scanning + content preview API (P9+P10)
@@ -105,12 +105,12 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
     analytics.html    Analytics: cost trends, status donut, model usage, top chains
     orchestrator.html Orchestrator status + agent cards
     terminals.html    Multi-terminal xterm.js interface for orchestrator instances (Phase 2)
-    taskboard.html    Kanban task board for coordination tasks (Phase 12)
+    taskboard.html    Kanban task board for coordination tasks (Phase 12+13)
     settings.html     Settings page: model, limits, preferences
     style.css         Pico CSS overrides (dark mode, status dots, timeline, log panel, reports, terminal, task board)
     app.js            Shared client JS: toast, progress, branch auto-gen, project filter, WS updates
     terminals.js      Terminal page JS: xterm.js instances, tab/grid views, WS event routing, search, keyboard shortcuts (Phase 2+7a)
-    taskboard.js      Task board JS: Kanban rendering, drag-and-drop, WS real-time updates, add/cancel/retry (Phase 12)
+    taskboard.js      Task board JS: Kanban rendering, drag-and-drop, WS real-time updates, add/cancel/retry, filter/search, keyboard shortcuts, detail/edit dialog, batch operations (Phase 12+13)
   skills/             Skill pool system (Phase 5)
     registry.mjs     Skill registry — load, validate, index, search, get
     selector.mjs     Two-stage skill selection pipeline (coarse filter + scoring)
@@ -129,7 +129,7 @@ operator/             Auto-continuation system (M2+M4+M5+P3+Phase1+Phase6)
     adaptive-limiter.mjs Adaptive rate limiting: 429 detection, exponential backoff, gradual recovery
     worktree-manager.mjs Per-worker git worktree isolation: create, remove, merge, dry-run conflict detection
     persistent-queue.mjs Disk-backed task queue wrapper: atomic writes, crash recovery, in-flight reset (Phase 7b)
-  __tests__/          914 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration)
+  __tests__/          938 tests (registry, errors, server, views, file-watcher, process-pool, skills, skills-5b, coordination, coordination-integration)
 
 shared/               Cross-module shared code
   event-bus.mjs       EventBus + IPCEventBus (extracted from orchestrator/observability.mjs)
@@ -167,7 +167,7 @@ Find the right doc: `node docs/find-docs.mjs "<topic>"`
 
 ## Test Suite
 
-2342 tests across 32 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (160), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (281), coordination-integration (22). Run `npm test` to verify.
+2366 tests across 32 suites. Engine: calculator (202), phase-resolution (66), gigling-gear (48), player-gear (46), match (100), playtest (128), gear-variants (223), ai (95). Orchestrator: dag-scheduler (59), mission-validator (64), cost-tracker (27), handoff-parser (26), agent-tracking (26), observability (28), mock-runner (26), test-filter (21), backlog-system (18), checkpoint (10), dry-run-integration (6), continuation (37), model-routing (13), role-registry (67). Operator: registry (21), errors (43), server (174), views (165), file-watcher (16), process-pool (65), skills (158), skills-5b (75), coordination (291), coordination-integration (22). Run `npm test` to verify.
 
 ## Orchestrator Rules (for orchestrated agents)
 

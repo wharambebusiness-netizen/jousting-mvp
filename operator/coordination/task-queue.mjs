@@ -220,6 +220,26 @@ export function createTaskQueue(options = {}) {
   }
 
   /**
+   * Update mutable fields on a pending or assigned task.
+   * @param {string} taskId
+   * @param {object} fields - Fields to update (task, priority, category, metadata)
+   * @returns {object} Updated task
+   */
+  function update(taskId, fields = {}) {
+    const task = tasks.get(taskId);
+    if (!task) throw new Error(`Task "${taskId}" not found`);
+    if (task.status !== 'pending' && task.status !== 'assigned') {
+      throw new Error(`Cannot update task "${taskId}" with status "${task.status}" (must be pending or assigned)`);
+    }
+    if (fields.task !== undefined) task.task = String(fields.task);
+    if (fields.priority !== undefined) task.priority = Number(fields.priority) || 0;
+    if (fields.category !== undefined) task.category = fields.category || null;
+    if (fields.metadata !== undefined) task.metadata = { ...task.metadata, ...(fields.metadata || {}) };
+    log(`[queue] Updated task ${taskId}`);
+    return { ...task };
+  }
+
+  /**
    * Reset a failed/cancelled task back to pending.
    * @param {string} taskId
    * @returns {object} Updated task
@@ -525,6 +545,7 @@ export function createTaskQueue(options = {}) {
     complete,
     fail,
     cancel,
+    update,
     retry,
     get,
     getAll,

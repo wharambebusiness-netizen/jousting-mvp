@@ -9,9 +9,10 @@
 //   GET  /api/coordination/tasks         - List all tasks
 //   POST /api/coordination/tasks         - Add a task
 //   POST /api/coordination/tasks/batch   - Add multiple tasks
-//   GET  /api/coordination/tasks/:id     - Get task detail
-//   POST /api/coordination/tasks/:id/cancel - Cancel a task
-//   POST /api/coordination/tasks/:id/retry  - Retry a failed task
+//   GET   /api/coordination/tasks/:id     - Get task detail
+//   PATCH /api/coordination/tasks/:id     - Update task fields
+//   POST  /api/coordination/tasks/:id/cancel - Cancel a task
+//   POST  /api/coordination/tasks/:id/retry  - Retry a failed task
 //   GET  /api/coordination/progress      - Task progress summary
 //   POST /api/coordination/start         - Start coordinator
 //   POST /api/coordination/drain         - Begin draining
@@ -98,6 +99,15 @@ export function createCoordinationRoutes(ctx) {
     const task = coordinator.taskQueue.get(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     res.json(task);
+  });
+
+  router.patch('/coordination/tasks/:id', (req, res) => {
+    try {
+      const task = coordinator.taskQueue.update(req.params.id, req.body);
+      res.json(task);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   router.post('/coordination/tasks/:id/cancel', (req, res) => {

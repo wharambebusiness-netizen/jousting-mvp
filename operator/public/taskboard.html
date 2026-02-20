@@ -33,8 +33,42 @@
       <h1>Task Board</h1>
       <div class="page-header__actions">
         <span class="task-board__status" id="board-status">--</span>
-        <button class="btn btn--sm" id="add-task-btn" title="Add task">+ Add Task</button>
+        <button class="btn btn--sm" id="add-task-btn" title="Add task (n)">+ Add Task</button>
       </div>
+    </div>
+
+    <!-- Filter Bar (Phase 13) -->
+    <div class="task-board__filters" id="board-filters">
+      <input type="text" class="task-board__search" id="board-search" placeholder="Search tasks... (/)" autocomplete="off">
+      <select class="task-board__filter-select" id="filter-status">
+        <option value="">All Statuses</option>
+        <option value="pending">Pending</option>
+        <option value="assigned">Assigned</option>
+        <option value="running">Running</option>
+        <option value="complete">Complete</option>
+        <option value="failed">Failed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <select class="task-board__filter-select" id="filter-priority">
+        <option value="">All Priorities</option>
+        <option value="high">High (10+)</option>
+        <option value="med">Medium (5-9)</option>
+        <option value="low">Low (1-4)</option>
+        <option value="none">Normal (0)</option>
+      </select>
+      <select class="task-board__filter-select" id="filter-category">
+        <option value="">All Categories</option>
+      </select>
+      <span class="task-board__filter-count" id="filter-count"></span>
+    </div>
+
+    <!-- Batch Action Bar (Phase 13) -->
+    <div class="task-board__batch-bar" id="batch-bar" style="display:none">
+      <span class="task-board__batch-count" id="batch-count">0 selected</span>
+      <button class="btn btn--sm btn--ghost" id="batch-select-all" title="Select all visible">Select All</button>
+      <button class="btn btn--sm btn--ghost" id="batch-clear" title="Clear selection">Clear</button>
+      <button class="btn btn--sm task-board__batch-cancel" id="batch-cancel" title="Cancel selected">Cancel Selected</button>
+      <button class="btn btn--sm task-board__batch-retry" id="batch-retry" title="Retry selected">Retry Selected</button>
     </div>
 
     <!-- Add Task Dialog -->
@@ -130,6 +164,72 @@
       <p>No coordination tasks yet.</p>
       <p>Add tasks via the API or click <strong>+ Add Task</strong> above.</p>
     </div>
+
+    <!-- Task Detail/Edit Dialog (Phase 13) -->
+    <dialog class="task-board__dialog task-board__dialog--detail" id="detail-dialog">
+      <article>
+        <header>
+          <h3 id="detail-title">Task Detail</h3>
+          <button class="task-board__dialog-close" id="detail-close" aria-label="Close">&times;</button>
+        </header>
+        <div id="detail-readonly">
+          <div class="task-board__detail-field"><strong>ID:</strong> <span id="detail-id" class="task-board__detail-mono"></span></div>
+          <div class="task-board__detail-field"><strong>Status:</strong> <span id="detail-status"></span></div>
+          <div class="task-board__detail-field"><strong>Worker:</strong> <span id="detail-worker"></span></div>
+          <div class="task-board__detail-field"><strong>Dependencies:</strong> <span id="detail-deps"></span></div>
+          <div class="task-board__detail-field"><strong>Created:</strong> <span id="detail-created"></span></div>
+          <div class="task-board__detail-field"><strong>Started:</strong> <span id="detail-started"></span></div>
+          <div class="task-board__detail-field"><strong>Completed:</strong> <span id="detail-completed"></span></div>
+          <div class="task-board__detail-field" id="detail-result-row" style="display:none"><strong>Result:</strong> <span id="detail-result"></span></div>
+          <div class="task-board__detail-field" id="detail-error-row" style="display:none"><strong>Error:</strong> <span id="detail-error" class="task-board__detail-error"></span></div>
+        </div>
+        <form id="detail-form" style="display:none">
+          <label>Description
+            <input type="text" name="task" id="detail-task-input" required>
+          </label>
+          <label>Priority
+            <select name="priority" id="detail-priority-input">
+              <option value="0">Normal (0)</option>
+              <option value="1">Low (1)</option>
+              <option value="5">Medium (5)</option>
+              <option value="10">High (10)</option>
+            </select>
+          </label>
+          <label>Category
+            <input type="text" name="category" id="detail-category-input" placeholder="(optional)">
+          </label>
+        </form>
+        <footer>
+          <button type="button" class="btn btn--ghost" id="detail-cancel-btn">Close</button>
+          <button type="button" class="btn btn--primary" id="detail-save-btn" style="display:none">Save Changes</button>
+        </footer>
+      </article>
+    </dialog>
+
+    <!-- Keyboard Shortcuts Help (Phase 13) -->
+    <dialog class="task-board__dialog task-board__dialog--help" id="shortcuts-dialog">
+      <article>
+        <header>
+          <h3>Keyboard Shortcuts</h3>
+          <button class="task-board__dialog-close" id="shortcuts-close" aria-label="Close">&times;</button>
+        </header>
+        <table class="task-board__shortcuts-table">
+          <tbody>
+            <tr><td class="task-board__key">/</td><td>Focus search</td></tr>
+            <tr><td class="task-board__key">n</td><td>Add new task</td></tr>
+            <tr><td class="task-board__key">Esc</td><td>Close dialog / clear search</td></tr>
+            <tr><td class="task-board__key">?</td><td>Show this help</td></tr>
+            <tr><td class="task-board__key">1-5</td><td>Jump to column</td></tr>
+            <tr><td class="task-board__key">a</td><td>Select all visible tasks</td></tr>
+            <tr><td class="task-board__key">d</td><td>Deselect all</td></tr>
+            <tr><td class="task-board__key">r</td><td>Refresh tasks</td></tr>
+          </tbody>
+        </table>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('shortcuts-dialog').close()">Close</button>
+        </footer>
+      </article>
+    </dialog>
   </main>
 
   <div id="toast-container"></div>
