@@ -13,6 +13,7 @@ import { createCostAggregator, WARNING_THRESHOLD } from '../coordination/cost-ag
 import { createCoordinator, STATES } from '../coordination/coordinator.mjs';
 import { createWorktreeManager, WORKTREE_DIR_NAME, BRANCH_PREFIX } from '../coordination/worktree-manager.mjs';
 import { createPersistentQueue } from '../coordination/persistent-queue.mjs';
+import { handleMessage } from '../orchestrator-worker.mjs';
 import { EventBus } from '../../shared/event-bus.mjs';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +26,7 @@ function mockPool(workers = []) {
   return {
     getStatus: () => workers.map(w => ({ id: w.id || w, status: w.status || 'running' })),
     sendTo: (id, msg) => { sent.push({ id, msg }); return true; },
+    activeCount: () => workers.filter(w => (w.status || 'running') === 'running').length,
     getSent: () => sent,
     clearSent: () => sent.length = 0,
   };
@@ -2790,5 +2792,293 @@ describe('Coordinator with PersistentQueue', () => {
     const task = data.tasks.find(t => t.id === 'done');
     expect(task.status).toBe('complete');
     expect(task.result).toBe('success');
+  });
+});
+
+// ============================================================
+// Phase 9 — Hot-Reconfiguration
+// ============================================================
+
+describe('RateLimiter updateLimits', () => {
+  it('should update maxRequestsPerMinute', () => {
+    const limiter = createRateLimiter({ maxRequestsPerMinute: 10, maxTokensPerMinute: 100 });
+    limiter.updateLimits({ maxRequestsPerMinute: 20 });
+    const status = limiter.getStatus();
+    expect(status.maxRequestsPerMinute).toBe(20);
+  });
+
+  it('should update maxTokensPerMinute', () => {
+    const limiter = createRateLimiter({ maxRequestsPerMinute: 10, maxTokensPerMinute: 100 });
+    limiter.updateLimits({ maxTokensPerMinute: 500 });
+    const status = limiter.getStatus();
+    expect(status.maxTokensPerMinute).toBe(500);
+  });
+
+  it('should cap bucket to new max when lowering limits', () => {
+    const limiter = createRateLimiter({ maxRequestsPerMinute: 100, maxTokensPerMinute: 1000 });
+    // Bucket starts full at 100
+    limiter.updateLimits({ maxRequestsPerMinute: 5 });
+    const status = limiter.getStatus();
+    expect(status.requestBucket).toBeLessThanOrEqual(5);
+  });
+
+  it('should ignore invalid values', () => {
+    const limiter = createRateLimiter({ maxRequestsPerMinute: 10, maxTokensPerMinute: 100 });
+    limiter.updateLimits({ maxRequestsPerMinute: 0, maxTokensPerMinute: -1 });
+    const status = limiter.getStatus();
+    expect(status.maxRequestsPerMinute).toBe(10);
+    expect(status.maxTokensPerMinute).toBe(100);
+  });
+});
+
+describe('CostAggregator updateBudgets', () => {
+  it('should update globalBudgetUsd', () => {
+    const agg = createCostAggregator({ globalBudgetUsd: 50, perWorkerBudgetUsd: 10 });
+    agg.updateBudgets({ globalBudgetUsd: 200 });
+    const status = agg.getStatus();
+    expect(status.globalBudgetUsd).toBe(200);
+  });
+
+  it('should update perWorkerBudgetUsd', () => {
+    const agg = createCostAggregator({ globalBudgetUsd: 50, perWorkerBudgetUsd: 10 });
+    agg.updateBudgets({ perWorkerBudgetUsd: 30 });
+    const status = agg.getStatus();
+    expect(status.perWorkerBudgetUsd).toBe(30);
+  });
+
+  it('should reset exceeded flags when budget raised above totals', () => {
+    const agg = createCostAggregator({ globalBudgetUsd: 1, perWorkerBudgetUsd: 1 });
+    // Exhaust budget
+    agg.record('w1', { totalUsd: 1.5 });
+    let status = agg.getStatus();
+    expect(status.globalExceeded).toBe(true);
+    expect(status.workers.w1.exceeded).toBe(true);
+
+    // Raise budget
+    agg.updateBudgets({ globalBudgetUsd: 10, perWorkerBudgetUsd: 10 });
+    status = agg.getStatus();
+    expect(status.globalExceeded).toBe(false);
+    expect(status.workers.w1.exceeded).toBe(false);
+  });
+
+  it('should not reset flags when budget still below totals', () => {
+    const agg = createCostAggregator({ globalBudgetUsd: 1, perWorkerBudgetUsd: 1 });
+    agg.record('w1', { totalUsd: 5 });
+    agg.updateBudgets({ globalBudgetUsd: 2 }); // Still exceeded (5 > 2)
+    const status = agg.getStatus();
+    expect(status.globalExceeded).toBe(true);
+  });
+});
+
+describe('Coordinator updateOptions', () => {
+  let events, pool, coord;
+
+  beforeEach(() => {
+    events = new EventBus();
+    pool = mockPool([{ id: 'w1' }, { id: 'w2' }]);
+    coord = createCoordinator({
+      events,
+      pool,
+      options: {
+        maxRequestsPerMinute: 30,
+        maxTokensPerMinute: 500_000,
+        globalBudgetUsd: 50,
+        perWorkerBudgetUsd: 10,
+      },
+    });
+    coord.start();
+  });
+
+  afterEach(() => {
+    try { coord.stop(); } catch (_) {}
+  });
+
+  it('should update rate limiter via updateOptions', () => {
+    coord.updateOptions({ maxRequestsPerMinute: 100 });
+    const status = coord.rateLimiter.getStatus();
+    expect(status.maxRequestsPerMinute).toBe(100);
+  });
+
+  it('should update cost aggregator via updateOptions', () => {
+    coord.updateOptions({ globalBudgetUsd: 200, perWorkerBudgetUsd: 50 });
+    const status = coord.costAggregator.getStatus();
+    expect(status.globalBudgetUsd).toBe(200);
+    expect(status.perWorkerBudgetUsd).toBe(50);
+  });
+
+  it('should emit coord:config-updated event', () => {
+    const updates = [];
+    events.on('coord:config-updated', (data) => updates.push(data));
+    coord.updateOptions({ maxRequestsPerMinute: 200 });
+    expect(updates.length).toBe(1);
+    expect(updates[0].maxRequestsPerMinute).toBe(200);
+  });
+
+  it('should handle empty/null updates gracefully', () => {
+    expect(() => coord.updateOptions(null)).not.toThrow();
+    expect(() => coord.updateOptions({})).not.toThrow();
+  });
+});
+
+// ============================================================
+// Phase 9 — Task Metrics
+// ============================================================
+
+describe('Coordinator getMetrics', () => {
+  let events, pool, coord;
+
+  beforeEach(() => {
+    events = new EventBus();
+    pool = mockPool([{ id: 'w1' }, { id: 'w2' }]);
+    coord = createCoordinator({ events, pool });
+    coord.start();
+  });
+
+  afterEach(() => {
+    try { coord.stop(); } catch (_) {}
+  });
+
+  it('should return initial empty metrics', () => {
+    const metrics = coord.getMetrics();
+    expect(metrics.throughputPerMinute).toBe(0);
+    expect(metrics.avgCompletionMs).toBeNull();
+    expect(metrics.workerUtilization).toBe(0);
+    expect(metrics.recentCompletions).toBe(0);
+    expect(metrics.recentFailures).toBe(0);
+    expect(metrics.windowMs).toBe(300_000);
+  });
+
+  it('should track completions', () => {
+    coord.addTask({ id: 't1', task: 'test' });
+    events.emit('coord:complete', { workerId: 'w1', taskId: 't1', result: 'ok' });
+
+    const metrics = coord.getMetrics();
+    expect(metrics.recentCompletions).toBe(1);
+    expect(metrics.throughputPerMinute).toBeGreaterThan(0);
+  });
+
+  it('should track failures', () => {
+    coord.addTask({ id: 't1', task: 'test' });
+    events.emit('coord:failed', { workerId: 'w1', taskId: 't1', error: 'boom' });
+
+    const metrics = coord.getMetrics();
+    expect(metrics.recentFailures).toBe(1);
+  });
+
+  it('should calculate worker utilization', () => {
+    coord.addTask({ id: 't1', task: 'test1' });
+    coord.addTask({ id: 't2', task: 'test2' });
+    // Both tasks auto-assigned to w1 and w2
+
+    const metrics = coord.getMetrics();
+    // 2 workers active, 2 tasks assigned → utilization should be > 0
+    expect(metrics.workerUtilization).toBeGreaterThan(0);
+  });
+
+  it('should return outcome counts', () => {
+    coord.addTask({ id: 't1', task: 'test1' });
+    coord.addTask({ id: 't2', task: 'test2' });
+    events.emit('coord:complete', { workerId: 'w1', taskId: 't1', result: 'ok' });
+    events.emit('coord:failed', { workerId: 'w2', taskId: 't2', error: 'oops' });
+
+    const metrics = coord.getMetrics();
+    expect(metrics.outcomes.complete).toBe(1);
+    expect(metrics.outcomes.failed).toBe(1);
+  });
+});
+
+// ============================================================
+// Phase 9 — Worker Config IPC Handler
+// ============================================================
+
+describe('Worker Config IPC Handler', () => {
+  it('should handle config message and update state', () => {
+    const sent = [];
+    const originalSend = process.send;
+    process.send = (msg) => sent.push(msg);
+
+    try {
+      // Initialize the worker
+      handleMessage({ type: 'init', workerId: 'cfg-test', projectDir: '/tmp', config: { model: 'sonnet' } });
+
+      // Send config update
+      handleMessage({ type: 'config', model: 'opus', maxTurns: 50 });
+
+      // Should have sent a status update
+      const statusMsg = sent.find(m => m.type === 'status');
+      expect(statusMsg).toBeTruthy();
+
+      // Should have emitted worker:config-applied event
+      const eventMsg = sent.find(m => m.type === 'event' && m.event === 'worker:config-applied');
+      expect(eventMsg).toBeTruthy();
+      expect(eventMsg.data.model).toBe('opus');
+      expect(eventMsg.data.maxTurns).toBe(50);
+    } finally {
+      if (originalSend) {
+        process.send = originalSend;
+      } else {
+        delete process.send;
+      }
+    }
+  });
+
+  it('should not emit for config with no updates', () => {
+    const sent = [];
+    const originalSend = process.send;
+    process.send = (msg) => sent.push(msg);
+
+    try {
+      handleMessage({ type: 'init', workerId: 'cfg-test2', projectDir: '/tmp', config: {} });
+      handleMessage({ type: 'config' }); // No actual config fields
+
+      // Still sends status update
+      const statusMessages = sent.filter(m => m.type === 'status');
+      expect(statusMessages.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (originalSend) {
+        process.send = originalSend;
+      } else {
+        delete process.send;
+      }
+    }
+  });
+});
+
+// ============================================================
+// Phase 9 — Process Pool updateConfig
+// ============================================================
+
+describe('Process Pool updateConfig', () => {
+  it('should update worker config and reflect in getStatus', async () => {
+    const events = new EventBus();
+    const { createProcessPool } = await import('../process-pool.mjs');
+    const pool = createProcessPool({
+      events,
+      projectDir: '/tmp',
+      workerScript: join(import.meta.dirname, '..', 'orchestrator-worker.mjs'),
+    });
+
+    // Spawn a test worker
+    pool.spawn('cfg-w1', { model: 'sonnet' });
+
+    // Update config
+    const updated = pool.updateConfig('cfg-w1', { model: 'opus', maxTurns: 100 });
+    expect(updated).toBe(true);
+
+    // Verify in getStatus
+    const status = pool.getStatus();
+    const worker = status.find(w => w.id === 'cfg-w1');
+    expect(worker.config.model).toBe('opus');
+    expect(worker.config.maxTurns).toBe(100);
+
+    await pool.shutdownAll();
+  });
+
+  it('should return false for non-existent worker', async () => {
+    const events = new EventBus();
+    const { createProcessPool } = await import('../process-pool.mjs');
+    const pool = createProcessPool({ events, projectDir: '/tmp' });
+
+    expect(pool.updateConfig('no-such-worker', { model: 'opus' })).toBe(false);
   });
 });

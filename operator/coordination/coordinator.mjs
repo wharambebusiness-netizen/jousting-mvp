@@ -531,6 +531,128 @@ export function createCoordinator(ctx) {
     return created;
   }
 
+  // ── Metrics ────────────────────────────────────────────
+
+  const metricsState = {
+    completions: [],     // { taskId, workerId, completedAt, durationMs }
+    failures: [],        // { taskId, workerId, failedAt, error }
+    windowMs: 5 * 60_000, // 5-minute sliding window
+  };
+
+  // Patch event handlers to track metrics
+  const origComplete = handlers['coord:complete'];
+  handlers['coord:complete'] = (data) => {
+    const startTime = Date.now();
+    origComplete(data);
+    if (data.taskId) {
+      const task = taskQueue.get(data.taskId);
+      const completedAt = Date.now();
+      metricsState.completions.push({
+        taskId: data.taskId,
+        workerId: data.workerId,
+        completedAt,
+        durationMs: task?.startedAt ? completedAt - new Date(task.startedAt).getTime() : null,
+      });
+    }
+  };
+
+  const origFailed = handlers['coord:failed'];
+  handlers['coord:failed'] = (data) => {
+    origFailed(data);
+    if (data.taskId) {
+      metricsState.failures.push({
+        taskId: data.taskId,
+        workerId: data.workerId,
+        failedAt: Date.now(),
+        error: data.error,
+      });
+    }
+  };
+
+  /**
+   * Get task metrics (throughput, avg completion time, worker utilization).
+   * @returns {object}
+   */
+  function getMetrics() {
+    const now = Date.now();
+    const cutoff = now - metricsState.windowMs;
+
+    // Prune old data
+    metricsState.completions = metricsState.completions.filter(c => c.completedAt > cutoff);
+    metricsState.failures = metricsState.failures.filter(f => f.failedAt > cutoff);
+
+    const recentCompletions = metricsState.completions;
+    const recentFailures = metricsState.failures;
+
+    // Throughput: tasks per minute in the window
+    const windowMinutes = metricsState.windowMs / 60_000;
+    const throughput = recentCompletions.length / windowMinutes;
+
+    // Avg completion time
+    const durations = recentCompletions.filter(c => c.durationMs != null).map(c => c.durationMs);
+    const avgCompletionMs = durations.length > 0
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : null;
+
+    // Worker utilization: fraction of workers currently assigned tasks
+    const progress = taskQueue.getProgress();
+    const activeWorkers = pool.activeCount();
+    const busyWorkers = progress.assigned + progress.running;
+    const utilization = activeWorkers > 0 ? Math.min(1, busyWorkers / activeWorkers) : 0;
+
+    // Outcome counts (all-time from progress)
+    const outcomes = {
+      complete: progress.complete,
+      failed: progress.failed,
+      cancelled: progress.cancelled,
+      pending: progress.pending,
+      running: progress.running + progress.assigned,
+    };
+
+    return {
+      throughputPerMinute: Math.round(throughput * 100) / 100,
+      avgCompletionMs: avgCompletionMs != null ? Math.round(avgCompletionMs) : null,
+      workerUtilization: Math.round(utilization * 100) / 100,
+      recentCompletions: recentCompletions.length,
+      recentFailures: recentFailures.length,
+      windowMs: metricsState.windowMs,
+      outcomes,
+    };
+  }
+
+  // ── Hot-Reconfiguration ──────────────────────────────────
+
+  /**
+   * Update coordinator options at runtime.
+   * @param {object} updates
+   * @param {number} [updates.maxRequestsPerMinute] - Rate limit
+   * @param {number} [updates.maxTokensPerMinute] - Token rate limit
+   * @param {number} [updates.globalBudgetUsd] - Global budget cap
+   * @param {number} [updates.perWorkerBudgetUsd] - Per-worker budget cap
+   */
+  function updateOptions(updates) {
+    if (!updates || typeof updates !== 'object') return;
+
+    // Rate limiter updates
+    if (updates.maxRequestsPerMinute != null || updates.maxTokensPerMinute != null) {
+      rateLimiter.updateLimits({
+        maxRequestsPerMinute: updates.maxRequestsPerMinute,
+        maxTokensPerMinute: updates.maxTokensPerMinute,
+      });
+    }
+
+    // Budget updates
+    if (updates.globalBudgetUsd != null || updates.perWorkerBudgetUsd != null) {
+      costAggregator.updateBudgets({
+        globalBudgetUsd: updates.globalBudgetUsd,
+        perWorkerBudgetUsd: updates.perWorkerBudgetUsd,
+      });
+    }
+
+    log('[coord] Options updated');
+    events.emit('coord:config-updated', updates);
+  }
+
   // ── Status ────────────────────────────────────────────
 
   /**
@@ -568,8 +690,12 @@ export function createCoordinator(ctx) {
     costAggregator,
     worktreeManager,
 
-    // Status
+    // Status + Metrics
     getStatus,
+    getMetrics,
+
+    // Hot-reconfiguration
+    updateOptions,
   };
 }
 

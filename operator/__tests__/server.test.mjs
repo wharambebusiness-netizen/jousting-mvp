@@ -1887,6 +1887,7 @@ describe('Instance Config Endpoint (Phase 8)', () => {
       spawn: () => {},
       kill: () => true,
       sendTo: (id, msg) => { sentMessages.push({ id, msg }); return true; },
+      updateConfig: () => true,
       remove: () => true,
       shutdownAll: async () => {},
       activeCount: () => 1,
@@ -1915,5 +1916,145 @@ describe('Instance Config Endpoint (Phase 8)', () => {
     expect(configMsg.msg.model).toBe('opus');
     expect(configMsg.msg.maxBudgetUsd).toBe(15);
     expect(configMsg.msg.maxTurns).toBe(60);
+  });
+
+  it('config updates pool-level config via updateConfig', async () => {
+    await stopServer();
+
+    const configUpdates = [];
+    const mockPool = {
+      getStatus: () => [],
+      getWorker: () => null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: () => true,
+      updateConfig: (id, cfg) => { configUpdates.push({ id, cfg }); return true; },
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 0,
+    };
+
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    events.emit('orchestrator:started', { workerId: 'pool-cfg-test' });
+
+    const { body } = await api('/api/orchestrator/pool-cfg-test/config', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'haiku' }),
+    });
+
+    expect(body.success).toBe(true);
+    expect(configUpdates.length).toBe(1);
+    expect(configUpdates[0].id).toBe('pool-cfg-test');
+    expect(configUpdates[0].cfg.model).toBe('haiku');
+  });
+});
+
+// ── Coordination Endpoints (Phase 9) ──────────────────────
+
+describe('Coordination Metrics & Config Endpoints (Phase 9)', () => {
+  it('GET /api/coordination/metrics returns metrics', async () => {
+    await stopServer();
+
+    const mockPool = {
+      getStatus: () => [{ id: 'w1', status: 'running' }],
+      getWorker: () => null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: () => true,
+      updateConfig: () => true,
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 1,
+    };
+
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    // Start coordinator
+    await api('/api/coordination/start', { method: 'POST' });
+
+    const { status, body } = await api('/api/coordination/metrics');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('throughputPerMinute');
+    expect(body).toHaveProperty('avgCompletionMs');
+    expect(body).toHaveProperty('workerUtilization');
+    expect(body).toHaveProperty('recentCompletions');
+    expect(body).toHaveProperty('recentFailures');
+    expect(body).toHaveProperty('windowMs');
+    expect(body).toHaveProperty('outcomes');
+  });
+
+  it('POST /api/coordination/config updates rate limits and budgets', async () => {
+    await stopServer();
+
+    const mockPool = {
+      getStatus: () => [{ id: 'w1', status: 'running' }],
+      getWorker: () => null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: () => true,
+      updateConfig: () => true,
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 1,
+    };
+
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    // Start coordinator
+    await api('/api/coordination/start', { method: 'POST' });
+
+    const { status, body } = await api('/api/coordination/config', {
+      method: 'POST',
+      body: JSON.stringify({ maxRequestsPerMinute: 120, globalBudgetUsd: 500 }),
+    });
+
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.rateLimiter.maxRequestsPerMinute).toBe(120);
+    expect(body.costs.globalBudgetUsd).toBe(500);
+  });
+
+  it('coordination endpoints return 503 without coordinator', async () => {
+    // Restart server without pool → no coordinator
+    await stopServer();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    const { status: metricsStatus } = await api('/api/coordination/metrics');
+    expect(metricsStatus).toBe(503);
+
+    const { status: configStatus } = await api('/api/coordination/config', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(configStatus).toBe(503);
   });
 });

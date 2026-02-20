@@ -11,6 +11,7 @@
 //   { type: 'stop' }
 //   { type: 'shutdown' }
 //   { type: 'ping' }
+//   { type: 'config', model?, maxBudgetUsd?, maxTurns? }
 //   { type: 'coord:proceed', taskId, task, category?, metadata? }
 //   { type: 'coord:wait', reason }
 //   { type: 'coord:rate-grant', remaining }
@@ -294,6 +295,27 @@ function handleMessage(msg) {
         process.exit(0);
       }
       break;
+
+    case 'config': {
+      // Runtime config update — merge into local config state
+      const updates = {};
+      if (msg.model) { config.model = msg.model; updates.model = msg.model; }
+      if (msg.maxBudgetUsd != null) { config.maxBudgetUsd = msg.maxBudgetUsd; updates.maxBudgetUsd = msg.maxBudgetUsd; }
+      if (msg.maxTurns != null) { config.maxTurns = msg.maxTurns; updates.maxTurns = msg.maxTurns; }
+
+      // Forward to running orchestrator process if active
+      if (running && orchProcess) {
+        try { orchProcess.send({ type: 'config', ...updates }); } catch { /* IPC closed */ }
+      }
+
+      // Emit event so UI can confirm config applied
+      if (events) {
+        events.emit('worker:config-applied', { workerId, ...updates });
+      }
+
+      sendStatus();
+      break;
+    }
 
     // ── Coordination IPC messages (from coordinator via pool.sendTo) ──
     case 'coord:proceed':

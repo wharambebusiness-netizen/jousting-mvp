@@ -24,8 +24,8 @@ const WARNING_THRESHOLD = 0.8; // Emit warning at 80% of budget
  * @returns {object} Aggregator methods
  */
 export function createCostAggregator(options = {}) {
-  const globalBudgetUsd = options.globalBudgetUsd ?? 100;
-  const perWorkerBudgetUsd = options.perWorkerBudgetUsd ?? 25;
+  let globalBudgetUsd = options.globalBudgetUsd ?? 100;
+  let perWorkerBudgetUsd = options.perWorkerBudgetUsd ?? 25;
   const events = options.events || null;
   const log = options.log || (() => {});
 
@@ -210,11 +210,41 @@ export function createCostAggregator(options = {}) {
     globalExceeded = false;
   }
 
+  /**
+   * Update budget caps at runtime.
+   * Resets warning/exceeded flags if new budget is higher than current totals.
+   * @param {object} updates
+   * @param {number} [updates.globalBudgetUsd]
+   * @param {number} [updates.perWorkerBudgetUsd]
+   */
+  function updateBudgets(updates) {
+    if (updates.globalBudgetUsd != null && updates.globalBudgetUsd > 0) {
+      globalBudgetUsd = updates.globalBudgetUsd;
+      // Reset flags if budget raised above current totals
+      if (globalTotalUsd < globalBudgetUsd) {
+        globalExceeded = false;
+        globalWarned = globalTotalUsd >= globalBudgetUsd * WARNING_THRESHOLD;
+      }
+    }
+    if (updates.perWorkerBudgetUsd != null && updates.perWorkerBudgetUsd > 0) {
+      perWorkerBudgetUsd = updates.perWorkerBudgetUsd;
+      // Reset worker flags where applicable
+      for (const record of workers.values()) {
+        if (record.totalUsd < perWorkerBudgetUsd) {
+          record.exceeded = false;
+          record.warned = record.totalUsd >= perWorkerBudgetUsd * WARNING_THRESHOLD;
+        }
+      }
+    }
+    log(`[cost] Budgets updated: global=$${globalBudgetUsd}, per-worker=$${perWorkerBudgetUsd}`);
+  }
+
   return {
     record,
     checkBudget,
     getStatus,
     getWorkerCost,
+    updateBudgets,
     reset,
   };
 }

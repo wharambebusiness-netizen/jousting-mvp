@@ -459,6 +459,20 @@ export function createProcessPool(ctx) {
   }
 
   /**
+   * Update a worker's config (merges into existing config).
+   * Call this when runtime config changes so getStatus() reflects the latest.
+   * @param {string} workerId
+   * @param {object} configUpdate - Fields to merge into the worker's config
+   * @returns {boolean} true if worker was found and config updated
+   */
+  function updateConfig(workerId, configUpdate) {
+    const entry = workers.get(workerId);
+    if (!entry) return false;
+    entry.config = { ...entry.config, ...configUpdate };
+    return true;
+  }
+
+  /**
    * Send a handoff context file to a specific worker, triggering a start with that context.
    * @param {string} workerId
    * @param {string} handoffFile - Path to handoff context file
@@ -578,6 +592,7 @@ export function createProcessPool(ctx) {
     kill,
     restart: restartWorker,
     sendTo,
+    updateConfig,
     handoff,
     getStatus,
     getWorker,

@@ -380,14 +380,18 @@ export function createOrchestratorRoutes(ctx) {
     if (maxBudgetUsd != null) state.maxBudgetUsd = maxBudgetUsd;
     if (maxTurns != null) state.maxTurns = maxTurns;
 
-    // Forward config to running worker via IPC
-    if (pool && state.running) {
-      pool.sendTo(instanceId, {
-        type: 'config',
-        model: model || undefined,
-        maxBudgetUsd: maxBudgetUsd != null ? maxBudgetUsd : undefined,
-        maxTurns: maxTurns != null ? maxTurns : undefined,
-      });
+    // Forward config to running worker via IPC + update pool-level config
+    if (pool) {
+      const configUpdate = {};
+      if (model) configUpdate.model = model;
+      if (maxBudgetUsd != null) configUpdate.maxBudgetUsd = maxBudgetUsd;
+      if (maxTurns != null) configUpdate.maxTurns = maxTurns;
+
+      pool.updateConfig(instanceId, configUpdate);
+
+      if (state.running) {
+        pool.sendTo(instanceId, { type: 'config', ...configUpdate });
+      }
     }
 
     res.json({ success: true, config: { model: state.model, maxBudgetUsd: state.maxBudgetUsd, maxTurns: state.maxTurns } });

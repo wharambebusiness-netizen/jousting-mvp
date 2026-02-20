@@ -21,8 +21,8 @@
  * @returns {object} Limiter methods
  */
 export function createRateLimiter(options = {}) {
-  const maxRequestsPerMinute = options.maxRequestsPerMinute || 60;
-  const maxTokensPerMinute = options.maxTokensPerMinute || 1_000_000;
+  let maxRequestsPerMinute = options.maxRequestsPerMinute || 60;
+  let maxTokensPerMinute = options.maxTokensPerMinute || 1_000_000;
   const log = options.log || (() => {});
   const now = options.now || (() => Date.now());
 
@@ -192,12 +192,32 @@ export function createRateLimiter(options = {}) {
     }
   }
 
+  /**
+   * Update rate limits at runtime.
+   * @param {object} updates
+   * @param {number} [updates.maxRequestsPerMinute]
+   * @param {number} [updates.maxTokensPerMinute]
+   */
+  function updateLimits(updates) {
+    if (updates.maxRequestsPerMinute != null && updates.maxRequestsPerMinute > 0) {
+      maxRequestsPerMinute = updates.maxRequestsPerMinute;
+      // Scale bucket proportionally
+      requestBucket = Math.min(requestBucket, maxRequestsPerMinute);
+    }
+    if (updates.maxTokensPerMinute != null && updates.maxTokensPerMinute > 0) {
+      maxTokensPerMinute = updates.maxTokensPerMinute;
+      tokenBucket = Math.min(tokenBucket, maxTokensPerMinute);
+    }
+    log(`[rate] Limits updated: ${maxRequestsPerMinute} req/min, ${maxTokensPerMinute} tok/min`);
+  }
+
   return {
     tryAcquire,
     acquire,
     processWaiters,
     getStatus,
     getWorkerStats,
+    updateLimits,
     reset,
   };
 }

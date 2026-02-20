@@ -18,6 +18,8 @@
 //   POST /api/coordination/stop          - Stop coordinator
 //   GET  /api/coordination/rate-limit    - Rate limiter status
 //   GET  /api/coordination/costs         - Cost aggregation status
+//   GET  /api/coordination/metrics       - Task throughput & metrics
+//   POST /api/coordination/config        - Hot-reconfigure coordinator
 // ============================================================
 
 import { Router } from 'express';
@@ -131,6 +133,20 @@ export function createCoordinationRoutes(ctx) {
 
   router.get('/coordination/costs', (_req, res) => {
     res.json(coordinator.costAggregator.getStatus());
+  });
+
+  // ── Metrics ──────────────────────────────────────────────
+
+  router.get('/coordination/metrics', (_req, res) => {
+    res.json(coordinator.getMetrics());
+  });
+
+  // ── Hot-Reconfiguration ──────────────────────────────────
+
+  router.post('/coordination/config', (req, res) => {
+    const updates = req.body || {};
+    coordinator.updateOptions(updates);
+    res.json({ ok: true, rateLimiter: coordinator.rateLimiter.getStatus(), costs: coordinator.costAggregator.getStatus() });
   });
 
   return router;
