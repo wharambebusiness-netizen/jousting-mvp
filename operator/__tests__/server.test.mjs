@@ -1546,6 +1546,34 @@ describe('Terminals Page', () => {
     expect(text).toContain('THEMES');
     expect(text).toContain('createWS');
   });
+
+  it('terminals page has worker health panel (Phase 8)', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('term-health');
+    expect(text).toContain('health-grid');
+    expect(text).toContain('Worker Health');
+  });
+
+  it('terminals page has config dialog (Phase 8)', async () => {
+    const res = await fetch(`${baseUrl}/terminals`);
+    const text = await res.text();
+    expect(text).toContain('config-dialog');
+    expect(text).toContain('config-form');
+    expect(text).toContain('config-model');
+    expect(text).toContain('config-budget');
+    expect(text).toContain('config-turns');
+  });
+
+  it('terminals.js includes health panel functions (Phase 8)', async () => {
+    const res = await fetch(`${baseUrl}/terminals.js`);
+    const text = await res.text();
+    expect(text).toContain('loadWorkerHealth');
+    expect(text).toContain('renderHealthCard');
+    expect(text).toContain('updateHealthFromEvent');
+    expect(text).toContain('openConfigDialog');
+    expect(text).toContain('submitConfig');
+  });
 });
 
 // ── Nav Links ───────────────────────────────────────────────
@@ -1684,5 +1712,208 @@ describe('Handoff API', () => {
     expect(received.length).toBeGreaterThanOrEqual(1);
     expect(received[0].workerId).toBe('handoff-test-5');
     expect(received[0].handoffFile).toBeTruthy();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Phase 8 — Worker Health + Config
+// ══════════════════════════════════════════════════════════════
+
+describe('Worker Health Endpoint (Phase 8)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/workers/health returns poolActive:false when no pool', async () => {
+    const { status, body } = await api('/api/orchestrator/workers/health');
+    expect(status).toBe(200);
+    expect(body.poolActive).toBe(false);
+    expect(body.workers).toEqual([]);
+  });
+});
+
+describe('Worker Health Endpoint with Pool (Phase 8)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('GET /api/orchestrator/workers/health returns worker data from pool', async () => {
+    // Create mock pool
+    const mockPool = {
+      getStatus: () => [{
+        id: 'w1',
+        status: 'running',
+        pid: 12345,
+        circuitState: 'closed',
+        consecutiveFailures: 0,
+        restartCount: 2,
+        lastHeartbeat: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        stoppedAt: null,
+        exitCode: null,
+        config: { model: 'sonnet' },
+      }, {
+        id: 'w2',
+        status: 'stopped',
+        pid: 12346,
+        circuitState: 'open',
+        consecutiveFailures: 3,
+        restartCount: 5,
+        lastHeartbeat: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        stoppedAt: new Date().toISOString(),
+        exitCode: 1,
+        config: { model: 'haiku' },
+      }],
+      getWorker: (id) => mockPool.getStatus().find(w => w.id === id) || null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: () => true,
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 1,
+    };
+
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    const { status, body } = await api('/api/orchestrator/workers/health');
+    expect(status).toBe(200);
+    expect(body.poolActive).toBe(true);
+    expect(body.workers).toHaveLength(2);
+
+    const w1 = body.workers.find(w => w.id === 'w1');
+    expect(w1.status).toBe('running');
+    expect(w1.circuitState).toBe('closed');
+    expect(w1.consecutiveFailures).toBe(0);
+    expect(w1.restartCount).toBe(2);
+    expect(w1.pid).toBe(12345);
+
+    const w2 = body.workers.find(w => w.id === 'w2');
+    expect(w2.status).toBe('stopped');
+    expect(w2.circuitState).toBe('open');
+    expect(w2.consecutiveFailures).toBe(3);
+    expect(w2.restartCount).toBe(5);
+    expect(w2.exitCode).toBe(1);
+  });
+});
+
+describe('Instance Config Endpoint (Phase 8)', () => {
+  beforeAll(async () => {
+    setupTestDir();
+    seedRegistry();
+    await startServer();
+  });
+  afterAll(async () => {
+    await stopServer();
+    teardownTestDir();
+  });
+
+  it('POST /api/orchestrator/:id/config returns 404 for unknown instance', async () => {
+    const { status } = await api('/api/orchestrator/nonexistent/config', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'opus' }),
+    });
+    expect(status).toBe(404);
+  });
+
+  it('POST /api/orchestrator/:id/config updates model', async () => {
+    // Create instance first
+    events.emit('orchestrator:started', { workerId: 'config-test-1', model: 'sonnet' });
+
+    const { status, body } = await api('/api/orchestrator/config-test-1/config', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'opus' }),
+    });
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.config.model).toBe('opus');
+  });
+
+  it('POST /api/orchestrator/:id/config updates budget and turns', async () => {
+    events.emit('orchestrator:started', { workerId: 'config-test-2' });
+
+    const { status, body } = await api('/api/orchestrator/config-test-2/config', {
+      method: 'POST',
+      body: JSON.stringify({ maxBudgetUsd: 10, maxTurns: 50 }),
+    });
+    expect(status).toBe(200);
+    expect(body.config.maxBudgetUsd).toBe(10);
+    expect(body.config.maxTurns).toBe(50);
+  });
+
+  it('updated config persists across status queries', async () => {
+    events.emit('orchestrator:started', { workerId: 'config-test-3', model: 'haiku' });
+
+    await api('/api/orchestrator/config-test-3/config', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'opus', maxBudgetUsd: 20, maxTurns: 100 }),
+    });
+
+    const { body } = await api('/api/orchestrator/instances');
+    const inst = body.find(i => i.id === 'config-test-3');
+    expect(inst.model).toBe('opus');
+    expect(inst.maxBudgetUsd).toBe(20);
+    expect(inst.maxTurns).toBe(100);
+  });
+
+  it('config sends IPC to running worker when pool available', async () => {
+    // Stop current server and start with mock pool
+    await stopServer();
+
+    const sentMessages = [];
+    const mockPool = {
+      getStatus: () => [],
+      getWorker: () => null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: (id, msg) => { sentMessages.push({ id, msg }); return true; },
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 1,
+    };
+
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    // Create running instance
+    events.emit('orchestrator:started', { workerId: 'config-ipc-test' });
+
+    await api('/api/orchestrator/config-ipc-test/config', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'opus', maxBudgetUsd: 15, maxTurns: 60 }),
+    });
+
+    const configMsg = sentMessages.find(m => m.msg.type === 'config');
+    expect(configMsg).toBeTruthy();
+    expect(configMsg.id).toBe('config-ipc-test');
+    expect(configMsg.msg.model).toBe('opus');
+    expect(configMsg.msg.maxBudgetUsd).toBe(15);
+    expect(configMsg.msg.maxTurns).toBe(60);
   });
 });

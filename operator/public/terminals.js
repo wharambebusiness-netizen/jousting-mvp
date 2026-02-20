@@ -320,6 +320,7 @@ function addTerminalInstance(id, state) {
       '<span class="handoff-history" style="position:relative;display:inline-block;">' +
         '<button class="term-status__btn" onclick="showHandoffHistory(\'' + escHtml(id) + '\', this)" data-action="history">History</button>' +
       '</span>' +
+      '<button class="term-status__btn" onclick="openConfigDialog(\'' + escHtml(id) + '\')" data-action="config" title="Configure instance">\u2699</button>' +
       '<button class="term-status__btn" onclick="toggleMaximize(\'' + escHtml(id) + '\')" data-action="maximize" title="Maximize/Restore (Ctrl+Shift+M)">\u26F6</button>' +
     '</span>';
   panel.appendChild(statusBar);
@@ -725,6 +726,7 @@ function connectWS() {
         if (inst) {
           inst.terminal.writeln('\x1b[36m[SYSTEM] Worker spawned (PID: ' + (msg.data.pid || '?') + ')\x1b[0m');
         }
+        updateHealthFromEvent(instanceId, { status: 'starting', pid: msg.data.pid });
         break;
 
       case 'worker:ready':
@@ -734,6 +736,7 @@ function connectWS() {
           updateStatusBar(instanceId);
           updateTabDot(instanceId);
         }
+        updateHealthFromEvent(instanceId, { status: 'running' });
         break;
 
       case 'worker:exit':
@@ -743,6 +746,7 @@ function connectWS() {
           updateStatusBar(instanceId);
           updateTabDot(instanceId);
         }
+        updateHealthFromEvent(instanceId, { status: 'stopped', exitCode: msg.data.code });
         break;
 
       case 'worker:error':
@@ -755,15 +759,56 @@ function connectWS() {
         if (inst) {
           inst.terminal.writeln('\x1b[31;1m[WARN] Worker unhealthy — missed heartbeats\x1b[0m');
         }
+        updateHealthFromEvent(instanceId, { status: 'running' });
         break;
 
       case 'worker:restarted':
         if (inst) {
-          inst.terminal.writeln('\x1b[33m[SYSTEM] Worker restarted\x1b[0m');
+          inst.terminal.writeln('\x1b[33m[SYSTEM] Worker restarted (restart #' + (msg.data.restartCount || '?') + ')\x1b[0m');
           inst.running = true;
           updateStatusBar(instanceId);
           updateTabDot(instanceId);
         }
+        updateHealthFromEvent(instanceId, { status: 'running', restartCount: msg.data.restartCount || 0 });
+        break;
+
+      case 'worker:idle-killed':
+        if (inst) {
+          inst.terminal.writeln('\x1b[33m[SYSTEM] Worker killed (idle ' + Math.round((msg.data.idleMs || 0) / 1000) + 's)\x1b[0m');
+          inst.running = false;
+          updateStatusBar(instanceId);
+          updateTabDot(instanceId);
+        }
+        updateHealthFromEvent(instanceId, { status: 'stopped' });
+        break;
+
+      case 'worker:circuit-open':
+        if (inst) {
+          inst.terminal.writeln('\x1b[31;1m[HEALTH] Circuit breaker OPEN — ' + (msg.data.consecutiveFailures || '?') + ' consecutive failures\x1b[0m');
+        }
+        updateHealthFromEvent(instanceId, {
+          circuitState: 'open',
+          consecutiveFailures: msg.data.consecutiveFailures || 0,
+        });
+        break;
+
+      case 'worker:circuit-half-open':
+        if (inst) {
+          inst.terminal.writeln('\x1b[33m[HEALTH] Circuit breaker half-open — attempting recovery\x1b[0m');
+        }
+        updateHealthFromEvent(instanceId, { circuitState: 'half-open' });
+        break;
+
+      case 'worker:max-restarts':
+        if (inst) {
+          inst.terminal.writeln('\x1b[31;1m[HEALTH] Max restarts exceeded (' + (msg.data.maxRestarts || '?') + ') — worker abandoned\x1b[0m');
+        }
+        showToast('Worker ' + instanceId + ' exceeded max restarts', 'error');
+        updateHealthFromEvent(instanceId, {
+          status: 'stopped',
+          consecutiveFailures: msg.data.consecutiveFailures || 0,
+          restartCount: msg.data.restartCount || 0,
+        });
         break;
 
       case 'orchestrator:started':
@@ -1379,6 +1424,202 @@ window.addEventListener('resize', function() {
   }, 100);
 });
 
+// ── Worker Health Panel ──────────────────────────────────────
+
+var healthGrid = document.getElementById('health-grid');
+var healthBadge = document.getElementById('health-badge');
+var healthEmpty = document.getElementById('health-empty');
+var healthData = new Map(); // workerId → health state
+
+function loadWorkerHealth() {
+  fetch('/api/orchestrator/workers/health')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.poolActive) {
+        if (healthBadge) healthBadge.textContent = '0';
+        if (healthEmpty) healthEmpty.style.display = 'block';
+        return;
+      }
+      updateHealthCards(data.workers);
+    })
+    .catch(function() { /* pool not active */ });
+}
+
+function updateHealthCards(workers) {
+  if (!healthGrid) return;
+
+  if (!workers || workers.length === 0) {
+    if (healthBadge) healthBadge.textContent = '0';
+    if (healthEmpty) healthEmpty.style.display = 'block';
+    // Remove stale cards
+    healthData.forEach(function(_, id) { removeHealthCard(id); });
+    healthData.clear();
+    return;
+  }
+
+  if (healthEmpty) healthEmpty.style.display = 'none';
+  if (healthBadge) healthBadge.textContent = String(workers.length);
+
+  var seenIds = new Set();
+  workers.forEach(function(w) {
+    seenIds.add(w.id);
+    healthData.set(w.id, w);
+    renderHealthCard(w);
+  });
+
+  // Remove cards for workers no longer present
+  healthData.forEach(function(_, id) {
+    if (!seenIds.has(id)) {
+      removeHealthCard(id);
+      healthData.delete(id);
+    }
+  });
+}
+
+function renderHealthCard(w) {
+  var existing = healthGrid.querySelector('[data-health-id="' + w.id + '"]');
+  var card = existing || document.createElement('div');
+  card.className = 'term-health__card';
+  card.dataset.healthId = w.id;
+
+  var statusClass = w.status === 'running' ? 'running' :
+    w.status === 'starting' ? 'starting' :
+    w.status === 'stopping' ? 'stopping' : 'stopped';
+
+  var circuitClass = w.circuitState === 'open' ? 'open' :
+    w.circuitState === 'half-open' ? 'half-open' : 'closed';
+
+  var now = Date.now();
+  var heartbeatAge = w.lastHeartbeat ? Math.round((now - new Date(w.lastHeartbeat).getTime()) / 1000) : 0;
+  var activityAge = w.lastActivity ? Math.round((now - new Date(w.lastActivity).getTime()) / 1000) : 0;
+
+  card.innerHTML =
+    '<div class="term-health__header">' +
+      '<span class="term-health__dot term-health__dot--' + statusClass + '"></span>' +
+      '<span class="term-health__id">' + escHtml(w.id) + '</span>' +
+      '<span class="term-health__circuit term-health__circuit--' + circuitClass + '">' + w.circuitState + '</span>' +
+    '</div>' +
+    '<div class="term-health__stats">' +
+      '<span title="Consecutive failures">' +
+        '<span class="term-health__stat-label">Fails</span>' +
+        '<span class="term-health__stat-value' + (w.consecutiveFailures > 0 ? ' term-health__stat--warn' : '') + '">' + w.consecutiveFailures + '</span>' +
+      '</span>' +
+      '<span title="Restart count">' +
+        '<span class="term-health__stat-label">Restarts</span>' +
+        '<span class="term-health__stat-value">' + w.restartCount + '</span>' +
+      '</span>' +
+      '<span title="Last heartbeat">' +
+        '<span class="term-health__stat-label">Heartbeat</span>' +
+        '<span class="term-health__stat-value">' + formatAge(heartbeatAge) + '</span>' +
+      '</span>' +
+      '<span title="Last activity">' +
+        '<span class="term-health__stat-label">Activity</span>' +
+        '<span class="term-health__stat-value">' + formatAge(activityAge) + '</span>' +
+      '</span>' +
+    '</div>';
+
+  if (!existing) {
+    healthGrid.appendChild(card);
+  }
+}
+
+function removeHealthCard(id) {
+  if (!healthGrid) return;
+  var card = healthGrid.querySelector('[data-health-id="' + id + '"]');
+  if (card) card.remove();
+}
+
+function formatAge(seconds) {
+  if (seconds < 60) return seconds + 's';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+  return Math.floor(seconds / 3600) + 'h';
+}
+
+// Refresh health every 10 seconds when panel is open
+setInterval(function() {
+  var details = document.getElementById('term-health');
+  if (details && details.open) loadWorkerHealth();
+}, 10000);
+
+// Load health data when details panel is opened
+(function() {
+  var details = document.getElementById('term-health');
+  if (details) {
+    details.addEventListener('toggle', function() {
+      if (details.open) loadWorkerHealth();
+    });
+  }
+})();
+
+// Update health cards from WS events
+function updateHealthFromEvent(workerId, updates) {
+  var w = healthData.get(workerId);
+  if (!w) {
+    loadWorkerHealth();
+    return;
+  }
+  Object.assign(w, updates);
+  renderHealthCard(w);
+}
+
+// ── Config Dialog ────────────────────────────────────────────
+
+function openConfigDialog(id) {
+  var inst = instances.get(id);
+  if (!inst) return;
+
+  var dialog = document.getElementById('config-dialog');
+  var idLabel = document.getElementById('config-dialog-id');
+  var idInput = document.getElementById('config-instance-id');
+  var modelSel = document.getElementById('config-model');
+  var budgetInput = document.getElementById('config-budget');
+  var turnsInput = document.getElementById('config-turns');
+
+  if (idLabel) idLabel.textContent = id;
+  if (idInput) idInput.value = id;
+  if (modelSel) modelSel.value = inst.model || 'sonnet';
+  if (budgetInput) budgetInput.value = inst.maxBudgetUsd || 5;
+  if (turnsInput) turnsInput.value = inst.maxTurns || 30;
+
+  dialog.showModal();
+}
+
+function submitConfig(e) {
+  e.preventDefault();
+  var form = e.target;
+  var id = form.instanceId.value;
+  var model = form.model.value;
+  var maxBudgetUsd = parseFloat(form.maxBudgetUsd.value) || 5;
+  var maxTurns = parseInt(form.maxTurns.value) || 30;
+
+  fetch('/api/orchestrator/' + encodeURIComponent(id) + '/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: model, maxBudgetUsd: maxBudgetUsd, maxTurns: maxTurns }),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Config update failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      var inst = instances.get(id);
+      if (inst) {
+        inst.model = data.config.model;
+        inst.maxBudgetUsd = data.config.maxBudgetUsd;
+        inst.maxTurns = data.config.maxTurns;
+        updateStatusBar(id);
+        inst.terminal.writeln('\x1b[36m[CONFIG] Updated: model=' + data.config.model + ', budget=$' + data.config.maxBudgetUsd + ', turns=' + data.config.maxTurns + '\x1b[0m');
+      }
+      showToast('Configuration updated for ' + id, 'success');
+      document.getElementById('config-dialog').close();
+    })
+    .catch(function(err) {
+      showToast('Config update failed: ' + err.message, 'error');
+    });
+
+  return false;
+}
+
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
 window.addInstance = addInstance;
@@ -1392,6 +1633,8 @@ window.toggleMaximize = toggleMaximize;
 window.openTerminalSearch = openTerminalSearch;
 window.closeTerminalSearch = closeTerminalSearch;
 window.toggleShortcutsHelp = toggleShortcutsHelp;
+window.openConfigDialog = openConfigDialog;
+window.submitConfig = submitConfig;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

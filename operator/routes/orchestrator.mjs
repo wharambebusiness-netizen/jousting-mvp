@@ -341,6 +341,58 @@ export function createOrchestratorRoutes(ctx) {
     res.json(result);
   });
 
+  // ── GET /api/orchestrator/workers/health ──────────────
+  // Returns per-worker health data for the health dashboard.
+  router.get('/orchestrator/workers/health', (_req, res) => {
+    if (!pool) {
+      return res.json({ workers: [], poolActive: false });
+    }
+    const workers = pool.getStatus().map(w => ({
+      id: w.id,
+      status: w.status,
+      pid: w.pid,
+      circuitState: w.circuitState || 'closed',
+      consecutiveFailures: w.consecutiveFailures || 0,
+      restartCount: w.restartCount || 0,
+      lastHeartbeat: w.lastHeartbeat,
+      lastActivity: w.lastActivity,
+      startedAt: w.startedAt,
+      stoppedAt: w.stoppedAt,
+      exitCode: w.exitCode,
+      config: w.config || {},
+    }));
+    res.json({ workers, poolActive: true });
+  });
+
+  // ── POST /api/orchestrator/:id/config ─────────────────
+  // Update runtime configuration for a worker instance.
+  router.post('/orchestrator/:id/config', (req, res) => {
+    const instanceId = req.params.id;
+    const state = instances.get(instanceId);
+    if (!state) {
+      return res.status(404).json({ error: `Instance ${instanceId} not found` });
+    }
+
+    const { model, maxBudgetUsd, maxTurns } = req.body || {};
+
+    // Update local state
+    if (model) state.model = model;
+    if (maxBudgetUsd != null) state.maxBudgetUsd = maxBudgetUsd;
+    if (maxTurns != null) state.maxTurns = maxTurns;
+
+    // Forward config to running worker via IPC
+    if (pool && state.running) {
+      pool.sendTo(instanceId, {
+        type: 'config',
+        model: model || undefined,
+        maxBudgetUsd: maxBudgetUsd != null ? maxBudgetUsd : undefined,
+        maxTurns: maxTurns != null ? maxTurns : undefined,
+      });
+    }
+
+    res.json({ success: true, config: { model: state.model, maxBudgetUsd: state.maxBudgetUsd, maxTurns: state.maxTurns } });
+  });
+
   // ── POST /api/orchestrator/:id/start ──────────────────
   router.post('/orchestrator/:id/start', (req, res) => {
     const instanceId = req.params.id;

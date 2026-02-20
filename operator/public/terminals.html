@@ -43,6 +43,18 @@
       </div>
     </div>
 
+    <!-- Worker Health Panel (collapsible) -->
+    <details class="term-health" id="term-health">
+      <summary class="term-health__toggle">
+        <span class="term-health__title">Worker Health</span>
+        <span class="term-health__badge" id="health-badge" title="Total workers">0</span>
+      </summary>
+      <div class="term-health__grid" id="health-grid">
+        <!-- Health cards rendered dynamically by terminals.js -->
+        <div class="term-health__empty" id="health-empty">No workers in pool</div>
+      </div>
+    </details>
+
     <!-- Tab Bar -->
     <div class="term-tabs" id="term-tabs" role="tablist" aria-label="Orchestrator instances">
       <!-- Tabs rendered dynamically by terminals.js -->
@@ -95,6 +107,39 @@
       </article>
     </dialog>
   </main>
+
+  <!-- Instance Config Dialog -->
+  <dialog class="term-dialog config-dialog" id="config-dialog">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('config-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Configure Instance: <span id="config-dialog-id"></span></h3>
+      </header>
+      <form id="config-form" onsubmit="return submitConfig(event)">
+        <input type="hidden" name="instanceId" id="config-instance-id">
+        <label>
+          Model
+          <select name="model" id="config-model">
+            <option value="haiku">Haiku</option>
+            <option value="sonnet" selected>Sonnet</option>
+            <option value="opus">Opus</option>
+          </select>
+        </label>
+        <label>
+          Max Budget (USD)
+          <input type="number" name="maxBudgetUsd" id="config-budget" min="0" max="100" step="0.5" value="5" placeholder="e.g. 5.00">
+        </label>
+        <label>
+          Max Turns
+          <input type="number" name="maxTurns" id="config-turns" min="1" max="200" step="1" value="30" placeholder="e.g. 30">
+        </label>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('config-dialog').close()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Apply</button>
+        </footer>
+      </form>
+    </article>
+  </dialog>
 
   <!-- Keyboard Shortcuts Help -->
   <dialog class="term-dialog shortcuts-dialog" id="shortcuts-dialog">

@@ -2479,3 +2479,171 @@ details[open] > .tree-summary .tree-icon--dir {
   font-size: 0.6875rem;
   white-space: nowrap;
 }
+
+/* ── 43. Worker Health Panel (Phase 8) ────────────────────── */
+
+.term-health {
+  margin: 0 0 var(--sp-2) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface);
+}
+.term-health > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  list-style: none;
+}
+.term-health > summary::-webkit-details-marker { display: none; }
+.term-health > summary::before {
+  content: '\25B6';
+  font-size: 0.5rem;
+  transition: transform 0.15s;
+  color: var(--text-muted);
+}
+.term-health[open] > summary::before {
+  transform: rotate(90deg);
+}
+.term-health__title {
+  flex: 1;
+}
+.term-health__badge {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.term-health__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.term-health__empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  padding: var(--sp-4) 0;
+}
+.term-health__card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-2) var(--sp-3);
+  transition: border-color 0.15s;
+}
+.term-health__card:hover {
+  border-color: var(--border-default);
+}
+.term-health__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.term-health__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.term-health__dot--running {
+  background: var(--status-success);
+  box-shadow: 0 0 4px var(--status-success);
+}
+.term-health__dot--starting {
+  background: var(--status-info);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+.term-health__dot--stopping {
+  background: var(--status-warning);
+}
+.term-health__dot--stopped {
+  background: var(--text-muted);
+  opacity: 0.5;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.term-health__id {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+.term-health__circuit {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.term-health__circuit--closed {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+.term-health__circuit--half-open {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+.term-health__circuit--open {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+.term-health__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-1) var(--sp-3);
+}
+.term-health__stat-label {
+  display: block;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.term-health__stat-value {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.term-health__stat--warn {
+  color: var(--status-error);
+}
+
+/* ── 44. Shortcuts Dialog Grid ────────────────────────────── */
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  align-items: center;
+  font-size: 0.875rem;
+}
+.shortcuts-grid kbd {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.shortcuts-grid span {
+  color: var(--text-secondary);
+}
