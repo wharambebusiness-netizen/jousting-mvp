@@ -90,7 +90,7 @@ function renderFileEntry(entry, _root, gitStatus) {
 
   const ePath = escapeHtml(entry.path);
   const badge = gitBadge(entry.path, gitStatus);
-  return `<div class="tree-file tree-file--clickable" data-path="${ePath}" onclick="previewFile(this)" tabindex="0" role="button" aria-label="Preview ${escapeHtml(entry.name)}">
+  return `<div class="tree-file tree-file--clickable" data-path="${ePath}" draggable="true" onclick="previewFile(this)" tabindex="0" role="button" aria-label="Preview ${escapeHtml(entry.name)}">
     <span class="tree-icon" aria-hidden="true">${fileIcon(entry.name)}</span>
     <span class="tree-name">${escapeHtml(entry.name)}</span>
     ${badge}

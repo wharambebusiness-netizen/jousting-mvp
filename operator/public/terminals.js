@@ -126,9 +126,15 @@ var viewToggle = document.getElementById('view-toggle-icon');
 var maximizedId = null; // id of maximized panel in grid mode, or null
 var wsHandle = null;    // WebSocket connection handle for cleanup
 
+// ── State: file sidebar ─────────────────────────────────────
+var sidebarOpen = localStorage.getItem('term-sidebar-open') === '1';
+var sidebarRoot = ''; // current project root shown in sidebar
+var sidebarFilterTimer = null;
+
 // ── Initialization ───────────────────────────────────────────
 (function init() {
   applyViewMode();
+  initSidebar();
   loadInstances();
   loadClaudeTerminals();
   loadMissions();
@@ -251,6 +257,13 @@ var wsHandle = null;    // WebSocket connection handle for cleanup
       addClaudeTerminal();
       return;
     }
+
+    // Ctrl+B: toggle file sidebar
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
+      e.preventDefault();
+      toggleSidebar();
+      return;
+    }
   });
 })();
 
@@ -322,6 +335,13 @@ function loadClaudeTerminals() {
       data.terminals.forEach(function(t) {
         addClaudeTerminalInstance(t.id, t);
       });
+      // If sidebar is open and we haven't loaded a tree yet, try the active tab
+      if (sidebarOpen && !sidebarRoot && activeTabId) {
+        var inst = instances.get(activeTabId);
+        if (inst && inst.type === 'claude') {
+          fetchSidebarRootForTerminal(activeTabId);
+        }
+      }
     })
     .catch(function() { /* Claude terminals not available */ });
 }
@@ -952,6 +972,11 @@ function switchTab(id) {
     setTimeout(function() {
       try { active.fitAddon.fit(); } catch (e) { /* ignore */ }
     }, 10);
+  }
+
+  // Update sidebar if open and switching to a Claude terminal
+  if (sidebarOpen && active && active.type === 'claude') {
+    fetchSidebarRootForTerminal(id);
   }
 }
 
@@ -2378,6 +2403,217 @@ function submitConfig(e) {
   return false;
 }
 
+// ── File Sidebar ─────────────────────────────────────────────
+
+function initSidebar() {
+  var sidebar = document.getElementById('term-sidebar');
+  if (!sidebar) return;
+
+  // Restore persisted state
+  if (sidebarOpen) {
+    sidebar.classList.remove('term-sidebar--hidden');
+  }
+
+  // Set up drag-and-drop on the panels container
+  setupDropTargets();
+}
+
+function toggleSidebar() {
+  var sidebar = document.getElementById('term-sidebar');
+  if (!sidebar) return;
+
+  sidebarOpen = !sidebarOpen;
+  sidebar.classList.toggle('term-sidebar--hidden', !sidebarOpen);
+  localStorage.setItem('term-sidebar-open', sidebarOpen ? '1' : '0');
+
+  // If opening and we have an active Claude terminal, load its project files
+  if (sidebarOpen && activeTabId) {
+    var inst = instances.get(activeTabId);
+    if (inst && inst.type === 'claude') {
+      fetchSidebarRootForTerminal(activeTabId);
+    }
+  }
+
+  // Refit terminals after sidebar toggle (width changed)
+  setTimeout(function() {
+    instances.forEach(function(inst) {
+      try { inst.fitAddon.fit(); } catch (e) { /* ignore */ }
+    });
+  }, 50);
+}
+
+function fetchSidebarRootForTerminal(terminalId) {
+  fetch('/api/claude-terminals/' + encodeURIComponent(terminalId))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.projectDir) {
+        loadSidebarTree(data.projectDir);
+      }
+    })
+    .catch(function() { /* ignore */ });
+}
+
+function loadSidebarTree(root) {
+  if (!root || root === sidebarRoot) return;
+  sidebarRoot = root;
+
+  var tree = document.getElementById('sidebar-tree');
+  if (!tree) return;
+
+  tree.dataset.root = root;
+  tree.innerHTML = '<div class="tree-loading">Loading…</div>';
+
+  fetch('/views/file-tree?root=' + encodeURIComponent(root) + '&path=')
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      tree.innerHTML = html;
+      setupDragOnTreeFiles(tree);
+    })
+    .catch(function() {
+      tree.innerHTML = '<div class="tree-empty">Failed to load files</div>';
+    });
+}
+
+function refreshSidebarTree() {
+  if (!sidebarRoot) return;
+  var tree = document.getElementById('sidebar-tree');
+  if (!tree) return;
+
+  // Reset loaded state on all open directories
+  var dirs = tree.querySelectorAll('.tree-dir[data-loaded="1"]');
+  for (var i = 0; i < dirs.length; i++) {
+    dirs[i].removeAttribute('data-loaded');
+  }
+
+  tree.innerHTML = '<div class="tree-loading">Loading…</div>';
+  fetch('/views/file-tree?root=' + encodeURIComponent(sidebarRoot) + '&path=')
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      tree.innerHTML = html;
+      setupDragOnTreeFiles(tree);
+    })
+    .catch(function() {
+      tree.innerHTML = '<div class="tree-empty">Failed to load files</div>';
+    });
+}
+
+function filterSidebarTree(input) {
+  if (sidebarFilterTimer) clearTimeout(sidebarFilterTimer);
+  sidebarFilterTimer = setTimeout(function() { _doFilterSidebar(input); }, 150);
+}
+
+function _doFilterSidebar(input) {
+  var tree = document.getElementById('sidebar-tree');
+  if (!tree) return;
+
+  var query = (input.value || '').toLowerCase().trim();
+  var files = tree.querySelectorAll('.tree-file');
+  var dirs = tree.querySelectorAll('.tree-dir');
+
+  if (!query) {
+    for (var i = 0; i < files.length; i++) files[i].style.display = '';
+    for (var j = 0; j < dirs.length; j++) dirs[j].style.display = '';
+    return;
+  }
+
+  // Filter files by name
+  for (var fi = 0; fi < files.length; fi++) {
+    var nameEl = files[fi].querySelector('.tree-name');
+    var name = nameEl ? nameEl.textContent.toLowerCase() : '';
+    files[fi].style.display = name.includes(query) ? '' : 'none';
+  }
+
+  // Show dirs containing visible children, bottom-up
+  for (var di = dirs.length - 1; di >= 0; di--) {
+    var children = dirs[di].querySelector('.tree-children');
+    var hasVisible = false;
+    if (children) {
+      var visFiles = children.querySelectorAll('.tree-file:not([style*="display: none"])');
+      var visDirs = children.querySelectorAll('.tree-dir:not([style*="display: none"])');
+      hasVisible = visFiles.length > 0 || visDirs.length > 0;
+    }
+    var dirName = dirs[di].querySelector('.tree-name');
+    var dirNameText = dirName ? dirName.textContent.toLowerCase() : '';
+    if (dirNameText.includes(query)) hasVisible = true;
+    dirs[di].style.display = hasVisible ? '' : 'none';
+    if (hasVisible && !dirs[di].open) {
+      dirs[di].open = true;
+      if (typeof loadTreeNode === 'function') loadTreeNode(dirs[di]);
+    }
+  }
+}
+
+// ── Drag-and-Drop: Files → Terminal ──────────────────────────
+
+function setupDragOnTreeFiles(container) {
+  container.addEventListener('dragstart', function(e) {
+    var fileEl = e.target.closest('.tree-file');
+    if (!fileEl) return;
+    var path = fileEl.dataset.path;
+    if (!path) return;
+    e.dataTransfer.setData('text/plain', path);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+}
+
+function setupDropTargets() {
+  var panelsEl = document.getElementById('term-panels');
+  if (!panelsEl) return;
+
+  panelsEl.addEventListener('dragover', function(e) {
+    // Only accept text/plain (file paths from sidebar)
+    if (!e.dataTransfer.types.includes('text/plain')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+
+    // Find the target panel
+    var panel = e.target.closest('.term-panel');
+    if (panel && !panel.classList.contains('term-panel--drag-over')) {
+      // Remove drag-over from all panels
+      var all = panelsEl.querySelectorAll('.term-panel--drag-over');
+      for (var i = 0; i < all.length; i++) all[i].classList.remove('term-panel--drag-over');
+      panel.classList.add('term-panel--drag-over');
+    }
+  });
+
+  panelsEl.addEventListener('dragleave', function(e) {
+    var panel = e.target.closest('.term-panel');
+    if (panel && !panel.contains(e.relatedTarget)) {
+      panel.classList.remove('term-panel--drag-over');
+    }
+  });
+
+  panelsEl.addEventListener('drop', function(e) {
+    e.preventDefault();
+    // Remove all drag-over highlights
+    var all = panelsEl.querySelectorAll('.term-panel--drag-over');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('term-panel--drag-over');
+
+    var filePath = e.dataTransfer.getData('text/plain');
+    if (!filePath) return;
+
+    // Find which terminal this panel belongs to
+    var panel = e.target.closest('.term-panel');
+    if (!panel) return;
+    var termId = panel.dataset.instanceId;
+    if (!termId) return;
+
+    var inst = instances.get(termId);
+    if (!inst) return;
+
+    if (inst.type === 'claude' && inst.binaryWs && inst.binaryWs.readyState === 1) {
+      // Send /add command to the Claude terminal
+      var fullPath = sidebarRoot ? sidebarRoot.replace(/\\/g, '/') + '/' + filePath : filePath;
+      inst.binaryWs.send('/add ' + fullPath + '\r');
+      showToast('Added ' + filePath + ' to ' + termId, 'success');
+    } else if (inst.type === 'claude') {
+      showToast('Terminal ' + termId + ' is not connected', 'error');
+    } else {
+      showToast('Can only drop files on Claude terminals', 'error');
+    }
+  });
+}
+
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
 window.addInstance = addInstance;
@@ -2400,6 +2636,9 @@ window.submitNewClaude = submitNewClaude;
 window.killClaudeInstance = killClaudeInstance;
 window.removeClaudeInstance = removeClaudeInstance;
 window.toggleClaudePermissions = toggleClaudePermissions;
+window.toggleSidebar = toggleSidebar;
+window.refreshSidebarTree = refreshSidebarTree;
+window.filterSidebarTree = filterSidebarTree;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

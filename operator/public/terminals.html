@@ -40,6 +40,7 @@
         <button class="btn btn--sm btn--ghost" id="view-toggle" onclick="toggleTerminalView()" title="Toggle grid/tab view (Ctrl+Shift+G)" aria-label="Toggle grid/tab view">
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
+        <button class="btn btn--sm btn--ghost" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle file sidebar (Ctrl+B)" aria-label="Toggle file sidebar">&#128193;</button>
         <button class="btn btn--sm btn--primary" id="add-claude-btn" onclick="addClaudeTerminal()" title="New Claude terminal (Ctrl+Shift+C)" aria-label="New Claude terminal">+ Claude</button>
         <button class="btn btn--sm btn--primary" id="add-instance-btn" onclick="addInstance()" title="Add orchestrator instance (Ctrl+N)" aria-label="Add instance">+ Orchestrator</button>
       </div>
@@ -111,12 +112,27 @@
       <!-- Tabs rendered dynamically by terminals.js -->
     </div>
 
-    <!-- Terminal Panels Container -->
-    <div class="term-panels" id="term-panels">
-      <!-- Terminal panels rendered dynamically by terminals.js -->
-      <div class="term-empty" id="term-empty">
-        <p>No terminals running.</p>
-        <p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>
+    <!-- Workspace: Sidebar + Terminal Panels -->
+    <div class="term-workspace" id="term-workspace">
+      <!-- File Sidebar (collapsible) -->
+      <aside class="term-sidebar term-sidebar--hidden" id="term-sidebar">
+        <div class="term-sidebar__header">
+          <span class="term-sidebar__title">Files</span>
+          <button class="btn btn--xs btn--ghost term-sidebar__refresh" onclick="refreshSidebarTree()" title="Refresh" aria-label="Refresh file tree">&#8635;</button>
+          <button class="btn btn--xs btn--ghost term-sidebar__close" onclick="toggleSidebar()" title="Close sidebar" aria-label="Close sidebar">&times;</button>
+        </div>
+        <input type="search" class="term-sidebar__search" placeholder="Filter files..." oninput="filterSidebarTree(this)" autocomplete="off" aria-label="Filter files">
+        <div class="term-sidebar__tree project-tree" id="sidebar-tree" data-root="">
+          <div class="tree-empty">Select a Claude terminal to browse its project files.</div>
+        </div>
+      </aside>
+      <!-- Terminal Panels Container -->
+      <div class="term-panels" id="term-panels">
+        <!-- Terminal panels rendered dynamically by terminals.js -->
+        <div class="term-empty" id="term-empty">
+          <p>No terminals running.</p>
+          <p>Click <strong>+ Claude</strong> to start an interactive Claude session, or <strong>+ Orchestrator</strong> for a managed worker instance.</p>
+        </div>
       </div>
     </div>
 
@@ -273,6 +289,7 @@
         <kbd>Ctrl+F</kbd><span>Search in terminal</span>
         <kbd>Ctrl+Shift+G</kbd><span>Toggle grid / tab view</span>
         <kbd>Ctrl+Shift+M</kbd><span>Maximize / restore panel</span>
+        <kbd>Ctrl+B</kbd><span>Toggle file sidebar</span>
         <kbd>Escape</kbd><span>Close dialog / search</span>
       </div>
     </article>

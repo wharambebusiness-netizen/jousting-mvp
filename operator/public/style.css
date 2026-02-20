@@ -1948,6 +1948,106 @@ details[open] > .tree-summary .tree-icon--dir {
   color: var(--status-failed);
 }
 
+/* Workspace: sidebar + terminal panels */
+.term-workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* File sidebar */
+.term-sidebar {
+  width: 280px;
+  min-width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.term-sidebar--hidden {
+  display: none;
+}
+.term-sidebar__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.term-sidebar__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+.term-sidebar__refresh,
+.term-sidebar__close {
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.term-sidebar__search {
+  margin: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.term-sidebar__search:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+.term-sidebar__tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-1) var(--sp-2);
+  scrollbar-width: thin;
+}
+.term-sidebar__tree .tree-file {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  cursor: grab;
+}
+.term-sidebar__tree .tree-file:active {
+  cursor: grabbing;
+}
+.term-sidebar__tree .tree-dir > summary {
+  font-size: 0.75rem;
+  padding: var(--sp-1) var(--sp-2);
+}
+.term-sidebar__tree .tree-meta {
+  font-size: 0.625rem;
+}
+
+/* Drag-over visual feedback on terminal panels */
+.term-panel--drag-over {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+.term-panel--drag-over::after {
+  content: 'Drop to /add file';
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--accent-primary);
+  color: var(--bg-root);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 10;
+}
+
 /* Terminal panels container */
 .term-panels {
   flex: 1;
