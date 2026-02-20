@@ -88,6 +88,38 @@ describe('Variant registry completeness', () => {
   });
 });
 
+// ============================================================
+// BL-077 (BL-071): Variant Tooltip Data Integrity
+// Validates that affinity values shown in variant tooltips map to real archetype IDs.
+// The VariantToggle and quick-build tooltips in LoadoutScreen display "Favors: <affinity>".
+// ============================================================
+describe('BL-077 (BL-071) — Variant tooltip affinity values are valid archetype IDs', () => {
+  // All 6 archetype IDs that exist in the game
+  const ARCHETYPE_IDS = ['charger', 'technician', 'bulwark', 'tactician', 'breaker', 'duelist'];
+
+  it('all steed variant definitions have affinity pointing to a valid archetype ID (18 combinations)', () => {
+    // 6 steed slots × 3 variants = 18 tooltip entries validated
+    // Ensures no typo/stale archetype name breaks the tooltip "Favors: <affinity>" text
+    for (const slot of ALL_STEED_SLOTS) {
+      for (const variant of ALL_GEAR_VARIANTS) {
+        const def = getSteedVariantDef(slot, variant);
+        expect(ARCHETYPE_IDS).toContain(def.affinity);
+      }
+    }
+  });
+
+  it('all player variant definitions have affinity pointing to a valid archetype ID (18 combinations)', () => {
+    // 6 player slots × 3 variants = 18 tooltip entries validated
+    // Ensures player gear tooltips reference real archetypes
+    for (const slot of ALL_PLAYER_SLOTS) {
+      for (const variant of ALL_GEAR_VARIANTS) {
+        const def = getPlayerVariantDef(slot, variant);
+        expect(ARCHETYPE_IDS).toContain(def.affinity);
+      }
+    }
+  });
+});
+
 // ===== Balanced variant matches legacy defaults =====
 
 describe('Balanced variant matches legacy slot stats', () => {

@@ -2127,3 +2127,60 @@ describe('SoftCap Combat Boundary Tests (QA Round 2)', () => {
     expect(softCap(150)).toBeGreaterThan(softCap(120));
   });
 });
+
+// ============================================================
+// BL-077 (BL-070): Melee Transition — Carryover Penalty Boundary Tests
+// Engine data validation for MeleeTransitionScreen unseat penalty display
+// ============================================================
+describe('BL-077 (BL-070) — Carryover Penalty Boundary Tests', () => {
+  it('carryover penalties at margin=6: first MOM penalty triggers, CTL and GRD still zero', () => {
+    // MOM divisor=6: floor(6/6)=1 → -1
+    // CTL divisor=7: floor(6/7)=0 → -0 (JS quirk: -Math.floor(0.857)=-0; use +0 to normalize)
+    // GRD divisor=9: floor(6/9)=0 → -0 (JS quirk: use +0 to normalize)
+    const penalties = calcCarryoverPenalties(6);
+    expect(penalties.momentumPenalty).toBe(-1);
+    expect(penalties.controlPenalty + 0).toBe(0);
+    expect(penalties.guardPenalty + 0).toBe(0);
+  });
+
+  it('carryover penalties at margin=7: first CTL penalty triggers alongside MOM, GRD still zero', () => {
+    // MOM: floor(7/6)=1 → -1
+    // CTL: floor(7/7)=1 → -1
+    // GRD: floor(7/9)=0 → -0 (JS quirk: -Math.floor(0.778)=-0; use +0 to normalize)
+    const penalties = calcCarryoverPenalties(7);
+    expect(penalties.momentumPenalty).toBe(-1);
+    expect(penalties.controlPenalty).toBe(-1);
+    expect(penalties.guardPenalty + 0).toBe(0);
+  });
+
+  it('carryover penalties at margin=9: first GRD penalty triggers — all three stats penalized', () => {
+    // MOM: floor(9/6)=1 → -1
+    // CTL: floor(9/7)=1 → -1
+    // GRD: floor(9/9)=1 → -1
+    const penalties = calcCarryoverPenalties(9);
+    expect(penalties.momentumPenalty).toBe(-1);
+    expect(penalties.controlPenalty).toBe(-1);
+    expect(penalties.guardPenalty).toBe(-1);
+  });
+
+  it('carryover penalties at large margin 100: severe penalties for decisive unseat', () => {
+    // MOM: floor(100/6)=16 → -16
+    // CTL: floor(100/7)=14 → -14
+    // GRD: floor(100/9)=11 → -11
+    const penalties = calcCarryoverPenalties(100);
+    expect(penalties.momentumPenalty).toBe(-16);
+    expect(penalties.controlPenalty).toBe(-14);
+    expect(penalties.guardPenalty).toBe(-11);
+  });
+
+  it('carryover penalty ordering invariant: MOM penalized most, GRD penalized least', () => {
+    // Design intent: MOM (divisor=6) is most vulnerable to unseating trauma.
+    // GRD (divisor=9) is most resilient — armor stays effective even after being unseated.
+    // This invariant must hold for all meaningful unseat margins.
+    for (const margin of [6, 7, 9, 18, 30, 45, 60, 100]) {
+      const p = calcCarryoverPenalties(margin);
+      expect(Math.abs(p.momentumPenalty)).toBeGreaterThanOrEqual(Math.abs(p.controlPenalty));
+      expect(Math.abs(p.controlPenalty)).toBeGreaterThanOrEqual(Math.abs(p.guardPenalty));
+    }
+  });
+});

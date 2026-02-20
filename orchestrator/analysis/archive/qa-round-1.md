@@ -1,169 +1,215 @@
-# QA Round 1 — Analysis Report
+# QA Round 1 — BL-077: Manual QA Analysis (4 Shipped Onboarding Features)
 
-**Date**: 2026-02-09
-**Test Baseline**: 794 tests passing
-**Test Count After**: 822 tests passing (+28 new tests)
-**Status**: All tests passing ✓
-
----
-
-## Summary
-
-Added 28 new tests across two backlog tasks:
-- **BL-050**: 17 edge case tests for phase-resolution
-- **BL-051**: 11 integration tests for match gear pipeline
-
-All tests pass. No regressions detected. No engine bugs found.
+**Date**: 2026-02-19
+**QA Engineer**: Round 1 (new session, branch agent-qa-r1)
+**Baseline**: 813 engine tests passing
+**After**: 820 engine tests passing (+7)
+**Status**: Code-level audit complete. Manual human testing still required (per task spec).
 
 ---
 
-## BL-050: Phase-Resolution Edge Cases (17 tests)
+## Executive Summary
 
-### Coverage Added
+BL-077 is a manual QA task for 4 shipped onboarding features that requires human testers
+(screen readers, cross-browser, touch devices). This round delivered:
 
-**1. Unseat Timing (4 tests)**
-- Unseat on pass 1 (earliest possible)
-- Unseat on pass 5 (last joust pass)
-- Both players unseated — higher margin wins
-- Both players unseated — tied margins results in no unseat
-
-**2. Extreme Fatigue Scenarios (6 tests)**
-- Stamina=0 joust pass: stats fully fatigued
-- Stamina=1 joust pass: minimal but non-zero fatigue factor
-- Stamina=0 melee round: stats fully fatigued
-- Stamina=1 melee round: minimal fatigue factor
-- Both players at stamina=0 in joust
-- Both players at stamina=1 in melee
-
-**3. Shift Eligibility at Exact Threshold (4 tests)**
-- Shift at exact CTL threshold (Standard speed)
-- Shift fails just below CTL threshold via fatigue
-- Shift at exact stamina threshold (stamina=10)
-- Shift fails when stamina is below cost threshold
-
-**4. Breaker Penetration vs High-Guard in Melee (3 tests)**
-- Breaker vs Bulwark using Guard High: penetration mitigates high guard
-- Breaker vs Bulwark+Guard High at low stamina: penetration + fatigue interaction
-- Breaker vs Bulwark: penetration scales with guard stat
-
-### Key Findings
-
-1. **Shift eligibility is more complex than expected**:
-   - Requires BOTH: effective CTL >= threshold AND currentStamina >= 10
-   - Effective CTL is computed AFTER fatigue, so low stamina can prevent shift even with high base CTL
-   - Carryover penalties do NOT affect shift eligibility in joust phase (only in melee)
-
-2. **Guard fatigue floor (0.5) protects defensive stats at zero stamina**:
-   - At stamina=0, MOM and CTL drop to 0 but guard remains > 0
-   - This prevents divide-by-zero and ensures defensive players have minimal protection
-
-3. **All edge cases handled gracefully**:
-   - No crashes at extreme stamina values
-   - No divide-by-zero errors
-   - Mirror matchups at low stamina correctly tie
+1. **Code-level audit** of all 4 features — no blocking bugs found
+2. **7 new unit tests** validating engine data behind the UI:
+   - 5 `calcCarryoverPenalties` boundary tests (BL-070, calculator.test.ts:2131–2186)
+   - 2 variant affinity ID validation tests (BL-071, gear-variants.test.ts:90–128)
+3. **Notable finding**: Worktree at `.worktrees/qa` has no checkout — files are in main project
 
 ---
 
-## BL-051: Match Gear Integration Tests (11 tests)
+## Feature Audit
 
-### Coverage Added
+### BL-073 — Stat Tooltips (SetupScreen + LoadoutScreen)
 
-**1. Full Stat Pipeline (4 tests)**
-- Uncommon steed + player gear: full stat pipeline from base to softCap
-- Giga steed gear: verify softCap activates on high stats
-- Mixed variants: aggressive steed + defensive player gear
-- Bare vs giga: giga produces higher impact scores
+**Location**: `src/ui/helpers.tsx:80–104` (StatBar component), `src/ui/LoadoutScreen.tsx`
 
-**2. createMatch() Argument Combinations (5 tests)**
-- createMatch() with 0 loadout args: bare match
-- createMatch() with 2 loadout args: steed only
-- createMatch() with 4 loadout args: steed + player gear
-- createMatch() with 6 loadout args: asymmetric gear
-- applyPlayerLoadout does NOT add rarity bonus (regression guard)
+**Implementation**:
+- `StatBar` uses `<abbr>` element with `title` (native tooltip) + `aria-label` for screen readers
+- `tabIndex={0}` on abbr allows keyboard users to trigger tooltip
+- 5 detailed tooltip texts in `STAT_TIPS_DETAIL` (keyed by type: mom/ctl/grd/init/sta)
+- `STAT_ABBR` maps full stat names to abbreviations (used in gear stat display)
 
-**3. Full Match Integration (2 tests)**
-- Full match with uncommon gear: stat pipeline verified
-- Full match comparing bare vs giga outcomes: verify stat advantage translates to match advantage
+**Issues Found**:
+- **MINOR**: `StaminaBar` component (helpers.tsx:162) uses `data-tip` attribute for tooltip,
+  not `title`. Native `data-tip` is non-standard — relies on CSS/JS tooltip framework.
+  Screen readers will NOT announce `data-tip` content. Severity: LOW (stamina bar tooltip
+  is supplementary; stamina value is already visible as text).
+- **INFO**: `STAT_ABBR` constant is duplicated in `helpers.tsx:18` and `LoadoutScreen.tsx`
+  (quality-review round flagged this). Not a bug but a maintainability risk.
 
-### Key Findings
-
-1. **applyPlayerLoadout correctly excludes rarity bonus**:
-   - Rarity bonus is mount-only (steed gear)
-   - Player gear adds only slot bonuses, no flat rarity bonus
-   - Regression test verifies this critical distinction
-
-2. **Gear variants work correctly in mixed configurations**:
-   - Aggressive steed + defensive player gear produces expected hybrid stats
-   - No conflicts or edge cases when mixing variants
-
-3. **Giga gear produces significantly higher impact**:
-   - Giga gear yields 1.5x+ impact compared to bare archetype
-   - Stats correctly flow through: base → steed → player → softCap → fatigue → combat
-
-4. **SoftCap activates correctly at giga tier**:
-   - Stats exceeding 100 (knee) are correctly capped
-   - No overflow or incorrect calculations
+**Tests validating this feature**: STAT_ABBR/STAT_TIPS are UI-only constants with no engine
+test coverage (by design — they're presentation layer). Engine gear stat names (`momentum`,
+`control`, etc.) are validated exhaustively in gear-variants.test.ts lines 51–68.
 
 ---
 
-## Test Suite Health
+### BL-071 — Variant Tooltips (LoadoutScreen)
 
-**Current Coverage**:
-- 822 tests across 8 suites
-- **calculator**: 194 tests (core math + guard penetration + fatigue)
-- **phase-resolution**: 55 tests (+17 edge cases)
-- **match**: 100 tests (+11 gear integration)
-- **gigling-gear**: 48 tests
-- **player-gear**: 46 tests
-- **gear-variants**: 156 tests
-- **playtest**: 128 tests (property-based + stress)
-- **ai**: 95 tests
+**Location**: `src/ui/LoadoutScreen.tsx:256–284` (VariantToggle), `src/ui/LoadoutScreen.tsx:317–397` (quick-build cards)
 
-**No Regressions**: All 794 baseline tests continue to pass.
+**Implementation**:
+- `VariantToggle` buttons: `title` (native tooltip) + `aria-label` with affinity text
+- `QuickSetButtons`: `title` + `aria-label`
+- `quick-build-card` buttons: detailed `aria-label` with strategy/risk/impact
+- Inline `variant-tooltip` divs inside button elements show strategy/risk/impact rows
 
-**Performance**: Match creation + 5 passes runs under 50ms (well within acceptable range).
+**Issues Found**:
+- **MINOR**: `variant-tooltip` div is a block element nested inside a `<button>`. While
+  technically valid HTML5, some older screen readers (JAWS pre-2022) may not announce
+  block child content of button correctly. Human JAWS testing needed.
+- **MINOR**: No `aria-describedby` linking the quick-build button to its expanded
+  variant-tooltip div. Screen reader users pressing Tab will hear the aria-label but
+  may not discover the strategy/risk/impact detail rows.
+- **INFO**: Matchup hint win rate estimates (LoadoutScreen.tsx:154–221) are heuristic and
+  may not match simulation-derived values. This is informational display, not bug-level.
 
----
+**New Tests Added** (gear-variants.test.ts:90–128):
+- All 18 steed variant affinity values are valid archetype IDs (no typos)
+- All 18 player variant affinity values are valid archetype IDs (no typos)
 
-## Bugs Found
-
-**None**. All edge cases handled correctly. No engine defects discovered.
-
----
-
-## Test Development Notes
-
-**Test Authoring Challenges**:
-1. Initial misunderstanding of shift eligibility rules (carryover vs fatigue)
-2. Field name confusion (`cumulativeScore1` not `cumulativeImpactPlayer1`)
-3. Gear rarity names (`uncommon` not `common` for lowest tier)
-
-**Solutions Applied**:
-- Verified shift logic in `phase-joust.ts` and `calculator.ts`
-- Used existing test patterns for field access
-- Checked gear factory function signatures
+**Engine validation**: `getSteedVariantDef`/`getPlayerVariantDef` already have
+spot-check tests (gear-variants.test.ts:281–339). New tests add exhaustive coverage
+of the affinity field specifically (tooltip "Favors: <archetype>" correctness).
 
 ---
 
-## Recommendations
+### BL-068 — Counter Chart (AttackSelect, accessible modal)
 
-1. **Continue edge case expansion**: Consider adding tests for:
-   - Shift eligibility at Fast and Slow thresholds (70 and 50)
-   - Negative carryover values exceeding base stats
-   - All 6 archetypes at stamina=0/1 (currently only tested a few)
+**Location**: `src/ui/CounterChart.tsx`
 
-2. **Gear pipeline stress testing**: Add tests for:
-   - All rarity tiers (bare, uncommon, rare, epic, legendary, relic, giga)
-   - All 3 variants (aggressive, balanced, defensive) at each tier
-   - Edge case: one player with max gear, opponent with zero gear
+**Implementation**:
+- Modal with `role="dialog"`, `aria-modal="true"`, `aria-labelledby="counter-chart-title"`
+- Close button auto-focused on mount (using `useRef` + `useEffect`)
+- Escape key closes modal (document-level keydown listener)
+- Overlay click closes modal
+- Each `AttackCounterCard` is `<article>` with `aria-label` listing beats/beatenBy
+- Emoji stance icons have `aria-hidden="true"`
 
-3. **Performance regression guards**: Add explicit performance tests for:
-   - Full 5-pass joust completion time
-   - 10-round melee completion time
-   - Match creation overhead with giga gear
+**Issues Found**:
+- **MODERATE**: Overlay div has `aria-hidden="false"` (CounterChart.tsx:161). This is
+  redundant and potentially confusing — the default is already `aria-hidden="false"`.
+  WCAG best practice for modals is to set `aria-hidden="true"` on ALL background content
+  when modal is open (via `inert` attribute or JS). Without this, screen readers can
+  navigate to background content while modal is open. Severity: MODERATE for WCAG AAA.
+- **MODERATE**: No focus trap implementation. After the close button, Tab key can leave
+  the dialog (reaching background elements). WCAG 2.1 SC 2.1.2 requires focus not to
+  get trapped AND dialog focus management spec requires trapping within modal during open.
+  WCAG AAA compliance would require a proper focus trap. Severity: MODERATE.
+- **LOW**: `AttackCounterCard` uses emoji characters (✅ ⚠️) directly in visible content
+  (CounterChart.tsx:91, 101). These have `aria-hidden="true"` which is correct, but the
+  label text ("BEATS:", "WEAK TO:") doesn't have a semantic role. Minor readability issue.
+
+**Engine data correctness**: Counter data (`beats`/`beatenBy`) is exhaustively validated:
+- calculator.test.ts:630–665: symmetry (if A beats B → B.beatenBy contains A)
+- calculator.test.ts:990–1035: all 6 joust + 6 melee attacks have at least 1 counter
+- playtest.test.ts:233–256: named counter pair validations
 
 ---
 
-## Next Steps
+### BL-070 — Melee Transition Screen
 
-Both assigned tasks (BL-050 and BL-051) are **complete**. Ready for next assignment.
+**Location**: `src/ui/MeleeTransitionScreen.tsx`
+
+**Implementation**:
+- Modal with `role="dialog"` on outer div (the clickable overlay), `aria-modal="true"`,
+  `aria-labelledby="melee-transition-title"`
+- Continue button auto-focused on mount
+- Escape/Space/Enter all trigger `onContinue`
+- Overlay click triggers `onContinue`
+- Weapon diagram has descriptive `aria-label`
+- Emoji icons have `aria-hidden="true"`
+- Unseat details show carryover penalties (MOM/CTL/GRD) from `calcCarryoverPenalties()`
+
+**Issues Found**:
+- **LOW**: `role="dialog"` is on the outer overlay div (which also serves as the
+  click-to-dismiss backdrop). ARIA best practice places `role="dialog"` on the inner
+  modal content element, not the backdrop. Current implementation means the "dialog"
+  area extends to the full screen including the dismiss zone. Not a functional bug.
+- **INFO**: Continue button label is "Continue to Melee Phase" regardless of whether
+  the match is already in MatchEnd phase. The button text correctly reads
+  "Continue to Melee Phase" always (not "See Final Result" as in MeleeResult.tsx).
+  Consistent but could confuse players on final round transitions.
+
+**New Tests Added** (calculator.test.ts:2131–2186):
+- `calcCarryoverPenalties(6)`: first MOM divisor breakpoint (-1, 0, 0)
+- `calcCarryoverPenalties(7)`: first CTL divisor breakpoint (-1, -1, 0)
+- `calcCarryoverPenalties(9)`: first GRD divisor breakpoint (-1, -1, -1)
+- `calcCarryoverPenalties(100)`: large margin (-16, -14, -11)
+- Ordering invariant: |MOM| ≥ |CTL| ≥ |GRD| for all margins 6–100
+
+**JavaScript `-0` Bug Found and Documented**:
+When `margin < divisor`, `-Math.floor(margin/divisor)` returns `-0`, not `0`. Existing
+tests at line 906–913 already handle this using `penalty + 0` normalization. New tests
+follow the same pattern. This is a cosmetic issue (display shows `0` either way) but
+could cause `toBe(0)` test failures if not handled.
+
+---
+
+## Test Results
+
+**Before**: 813 engine tests (calculator:202, phase-resolution:66, gigling-gear:48,
+player-gear:46, match:100, gear-variants:223, playtest:128)
+
+**After**: 820 engine tests (+7)
+- calculator.test.ts: 202 → 207 (+5 carryover boundary tests)
+- gear-variants.test.ts: 223 → 225 (+2 affinity ID validation tests)
+
+**Duration**: ~628ms (stable, no regression)
+
+---
+
+## Pre-existing Test Failures (NOT from my changes)
+
+The full test suite has 5 failing suites (orchestrator + operator tests):
+- `orchestrator/role-registry.test.mjs`: SyntaxError
+- `operator/__tests__/process-pool.test.mjs`: SyntaxError
+- `operator/__tests__/server.test.mjs`: SyntaxError
+- `operator/__tests__/views.test.mjs`: SyntaxError
+- `operator/__tests__/coordination-integration.test.mjs`: 3 test failures
+
+These are pre-existing and unrelated to engine changes. Engine tests: all 820 passing.
+
+---
+
+## Manual Testing Still Required (Human QA)
+
+BL-077 acceptance criteria require human testers for:
+
+| Test Area | Status |
+|-----------|--------|
+| NVDA screen reader (Windows) | ❌ Requires human |
+| JAWS screen reader (Windows) | ❌ Requires human |
+| VoiceOver (macOS/iOS) | ❌ Requires human |
+| Chrome (latest) | ❌ Requires human |
+| Safari (macOS/iOS) | ❌ Requires human |
+| Firefox (latest) | ❌ Requires human |
+| Edge (latest) | ❌ Requires human |
+| iOS touch (iPhone) | ❌ Requires human |
+| Android touch | ❌ Requires human |
+| WCAG AAA audit | ❌ Requires human (or axe-core automated) |
+| 320px responsive layout | ❌ Requires human |
+| 1920px responsive layout | ❌ Requires human |
+
+**Priority items for human testers**:
+1. CounterChart focus trap (Tab cycling within modal)
+2. VariantToggle screen reader announcement of affinity tooltip
+3. MeleeTransitionScreen auto-focus behavior (continue button)
+4. Quick-build card block-element-inside-button screen reader behavior
+
+---
+
+## Summary of Bugs Found
+
+| ID | Severity | Feature | Description |
+|----|----------|---------|-------------|
+| QA-R1-01 | MODERATE | BL-068 | CounterChart: no focus trap (Tab leaves modal) |
+| QA-R1-02 | MODERATE | BL-068 | CounterChart: background content accessible to SR during modal open |
+| QA-R1-03 | LOW | BL-071 | VariantToggle: no aria-describedby for variant-tooltip detail rows |
+| QA-R1-04 | LOW | BL-070 | MeleeTransitionScreen: role=dialog on backdrop, not inner modal |
+| QA-R1-05 | LOW | BL-073 | StaminaBar: uses data-tip (non-standard), not title/aria attributes |
+
+None of these are blockers — all 4 features are functional and usable.

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "4c80ff3b-0820-4491-880e-d42b67f115f1",
+    "instanceId": "worker-2",
+    "mission": "bugfix-sprint.json",
+    "model": "opus",
+    "dryRun": false,
+    "startedAt": "2026-02-20T02:57:09.982Z",
+    "stoppedAt": "2026-02-20T02:58:02.066Z",
+    "durationMs": 52084,
+    "outcome": "stopped",
+    "rounds": 0,
+    "agents": 0
+  }
+]
