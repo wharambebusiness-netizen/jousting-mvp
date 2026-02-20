@@ -2477,3 +2477,177 @@ describe('Task Board Enhancements (Phase 13)', () => {
     expect(updated.category).toBe('review');
   });
 });
+
+// ============================================================
+// Phase 14 — DAG Visualization + Task Templates
+// ============================================================
+
+describe('Phase 14 — DAG + Templates', () => {
+  // ── Static file checks ────────────────────────────────
+
+  it('taskboard.html contains DAG view container', async () => {
+    const html = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'taskboard.html'), 'utf-8'
+    );
+    expect(html).toContain('dag-view');
+    expect(html).toContain('dag-container');
+    expect(html).toContain('view-kanban');
+    expect(html).toContain('view-dag');
+  });
+
+  it('taskboard.html contains template dialog', async () => {
+    const html = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'taskboard.html'), 'utf-8'
+    );
+    expect(html).toContain('template-dialog');
+    expect(html).toContain('template-list');
+    expect(html).toContain('template-preview');
+    expect(html).toContain('template-prefix');
+  });
+
+  it('taskboard.html contains new keyboard shortcuts', async () => {
+    const html = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'taskboard.html'), 'utf-8'
+    );
+    expect(html).toContain('Toggle DAG view');
+    expect(html).toContain('Toggle Kanban view');
+    expect(html).toContain('Open templates');
+  });
+
+  it('taskboard.js contains DAG rendering functions', async () => {
+    const js = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'taskboard.js'), 'utf-8'
+    );
+    expect(js).toContain('renderDAG');
+    expect(js).toContain('loadGraph');
+    expect(js).toContain('switchView');
+    expect(js).toContain('DAG_NODE_W');
+  });
+
+  it('taskboard.js contains template functions', async () => {
+    const js = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'taskboard.js'), 'utf-8'
+    );
+    expect(js).toContain('loadTemplates');
+    expect(js).toContain('openTemplateDialog');
+    expect(js).toContain('applyTemplate');
+    expect(js).toContain('selectTemplate');
+  });
+
+  it('style.css contains DAG visualization styles', async () => {
+    const css = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'style.css'), 'utf-8'
+    );
+    expect(css).toContain('.dag-node');
+    expect(css).toContain('.dag-edge');
+    expect(css).toContain('.task-board__dag-container');
+    expect(css).toContain('.task-board__view-toggle');
+  });
+
+  it('style.css contains template styles', async () => {
+    const css = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'public', 'style.css'), 'utf-8'
+    );
+    expect(css).toContain('.task-board__template-list');
+    expect(css).toContain('.task-board__template-item');
+    expect(css).toContain('.task-board__template-preview');
+    expect(css).toContain('.task-board__template-prefix');
+  });
+
+  // ── API endpoint checks ───────────────────────────────
+
+  it('GET /api/coordination/graph returns 503 without coordinator', async () => {
+    await stopServer();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    const { status } = await api('/api/coordination/graph');
+    expect(status).toBe(503);
+  });
+
+  it('GET /api/coordination/templates returns 503 without coordinator', async () => {
+    // Server from previous test still running without coordinator
+    const { status } = await api('/api/coordination/templates');
+    expect(status).toBe(503);
+  });
+
+  it('GET /api/coordination/graph returns graph data with coordinator', async () => {
+    await stopServer();
+    const mockPool = {
+      getStatus: () => [{ id: 'w1', status: 'running' }],
+      getWorker: () => null,
+      spawn: () => {},
+      kill: () => true,
+      sendTo: () => true,
+      updateConfig: () => true,
+      remove: () => true,
+      shutdownAll: async () => {},
+      activeCount: () => 1,
+    };
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+
+    const { status, body } = await api('/api/coordination/graph');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('nodes');
+    expect(body).toHaveProperty('edges');
+    expect(body).toHaveProperty('levels');
+    expect(Array.isArray(body.nodes)).toBe(true);
+    expect(Array.isArray(body.edges)).toBe(true);
+    expect(Array.isArray(body.levels)).toBe(true);
+  });
+
+  it('GET /api/coordination/templates returns template array with coordinator', async () => {
+    // Server from previous test still running with coordinator
+    const { status, body } = await api('/api/coordination/templates');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBe(5);
+    expect(body[0]).toHaveProperty('id');
+    expect(body[0]).toHaveProperty('name');
+    expect(body[0]).toHaveProperty('description');
+    expect(body[0]).toHaveProperty('tasks');
+    expect(Array.isArray(body[0].tasks)).toBe(true);
+  });
+
+  it('GET /api/coordination/graph reflects added tasks', async () => {
+    // Add tasks with deps
+    await api('/api/coordination/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ id: 'g-root', task: 'Root task' }),
+    });
+    await api('/api/coordination/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ id: 'g-child', task: 'Child task', deps: ['g-root'] }),
+    });
+
+    const { status, body } = await api('/api/coordination/graph');
+    expect(status).toBe(200);
+    expect(body.nodes).toContain('g-root');
+    expect(body.nodes).toContain('g-child');
+    expect(body.edges).toEqual(expect.arrayContaining([
+      { from: 'g-root', to: 'g-child' },
+    ]));
+    expect(body.levels.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('coordination routes file lists graph and templates endpoints', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'coordination.mjs'), 'utf-8'
+    );
+    expect(routeSource).toContain('/coordination/graph');
+    expect(routeSource).toContain('/coordination/templates');
+  });
+});

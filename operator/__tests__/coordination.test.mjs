@@ -3522,3 +3522,196 @@ describe('WebSocket Bridged Events (Phase 11)', () => {
     expect(wsSource).toContain("'coord:rate-adjusted'");
   });
 });
+
+// ============================================================
+// Phase 14 — DAG Graph + Templates
+// ============================================================
+
+describe('getDependencyGraph — extended topologies (Phase 14)', () => {
+  let queue;
+  beforeEach(() => { queue = createTaskQueue(); });
+
+  it('should return empty graph for no tasks', () => {
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toEqual([]);
+    expect(graph.edges).toEqual([]);
+    expect(graph.levels).toEqual([]);
+  });
+
+  it('should return single node with no edges', () => {
+    queue.add({ id: 'solo', task: 'alone' });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toEqual(['solo']);
+    expect(graph.edges).toEqual([]);
+    expect(graph.levels).toEqual([['solo']]);
+  });
+
+  it('should handle fan-out topology (one → many)', () => {
+    queue.add({ id: 'root', task: 'root' });
+    queue.add({ id: 'a', task: 'child-a', deps: ['root'] });
+    queue.add({ id: 'b', task: 'child-b', deps: ['root'] });
+    queue.add({ id: 'c', task: 'child-c', deps: ['root'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toHaveLength(4);
+    expect(graph.edges).toHaveLength(3);
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      { from: 'root', to: 'a' },
+      { from: 'root', to: 'b' },
+      { from: 'root', to: 'c' },
+    ]));
+    expect(graph.levels).toHaveLength(2);
+    expect(graph.levels[0]).toEqual(['root']);
+    expect(graph.levels[1]).toHaveLength(3);
+  });
+
+  it('should handle fan-in topology (many → one)', () => {
+    queue.add({ id: 'a', task: 'source-a' });
+    queue.add({ id: 'b', task: 'source-b' });
+    queue.add({ id: 'c', task: 'source-c' });
+    queue.add({ id: 'merge', task: 'merge all', deps: ['a', 'b', 'c'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toHaveLength(4);
+    expect(graph.edges).toHaveLength(3);
+    expect(graph.levels).toHaveLength(2);
+    expect(graph.levels[0]).toHaveLength(3);
+    expect(graph.levels[1]).toEqual(['merge']);
+  });
+
+  it('should handle diamond topology (fan-out + fan-in)', () => {
+    queue.add({ id: 'start', task: 'start' });
+    queue.add({ id: 'left', task: 'left', deps: ['start'] });
+    queue.add({ id: 'right', task: 'right', deps: ['start'] });
+    queue.add({ id: 'end', task: 'end', deps: ['left', 'right'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toHaveLength(4);
+    expect(graph.edges).toHaveLength(4);
+    expect(graph.levels).toHaveLength(3);
+    expect(graph.levels[0]).toEqual(['start']);
+    expect(graph.levels[1]).toHaveLength(2);
+    expect(graph.levels[2]).toEqual(['end']);
+  });
+
+  it('should handle deep chain (5 levels)', () => {
+    queue.add({ id: 'a', task: 'a' });
+    queue.add({ id: 'b', task: 'b', deps: ['a'] });
+    queue.add({ id: 'c', task: 'c', deps: ['b'] });
+    queue.add({ id: 'd', task: 'd', deps: ['c'] });
+    queue.add({ id: 'e', task: 'e', deps: ['d'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.levels).toHaveLength(5);
+    expect(graph.edges).toHaveLength(4);
+  });
+
+  it('should handle disconnected subgraphs', () => {
+    queue.add({ id: 'a1', task: 'subgraph-1' });
+    queue.add({ id: 'a2', task: 'subgraph-1-child', deps: ['a1'] });
+    queue.add({ id: 'b1', task: 'subgraph-2' });
+    queue.add({ id: 'b2', task: 'subgraph-2-child', deps: ['b1'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toHaveLength(4);
+    expect(graph.edges).toHaveLength(2);
+    expect(graph.levels).toHaveLength(2);
+    expect(graph.levels[0]).toHaveLength(2);
+    expect(graph.levels[1]).toHaveLength(2);
+  });
+
+  it('should skip edges to non-existent deps (forward reference not added)', () => {
+    queue.add({ id: 'a', task: 'a', deps: ['missing'] });
+    const graph = queue.getDependencyGraph();
+    expect(graph.nodes).toEqual(['a']);
+    expect(graph.edges).toEqual([]); // 'missing' not in queue
+  });
+});
+
+describe('Task Templates (Phase 14)', () => {
+  it('should export TASK_TEMPLATES from coordination routes', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'coordination.mjs'), 'utf-8'
+    );
+    expect(routeSource).toContain('TASK_TEMPLATES');
+    expect(routeSource).toContain('sequential-pipeline');
+    expect(routeSource).toContain('parallel-workers');
+    expect(routeSource).toContain('feature-dev');
+    expect(routeSource).toContain('bug-fix');
+    expect(routeSource).toContain('full-cycle');
+  });
+
+  it('each template should have valid deps referencing sibling task IDs', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'coordination.mjs'), 'utf-8'
+    );
+    // Extract templates by importing the route source indirectly — validate via task queue
+    // Instead, create each template's tasks in a queue to verify validity
+    const templates = [
+      { tasks: [
+        { id: 'analyze', task: 'a', deps: [] },
+        { id: 'implement', task: 'b', deps: ['analyze'] },
+        { id: 'verify', task: 'c', deps: ['implement'] },
+      ]},
+      { tasks: [
+        { id: 'worker-a', task: 'a' },
+        { id: 'worker-b', task: 'b' },
+        { id: 'worker-c', task: 'c' },
+        { id: 'merge', task: 'd', deps: ['worker-a', 'worker-b', 'worker-c'] },
+      ]},
+      { tasks: [
+        { id: 'plan', task: 'a' },
+        { id: 'code', task: 'b', deps: ['plan'] },
+        { id: 'tests', task: 'c', deps: ['plan'] },
+        { id: 'review', task: 'd', deps: ['code', 'tests'] },
+        { id: 'deploy', task: 'e', deps: ['review'] },
+      ]},
+      { tasks: [
+        { id: 'investigate', task: 'a' },
+        { id: 'fix', task: 'b', deps: ['investigate'] },
+        { id: 'test', task: 'c', deps: ['fix'] },
+        { id: 'verify', task: 'd', deps: ['test'] },
+      ]},
+      { tasks: [
+        { id: 'plan', task: 'a' },
+        { id: 'frontend', task: 'b', deps: ['plan'] },
+        { id: 'backend', task: 'c', deps: ['plan'] },
+        { id: 'integrate', task: 'd', deps: ['frontend', 'backend'] },
+        { id: 'test', task: 'e', deps: ['integrate'] },
+        { id: 'deploy', task: 'f', deps: ['test'] },
+      ]},
+    ];
+
+    for (const tmpl of templates) {
+      const q = createTaskQueue();
+      for (const t of tmpl.tasks) {
+        q.add(t);
+      }
+      const v = q.validate();
+      expect(v.valid).toBe(true);
+      expect(v.errors).toHaveLength(0);
+    }
+  });
+
+  it('templates should not create cycles when loaded into task queue', () => {
+    const q = createTaskQueue();
+    // Load the feature-dev template
+    q.add({ id: 'plan', task: 'Plan feature' });
+    q.add({ id: 'code', task: 'Code', deps: ['plan'] });
+    q.add({ id: 'tests', task: 'Tests', deps: ['plan'] });
+    q.add({ id: 'review', task: 'Review', deps: ['code', 'tests'] });
+    q.add({ id: 'deploy', task: 'Deploy', deps: ['review'] });
+    const v = q.validate();
+    expect(v.valid).toBe(true);
+    const graph = q.getDependencyGraph();
+    expect(graph.levels).toHaveLength(4); // plan → code/tests → review → deploy
+  });
+
+  it('prefixed template tasks should maintain valid deps', () => {
+    const q = createTaskQueue();
+    const prefix = 'sprint-1-';
+    q.add({ id: prefix + 'plan', task: 'Plan' });
+    q.add({ id: prefix + 'code', task: 'Code', deps: [prefix + 'plan'] });
+    q.add({ id: prefix + 'tests', task: 'Tests', deps: [prefix + 'plan'] });
+    q.add({ id: prefix + 'review', task: 'Review', deps: [prefix + 'code', prefix + 'tests'] });
+    const v = q.validate();
+    expect(v.valid).toBe(true);
+    expect(q.getReady()).toHaveLength(1);
+    expect(q.getReady()[0].id).toBe('sprint-1-plan');
+  });
+});

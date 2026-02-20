@@ -14,6 +14,8 @@
 //   POST  /api/coordination/tasks/:id/cancel - Cancel a task
 //   POST  /api/coordination/tasks/:id/retry  - Retry a failed task
 //   GET  /api/coordination/progress      - Task progress summary
+//   GET  /api/coordination/graph         - Dependency graph (nodes, edges, levels)
+//   GET  /api/coordination/templates     - Built-in task templates
 //   POST /api/coordination/start         - Start coordinator
 //   POST /api/coordination/drain         - Begin draining
 //   POST /api/coordination/stop          - Stop coordinator
@@ -25,6 +27,68 @@
 // ============================================================
 
 import { Router } from 'express';
+
+// ── Built-in Task Templates ─────────────────────────────────
+
+const TASK_TEMPLATES = [
+  {
+    id: 'sequential-pipeline',
+    name: 'Sequential Pipeline',
+    description: 'Three-stage linear pipeline: analyze, implement, verify.',
+    tasks: [
+      { id: 'analyze', task: 'Analyze requirements and plan approach', priority: 5, category: 'planning' },
+      { id: 'implement', task: 'Implement the planned changes', priority: 5, deps: ['analyze'], category: 'development' },
+      { id: 'verify', task: 'Verify implementation and run tests', priority: 5, deps: ['implement'], category: 'testing' },
+    ],
+  },
+  {
+    id: 'parallel-workers',
+    name: 'Parallel Workers',
+    description: 'Three independent tasks that merge into a final review.',
+    tasks: [
+      { id: 'worker-a', task: 'Worker A: process first batch', priority: 1, category: 'development' },
+      { id: 'worker-b', task: 'Worker B: process second batch', priority: 1, category: 'development' },
+      { id: 'worker-c', task: 'Worker C: process third batch', priority: 1, category: 'development' },
+      { id: 'merge', task: 'Merge and review all worker outputs', priority: 5, deps: ['worker-a', 'worker-b', 'worker-c'], category: 'review' },
+    ],
+  },
+  {
+    id: 'feature-dev',
+    name: 'Feature Development',
+    description: 'Plan, then parallel code + tests, then review and deploy.',
+    tasks: [
+      { id: 'plan', task: 'Plan feature design and architecture', priority: 10, category: 'planning' },
+      { id: 'code', task: 'Implement feature code', priority: 5, deps: ['plan'], category: 'development' },
+      { id: 'tests', task: 'Write tests for the feature', priority: 5, deps: ['plan'], category: 'testing' },
+      { id: 'review', task: 'Code review and integration', priority: 5, deps: ['code', 'tests'], category: 'review' },
+      { id: 'deploy', task: 'Deploy to production', priority: 1, deps: ['review'], category: 'deployment' },
+    ],
+  },
+  {
+    id: 'bug-fix',
+    name: 'Bug Fix',
+    description: 'Investigate, fix, test, and verify a bug.',
+    tasks: [
+      { id: 'investigate', task: 'Investigate root cause of the bug', priority: 10, category: 'debugging' },
+      { id: 'fix', task: 'Implement the bug fix', priority: 5, deps: ['investigate'], category: 'development' },
+      { id: 'test', task: 'Write regression tests', priority: 5, deps: ['fix'], category: 'testing' },
+      { id: 'verify', task: 'Verify fix in staging environment', priority: 1, deps: ['test'], category: 'testing' },
+    ],
+  },
+  {
+    id: 'full-cycle',
+    name: 'Full Development Cycle',
+    description: 'Complete cycle: plan, parallel frontend + backend, integrate, test, deploy.',
+    tasks: [
+      { id: 'plan', task: 'Requirements analysis and architecture', priority: 10, category: 'planning' },
+      { id: 'frontend', task: 'Frontend implementation', priority: 5, deps: ['plan'], category: 'development' },
+      { id: 'backend', task: 'Backend implementation', priority: 5, deps: ['plan'], category: 'development' },
+      { id: 'integrate', task: 'Integration and API wiring', priority: 5, deps: ['frontend', 'backend'], category: 'development' },
+      { id: 'test', task: 'End-to-end testing', priority: 5, deps: ['integrate'], category: 'testing' },
+      { id: 'deploy', task: 'Deploy and monitor', priority: 1, deps: ['test'], category: 'deployment' },
+    ],
+  },
+];
 
 /**
  * Create coordination routes.
@@ -132,6 +196,18 @@ export function createCoordinationRoutes(ctx) {
 
   router.get('/coordination/progress', (_req, res) => {
     res.json(coordinator.taskQueue.getProgress());
+  });
+
+  // ── Dependency Graph ───────────────────────────────────
+
+  router.get('/coordination/graph', (_req, res) => {
+    res.json(coordinator.taskQueue.getDependencyGraph());
+  });
+
+  // ── Templates ─────────────────────────────────────────
+
+  router.get('/coordination/templates', (_req, res) => {
+    res.json(TASK_TEMPLATES);
   });
 
   // ── Rate Limiter ────────────────────────────────────────

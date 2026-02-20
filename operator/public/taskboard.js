@@ -1,5 +1,5 @@
 // ============================================================
-// Task Board — Kanban UI for Coordination Tasks (Phase 12+13)
+// Task Board — Kanban UI for Coordination Tasks (Phase 12-14)
 // ============================================================
 // Fetches tasks from /api/coordination/tasks, renders as cards
 // in status columns. Real-time updates via WebSocket.
@@ -7,9 +7,14 @@
 //
 // Phase 13 additions:
 //   - Filter/search bar with text, status, priority, category
-//   - Keyboard shortcuts (?, n, /, Esc, 1-5, a, d, r)
+//   - Keyboard shortcuts (?, n, /, Esc, 1-5, a, d, r, g, k, t)
 //   - Task detail/edit dialog (click card, PATCH to update)
 //   - Batch select and batch cancel/retry operations
+//
+// Phase 14 additions:
+//   - DAG dependency visualization (SVG graph view)
+//   - Task templates (predefined DAG workflows)
+//   - View toggle (Kanban / DAG)
 // ============================================================
 
 /* global createWS, showToast */
@@ -28,6 +33,10 @@
   var filterPriority = '';  // current priority filter
   var filterCategory = '';  // current category filter
   var detailTaskId = null;  // task shown in detail dialog
+  var currentView = 'kanban'; // 'kanban' or 'dag'
+  var cachedGraph = null;     // last graph response from API
+  var templateData = null;    // cached templates from API
+  var selectedTemplate = null; // template being previewed
 
   // ── DOM refs ────────────────────────────────────────────────
   var columns = {
@@ -61,6 +70,13 @@
   var batchCountEl   = document.getElementById('batch-count');
   var detailDialog   = document.getElementById('detail-dialog');
   var shortcutsDialog = document.getElementById('shortcuts-dialog');
+  var dagView        = document.getElementById('dag-view');
+  var dagContainer   = document.getElementById('dag-container');
+  var kanbanBoard    = document.getElementById('task-board');
+  var viewKanbanBtn  = document.getElementById('view-kanban');
+  var viewDagBtn     = document.getElementById('view-dag');
+  var templateBtn    = document.getElementById('template-btn');
+  var templateDialog = document.getElementById('template-dialog');
 
   // ── Helpers ─────────────────────────────────────────────────
 
@@ -341,9 +357,16 @@
 
     // Empty state
     boardEmpty.style.display = total === 0 ? '' : 'none';
-    document.getElementById('task-board').style.display = total === 0 ? 'none' : '';
-    document.querySelector('.task-board__progress').style.display = total === 0 ? 'none' : '';
-    document.getElementById('board-filters').style.display = total === 0 ? 'none' : '';
+    var hasTasks = total > 0;
+    if (currentView === 'kanban') {
+      kanbanBoard.style.display = hasTasks ? '' : 'none';
+      dagView.style.display = 'none';
+    } else {
+      kanbanBoard.style.display = 'none';
+      dagView.style.display = hasTasks ? '' : 'none';
+    }
+    document.querySelector('.task-board__progress').style.display = hasTasks ? '' : 'none';
+    document.getElementById('board-filters').style.display = hasTasks ? '' : 'none';
 
     // Update category dropdown options
     updateCategoryDropdown();
@@ -354,6 +377,11 @@
       if (!tasks[selIds[s]]) delete selected[selIds[s]];
     }
     updateSelectUI();
+
+    // Also refresh DAG if in DAG view
+    if (currentView === 'dag') {
+      loadGraph();
+    }
   }
 
   // ── Data Fetching ───────────────────────────────────────────
@@ -624,6 +652,330 @@
     updateTask(detailTaskId, fields);
   }
 
+  // ── View Toggle ────────────────────────────────────────────
+
+  function switchView(view) {
+    currentView = view;
+    if (view === 'kanban') {
+      viewKanbanBtn.classList.add('task-board__view-btn--active');
+      viewDagBtn.classList.remove('task-board__view-btn--active');
+      kanbanBoard.style.display = '';
+      dagView.style.display = 'none';
+    } else {
+      viewDagBtn.classList.add('task-board__view-btn--active');
+      viewKanbanBtn.classList.remove('task-board__view-btn--active');
+      kanbanBoard.style.display = 'none';
+      dagView.style.display = '';
+      loadGraph();
+    }
+  }
+
+  viewKanbanBtn.addEventListener('click', function () { switchView('kanban'); });
+  viewDagBtn.addEventListener('click', function () { switchView('dag'); });
+
+  // ── DAG Visualization ──────────────────────────────────────
+
+  var DAG_NODE_W = 160;
+  var DAG_NODE_H = 52;
+  var DAG_COL_GAP = 60;
+  var DAG_ROW_GAP = 24;
+  var DAG_PAD = 32;
+
+  var DAG_STATUS_CLASS = {
+    pending: 'pending',
+    assigned: 'assigned',
+    running: 'running',
+    complete: 'complete',
+    failed: 'failed',
+    cancelled: 'cancelled',
+  };
+
+  function loadGraph() {
+    fetch('/api/coordination/graph')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (graph) {
+        cachedGraph = graph;
+        renderDAG(graph);
+      })
+      .catch(function () {
+        dagContainer.innerHTML = '<div class="task-board__dag-empty">No dependency graph available.</div>';
+      });
+  }
+
+  function renderDAG(graph) {
+    if (!graph || !graph.nodes || graph.nodes.length === 0) {
+      dagContainer.innerHTML = '<div class="task-board__dag-empty">No tasks to visualize.</div>';
+      return;
+    }
+
+    var levels = graph.levels || [];
+    if (levels.length === 0) {
+      // Fallback: all nodes in one level
+      levels = [graph.nodes.slice()];
+    }
+
+    // Build lookup: nodeId → task data
+    var taskMap = {};
+    for (var i = 0; i < graph.nodes.length; i++) {
+      var nid = graph.nodes[i];
+      taskMap[nid] = tasks[nid] || { id: nid, task: nid, status: 'pending', deps: [] };
+    }
+
+    // Calculate node positions: x by level, y by index within level
+    var positions = {};
+    var maxRows = 0;
+    for (var li = 0; li < levels.length; li++) {
+      if (levels[li].length > maxRows) maxRows = levels[li].length;
+    }
+
+    for (var lj = 0; lj < levels.length; lj++) {
+      var level = levels[lj];
+      var levelHeight = level.length * (DAG_NODE_H + DAG_ROW_GAP) - DAG_ROW_GAP;
+      var totalHeight = maxRows * (DAG_NODE_H + DAG_ROW_GAP) - DAG_ROW_GAP;
+      var yOffset = (totalHeight - levelHeight) / 2;
+      for (var ni = 0; ni < level.length; ni++) {
+        positions[level[ni]] = {
+          x: DAG_PAD + lj * (DAG_NODE_W + DAG_COL_GAP),
+          y: DAG_PAD + yOffset + ni * (DAG_NODE_H + DAG_ROW_GAP),
+        };
+      }
+    }
+
+    // SVG dimensions
+    var svgW = DAG_PAD * 2 + levels.length * (DAG_NODE_W + DAG_COL_GAP) - DAG_COL_GAP;
+    var svgH = DAG_PAD * 2 + maxRows * (DAG_NODE_H + DAG_ROW_GAP) - DAG_ROW_GAP;
+    if (svgW < 300) svgW = 300;
+    if (svgH < 200) svgH = 200;
+
+    // Build SVG elements
+    var edgesHtml = '';
+    var arrowsHtml = '';
+    var nodesHtml = '';
+
+    // Arrow marker def
+    var defs = '<defs><marker id="dag-arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<polygon points="0 0, 8 3, 0 6" class="dag-edge-arrow"/></marker>' +
+      '<marker id="dag-arrowhead-done" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<polygon points="0 0, 8 3, 0 6" class="dag-edge-arrow dag-edge-arrow--complete"/></marker></defs>';
+
+    // Render edges
+    var edges = graph.edges || [];
+    for (var ei = 0; ei < edges.length; ei++) {
+      var edge = edges[ei];
+      var fromPos = positions[edge.from];
+      var toPos = positions[edge.to];
+      if (!fromPos || !toPos) continue;
+
+      var fromTask = taskMap[edge.from];
+      var isDone = fromTask && fromTask.status === 'complete';
+      var edgeClass = isDone ? 'dag-edge dag-edge--complete' : 'dag-edge';
+      var markerId = isDone ? 'dag-arrowhead-done' : 'dag-arrowhead';
+
+      // Bezier curve from right of source to left of target
+      var x1 = fromPos.x + DAG_NODE_W;
+      var y1 = fromPos.y + DAG_NODE_H / 2;
+      var x2 = toPos.x;
+      var y2 = toPos.y + DAG_NODE_H / 2;
+      var cx1 = x1 + (x2 - x1) * 0.4;
+      var cx2 = x2 - (x2 - x1) * 0.4;
+
+      edgesHtml += '<path d="M ' + x1 + ' ' + y1 + ' C ' + cx1 + ' ' + y1 + ', ' + cx2 + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" class="' + edgeClass + '" marker-end="url(#' + markerId + ')"/>';
+    }
+
+    // Render nodes
+    for (var nk = 0; nk < graph.nodes.length; nk++) {
+      var nodeId = graph.nodes[nk];
+      var pos = positions[nodeId];
+      if (!pos) continue;
+      var task = taskMap[nodeId];
+      var statusClass = DAG_STATUS_CLASS[task.status] || 'pending';
+      var label = nodeId.length > 18 ? nodeId.substring(0, 16) + '..' : nodeId;
+      var desc = (task.task || '').length > 22 ? task.task.substring(0, 20) + '..' : (task.task || '');
+
+      nodesHtml += '<g class="dag-node" data-id="' + escapeHtml(nodeId) + '" transform="translate(' + pos.x + ',' + pos.y + ')">' +
+        '<rect width="' + DAG_NODE_W + '" height="' + DAG_NODE_H + '" rx="6" class="dag-node__bg dag-node__bg--' + statusClass + '"/>' +
+        '<circle cx="12" cy="14" r="4" class="dag-node__status-dot dag-node__bg--' + statusClass + '" fill="currentColor" style="fill:' + getStatusColor(statusClass) + '"/>' +
+        '<text x="22" y="17" class="dag-node__label">' + escapeHtml(label) + '</text>' +
+        '<text x="12" y="36" class="dag-node__desc">' + escapeHtml(desc) + '</text>' +
+        '</g>';
+    }
+
+    dagContainer.innerHTML = '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" width="' + svgW + '" height="' + svgH + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Task dependency graph">' +
+      defs + edgesHtml + nodesHtml + '</svg>';
+
+    // Click handler for nodes
+    var svgEl = dagContainer.querySelector('svg');
+    if (svgEl) {
+      svgEl.addEventListener('click', function (e) {
+        var node = e.target.closest('.dag-node');
+        if (node && node.dataset.id) {
+          openDetail(node.dataset.id);
+        }
+      });
+    }
+  }
+
+  function getStatusColor(status) {
+    var colors = {
+      pending: '#636370',
+      assigned: '#3b82f6',
+      running: '#22c55e',
+      complete: '#6366f1',
+      failed: '#ef4444',
+      cancelled: '#636370',
+    };
+    return colors[status] || '#636370';
+  }
+
+  // ── Task Templates ─────────────────────────────────────────
+
+  function loadTemplates() {
+    if (templateData) return;
+    fetch('/api/coordination/templates')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        templateData = data;
+      })
+      .catch(function () {
+        templateData = [];
+      });
+  }
+
+  function openTemplateDialog() {
+    loadTemplates();
+    selectedTemplate = null;
+    renderTemplateList();
+    templateDialog.showModal();
+  }
+
+  function renderTemplateList() {
+    var list = document.getElementById('template-list');
+    var preview = document.getElementById('template-preview');
+    var applyBtn = document.getElementById('template-apply-btn');
+    var backBtn = document.getElementById('template-back');
+
+    list.style.display = '';
+    preview.style.display = 'none';
+    applyBtn.style.display = 'none';
+    backBtn.style.display = 'none';
+
+    if (!templateData || templateData.length === 0) {
+      list.innerHTML = '<div class="task-board__dag-empty">No templates available.</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < templateData.length; i++) {
+      var tmpl = templateData[i];
+      html += '<div class="task-board__template-item" data-template="' + escapeHtml(tmpl.id) + '">' +
+        '<div class="task-board__template-item-name">' + escapeHtml(tmpl.name) + '</div>' +
+        '<div class="task-board__template-item-desc">' + escapeHtml(tmpl.description) + '</div>' +
+        '<div class="task-board__template-item-count">' + tmpl.tasks.length + ' tasks</div>' +
+        '</div>';
+    }
+    list.innerHTML = html;
+
+    // Click handlers
+    list.addEventListener('click', function handler(e) {
+      var item = e.target.closest('[data-template]');
+      if (!item) return;
+      list.removeEventListener('click', handler);
+      var tmplId = item.dataset.template;
+      for (var j = 0; j < templateData.length; j++) {
+        if (templateData[j].id === tmplId) {
+          selectTemplate(templateData[j]);
+          break;
+        }
+      }
+    });
+  }
+
+  function selectTemplate(tmpl) {
+    selectedTemplate = tmpl;
+    var list = document.getElementById('template-list');
+    var preview = document.getElementById('template-preview');
+    var applyBtn = document.getElementById('template-apply-btn');
+    var backBtn = document.getElementById('template-back');
+
+    list.style.display = 'none';
+    preview.style.display = '';
+    applyBtn.style.display = '';
+    backBtn.style.display = '';
+
+    document.getElementById('template-preview-title').textContent = tmpl.name;
+    document.getElementById('template-preview-desc').textContent = tmpl.description;
+    document.getElementById('template-prefix').value = '';
+
+    var tasksHtml = '';
+    for (var i = 0; i < tmpl.tasks.length; i++) {
+      var t = tmpl.tasks[i];
+      var depsText = t.deps && t.deps.length ? 'deps: ' + t.deps.join(', ') : '';
+      tasksHtml += '<div class="task-board__template-task">' +
+        '<span class="task-board__template-task-id">' + escapeHtml(t.id) + '</span>' +
+        '<span class="task-board__template-task-desc">' + escapeHtml(t.task) + '</span>' +
+        (depsText ? '<span class="task-board__template-task-deps">' + escapeHtml(depsText) + '</span>' : '') +
+        '</div>';
+    }
+    document.getElementById('template-preview-tasks').innerHTML = tasksHtml;
+  }
+
+  function applyTemplate() {
+    if (!selectedTemplate) return;
+    var prefix = (document.getElementById('template-prefix').value || '').trim();
+    var batchTasks = [];
+    for (var i = 0; i < selectedTemplate.tasks.length; i++) {
+      var t = selectedTemplate.tasks[i];
+      var taskDef = {
+        id: prefix + t.id,
+        task: t.task,
+        priority: t.priority || 0,
+      };
+      if (t.category) taskDef.category = t.category;
+      if (t.deps && t.deps.length) {
+        taskDef.deps = [];
+        for (var j = 0; j < t.deps.length; j++) {
+          taskDef.deps.push(prefix + t.deps[j]);
+        }
+      }
+      batchTasks.push(taskDef);
+    }
+
+    fetch('/api/coordination/tasks/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: batchTasks }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+        return r.json();
+      })
+      .then(function (created) {
+        var count = Array.isArray(created) ? created.length : 0;
+        if (typeof showToast === 'function') showToast(count + ' tasks created from template', 'success');
+        templateDialog.close();
+        loadTasks();
+      })
+      .catch(function (err) {
+        if (typeof showToast === 'function') showToast('Template failed: ' + err.message, 'error');
+      });
+  }
+
+  // Template dialog event handlers
+  templateBtn.addEventListener('click', function () { openTemplateDialog(); });
+  document.getElementById('template-close').addEventListener('click', function () { templateDialog.close(); });
+  document.getElementById('template-cancel-btn').addEventListener('click', function () { templateDialog.close(); });
+  document.getElementById('template-apply-btn').addEventListener('click', function () { applyTemplate(); });
+  document.getElementById('template-back').addEventListener('click', function () {
+    selectedTemplate = null;
+    renderTemplateList();
+  });
+
   // ── Event Delegation (action buttons + card click) ──────────
 
   document.getElementById('task-board').addEventListener('click', function (e) {
@@ -733,6 +1085,7 @@
       if (addTaskDialog.open) { addTaskDialog.close(); e.preventDefault(); return; }
       if (detailDialog.open) { detailDialog.close(); e.preventDefault(); return; }
       if (shortcutsDialog.open) { shortcutsDialog.close(); e.preventDefault(); return; }
+      if (templateDialog.open) { templateDialog.close(); e.preventDefault(); return; }
       if (inInput && boardSearch === e.target) {
         boardSearch.value = '';
         filterText = '';
@@ -765,6 +1118,27 @@
     // n — add task
     if (e.key === 'n' || e.key === 'N') {
       addTaskDialog.showModal();
+      e.preventDefault();
+      return;
+    }
+
+    // g — DAG view
+    if (e.key === 'g' || e.key === 'G') {
+      switchView('dag');
+      e.preventDefault();
+      return;
+    }
+
+    // k — Kanban view
+    if (e.key === 'k' || e.key === 'K') {
+      switchView('kanban');
+      e.preventDefault();
+      return;
+    }
+
+    // t — templates
+    if (e.key === 't' || e.key === 'T') {
+      openTemplateDialog();
       e.preventDefault();
       return;
     }
@@ -857,6 +1231,7 @@
   // ── Initial Load + Polling ──────────────────────────────────
   loadTasks();
   loadStatus();
+  loadTemplates();
   refreshTimer = setInterval(function () {
     loadTasks();
     loadStatus();

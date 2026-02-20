@@ -33,6 +33,11 @@
       <h1>Task Board</h1>
       <div class="page-header__actions">
         <span class="task-board__status" id="board-status">--</span>
+        <div class="task-board__view-toggle" id="view-toggle">
+          <button class="btn btn--sm task-board__view-btn task-board__view-btn--active" id="view-kanban" title="Kanban view (k)">Kanban</button>
+          <button class="btn btn--sm task-board__view-btn" id="view-dag" title="DAG view (g)">DAG</button>
+        </div>
+        <button class="btn btn--sm btn--ghost" id="template-btn" title="Use template (t)">Templates</button>
         <button class="btn btn--sm" id="add-task-btn" title="Add task (n)">+ Add Task</button>
       </div>
     </div>
@@ -159,6 +164,18 @@
       </div>
     </div>
 
+    <!-- DAG Visualization (Phase 14) -->
+    <div class="task-board__dag" id="dag-view" style="display:none">
+      <div class="task-board__dag-container" id="dag-container"></div>
+      <div class="task-board__dag-legend">
+        <span class="task-board__dag-legend-item"><span class="task-board__dag-dot task-board__dag-dot--pending"></span> Pending</span>
+        <span class="task-board__dag-legend-item"><span class="task-board__dag-dot task-board__dag-dot--assigned"></span> Assigned</span>
+        <span class="task-board__dag-legend-item"><span class="task-board__dag-dot task-board__dag-dot--running"></span> Running</span>
+        <span class="task-board__dag-legend-item"><span class="task-board__dag-dot task-board__dag-dot--complete"></span> Complete</span>
+        <span class="task-board__dag-legend-item"><span class="task-board__dag-dot task-board__dag-dot--failed"></span> Failed</span>
+      </div>
+    </div>
+
     <!-- Empty State -->
     <div class="task-board__empty" id="board-empty" style="display:none">
       <p>No coordination tasks yet.</p>
@@ -206,6 +223,30 @@
       </article>
     </dialog>
 
+    <!-- Template Selection Dialog (Phase 14) -->
+    <dialog class="task-board__dialog task-board__dialog--template" id="template-dialog">
+      <article>
+        <header>
+          <h3>Use Template</h3>
+          <button class="task-board__dialog-close" id="template-close" aria-label="Close">&times;</button>
+        </header>
+        <div id="template-list" class="task-board__template-list"></div>
+        <div id="template-preview" class="task-board__template-preview" style="display:none">
+          <h4 id="template-preview-title"></h4>
+          <p id="template-preview-desc" class="task-board__template-preview-desc"></p>
+          <div id="template-preview-tasks" class="task-board__template-preview-tasks"></div>
+          <label class="task-board__template-prefix-label">ID Prefix (optional)
+            <input type="text" id="template-prefix" class="task-board__template-prefix" placeholder="e.g. sprint-1-">
+          </label>
+        </div>
+        <footer>
+          <button type="button" class="btn btn--ghost" id="template-back" style="display:none">Back</button>
+          <button type="button" class="btn btn--ghost" id="template-cancel-btn">Cancel</button>
+          <button type="button" class="btn btn--primary" id="template-apply-btn" style="display:none">Apply Template</button>
+        </footer>
+      </article>
+    </dialog>
+
     <!-- Keyboard Shortcuts Help (Phase 13) -->
     <dialog class="task-board__dialog task-board__dialog--help" id="shortcuts-dialog">
       <article>
@@ -223,6 +264,9 @@
             <tr><td class="task-board__key">a</td><td>Select all visible tasks</td></tr>
             <tr><td class="task-board__key">d</td><td>Deselect all</td></tr>
             <tr><td class="task-board__key">r</td><td>Refresh tasks</td></tr>
+            <tr><td class="task-board__key">g</td><td>Toggle DAG view</td></tr>
+            <tr><td class="task-board__key">k</td><td>Toggle Kanban view</td></tr>
+            <tr><td class="task-board__key">t</td><td>Open templates</td></tr>
           </tbody>
         </table>
         <footer>

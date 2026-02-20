@@ -3328,3 +3328,218 @@ details[open] > .tree-summary .tree-icon--dir {
   min-width: 28px;
   display: inline-block;
 }
+
+/* ── 49. Phase 14 — DAG Visualization + Task Templates ──── */
+
+/* View Toggle */
+.task-board__view-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+}
+.task-board__view-btn {
+  border-radius: 0 !important;
+  border: none !important;
+  padding: var(--sp-1) var(--sp-3) !important;
+  font-size: 0.75rem !important;
+  background: var(--bg-root) !important;
+  color: var(--text-muted) !important;
+  transition: background 0.15s, color 0.15s;
+}
+.task-board__view-btn--active {
+  background: var(--bg-overlay) !important;
+  color: var(--text-primary) !important;
+}
+.task-board__view-btn:hover {
+  background: var(--bg-raised) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* DAG Container */
+.task-board__dag {
+  margin-top: var(--sp-3);
+}
+.task-board__dag-container {
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--sp-4);
+  min-height: 300px;
+  overflow: auto;
+}
+.task-board__dag-container svg {
+  display: block;
+}
+
+/* DAG Legend */
+.task-board__dag-legend {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.task-board__dag-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.task-board__dag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.task-board__dag-dot--pending { background: var(--text-muted); }
+.task-board__dag-dot--assigned { background: var(--status-info); }
+.task-board__dag-dot--running { background: var(--status-success); }
+.task-board__dag-dot--complete { background: var(--accent); }
+.task-board__dag-dot--failed { background: var(--status-error); }
+
+/* DAG SVG Nodes */
+.dag-node { cursor: pointer; }
+.dag-node:hover .dag-node__bg { stroke-width: 2; }
+.dag-node__bg {
+  stroke-width: 1;
+  transition: stroke-width 0.15s;
+}
+.dag-node__bg--pending { fill: var(--bg-surface); stroke: var(--text-muted); }
+.dag-node__bg--assigned { fill: rgba(59, 130, 246, 0.1); stroke: var(--status-info); }
+.dag-node__bg--running { fill: rgba(34, 197, 94, 0.1); stroke: var(--status-success); }
+.dag-node__bg--complete { fill: rgba(99, 102, 241, 0.1); stroke: var(--accent); }
+.dag-node__bg--failed { fill: rgba(239, 68, 68, 0.1); stroke: var(--status-error); }
+.dag-node__bg--cancelled { fill: rgba(239, 68, 68, 0.05); stroke: var(--text-muted); stroke-dasharray: 4 2; }
+.dag-node__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+.dag-node__desc {
+  font-size: 10px;
+  fill: var(--text-secondary);
+}
+.dag-node__status-dot {
+  transition: fill 0.15s;
+}
+
+/* DAG Edges */
+.dag-edge {
+  fill: none;
+  stroke: var(--border-default);
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+.dag-edge--complete {
+  stroke: var(--accent);
+  opacity: 0.4;
+}
+.dag-edge-arrow {
+  fill: var(--border-default);
+  opacity: 0.6;
+}
+.dag-edge-arrow--complete {
+  fill: var(--accent);
+  opacity: 0.4;
+}
+
+/* DAG Empty State */
+.task-board__dag-empty {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Template Dialog */
+.task-board__dialog--template {
+  max-width: 520px;
+}
+.task-board__template-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.task-board__template-item {
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.task-board__template-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+}
+.task-board__template-item-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.task-board__template-item-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.task-board__template-item-count {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Template Preview */
+.task-board__template-preview-desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-3);
+}
+.task-board__template-preview-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.task-board__template-task {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-root);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+.task-board__template-task-id {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.task-board__template-task-desc {
+  color: var(--text-secondary);
+  flex: 1;
+}
+.task-board__template-task-deps {
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  flex-shrink: 0;
+}
+.task-board__template-prefix-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.task-board__template-prefix {
+  background: var(--bg-root) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-sm, 6px) !important;
+  padding: var(--sp-1) var(--sp-3) !important;
+  font-size: 0.8125rem !important;
+  font-family: var(--font-mono);
+  width: 100%;
+  margin-top: 4px;
+}
