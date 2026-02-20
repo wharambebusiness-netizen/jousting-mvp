@@ -1024,6 +1024,11 @@ function connectWS() {
         var metricsPanel = document.getElementById('term-metrics');
         if (metricsPanel && metricsPanel.open) loadCoordMetrics();
         break;
+
+      case 'coord:rate-adjusted':
+        // Update adaptive rate card directly from WS data (no extra fetch)
+        updateAdaptiveCard({ enabled: true, state: msg.data.state, factor: msg.data.factor });
+        break;
     }
   }, {
     trackStatus: true,
@@ -1605,6 +1610,12 @@ function loadCoordMetrics() {
         metricsStateBadge.className = 'term-metrics__badge term-metrics__badge--stopped';
       }
     });
+
+  // Fetch adaptive rate limiter status
+  fetch('/api/coordination/adaptive-rate')
+    .then(function(r) { return r.json(); })
+    .then(function(data) { updateAdaptiveCard(data); })
+    .catch(function() { updateAdaptiveCard(null); });
 }
 
 function updateMetricsCards(data) {
@@ -1636,6 +1647,33 @@ function formatDurationMs(ms) {
   if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
   if (ms < 3600000) return (ms / 60000).toFixed(1) + 'm';
   return (ms / 3600000).toFixed(1) + 'h';
+}
+
+function updateAdaptiveCard(data) {
+  var pctEl = document.getElementById('metric-adaptive-pct');
+  var stateEl = document.getElementById('metric-adaptive-state');
+  var cardEl = document.getElementById('metric-adaptive-card');
+
+  if (!data || !data.enabled) {
+    if (pctEl) pctEl.textContent = '--';
+    if (stateEl) { stateEl.textContent = 'disabled'; stateEl.className = 'term-metrics__adaptive-badge'; }
+    return;
+  }
+
+  var pct = Math.round((data.factor || 1) * 100);
+  if (pctEl) {
+    pctEl.textContent = pct + '%';
+    pctEl.className = 'term-metrics__value';
+    if (pct <= 25) pctEl.className += ' term-metrics__value--danger';
+    else if (pct < 100) pctEl.className += ' term-metrics__value--warn';
+  }
+
+  if (stateEl) {
+    stateEl.textContent = data.state || 'normal';
+    stateEl.className = 'term-metrics__adaptive-badge';
+    if (data.state === 'backing-off') stateEl.className += ' term-metrics__adaptive-badge--backing-off';
+    else if (data.state === 'recovering') stateEl.className += ' term-metrics__adaptive-badge--recovering';
+  }
 }
 
 // Refresh metrics every 10 seconds when panel is open

@@ -11,6 +11,7 @@ import { createWorkAssigner, STRATEGIES } from '../coordination/work-assigner.mj
 import { createRateLimiter } from '../coordination/rate-limiter.mjs';
 import { createCostAggregator, WARNING_THRESHOLD } from '../coordination/cost-aggregator.mjs';
 import { createCoordinator, STATES } from '../coordination/coordinator.mjs';
+import { createAdaptiveLimiter, ADAPTIVE_STATES } from '../coordination/adaptive-limiter.mjs';
 import { createWorktreeManager, WORKTREE_DIR_NAME, BRANCH_PREFIX } from '../coordination/worktree-manager.mjs';
 import { createPersistentQueue } from '../coordination/persistent-queue.mjs';
 import { handleMessage } from '../orchestrator-worker.mjs';
@@ -3126,5 +3127,329 @@ describe('Coordinator updateOptions emits config-updated', () => {
     expect(emitted[0].globalBudgetUsd).toBe(200);
 
     coordinator.stop();
+  });
+});
+
+// ============================================================
+// Phase 11 — Adaptive Rate Limiter
+// ============================================================
+
+describe('AdaptiveLimiter', () => {
+  let rl, adaptive, events;
+
+  beforeEach(() => {
+    events = new EventBus();
+    rl = createRateLimiter({ maxRequestsPerMinute: 60, maxTokensPerMinute: 100000 });
+    adaptive = createAdaptiveLimiter({
+      rateLimiter: rl,
+      events,
+      errorThreshold: 3,
+      windowMs: 60000,
+      backoffFactor: 0.5,
+      maxBackoffLevel: 4,
+      recoveryIntervalMs: 100, // fast for testing
+      recoveryFactor: 1.5,
+    });
+  });
+
+  afterEach(() => {
+    adaptive.destroy();
+  });
+
+  it('should start in normal state', () => {
+    const status = adaptive.getStatus();
+    expect(status.state).toBe('normal');
+    expect(status.backoffLevel).toBe(0);
+    expect(status.errorsInWindow).toBe(0);
+    expect(status.factor).toBe(1);
+    expect(status.baselineRequests).toBe(60);
+    expect(status.baselineTokens).toBe(100000);
+    expect(status.currentRequests).toBe(60);
+    expect(status.currentTokens).toBe(100000);
+  });
+
+  it('should require a rateLimiter', () => {
+    expect(() => createAdaptiveLimiter()).toThrow('requires a rateLimiter');
+  });
+
+  it('should track errors without triggering below threshold', () => {
+    const r1 = adaptive.recordError('w1', 'rate limit');
+    expect(r1.triggered).toBe(false);
+    expect(r1.errorsInWindow).toBe(1);
+    expect(r1.state).toBe('normal');
+
+    const r2 = adaptive.recordError('w2', 'rate limit');
+    expect(r2.triggered).toBe(false);
+    expect(r2.errorsInWindow).toBe(2);
+  });
+
+  it('should trigger backoff at error threshold', () => {
+    adaptive.recordError('w1');
+    adaptive.recordError('w2');
+    const r3 = adaptive.recordError('w3');
+    expect(r3.triggered).toBe(true);
+    expect(r3.backoffLevel).toBe(1);
+    expect(r3.state).toBe('backing-off');
+  });
+
+  it('should reduce rate limiter limits on backoff', () => {
+    adaptive.recordError('w1');
+    adaptive.recordError('w2');
+    adaptive.recordError('w3');
+
+    const rlStatus = rl.getStatus();
+    // 60 * 0.5 = 30
+    expect(rlStatus.maxRequestsPerMinute).toBe(30);
+    // 100000 * 0.5 = 50000
+    expect(rlStatus.maxTokensPerMinute).toBe(50000);
+  });
+
+  it('should emit coord:rate-adjusted on backoff', () => {
+    const emitted = [];
+    events.on('coord:rate-adjusted', (data) => emitted.push(data));
+
+    adaptive.recordError('w1');
+    adaptive.recordError('w2');
+    adaptive.recordError('w3');
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0].state).toBe('backing-off');
+    expect(emitted[0].backoffLevel).toBe(1);
+    expect(emitted[0].currentRequests).toBe(30);
+    expect(emitted[0].currentTokens).toBe(50000);
+    expect(emitted[0].baselineRequests).toBe(60);
+  });
+
+  it('should deepen backoff on repeated error bursts', () => {
+    // First burst → level 1
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    expect(adaptive.getStatus().backoffLevel).toBe(1);
+
+    // Second burst → level 2
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    expect(adaptive.getStatus().backoffLevel).toBe(2);
+
+    // Limits at level 2: 0.5^2 = 0.25 → 15 req, 25000 tok
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBe(15);
+    expect(rlStatus.maxTokensPerMinute).toBe(25000);
+  });
+
+  it('should not exceed max backoff level', () => {
+    for (let level = 0; level < 6; level++) {
+      for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    }
+    expect(adaptive.getStatus().backoffLevel).toBe(4);
+    // 0.5^4 = 0.0625 → 4 req (rounded, min 1), 6250 tok
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBe(4);
+    expect(rlStatus.maxTokensPerMinute).toBe(6250);
+  });
+
+  it('should recover limits over time', async () => {
+    // Trigger backoff
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    expect(adaptive.getStatus().state).toBe('backing-off');
+
+    // Wait for recovery steps (interval is 100ms in test)
+    await new Promise(r => setTimeout(r, 350));
+
+    const status = adaptive.getStatus();
+    // Should be recovering or normal by now
+    expect(['recovering', 'normal']).toContain(status.state);
+    // Limits should be higher than backoff level
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBeGreaterThanOrEqual(30);
+  });
+
+  it('should fully restore limits after recovery', async () => {
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+
+    // Wait long enough for full recovery (need 2 recovery steps at 100ms each + margin)
+    await new Promise(r => setTimeout(r, 800));
+
+    const status = adaptive.getStatus();
+    expect(status.state).toBe('normal');
+    expect(status.backoffLevel).toBe(0);
+
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBe(60);
+    expect(rlStatus.maxTokensPerMinute).toBe(100000);
+  });
+
+  it('should update baseline on updateBaseline', () => {
+    adaptive.updateBaseline({ maxRequestsPerMinute: 120, maxTokensPerMinute: 200000 });
+    const status = adaptive.getStatus();
+    expect(status.baselineRequests).toBe(120);
+    expect(status.baselineTokens).toBe(200000);
+    expect(status.currentRequests).toBe(120);
+    expect(status.currentTokens).toBe(200000);
+  });
+
+  it('should not update active limits on baseline change during backoff', () => {
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    const backoffRequests = rl.getStatus().maxRequestsPerMinute;
+
+    adaptive.updateBaseline({ maxRequestsPerMinute: 120 });
+    expect(adaptive.getStatus().baselineRequests).toBe(120);
+    // Active limits should still be at backoff level, not jump to new baseline
+    expect(adaptive.getStatus().currentRequests).toBe(backoffRequests);
+  });
+
+  it('should reset to normal state', () => {
+    for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    expect(adaptive.getStatus().state).toBe('backing-off');
+
+    adaptive.reset();
+    expect(adaptive.getStatus().state).toBe('normal');
+    expect(adaptive.getStatus().backoffLevel).toBe(0);
+    expect(adaptive.getStatus().errorsInWindow).toBe(0);
+
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBe(60);
+    expect(rlStatus.maxTokensPerMinute).toBe(100000);
+  });
+
+  it('should expose ADAPTIVE_STATES', () => {
+    expect(ADAPTIVE_STATES.NORMAL).toBe('normal');
+    expect(ADAPTIVE_STATES.BACKING_OFF).toBe('backing-off');
+    expect(ADAPTIVE_STATES.RECOVERING).toBe('recovering');
+  });
+
+  it('should have min floor for requests (never 0)', () => {
+    // Drive to max backoff then try one more
+    for (let level = 0; level < 5; level++) {
+      for (let i = 0; i < 3; i++) adaptive.recordError('w1');
+    }
+    const rlStatus = rl.getStatus();
+    expect(rlStatus.maxRequestsPerMinute).toBeGreaterThanOrEqual(1);
+    expect(rlStatus.maxTokensPerMinute).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('should prune old errors outside window', () => {
+    let clock = 0;
+    const timed = createAdaptiveLimiter({
+      rateLimiter: rl,
+      errorThreshold: 3,
+      windowMs: 1000,
+      now: () => clock,
+    });
+
+    timed.recordError('w1');
+    timed.recordError('w1');
+    clock = 2000; // Advance past window
+    const status = timed.getStatus();
+    expect(status.errorsInWindow).toBe(0);
+    timed.destroy();
+  });
+});
+
+// ============================================================
+// Phase 11 — Coordinator + Adaptive Rate Limiter Integration
+// ============================================================
+
+describe('Coordinator with Adaptive Rate Limiter', () => {
+  it('should create adaptive limiter by default', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({ events, pool });
+
+    expect(coordinator.adaptiveLimiter).toBeTruthy();
+    const status = coordinator.adaptiveLimiter.getStatus();
+    expect(status.state).toBe('normal');
+
+    coordinator.stop();
+  });
+
+  it('should not create adaptive limiter when disabled', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({
+      events, pool,
+      options: { enableAdaptiveRate: false },
+    });
+
+    expect(coordinator.adaptiveLimiter).toBeNull();
+    coordinator.stop();
+  });
+
+  it('should handle coord:rate-error by recording in adaptive limiter', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({
+      events, pool,
+      options: { adaptiveErrorThreshold: 2 },
+    });
+
+    coordinator.start();
+
+    // Send rate errors
+    events.emit('coord:rate-error', { workerId: 'w1', detail: '429 too many' });
+    expect(coordinator.adaptiveLimiter.getStatus().errorsInWindow).toBe(1);
+
+    events.emit('coord:rate-error', { workerId: 'w1', detail: '429 too many' });
+    expect(coordinator.adaptiveLimiter.getStatus().state).toBe('backing-off');
+
+    coordinator.stop();
+  });
+
+  it('should update adaptive baseline when updateOptions changes rate limits', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({ events, pool });
+
+    coordinator.start();
+    coordinator.updateOptions({ maxRequestsPerMinute: 120 });
+
+    const alStatus = coordinator.adaptiveLimiter.getStatus();
+    expect(alStatus.baselineRequests).toBe(120);
+
+    coordinator.stop();
+  });
+
+  it('should emit coord:rate-adjusted through event bus', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({
+      events, pool,
+      options: { adaptiveErrorThreshold: 2 },
+    });
+
+    coordinator.start();
+
+    const emitted = [];
+    events.on('coord:rate-adjusted', (data) => emitted.push(data));
+
+    events.emit('coord:rate-error', { workerId: 'w1' });
+    events.emit('coord:rate-error', { workerId: 'w1' });
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0].state).toBe('backing-off');
+
+    coordinator.stop();
+  });
+
+  it('should ignore coord:rate-error with no workerId', () => {
+    const events = new EventBus();
+    const pool = mockPool([{ id: 'w1' }]);
+    const coordinator = createCoordinator({ events, pool });
+
+    coordinator.start();
+    events.emit('coord:rate-error', { detail: 'no worker' });
+    expect(coordinator.adaptiveLimiter.getStatus().errorsInWindow).toBe(0);
+
+    coordinator.stop();
+  });
+});
+
+// ============================================================
+// Phase 11 — WebSocket Bridged Events includes coord:rate-adjusted
+// ============================================================
+
+describe('WebSocket Bridged Events (Phase 11)', () => {
+  it('should include coord:rate-adjusted in bridged events list', async () => {
+    const { readFileSync } = await import('fs');
+    const wsSource = readFileSync(join(import.meta.dirname, '..', 'ws.mjs'), 'utf-8');
+    expect(wsSource).toContain("'coord:rate-adjusted'");
   });
 });

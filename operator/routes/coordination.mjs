@@ -19,6 +19,7 @@
 //   GET  /api/coordination/rate-limit    - Rate limiter status
 //   GET  /api/coordination/costs         - Cost aggregation status
 //   GET  /api/coordination/metrics       - Task throughput & metrics
+//   GET  /api/coordination/adaptive-rate - Adaptive rate limiter status
 //   POST /api/coordination/config        - Hot-reconfigure coordinator
 // ============================================================
 
@@ -139,6 +140,15 @@ export function createCoordinationRoutes(ctx) {
 
   router.get('/coordination/metrics', (_req, res) => {
     res.json(coordinator.getMetrics());
+  });
+
+  // ── Adaptive Rate Limiter ──────────────────────────────────
+
+  router.get('/coordination/adaptive-rate', (_req, res) => {
+    if (!coordinator.adaptiveLimiter) {
+      return res.json({ enabled: false });
+    }
+    res.json({ enabled: true, ...coordinator.adaptiveLimiter.getStatus() });
   });
 
   // ── Hot-Reconfiguration ──────────────────────────────────

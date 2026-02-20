@@ -19,6 +19,7 @@ import { createWorkAssigner } from './work-assigner.mjs';
 import { createRateLimiter } from './rate-limiter.mjs';
 import { createCostAggregator } from './cost-aggregator.mjs';
 import { createWorktreeManager } from './worktree-manager.mjs';
+import { createAdaptiveLimiter } from './adaptive-limiter.mjs';
 
 // ── Lifecycle States ────────────────────────────────────────
 
@@ -53,6 +54,12 @@ const STATES = new Set(['init', 'running', 'draining', 'stopped']);
  * @param {boolean} [ctx.options.budgetAutoDrain=true] - Auto-drain on global budget exceeded
  * @param {Function} [ctx.options.workerConfigFactory] - Factory fn(workerId) returning config for auto-spawned workers
  * @param {string} [ctx.options.persistPath] - Path to persist task queue on disk (survives restarts)
+ * @param {boolean} [ctx.options.enableAdaptiveRate=true] - Enable adaptive rate limiting (auto-reduce on 429s)
+ * @param {number} [ctx.options.adaptiveErrorThreshold=3] - 429 errors in window before backoff
+ * @param {number} [ctx.options.adaptiveWindowMs=60000] - Sliding window for 429 error counting
+ * @param {number} [ctx.options.adaptiveBackoffFactor=0.5] - Multiply limits by this on each backoff level
+ * @param {number} [ctx.options.adaptiveMaxBackoffLevel=4] - Maximum backoff depth
+ * @param {number} [ctx.options.adaptiveRecoveryIntervalMs=30000] - Interval between recovery steps
  * @param {Function} [ctx.log] - Logger
  * @returns {object} Coordinator methods
  */
@@ -99,6 +106,22 @@ export function createCoordinator(ctx) {
   const worktreeManager = ctx.worktreeManager || (
     opts.enableWorktrees && ctx.projectDir
       ? createWorktreeManager({ projectDir: ctx.projectDir, events, log })
+      : null
+  );
+
+  const enableAdaptiveRate = opts.enableAdaptiveRate !== false;
+  const adaptiveLimiter = ctx.adaptiveLimiter || (
+    enableAdaptiveRate
+      ? createAdaptiveLimiter({
+          rateLimiter,
+          events,
+          errorThreshold: opts.adaptiveErrorThreshold,
+          windowMs: opts.adaptiveWindowMs,
+          backoffFactor: opts.adaptiveBackoffFactor,
+          maxBackoffLevel: opts.adaptiveMaxBackoffLevel,
+          recoveryIntervalMs: opts.adaptiveRecoveryIntervalMs,
+          log,
+        })
       : null
   );
 
@@ -338,6 +361,21 @@ export function createCoordinator(ctx) {
   };
 
   /**
+   * Handle coord:rate-error — worker reports a 429 rate limit error.
+   * Feeds into adaptive limiter for automatic backoff.
+   */
+  handlers['coord:rate-error'] = (data) => {
+    const { workerId, detail } = data;
+    if (!workerId) return;
+
+    if (adaptiveLimiter) {
+      adaptiveLimiter.recordError(workerId, detail);
+    } else {
+      log(`[coord] 429 from ${workerId} (adaptive rate limiting disabled)`);
+    }
+  };
+
+  /**
    * Handle session:complete — auto-bridge session cost data to cost aggregator.
    * Workers emit session:complete via IPCEventBus when a session finishes.
    */
@@ -458,6 +496,7 @@ export function createCoordinator(ctx) {
     stopRateLimiterTick();
     stopAutoScaleChecker();
     clearDrainTimeout();
+    if (adaptiveLimiter) adaptiveLimiter.destroy();
 
     // Final save to disk
     if (taskQueue.isPersistent && taskQueue.save) {
@@ -639,6 +678,13 @@ export function createCoordinator(ctx) {
         maxRequestsPerMinute: updates.maxRequestsPerMinute,
         maxTokensPerMinute: updates.maxTokensPerMinute,
       });
+      // Also update adaptive limiter baseline so recovery targets the new limits
+      if (adaptiveLimiter) {
+        adaptiveLimiter.updateBaseline({
+          maxRequestsPerMinute: updates.maxRequestsPerMinute,
+          maxTokensPerMinute: updates.maxTokensPerMinute,
+        });
+      }
     }
 
     // Budget updates
@@ -689,6 +735,7 @@ export function createCoordinator(ctx) {
     rateLimiter,
     costAggregator,
     worktreeManager,
+    adaptiveLimiter,
 
     // Status + Metrics
     getStatus,

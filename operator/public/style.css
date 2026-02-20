@@ -2780,3 +2780,28 @@ details[open] > .tree-summary .tree-icon--dir {
   transition: width 0.3s ease;
   width: 0%;
 }
+.term-metrics__adaptive-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(16,185,129,0.15);
+  color: #10b981;
+}
+.term-metrics__adaptive-badge--backing-off {
+  background: rgba(244,63,94,0.15);
+  color: #f43f5e;
+}
+.term-metrics__adaptive-badge--recovering {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+}
+.term-metrics__value--warn {
+  color: #f59e0b;
+}
+.term-metrics__value--danger {
+  color: #f43f5e;
+}

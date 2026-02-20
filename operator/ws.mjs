@@ -170,6 +170,7 @@ export function createWebSocketHandler({ server, events }) {
     'coord:scale-up', 'coord:drain-timeout', 'coord:queue-loaded',
     'coord:worktree-created', 'coord:worktree-removed', 'coord:worktree-merged',
     'coord:conflicts-detected', 'coord:config-updated',
+    'coord:rate-adjusted',
   ];
 
   const bridgeHandlers = [];
