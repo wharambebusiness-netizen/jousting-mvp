@@ -59,7 +59,7 @@ function createWS(subscriptions, onMessage, opts) {
     if (!opts.trackStatus) return;
     var dot = document.getElementById('ws-dot');
     if (!dot) return;
-    dot.className = 'ws-dot ws-dot--' + state;
+    dot.className = (dot.className.includes('sidebar-nav__ws-dot') ? 'sidebar-nav__ws-dot ' : '') + 'ws-dot ws-dot--' + state;
     dot.title = 'WebSocket: ' + state;
   }
 
@@ -241,6 +241,22 @@ function loadProjects() {
       select.style.display = 'none';
     });
 }
+
+// ── Sidebar Nav Active Link ─────────────────────────────────
+function updateSidebarActiveLink() {
+  var path = window.location.pathname;
+  var links = document.querySelectorAll('.sidebar-nav__link');
+  for (var i = 0; i < links.length; i++) {
+    var linkPage = links[i].getAttribute('data-page');
+    var isActive = (linkPage === path) || (linkPage === '/' && path === '/index.html');
+    links[i].classList.toggle('sidebar-nav__link--active', isActive);
+  }
+}
+
+// Update active link after HTMX navigation
+document.body.addEventListener('htmx:afterSettle', function() {
+  updateSidebarActiveLink();
+});
 
 // Inject project filter into all HTMX GET requests
 document.body.addEventListener('htmx:configRequest', function(evt) {

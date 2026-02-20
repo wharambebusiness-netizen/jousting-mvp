@@ -11,10 +11,10 @@
 // ── Color Themes ─────────────────────────────────────────────
 var THEMES = [
   {
-    id: 1, name: 'Indigo', accent: '#6366f1', bg: '#0d0d14',
+    id: 1, name: 'Indigo', accent: '#6366f1', bg: '#020204', glow: 'rgba(99,102,241,0.25)',
     xterm: {
-      background: '#0d0d14', foreground: '#e2e8f0', cursor: '#6366f1',
-      cursorAccent: '#0d0d14', selectionBackground: 'rgba(99,102,241,0.3)',
+      background: '#020204', foreground: '#e4e4e8', cursor: '#6366f1',
+      cursorAccent: '#020204', selectionBackground: 'rgba(99,102,241,0.3)',
       black: '#1e1e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#4a4a5a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -23,10 +23,10 @@ var THEMES = [
     }
   },
   {
-    id: 2, name: 'Emerald', accent: '#10b981', bg: '#0a0f0d',
+    id: 2, name: 'Emerald', accent: '#10b981', bg: '#010302', glow: 'rgba(16,185,129,0.25)',
     xterm: {
-      background: '#0a0f0d', foreground: '#e2e8f0', cursor: '#10b981',
-      cursorAccent: '#0a0f0d', selectionBackground: 'rgba(16,185,129,0.3)',
+      background: '#010302', foreground: '#e4e4e8', cursor: '#10b981',
+      cursorAccent: '#010302', selectionBackground: 'rgba(16,185,129,0.3)',
       black: '#1e2e1e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#4a5a4a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -35,10 +35,10 @@ var THEMES = [
     }
   },
   {
-    id: 3, name: 'Amber', accent: '#f59e0b', bg: '#0f0e0a',
+    id: 3, name: 'Amber', accent: '#f59e0b', bg: '#030201', glow: 'rgba(245,158,11,0.25)',
     xterm: {
-      background: '#0f0e0a', foreground: '#e2e8f0', cursor: '#f59e0b',
-      cursorAccent: '#0f0e0a', selectionBackground: 'rgba(245,158,11,0.3)',
+      background: '#030201', foreground: '#e4e4e8', cursor: '#f59e0b',
+      cursorAccent: '#030201', selectionBackground: 'rgba(245,158,11,0.3)',
       black: '#2e2e1e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#5a5a4a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -47,10 +47,10 @@ var THEMES = [
     }
   },
   {
-    id: 4, name: 'Rose', accent: '#f43f5e', bg: '#0f0a0c',
+    id: 4, name: 'Rose', accent: '#f43f5e', bg: '#030102', glow: 'rgba(244,63,94,0.25)',
     xterm: {
-      background: '#0f0a0c', foreground: '#e2e8f0', cursor: '#f43f5e',
-      cursorAccent: '#0f0a0c', selectionBackground: 'rgba(244,63,94,0.3)',
+      background: '#030102', foreground: '#e4e4e8', cursor: '#f43f5e',
+      cursorAccent: '#030102', selectionBackground: 'rgba(244,63,94,0.3)',
       black: '#2e1e1e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#5a4a4a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -59,10 +59,10 @@ var THEMES = [
     }
   },
   {
-    id: 5, name: 'Violet', accent: '#a78bfa', bg: '#0e0b14',
+    id: 5, name: 'Violet', accent: '#a78bfa', bg: '#020105', glow: 'rgba(167,139,250,0.25)',
     xterm: {
-      background: '#0e0b14', foreground: '#e2e8f0', cursor: '#a78bfa',
-      cursorAccent: '#0e0b14', selectionBackground: 'rgba(167,139,250,0.3)',
+      background: '#020105', foreground: '#e4e4e8', cursor: '#a78bfa',
+      cursorAccent: '#020105', selectionBackground: 'rgba(167,139,250,0.3)',
       black: '#1e1e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#4a4a5a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -71,10 +71,10 @@ var THEMES = [
     }
   },
   {
-    id: 6, name: 'Cyan', accent: '#22d3ee', bg: '#0a0e10',
+    id: 6, name: 'Cyan', accent: '#22d3ee', bg: '#010203', glow: 'rgba(34,211,238,0.25)',
     xterm: {
-      background: '#0a0e10', foreground: '#e2e8f0', cursor: '#22d3ee',
-      cursorAccent: '#0a0e10', selectionBackground: 'rgba(34,211,238,0.3)',
+      background: '#010203', foreground: '#e4e4e8', cursor: '#22d3ee',
+      cursorAccent: '#010203', selectionBackground: 'rgba(34,211,238,0.3)',
       black: '#1e2e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#4a5a5a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -83,10 +83,10 @@ var THEMES = [
     }
   },
   {
-    id: 7, name: 'Pink', accent: '#ec4899', bg: '#100a0e',
+    id: 7, name: 'Pink', accent: '#ec4899', bg: '#030103', glow: 'rgba(236,72,153,0.25)',
     xterm: {
-      background: '#100a0e', foreground: '#e2e8f0', cursor: '#ec4899',
-      cursorAccent: '#100a0e', selectionBackground: 'rgba(236,72,153,0.3)',
+      background: '#030103', foreground: '#e4e4e8', cursor: '#ec4899',
+      cursorAccent: '#030103', selectionBackground: 'rgba(236,72,153,0.3)',
       black: '#2e1e2e', red: '#f43f5e', green: '#10b981', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#ec4899', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#5a4a5a', brightRed: '#fb7185', brightGreen: '#34d399',
@@ -95,10 +95,10 @@ var THEMES = [
     }
   },
   {
-    id: 8, name: 'Lime', accent: '#84cc16', bg: '#0b0f0a',
+    id: 8, name: 'Lime', accent: '#84cc16', bg: '#010301', glow: 'rgba(132,204,22,0.25)',
     xterm: {
-      background: '#0b0f0a', foreground: '#e2e8f0', cursor: '#84cc16',
-      cursorAccent: '#0b0f0a', selectionBackground: 'rgba(132,204,22,0.3)',
+      background: '#010301', foreground: '#e4e4e8', cursor: '#84cc16',
+      cursorAccent: '#010301', selectionBackground: 'rgba(132,204,22,0.3)',
       black: '#1e2e1e', red: '#f43f5e', green: '#84cc16', yellow: '#f59e0b',
       blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e8f0',
       brightBlack: '#4a5a4a', brightRed: '#fb7185', brightGreen: '#a3e635',
@@ -114,6 +114,7 @@ var THEMES = [
 var instances = new Map();
 var activeTabId = null;
 var viewMode = localStorage.getItem('term-view') || 'tabs'; // 'tabs' | 'grid'
+var gridLayout = localStorage.getItem('term-layout') || 'quad'; // 'single' | 'split-h' | 'split-v' | 'triple' | 'quad'
 var themeIndex = 0;
 
 // ── DOM refs ─────────────────────────────────────────────────
@@ -271,6 +272,16 @@ var sidebarFilterTimer = null;
       if (activeTabId) toggleAutoHandoff(activeTabId);
       return;
     }
+
+    // 1-5: quick layout switch (no modifiers, not in form fields)
+    if (!e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey) {
+      var layouts = { '1': 'single', '2': 'split-h', '3': 'split-v', '4': 'triple', '5': 'quad' };
+      if (layouts[e.key]) {
+        e.preventDefault();
+        setLayout(layouts[e.key]);
+        return;
+      }
+    }
   });
 })();
 
@@ -400,6 +411,7 @@ function addClaudeTerminalInstance(id, state) {
   tab.setAttribute('role', 'tab');
   tab.setAttribute('aria-selected', 'false');
   tab.style.setProperty('--tab-accent', theme.accent);
+  tab.style.setProperty('--tab-glow', theme.glow);
   tab.dataset.instanceId = id;
   var isRunning = state && state.status === 'running';
   tab.innerHTML =
@@ -415,6 +427,7 @@ function addClaudeTerminalInstance(id, state) {
   panel.dataset.instanceId = id;
   panel.style.setProperty('--panel-accent', theme.accent);
   panel.style.setProperty('--panel-bg', theme.bg);
+  panel.style.setProperty('--panel-glow', theme.glow);
 
   // Status bar (Claude-specific: permission toggle, auto-handoff, kill, maximize)
   var permLabel = state && state.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
@@ -832,6 +845,7 @@ function addTerminalInstance(id, state) {
   tab.setAttribute('role', 'tab');
   tab.setAttribute('aria-selected', 'false');
   tab.style.setProperty('--tab-accent', theme.accent);
+  tab.style.setProperty('--tab-glow', theme.glow);
   tab.dataset.instanceId = id;
   tab.innerHTML =
     '<span class="term-tab__dot' + (state && state.running ? ' term-tab__dot--running' : ' term-tab__dot--stopped') + '"></span>' +
@@ -846,6 +860,7 @@ function addTerminalInstance(id, state) {
   panel.dataset.instanceId = id;
   panel.style.setProperty('--panel-accent', theme.accent);
   panel.style.setProperty('--panel-bg', theme.bg);
+  panel.style.setProperty('--panel-glow', theme.glow);
 
   // Status bar
   var statusBar = document.createElement('div');
@@ -1203,6 +1218,7 @@ function addInstance() {
 function toggleTerminalView() {
   viewMode = viewMode === 'tabs' ? 'grid' : 'tabs';
   localStorage.setItem('term-view', viewMode);
+  // Layout selector is only visible in grid mode (CSS handles showing/hiding)
   applyViewMode();
 }
 
@@ -1211,6 +1227,19 @@ function applyViewMode() {
   panels.classList.toggle('term-panels--grid', isGrid);
   panels.classList.toggle('term-panels--tabs', !isGrid);
   viewToggle.textContent = isGrid ? '\u25A3' : '\u25A6\u25A6';
+
+  // Apply grid layout attribute
+  if (isGrid) {
+    panels.setAttribute('data-layout', gridLayout);
+  } else {
+    panels.removeAttribute('data-layout');
+  }
+
+  // Update layout selector active state
+  var layoutBtns = document.querySelectorAll('.layout-selector__btn');
+  for (var i = 0; i < layoutBtns.length; i++) {
+    layoutBtns[i].classList.toggle('layout-selector__btn--active', layoutBtns[i].getAttribute('data-layout') === gridLayout);
+  }
 
   // Clear maximize state when switching to tabs
   if (!isGrid && maximizedId) {
@@ -1248,6 +1277,17 @@ function applyViewMode() {
       try { inst.fitAddon.fit(); } catch (e) { /* ignore */ }
     });
   }, 50);
+}
+
+function setLayout(layout) {
+  gridLayout = layout;
+  localStorage.setItem('term-layout', layout);
+  // Auto-switch to grid mode if not already
+  if (viewMode !== 'grid') {
+    viewMode = 'grid';
+    localStorage.setItem('term-view', viewMode);
+  }
+  applyViewMode();
 }
 
 // ── WebSocket event routing ──────────────────────────────────
@@ -2725,6 +2765,7 @@ function setupDropTargets() {
 
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
+window.setLayout = setLayout;
 window.addInstance = addInstance;
 window.removeInstance = removeInstance;
 window.startInstance = startInstance;

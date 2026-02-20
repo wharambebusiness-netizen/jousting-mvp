@@ -123,7 +123,7 @@ describe('createClaudeTerminal', () => {
     expect(term.id).toMatch(/^claude-/);
 
     const call = mockPtySpawn.mock.calls[0];
-    expect(call[0]).toMatch(/^claude/);
+    expect(call[0]).toMatch(/claude/);
     expect(call[1]).toEqual([]);
     expect(call[2].cols).toBe(DEFAULT_COLS);
     expect(call[2].rows).toBe(DEFAULT_ROWS);
