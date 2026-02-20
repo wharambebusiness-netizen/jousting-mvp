@@ -2170,3 +2170,149 @@ describe('Terminals Page Phase 11 Elements', () => {
     expect(text).toContain('.term-metrics__value--danger');
   });
 });
+
+// ── Phase 12: Task Board ──────────────────────────────────────
+
+describe('Task Board Page (Phase 12)', () => {
+  let appInstance, baseUrl, events;
+
+  beforeAll(async () => {
+    setupTestDir();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await appInstance.close();
+    teardownTestDir();
+  });
+
+  it('GET /taskboard serves task board HTML page', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('Task Board');
+    expect(text).toContain('task-board');
+  });
+
+  it('task board has Kanban columns for all statuses', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('col-pending');
+    expect(text).toContain('col-assigned');
+    expect(text).toContain('col-running');
+    expect(text).toContain('col-complete');
+    expect(text).toContain('col-failed');
+  });
+
+  it('task board has add task dialog', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('add-task-dialog');
+    expect(text).toContain('add-task-form');
+    expect(text).toContain('add-task-btn');
+  });
+
+  it('task board has progress bar', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('board-progress');
+    expect(text).toContain('progress-fill');
+  });
+
+  it('task board has coordinator status badge', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('board-status');
+  });
+
+  it('task board includes taskboard.js script', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('taskboard.js');
+  });
+
+  it('taskboard.js serves and contains key functions', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('loadTasks');
+    expect(text).toContain('renderBoard');
+    expect(text).toContain('renderCard');
+    expect(text).toContain('handleDrop');
+    expect(text).toContain('createWS');
+  });
+
+  it('taskboard.js references coordination API endpoints', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('/api/coordination/tasks');
+    expect(text).toContain('/api/coordination/status');
+    expect(text).toContain('/cancel');
+    expect(text).toContain('/retry');
+  });
+
+  it('taskboard.js handles WebSocket coord events', async () => {
+    const res = await fetch(`${baseUrl}/taskboard.js`);
+    const text = await res.text();
+    expect(text).toContain('coord:assigned');
+    expect(text).toContain('coord:task-complete');
+    expect(text).toContain('coord:task-failed');
+    expect(text).toContain('coord:all-complete');
+  });
+
+  it('style.css includes task board styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-board');
+    expect(text).toContain('.task-board__column');
+    expect(text).toContain('.task-card');
+    expect(text).toContain('.task-card__priority');
+    expect(text).toContain('.task-board__dialog');
+    expect(text).toContain('.task-board__progress');
+  });
+
+  it('style.css has task card action and status styles', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-card__action--cancel');
+    expect(text).toContain('.task-card__action--retry');
+    expect(text).toContain('.task-card--cancelled');
+    expect(text).toContain('.task-card--dragging');
+    expect(text).toContain('.task-board__cards--drop-target');
+  });
+
+  it('all existing pages have Tasks nav link', async () => {
+    const pages = ['/', '/analytics', '/orchestrator', '/terminals', '/settings'];
+    for (const page of pages) {
+      const res = await fetch(`${baseUrl}${page}`);
+      const text = await res.text();
+      expect(text).toContain('href="/taskboard"');
+      expect(text).toContain('>Tasks<');
+    }
+  });
+
+  it('task board column headers have status dots', async () => {
+    const res = await fetch(`${baseUrl}/taskboard`);
+    const text = await res.text();
+    expect(text).toContain('task-board__column-dot--pending');
+    expect(text).toContain('task-board__column-dot--assigned');
+    expect(text).toContain('task-board__column-dot--running');
+    expect(text).toContain('task-board__column-dot--complete');
+    expect(text).toContain('task-board__column-dot--failed');
+  });
+
+  it('style.css has priority badge variants', async () => {
+    const res = await fetch(`${baseUrl}/style.css`);
+    const text = await res.text();
+    expect(text).toContain('.task-card__priority--high');
+    expect(text).toContain('.task-card__priority--med');
+    expect(text).toContain('.task-card__priority--low');
+  });
+});

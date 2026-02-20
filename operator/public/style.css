@@ -2805,3 +2805,364 @@ details[open] > .tree-summary .tree-icon--dir {
 .term-metrics__value--danger {
   color: #f43f5e;
 }
+
+/* ── 47. Task Board (Phase 12) ──────────────────────────── */
+
+.task-board {
+  display: flex;
+  gap: var(--sp-3);
+  overflow-x: auto;
+  padding-bottom: var(--sp-3);
+  min-height: 400px;
+}
+.task-board__column {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+}
+.task-board__column-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px) var(--radius-sm, 6px) 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.task-board__column-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.task-board__column-dot--pending {
+  background: var(--text-muted);
+}
+.task-board__column-dot--assigned {
+  background: var(--status-info);
+}
+.task-board__column-dot--running {
+  background: var(--status-success);
+  box-shadow: 0 0 4px var(--status-success);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+.task-board__column-dot--complete {
+  background: var(--accent);
+}
+.task-board__column-dot--failed {
+  background: var(--status-error);
+}
+.task-board__column-title {
+  flex: 1;
+}
+.task-board__column-count {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.task-board__cards {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm, 6px) var(--radius-sm, 6px);
+  min-height: 80px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.task-board__cards--drop-target {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+.task-board__col-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: var(--sp-4) 0;
+}
+
+/* Task Card */
+.task-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: grab;
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.task-card:hover {
+  border-color: var(--border-default);
+}
+.task-card--dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.task-card--cancelled {
+  opacity: 0.5;
+}
+.task-card--cancelled .task-card__id {
+  text-decoration: line-through;
+}
+.task-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: 2px;
+}
+.task-card__id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-card__priority {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.task-card__priority--high {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+}
+.task-card__priority--med {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.task-card__priority--low {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+.task-card__actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.task-card__action {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.task-card:hover .task-card__action {
+  opacity: 0.7;
+}
+.task-card__action:hover {
+  opacity: 1 !important;
+}
+.task-card__action--cancel:hover {
+  color: var(--status-error);
+}
+.task-card__action--retry:hover {
+  color: var(--status-success);
+}
+.task-card__desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.task-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin-top: 4px;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+.task-card__worker {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.task-card__category {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.task-card__deps {
+  color: var(--text-muted);
+}
+.task-card__time {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.task-card__error {
+  margin-top: 4px;
+  font-size: 0.625rem;
+  color: var(--status-error);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Board Progress Bar */
+.task-board__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.task-board__progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.task-board__progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s var(--ease-out);
+}
+.task-board__progress-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Board Status Badge */
+.task-board__status {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+}
+.task-board__status--running {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.task-board__status--draining {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.task-board__status--init {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+/* Board Empty State */
+.task-board__empty {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--text-muted);
+}
+.task-board__empty p {
+  margin-bottom: var(--sp-2);
+}
+
+/* Add Task Dialog */
+.task-board__dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-primary);
+  max-width: 480px;
+  width: 90vw;
+  padding: 0;
+}
+.task-board__dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+.task-board__dialog article {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.task-board__dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.task-board__dialog header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.task-board__dialog-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.task-board__dialog-close:hover {
+  color: var(--text-primary);
+}
+.task-board__dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.task-board__dialog label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.task-board__dialog input[type="text"],
+.task-board__dialog select {
+  background: var(--bg-root);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.8125rem;
+  width: 100%;
+}
+.task-board__dialog input[type="text"]:focus,
+.task-board__dialog select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.task-board__dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* Page header actions (shared utility) */
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}

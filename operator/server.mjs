@@ -217,6 +217,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'terminals.html'));
   });
 
+  // Task board page
+  app.get('/taskboard', (_req, res) => {
+    res.sendFile(join(publicDir, 'taskboard.html'));
+  });
+
   // Static files (CSS, index.html for /)
   app.use(express.static(publicDir));
 
