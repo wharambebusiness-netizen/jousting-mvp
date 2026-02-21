@@ -8,101 +8,134 @@
 
 /* global Terminal, FitAddon, SearchAddon, createWS, showToast */
 
+// ── Dynamic xterm.js Loader ─────────────────────────────────
+// When navigating via HTMX boost, <head> scripts may not reload.
+// Ensure xterm.js and addons are available before init.
+var _xtermReady = (typeof Terminal !== 'undefined');
+function ensureXtermLoaded(callback) {
+  if (typeof Terminal !== 'undefined') { callback(); return; }
+  // Load CSS if missing
+  if (!document.querySelector('link[href*="xterm"]')) {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css';
+    document.head.appendChild(link);
+  }
+  // Load scripts sequentially (each depends on prior)
+  var scripts = [
+    'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js',
+    'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js',
+    'https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js',
+  ];
+  var idx = 0;
+  function loadNext() {
+    if (idx >= scripts.length) { _xtermReady = true; callback(); return; }
+    // Skip if already loaded
+    if (document.querySelector('script[src="' + scripts[idx] + '"]')) { idx++; loadNext(); return; }
+    var s = document.createElement('script');
+    s.src = scripts[idx];
+    s.onload = function() { idx++; loadNext(); };
+    s.onerror = function() { idx++; loadNext(); }; // best-effort
+    document.head.appendChild(s);
+  }
+  loadNext();
+}
+
 // ── Color Themes ─────────────────────────────────────────────
 var THEMES = [
   {
-    id: 1, name: 'Unit-01', accent: '#7C3AED', bg: '#030008', glow: 'rgba(124,58,237,0.35)',
+    id: 1, name: 'Cobalt', accent: '#3b82f6', bg: '#0a0c14', glow: 'rgba(59,130,246,0.25)',
     xterm: {
-      background: '#030008', foreground: '#e8e0f0', cursor: '#7C3AED',
-      cursorAccent: '#030008', selectionBackground: 'rgba(124,58,237,0.3)',
-      black: '#1a1025', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#5c4d6e', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#0a0c14', foreground: '#e4e4e7', cursor: '#3b82f6',
+      cursorAccent: '#0a0c14', selectionBackground: 'rgba(59,130,246,0.3)',
+      black: '#18181b', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#52525b', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 2, name: 'Neon', accent: '#39FF14', bg: '#000803', glow: 'rgba(57,255,20,0.30)',
+    id: 2, name: 'Emerald', accent: '#10b981', bg: '#0a110e', glow: 'rgba(16,185,129,0.25)',
     xterm: {
-      background: '#000803', foreground: '#e8e0f0', cursor: '#39FF14',
-      cursorAccent: '#000803', selectionBackground: 'rgba(57,255,20,0.25)',
-      black: '#0a1a0a', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#3d5c3d', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#0a110e', foreground: '#e4e4e7', cursor: '#10b981',
+      cursorAccent: '#0a110e', selectionBackground: 'rgba(16,185,129,0.25)',
+      black: '#14201a', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#4a5c52', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 3, name: 'Alert', accent: '#FF6B00', bg: '#080400', glow: 'rgba(255,107,0,0.30)',
+    id: 3, name: 'Amber', accent: '#f59e0b', bg: '#110f0a', glow: 'rgba(245,158,11,0.25)',
     xterm: {
-      background: '#080400', foreground: '#e8e0f0', cursor: '#FF6B00',
-      cursorAccent: '#080400', selectionBackground: 'rgba(255,107,0,0.25)',
-      black: '#1a1508', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#5c5030', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#110f0a', foreground: '#e4e4e7', cursor: '#f59e0b',
+      cursorAccent: '#110f0a', selectionBackground: 'rgba(245,158,11,0.25)',
+      black: '#1e1a12', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#5c5540', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 4, name: 'Critical', accent: '#DC2626', bg: '#080003', glow: 'rgba(220,38,38,0.30)',
+    id: 4, name: 'Rose', accent: '#ef4444', bg: '#110a0a', glow: 'rgba(239,68,68,0.25)',
     xterm: {
-      background: '#080003', foreground: '#e8e0f0', cursor: '#DC2626',
-      cursorAccent: '#080003', selectionBackground: 'rgba(220,38,38,0.25)',
-      black: '#1a0a0a', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#5c3030', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#110a0a', foreground: '#e4e4e7', cursor: '#ef4444',
+      cursorAccent: '#110a0a', selectionBackground: 'rgba(239,68,68,0.25)',
+      black: '#1e1414', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#5c4040', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 5, name: 'Unit-02', accent: '#A78BFA', bg: '#050010', glow: 'rgba(167,139,250,0.30)',
+    id: 5, name: 'Violet', accent: '#a78bfa', bg: '#0e0a14', glow: 'rgba(167,139,250,0.25)',
     xterm: {
-      background: '#050010', foreground: '#e8e0f0', cursor: '#A78BFA',
-      cursorAccent: '#050010', selectionBackground: 'rgba(167,139,250,0.25)',
-      black: '#120a1a', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#5c4d6e', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#0e0a14', foreground: '#e4e4e7', cursor: '#a78bfa',
+      cursorAccent: '#0e0a14', selectionBackground: 'rgba(167,139,250,0.25)',
+      black: '#1a1520', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#5c5068', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 6, name: 'LCL', accent: '#22D3EE', bg: '#000508', glow: 'rgba(34,211,238,0.30)',
+    id: 6, name: 'Cyan', accent: '#22d3ee', bg: '#0a1012', glow: 'rgba(34,211,238,0.25)',
     xterm: {
-      background: '#000508', foreground: '#e8e0f0', cursor: '#22D3EE',
-      cursorAccent: '#000508', selectionBackground: 'rgba(34,211,238,0.25)',
-      black: '#0a1a1e', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#3d5c5c', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#0a1012', foreground: '#e4e4e7', cursor: '#22d3ee',
+      cursorAccent: '#0a1012', selectionBackground: 'rgba(34,211,238,0.25)',
+      black: '#141e22', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#405c5c', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 7, name: 'A.T.', accent: '#ec4899', bg: '#060010', glow: 'rgba(236,72,153,0.30)',
+    id: 7, name: 'Pink', accent: '#ec4899', bg: '#110a10', glow: 'rgba(236,72,153,0.25)',
     xterm: {
-      background: '#060010', foreground: '#e8e0f0', cursor: '#ec4899',
-      cursorAccent: '#060010', selectionBackground: 'rgba(236,72,153,0.25)',
-      black: '#1a0a1a', red: '#DC2626', green: '#39FF14', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#ec4899', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#5c3050', brightRed: '#ef4444', brightGreen: '#5aff4e',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#f9a8d4',
+      background: '#110a10', foreground: '#e4e4e7', cursor: '#ec4899',
+      cursorAccent: '#110a10', selectionBackground: 'rgba(236,72,153,0.25)',
+      black: '#1e141e', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#ec4899', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#5c3850', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#f9a8d4',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 8, name: 'Entry', accent: '#84cc16', bg: '#020800', glow: 'rgba(132,204,22,0.30)',
+    id: 8, name: 'Lime', accent: '#84cc16', bg: '#0c100a', glow: 'rgba(132,204,22,0.25)',
     xterm: {
-      background: '#020800', foreground: '#e8e0f0', cursor: '#84cc16',
-      cursorAccent: '#020800', selectionBackground: 'rgba(132,204,22,0.25)',
-      black: '#0a1a08', red: '#DC2626', green: '#84cc16', yellow: '#FF6B00',
-      blue: '#7C3AED', magenta: '#A855F7', cyan: '#22D3EE', white: '#e8e0f0',
-      brightBlack: '#3d5c30', brightRed: '#ef4444', brightGreen: '#a3e635',
-      brightYellow: '#ffaa44', brightBlue: '#A78BFA', brightMagenta: '#d68fff',
+      background: '#0c100a', foreground: '#e4e4e7', cursor: '#84cc16',
+      cursorAccent: '#0c100a', selectionBackground: 'rgba(132,204,22,0.25)',
+      black: '#161e14', red: '#ef4444', green: '#84cc16', yellow: '#f59e0b',
+      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
+      brightBlack: '#445c38', brightRed: '#f87171', brightGreen: '#a3e635',
+      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
@@ -136,9 +169,12 @@ var sidebarFilterTimer = null;
 (function init() {
   applyViewMode();
   initSidebar();
-  loadInstances();
-  loadClaudeTerminals();
   loadMissions();
+  // Ensure xterm.js is loaded before creating terminal instances
+  ensureXtermLoaded(function() {
+    loadInstances();
+    loadClaudeTerminals();
+  });
   // Close previous WS connection (HTMX boost re-runs scripts without full page unload)
   if (wsHandle) { wsHandle.close(); wsHandle = null; }
   connectWS();
@@ -1889,6 +1925,7 @@ function updateStatusBar(id) {
     }
     var killBtn = statusBar.querySelector('[data-action="kill"]');
     if (killBtn) killBtn.disabled = !inst.running;
+    updateTerminalCount();
     return;
   }
 
@@ -1899,6 +1936,7 @@ function updateStatusBar(id) {
   if (startBtn) startBtn.disabled = inst.running;
   if (stopBtn) stopBtn.disabled = !inst.running;
   if (handoffBtn) handoffBtn.disabled = !inst.running;
+  updateTerminalCount();
 }
 
 // ── Update tab dot (running/stopped) ─────────────────────────
@@ -1915,6 +1953,24 @@ function updateTabDot(id) {
 function updateEmptyState() {
   if (emptyState) {
     emptyState.style.display = instances.size === 0 ? 'flex' : 'none';
+  }
+  updateTerminalCount();
+}
+
+// ── Update terminal count badge in page header ───────────────
+function updateTerminalCount() {
+  var badge = document.getElementById('terminal-count-badge');
+  if (!badge) return;
+  var total = instances.size;
+  var running = 0;
+  instances.forEach(function(inst) { if (inst.running) running++; });
+  if (total === 0) {
+    badge.textContent = '';
+    badge.style.display = 'none';
+  } else {
+    badge.textContent = running + ' / ' + total;
+    badge.title = running + ' running, ' + (total - running) + ' stopped';
+    badge.style.display = 'inline-flex';
   }
 }
 
