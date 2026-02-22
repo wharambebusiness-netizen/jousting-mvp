@@ -712,3 +712,120 @@ function openProjectInTerminal(projectDir) {
   window.location.href = '/terminals';
 }
 window.openProjectInTerminal = openProjectInTerminal;
+
+// ── Space Particle Animation ────────────────────────────────
+// Floating particles with twinkling effect on a fixed canvas.
+// Pauses when tab is hidden. Shared across all pages via app.js.
+
+(function() {
+  var PARTICLE_COUNT = 80;
+  var canvas = document.createElement('canvas');
+  canvas.id = 'space-particles';
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;';
+  document.body.insertBefore(canvas, document.body.firstChild);
+
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var w = 0, h = 0;
+  var animId = null;
+  var paused = false;
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+
+  function createParticle() {
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: 0.4 + Math.random() * 2.1,        // radius 0.4-2.5
+      dx: (Math.random() - 0.5) * 0.15,     // slow drift X
+      dy: -0.05 - Math.random() * 0.15,     // gentle upward drift
+      alpha: 0.08 + Math.random() * 0.32,   // base opacity 0.08-0.40
+      twinkleSpeed: 0.003 + Math.random() * 0.012,  // oscillation speed
+      twinklePhase: Math.random() * Math.PI * 2,
+      // Some particles are tinted blue/violet, most are white
+      hue: Math.random() < 0.3 ? (220 + Math.random() * 40) : 0,
+      sat: Math.random() < 0.3 ? (40 + Math.random() * 30) : 0,
+    };
+  }
+
+  function init() {
+    resize();
+    particles = [];
+    for (var i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push(createParticle());
+    }
+  }
+
+  function draw(time) {
+    if (paused) { animId = null; return; }
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Optional: very faint nebula gradient overlay
+    var grd = ctx.createRadialGradient(w * 0.7, h * 0.3, 0, w * 0.7, h * 0.3, w * 0.5);
+    grd.addColorStop(0, 'rgba(99, 102, 241, 0.02)');
+    grd.addColorStop(0.5, 'rgba(139, 92, 246, 0.01)');
+    grd.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+
+      // Twinkling: oscillate alpha
+      var twinkle = Math.sin(time * p.twinkleSpeed + p.twinklePhase);
+      var alpha = p.alpha + twinkle * p.alpha * 0.6;
+      if (alpha < 0.02) alpha = 0.02;
+
+      // Draw particle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      if (p.sat > 0) {
+        ctx.fillStyle = 'hsla(' + p.hue + ',' + p.sat + '%,75%,' + alpha + ')';
+      } else {
+        ctx.fillStyle = 'rgba(200,210,240,' + alpha + ')';
+      }
+      ctx.fill();
+
+      // Subtle glow for larger particles
+      if (p.r > 1.5) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(140,160,255,' + (alpha * 0.12) + ')';
+        ctx.fill();
+      }
+
+      // Move
+      p.x += p.dx;
+      p.y += p.dy;
+
+      // Wrap around edges
+      if (p.x < -5) p.x = w + 5;
+      if (p.x > w + 5) p.x = -5;
+      if (p.y < -5) { p.y = h + 5; p.x = Math.random() * w; }
+      if (p.y > h + 5) { p.y = -5; p.x = Math.random() * w; }
+    }
+
+    animId = requestAnimationFrame(draw);
+  }
+
+  // Pause when tab not visible
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      paused = true;
+    } else {
+      paused = false;
+      if (!animId) animId = requestAnimationFrame(draw);
+    }
+  });
+
+  window.addEventListener('resize', function() {
+    resize();
+  });
+
+  init();
+  animId = requestAnimationFrame(draw);
+})();

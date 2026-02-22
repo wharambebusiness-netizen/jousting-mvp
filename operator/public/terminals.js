@@ -41,101 +41,101 @@ function ensureXtermLoaded(callback) {
   loadNext();
 }
 
-// ── Color Themes ─────────────────────────────────────────────
+// ── Color Themes — Space Palette ─────────────────────────────
 var THEMES = [
   {
-    id: 1, name: 'Cobalt', accent: '#3b82f6', bg: '#0a0c14', glow: 'rgba(59,130,246,0.25)',
+    id: 1, name: 'Nebula', accent: '#6366f1', bg: '#08082a', glow: 'rgba(99,102,241,0.30)',
     xterm: {
-      background: '#0a0c14', foreground: '#e4e4e7', cursor: '#3b82f6',
-      cursorAccent: '#0a0c14', selectionBackground: 'rgba(59,130,246,0.3)',
-      black: '#18181b', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#52525b', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#08082a', foreground: '#e2e4f0', cursor: '#6366f1',
+      cursorAccent: '#08082a', selectionBackground: 'rgba(99,102,241,0.3)',
+      black: '#12123a', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#505278', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 2, name: 'Emerald', accent: '#10b981', bg: '#0a110e', glow: 'rgba(16,185,129,0.25)',
+    id: 2, name: 'Aurora', accent: '#10b981', bg: '#061a14', glow: 'rgba(16,185,129,0.30)',
     xterm: {
-      background: '#0a110e', foreground: '#e4e4e7', cursor: '#10b981',
-      cursorAccent: '#0a110e', selectionBackground: 'rgba(16,185,129,0.25)',
-      black: '#14201a', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#4a5c52', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#061a14', foreground: '#e2e4f0', cursor: '#10b981',
+      cursorAccent: '#061a14', selectionBackground: 'rgba(16,185,129,0.25)',
+      black: '#0c2a1e', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#3a6852', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 3, name: 'Amber', accent: '#f59e0b', bg: '#110f0a', glow: 'rgba(245,158,11,0.25)',
+    id: 3, name: 'Solar', accent: '#f59e0b', bg: '#1a1606', glow: 'rgba(245,158,11,0.30)',
     xterm: {
-      background: '#110f0a', foreground: '#e4e4e7', cursor: '#f59e0b',
-      cursorAccent: '#110f0a', selectionBackground: 'rgba(245,158,11,0.25)',
-      black: '#1e1a12', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#5c5540', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#1a1606', foreground: '#e2e4f0', cursor: '#f59e0b',
+      cursorAccent: '#1a1606', selectionBackground: 'rgba(245,158,11,0.25)',
+      black: '#2a2410', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#68583a', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 4, name: 'Rose', accent: '#ef4444', bg: '#110a0a', glow: 'rgba(239,68,68,0.25)',
+    id: 4, name: 'Mars', accent: '#ef4444', bg: '#1a0606', glow: 'rgba(239,68,68,0.30)',
     xterm: {
-      background: '#110a0a', foreground: '#e4e4e7', cursor: '#ef4444',
-      cursorAccent: '#110a0a', selectionBackground: 'rgba(239,68,68,0.25)',
-      black: '#1e1414', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#5c4040', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#1a0606', foreground: '#e2e4f0', cursor: '#ef4444',
+      cursorAccent: '#1a0606', selectionBackground: 'rgba(239,68,68,0.25)',
+      black: '#2a1010', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#683838', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 5, name: 'Violet', accent: '#a78bfa', bg: '#0e0a14', glow: 'rgba(167,139,250,0.25)',
+    id: 5, name: 'Pulsar', accent: '#a78bfa', bg: '#0e0828', glow: 'rgba(167,139,250,0.30)',
     xterm: {
-      background: '#0e0a14', foreground: '#e4e4e7', cursor: '#a78bfa',
-      cursorAccent: '#0e0a14', selectionBackground: 'rgba(167,139,250,0.25)',
-      black: '#1a1520', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#5c5068', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#0e0828', foreground: '#e2e4f0', cursor: '#a78bfa',
+      cursorAccent: '#0e0828', selectionBackground: 'rgba(167,139,250,0.25)',
+      black: '#1a1240', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#5c5078', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 6, name: 'Cyan', accent: '#22d3ee', bg: '#0a1012', glow: 'rgba(34,211,238,0.25)',
+    id: 6, name: 'Quasar', accent: '#22d3ee', bg: '#061420', glow: 'rgba(34,211,238,0.30)',
     xterm: {
-      background: '#0a1012', foreground: '#e4e4e7', cursor: '#22d3ee',
-      cursorAccent: '#0a1012', selectionBackground: 'rgba(34,211,238,0.25)',
-      black: '#141e22', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#405c5c', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#061420', foreground: '#e2e4f0', cursor: '#22d3ee',
+      cursorAccent: '#061420', selectionBackground: 'rgba(34,211,238,0.25)',
+      black: '#0c2238', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#386068', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 7, name: 'Pink', accent: '#ec4899', bg: '#110a10', glow: 'rgba(236,72,153,0.25)',
+    id: 7, name: 'Comet', accent: '#ec4899', bg: '#1a0618', glow: 'rgba(236,72,153,0.30)',
     xterm: {
-      background: '#110a10', foreground: '#e4e4e7', cursor: '#ec4899',
-      cursorAccent: '#110a10', selectionBackground: 'rgba(236,72,153,0.25)',
-      black: '#1e141e', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#ec4899', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#5c3850', brightRed: '#f87171', brightGreen: '#34d399',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#f9a8d4',
+      background: '#1a0618', foreground: '#e2e4f0', cursor: '#ec4899',
+      cursorAccent: '#1a0618', selectionBackground: 'rgba(236,72,153,0.25)',
+      black: '#2a0c28', red: '#ef4444', green: '#10b981', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#ec4899', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#683858', brightRed: '#f87171', brightGreen: '#34d399',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#f9a8d4',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },
   {
-    id: 8, name: 'Lime', accent: '#84cc16', bg: '#0c100a', glow: 'rgba(132,204,22,0.25)',
+    id: 8, name: 'Stellar', accent: '#84cc16', bg: '#0c1a06', glow: 'rgba(132,204,22,0.30)',
     xterm: {
-      background: '#0c100a', foreground: '#e4e4e7', cursor: '#84cc16',
-      cursorAccent: '#0c100a', selectionBackground: 'rgba(132,204,22,0.25)',
-      black: '#161e14', red: '#ef4444', green: '#84cc16', yellow: '#f59e0b',
-      blue: '#3b82f6', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e4e4e7',
-      brightBlack: '#445c38', brightRed: '#f87171', brightGreen: '#a3e635',
-      brightYellow: '#fbbf24', brightBlue: '#60a5fa', brightMagenta: '#c4b5fd',
+      background: '#0c1a06', foreground: '#e2e4f0', cursor: '#84cc16',
+      cursorAccent: '#0c1a06', selectionBackground: 'rgba(132,204,22,0.25)',
+      black: '#142a0c', red: '#ef4444', green: '#84cc16', yellow: '#f59e0b',
+      blue: '#6366f1', magenta: '#a78bfa', cyan: '#22d3ee', white: '#e2e4f0',
+      brightBlack: '#3a6830', brightRed: '#f87171', brightGreen: '#a3e635',
+      brightYellow: '#fbbf24', brightBlue: '#818cf8', brightMagenta: '#c4b5fd',
       brightCyan: '#67e8f9', brightWhite: '#ffffff',
     }
   },

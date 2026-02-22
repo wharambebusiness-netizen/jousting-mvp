@@ -1,28 +1,28 @@
 /* ============================================================
-   Operator Dashboard — Design System (S135)
+   Operator Dashboard — Design System (S136)
    ============================================================
-   Modern dark theme: neutral backgrounds, blue accent,
-   clean typography, subtle depth, professional aesthetic.
+   Deep-space dark theme: cosmic backgrounds, indigo accent,
+   animated particles, stellar typography, nebula depth.
    ============================================================ */
 
 /* === 1. Design Tokens === */
 :root[data-theme="dark"] {
-  /* Background layers — Neutral dark */
-  --bg-root:     #09090b;
-  --bg-surface:  #111114;
-  --bg-raised:   #19191d;
-  --bg-overlay:  #222226;
+  /* Background layers — Deep space */
+  --bg-root:     #06061a;
+  --bg-surface:  #0b0b24;
+  --bg-raised:   #12123a;
+  --bg-overlay:  #1a1a4a;
 
-  /* Borders — neutral edges */
-  --border-subtle:  rgba(255,255,255,0.06);
-  --border-default: rgba(255,255,255,0.10);
-  --border-strong:  rgba(255,255,255,0.16);
+  /* Borders — cosmic edges */
+  --border-subtle:  rgba(140,140,255,0.08);
+  --border-default: rgba(140,140,255,0.14);
+  --border-strong:  rgba(140,140,255,0.22);
 
   /* Text hierarchy */
-  --text-primary:   #e4e4e7;
-  --text-secondary: #a1a1aa;
-  --text-muted:     #52525b;
-  --text-disabled:  #3f3f46;
+  --text-primary:   #e2e4f0;
+  --text-secondary: #9a9cc0;
+  --text-muted:     #505278;
+  --text-disabled:  #3a3c56;
 
   /* Status colors */
   --status-success:    #10b981;
@@ -36,13 +36,13 @@
   --status-purple:     #a78bfa;
   --status-purple-bg:  rgba(167,139,250,0.10);
 
-  /* Accent — Blue */
-  --accent:       #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-bg:    rgba(59,130,246,0.12);
+  /* Accent — Indigo / Stellar */
+  --accent:       #6366f1;
+  --accent-hover: #818cf8;
+  --accent-bg:    rgba(99,102,241,0.14);
 
-  /* Glow effects — subtle */
-  --glow-accent:  rgba(59,130,246,0.35);
+  /* Glow effects — cosmic */
+  --glow-accent:  rgba(99,102,241,0.40);
   --glow-success: rgba(16,185,129,0.30);
   --glow-warning: rgba(245,158,11,0.30);
   --glow-error:   rgba(239,68,68,0.30);
@@ -69,10 +69,10 @@
   --radius-xl: 12px;
   --radius-full: 9999px;
 
-  /* Shadows — neutral */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 14px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 28px rgba(0,0,0,0.6);
+  /* Shadows — deep space */
+  --shadow-sm: 0 1px 3px rgba(0,0,12,0.5);
+  --shadow-md: 0 4px 14px rgba(0,0,12,0.6);
+  --shadow-lg: 0 8px 28px rgba(0,0,12,0.7);
 
   /* Transitions */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -122,24 +122,24 @@
 
 /* === 2. Pico CSS Overrides === */
 [data-theme="dark"] {
-  --pico-background-color: #09090b;
-  --pico-card-background-color: #111114;
-  --pico-card-sectioning-background-color: #111114;
-  --pico-color: rgba(228,228,231,0.92);
-  --pico-muted-color: rgba(161,161,170,0.55);
-  --pico-muted-border-color: rgba(255,255,255,0.06);
-  --pico-primary: #3b82f6;
-  --pico-primary-hover: #60a5fa;
-  --pico-primary-focus: rgba(59,130,246,0.30);
+  --pico-background-color: #06061a;
+  --pico-card-background-color: #0b0b24;
+  --pico-card-sectioning-background-color: #0b0b24;
+  --pico-color: rgba(226,228,240,0.92);
+  --pico-muted-color: rgba(154,156,192,0.55);
+  --pico-muted-border-color: rgba(140,140,255,0.08);
+  --pico-primary: #6366f1;
+  --pico-primary-hover: #818cf8;
+  --pico-primary-focus: rgba(99,102,241,0.30);
   --pico-primary-inverse: #fff;
-  --pico-border-color: rgba(255,255,255,0.06);
-  --pico-form-element-background-color: #0c0c0e;
-  --pico-form-element-border-color: rgba(255,255,255,0.10);
-  --pico-form-element-focus-color: #3b82f6;
+  --pico-border-color: rgba(140,140,255,0.08);
+  --pico-form-element-background-color: #050516;
+  --pico-form-element-border-color: rgba(140,140,255,0.14);
+  --pico-form-element-focus-color: #6366f1;
   --pico-border-radius: 6px;
   --pico-block-spacing-vertical: 0.75rem;
   --pico-font-size: 0.9375rem;
-  --pico-table-border-color: rgba(255,255,255,0.06);
+  --pico-table-border-color: rgba(140,140,255,0.08);
 }
 
 /* === 3. Base / Body === */
@@ -149,6 +149,19 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Particle canvas — behind all content */
+#space-particles {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+/* Ensure main content sits above particles */
+.sidebar-nav { z-index: 60; }
+.page, .terminals-page { position: relative; z-index: 1; }
+#toast-container { z-index: 100; }
+.htmx-progress { z-index: 9999; }
 h1 { font-size: 1.375rem; font-weight: 600; letter-spacing: -0.01em; margin-bottom: var(--sp-2); }
 h2 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
 h3 { font-size: 0.9375rem; font-weight: 600; }
@@ -241,7 +254,7 @@ h3 { font-size: 0.9375rem; font-weight: 600; }
   box-shadow: inset 2px 0 0 var(--accent);
 }
 .sidebar-nav__link--active:hover {
-  background: rgba(59,130,246,0.16);
+  background: rgba(99,102,241,0.18);
 }
 .sidebar-nav__icon {
   width: 20px;
@@ -1209,7 +1222,7 @@ input::placeholder { color: var(--text-muted); }
 .terminal__dots span:nth-child(2) { background: #f59e0b; }
 .terminal__dots span:last-child { background: #10b981; }
 .terminal__body {
-  background: #0c0c0e;
+  background: #050516;
   margin: 0;
   padding: var(--sp-4);
   overflow-y: auto;
@@ -2006,17 +2019,17 @@ details[open] > .tree-summary .tree-icon--dir {
 
 /* Color themes per orchestrator instance */
 :root[data-theme="dark"] {
-  --orch-1-accent: #3b82f6;
-  --orch-1-bg: #0a0c14;
-  --orch-1-glow: rgba(59,130,246,0.25);
+  --orch-1-accent: #6366f1;
+  --orch-1-bg: #08082a;
+  --orch-1-glow: rgba(99,102,241,0.25);
   --orch-2-accent: #10b981;
-  --orch-2-bg: #0a110e;
+  --orch-2-bg: #061a14;
   --orch-2-glow: rgba(16,185,129,0.25);
   --orch-3-accent: #f59e0b;
-  --orch-3-bg: #110f0a;
+  --orch-3-bg: #1a1606;
   --orch-3-glow: rgba(245,158,11,0.25);
   --orch-4-accent: #ef4444;
-  --orch-4-bg: #110a0a;
+  --orch-4-bg: #1a0606;
   --orch-4-glow: rgba(239,68,68,0.25);
 }
 
