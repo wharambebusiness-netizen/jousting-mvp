@@ -277,6 +277,9 @@ function applySettingsDefaults() {
       // Pre-fill quick-start form model select
       var modelSelect = document.querySelector('.quick-start select[name="model"]');
       if (modelSelect && s.model) modelSelect.value = s.model;
+      // Apply particle visibility
+      var canvas = document.getElementById('space-particles');
+      if (canvas && s.particlesEnabled === false) canvas.style.display = 'none';
     })
     .catch(function() {});
 }
@@ -713,100 +716,576 @@ function openProjectInTerminal(projectDir) {
 }
 window.openProjectInTerminal = openProjectInTerminal;
 
-// ── Space Particle Animation ────────────────────────────────
-// Floating particles with twinkling effect on a fixed canvas.
-// Pauses when tab is hidden. Shared across all pages via app.js.
+// ── Space Scene Animation ──────────────────────────────────
+// Deep-space scene: stars, planets, 6 ship types (fighters,
+// cruisers, frigates, scouts, bombers, mothership), treasure,
+// comets, Dyson sphere superstructure. Pauses on hidden tab.
 
 (function() {
-  var PARTICLE_COUNT = 80;
   var canvas = document.createElement('canvas');
   canvas.id = 'space-particles';
   canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;';
   document.body.insertBefore(canvas, document.body.firstChild);
 
   var ctx = canvas.getContext('2d');
-  var particles = [];
   var w = 0, h = 0;
   var animId = null;
   var paused = false;
+
+  // Object pools
+  var stars = [];
+  var planets = [];
+  var ships = [];
+  var treasures = [];
+  var comets = [];
+  var structures = [];
+  var nextCometTime = 0;
 
   function resize() {
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
   }
 
-  function createParticle() {
+  // ── Stars (background dots) ──────────────────────────────
+  function createStar() {
     return {
       x: Math.random() * w,
       y: Math.random() * h,
-      r: 0.4 + Math.random() * 2.1,        // radius 0.4-2.5
-      dx: (Math.random() - 0.5) * 0.15,     // slow drift X
-      dy: -0.05 - Math.random() * 0.15,     // gentle upward drift
-      alpha: 0.08 + Math.random() * 0.32,   // base opacity 0.08-0.40
-      twinkleSpeed: 0.003 + Math.random() * 0.012,  // oscillation speed
+      r: 0.3 + Math.random() * 1.8,
+      dx: (Math.random() - 0.5) * 0.1,
+      dy: -0.03 - Math.random() * 0.1,
+      alpha: 0.06 + Math.random() * 0.28,
+      twinkleSpeed: 0.003 + Math.random() * 0.012,
       twinklePhase: Math.random() * Math.PI * 2,
-      // Some particles are tinted blue/violet, most are white
       hue: Math.random() < 0.3 ? (220 + Math.random() * 40) : 0,
       sat: Math.random() < 0.3 ? (40 + Math.random() * 30) : 0,
     };
   }
 
-  function init() {
-    resize();
-    particles = [];
-    for (var i = 0; i < PARTICLE_COUNT; i++) {
-      particles.push(createParticle());
+  function drawStar(p, time) {
+    var twinkle = Math.sin(time * p.twinkleSpeed + p.twinklePhase);
+    var alpha = p.alpha + twinkle * p.alpha * 0.6;
+    if (alpha < 0.02) alpha = 0.02;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    if (p.sat > 0) {
+      ctx.fillStyle = 'hsla(' + p.hue + ',' + p.sat + '%,75%,' + alpha + ')';
+    } else {
+      ctx.fillStyle = 'rgba(200,210,240,' + alpha + ')';
     }
+    ctx.fill();
+    if (p.r > 1.3) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(140,160,255,' + (alpha * 0.1) + ')';
+      ctx.fill();
+    }
+    p.x += p.dx; p.y += p.dy;
+    if (p.x < -5) p.x = w + 5;
+    if (p.x > w + 5) p.x = -5;
+    if (p.y < -5) { p.y = h + 5; p.x = Math.random() * w; }
+    if (p.y > h + 5) { p.y = -5; p.x = Math.random() * w; }
   }
 
+  // ── Planets ──────────────────────────────────────────────
+  function createPlanet() {
+    var r = 10 + Math.random() * 18;
+    var hues = [15, 30, 180, 210, 280, 340]; // orange, amber, teal, blue, purple, red
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: r,
+      dx: (Math.random() - 0.5) * 0.02,
+      dy: (Math.random() - 0.5) * 0.015,
+      hue: hues[Math.floor(Math.random() * hues.length)],
+      alpha: 0.04 + Math.random() * 0.04,
+      ringChance: Math.random(),
+      phase: Math.random() * Math.PI * 2,
+    };
+  }
+
+  function drawPlanet(p, time) {
+    var pulse = Math.sin(time * 0.001 + p.phase) * 0.01;
+    var a = p.alpha + pulse;
+    // Planet body with gradient
+    var g = ctx.createRadialGradient(p.x - p.r * 0.3, p.y - p.r * 0.3, 0, p.x, p.y, p.r);
+    g.addColorStop(0, 'hsla(' + p.hue + ',50%,50%,' + (a * 1.5) + ')');
+    g.addColorStop(0.7, 'hsla(' + p.hue + ',40%,30%,' + a + ')');
+    g.addColorStop(1, 'hsla(' + p.hue + ',30%,15%,' + (a * 0.5) + ')');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    // Ring for some planets
+    if (p.ringChance > 0.5) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.r * 1.6, p.r * 0.3, 0.3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'hsla(' + p.hue + ',30%,60%,' + (a * 0.6) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // Atmosphere glow
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * 1.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(' + p.hue + ',40%,50%,' + (a * 0.15) + ')';
+    ctx.fill();
+    p.x += p.dx; p.y += p.dy;
+    // Soft wrap
+    if (p.x < -p.r * 2) p.x = w + p.r * 2;
+    if (p.x > w + p.r * 2) p.x = -p.r * 2;
+    if (p.y < -p.r * 2) p.y = h + p.r * 2;
+    if (p.y > h + p.r * 2) p.y = -p.r * 2;
+  }
+
+  // ── Ships — 6 types ──────────────────────────────────────
+  // Types: fighter, cruiser, frigate, scout, bomber, mothership
+  var SHIP_TYPES = ['fighter', 'cruiser', 'frigate', 'scout', 'bomber', 'mothership'];
+
+  function createShip(type) {
+    var isMotherShip = type === 'mothership';
+    var speed = isMotherShip ? 0.12 : (type === 'scout' ? 0.7 : 0.2 + Math.random() * 0.35);
+    var angle = Math.random() * Math.PI * 2;
+    var size = isMotherShip ? 18 + Math.random() * 8 :
+               type === 'cruiser' ? 7 + Math.random() * 4 :
+               type === 'bomber' ? 6 + Math.random() * 3 :
+               type === 'frigate' ? 5 + Math.random() * 3 :
+               3 + Math.random() * 2; // fighter, scout
+    return {
+      type: type,
+      x: Math.random() * w,
+      y: Math.random() * h,
+      size: size,
+      speed: speed,
+      angle: angle,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      alpha: isMotherShip ? 0.07 : 0.04 + Math.random() * 0.04,
+      turnRate: 0.001 + Math.random() * 0.003,
+      engineGlow: Math.random() * Math.PI * 2,
+      chaseTarget: null, // assigned later for some ships
+      hue: isMotherShip ? 200 :
+           type === 'fighter' ? 30 + Math.random() * 20 :
+           type === 'cruiser' ? 210 + Math.random() * 30 :
+           type === 'frigate' ? 170 + Math.random() * 20 :
+           type === 'scout' ? 55 + Math.random() * 15 :
+           0 + Math.random() * 15,  // bomber = red
+    };
+  }
+
+  function drawShip(s, time) {
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.angle);
+    var a = s.alpha;
+    var sz = s.size;
+
+    // Engine glow (pulsing)
+    var eg = 0.5 + Math.sin(time * 0.008 + s.engineGlow) * 0.3;
+    ctx.beginPath();
+    ctx.arc(-sz * 0.6, 0, sz * 0.4 * eg, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(' + s.hue + ',80%,60%,' + (a * 0.8 * eg) + ')';
+    ctx.fill();
+
+    if (s.type === 'mothership') {
+      // Large elliptical hull with spine
+      ctx.beginPath();
+      ctx.ellipse(0, 0, sz, sz * 0.4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + s.hue + ',25%,25%,' + a + ')';
+      ctx.fill();
+      ctx.strokeStyle = 'hsla(' + s.hue + ',40%,50%,' + (a * 0.7) + ')';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      // Bridge dome
+      ctx.beginPath();
+      ctx.arc(sz * 0.3, 0, sz * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(190,60%,60%,' + (a * 1.2) + ')';
+      ctx.fill();
+      // Side docking bays
+      ctx.fillStyle = 'hsla(' + s.hue + ',30%,40%,' + (a * 0.5) + ')';
+      ctx.fillRect(-sz * 0.2, -sz * 0.5, sz * 0.3, sz * 0.12);
+      ctx.fillRect(-sz * 0.2, sz * 0.38, sz * 0.3, sz * 0.12);
+      // Rear engines (3)
+      for (var ei = -1; ei <= 1; ei++) {
+        ctx.beginPath();
+        ctx.arc(-sz * 0.9, ei * sz * 0.2, sz * 0.12 * eg, 0, Math.PI * 2);
+        ctx.fillStyle = 'hsla(200,90%,70%,' + (a * 1.5 * eg) + ')';
+        ctx.fill();
+      }
+    } else if (s.type === 'cruiser') {
+      // Elongated diamond
+      ctx.beginPath();
+      ctx.moveTo(sz, 0);
+      ctx.lineTo(0, -sz * 0.35);
+      ctx.lineTo(-sz * 0.7, -sz * 0.25);
+      ctx.lineTo(-sz * 0.5, 0);
+      ctx.lineTo(-sz * 0.7, sz * 0.25);
+      ctx.lineTo(0, sz * 0.35);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + s.hue + ',30%,30%,' + a + ')';
+      ctx.fill();
+      ctx.strokeStyle = 'hsla(' + s.hue + ',40%,55%,' + (a * 0.6) + ')';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    } else if (s.type === 'frigate') {
+      // Boxy with turret
+      ctx.beginPath();
+      ctx.moveTo(sz * 0.8, 0);
+      ctx.lineTo(sz * 0.2, -sz * 0.4);
+      ctx.lineTo(-sz * 0.6, -sz * 0.35);
+      ctx.lineTo(-sz * 0.6, sz * 0.35);
+      ctx.lineTo(sz * 0.2, sz * 0.4);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + s.hue + ',25%,28%,' + a + ')';
+      ctx.fill();
+      // Turret
+      ctx.beginPath();
+      ctx.arc(sz * 0.1, 0, sz * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + s.hue + ',30%,45%,' + (a * 0.8) + ')';
+      ctx.fill();
+    } else if (s.type === 'bomber') {
+      // Wide, flat triangle
+      ctx.beginPath();
+      ctx.moveTo(sz * 0.6, 0);
+      ctx.lineTo(-sz * 0.5, -sz * 0.5);
+      ctx.lineTo(-sz * 0.3, 0);
+      ctx.lineTo(-sz * 0.5, sz * 0.5);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + s.hue + ',35%,28%,' + a + ')';
+      ctx.fill();
+    } else if (s.type === 'scout') {
+      // Tiny sleek dart
+      ctx.beginPath();
+      ctx.moveTo(sz, 0);
+      ctx.lineTo(-sz * 0.4, -sz * 0.3);
+      ctx.lineTo(-sz * 0.2, 0);
+      ctx.lineTo(-sz * 0.4, sz * 0.3);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + s.hue + ',40%,40%,' + a + ')';
+      ctx.fill();
+    } else {
+      // Fighter — classic chevron
+      ctx.beginPath();
+      ctx.moveTo(sz, 0);
+      ctx.lineTo(-sz * 0.5, -sz * 0.45);
+      ctx.lineTo(-sz * 0.15, 0);
+      ctx.lineTo(-sz * 0.5, sz * 0.45);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + s.hue + ',35%,35%,' + a + ')';
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Chase behavior
+    if (s.chaseTarget) {
+      var t = s.chaseTarget;
+      var dx = t.x - s.x, dy = t.y - s.y;
+      var targetAngle = Math.atan2(dy, dx);
+      var diff = targetAngle - s.angle;
+      // Normalize angle diff
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      s.angle += diff * 0.015;
+    } else {
+      // Gentle meandering
+      s.angle += Math.sin(time * s.turnRate) * 0.003;
+    }
+    s.dx = Math.cos(s.angle) * s.speed;
+    s.dy = Math.sin(s.angle) * s.speed;
+    s.x += s.dx; s.y += s.dy;
+    // Wrap
+    var margin = s.size * 3;
+    if (s.x < -margin) s.x = w + margin;
+    if (s.x > w + margin) s.x = -margin;
+    if (s.y < -margin) s.y = h + margin;
+    if (s.y > h + margin) s.y = -margin;
+  }
+
+  // ── Treasure ─────────────────────────────────────────────
+  function createTreasure() {
+    var types = ['gem', 'coin', 'chest'];
+    var t = types[Math.floor(Math.random() * types.length)];
+    return {
+      shape: t,
+      x: Math.random() * w,
+      y: Math.random() * h,
+      size: t === 'chest' ? 5 + Math.random() * 3 : 3 + Math.random() * 2,
+      dx: (Math.random() - 0.5) * 0.08,
+      dy: (Math.random() - 0.5) * 0.06,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: 0.002 + Math.random() * 0.006,
+      alpha: 0.06 + Math.random() * 0.06,
+      hue: t === 'gem' ? 280 + Math.random() * 40 :
+           t === 'coin' ? 45 + Math.random() * 15 : 30,
+      twinklePhase: Math.random() * Math.PI * 2,
+    };
+  }
+
+  function drawTreasure(t, time) {
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    t.rotation += t.rotSpeed;
+    ctx.rotate(t.rotation);
+    var twinkle = Math.sin(time * 0.005 + t.twinklePhase);
+    var a = t.alpha + twinkle * 0.02;
+    var sz = t.size;
+
+    if (t.shape === 'gem') {
+      // Diamond shape
+      ctx.beginPath();
+      ctx.moveTo(0, -sz);
+      ctx.lineTo(sz * 0.6, 0);
+      ctx.lineTo(0, sz * 0.7);
+      ctx.lineTo(-sz * 0.6, 0);
+      ctx.closePath();
+      ctx.fillStyle = 'hsla(' + t.hue + ',60%,55%,' + a + ')';
+      ctx.fill();
+      // Sparkle
+      ctx.beginPath();
+      ctx.arc(0, -sz * 0.3, sz * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + t.hue + ',80%,80%,' + (a * 1.5) + ')';
+      ctx.fill();
+    } else if (t.shape === 'coin') {
+      // Circle with inner ring
+      ctx.beginPath();
+      ctx.arc(0, 0, sz, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + t.hue + ',70%,50%,' + a + ')';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'hsla(' + t.hue + ',60%,70%,' + (a * 0.8) + ')';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    } else {
+      // Chest — small rectangle with lid
+      ctx.fillStyle = 'hsla(' + t.hue + ',50%,30%,' + a + ')';
+      ctx.fillRect(-sz, -sz * 0.5, sz * 2, sz);
+      ctx.fillStyle = 'hsla(50,70%,50%,' + (a * 0.8) + ')';
+      ctx.fillRect(-sz * 0.9, -sz * 0.6, sz * 1.8, sz * 0.3);
+      // Latch
+      ctx.beginPath();
+      ctx.arc(0, -sz * 0.1, sz * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(50,80%,60%,' + (a * 1.2) + ')';
+      ctx.fill();
+    }
+    // Glow
+    ctx.beginPath();
+    ctx.arc(0, 0, sz * 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(' + t.hue + ',50%,50%,' + (a * 0.08) + ')';
+    ctx.fill();
+    ctx.restore();
+
+    t.x += t.dx; t.y += t.dy;
+    if (t.x < -10) t.x = w + 10;
+    if (t.x > w + 10) t.x = -10;
+    if (t.y < -10) t.y = h + 10;
+    if (t.y > h + 10) t.y = -10;
+  }
+
+  // ── Comets ───────────────────────────────────────────────
+  function spawnComet() {
+    var fromLeft = Math.random() > 0.5;
+    var startX = fromLeft ? -20 : w + 20;
+    var startY = Math.random() * h * 0.6;
+    var angle = fromLeft ? (-0.2 + Math.random() * 0.4) : (Math.PI - 0.2 + Math.random() * 0.4);
+    var speed = 2.5 + Math.random() * 3;
+    return {
+      x: startX,
+      y: startY,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed + 0.5,
+      size: 2 + Math.random() * 2,
+      alpha: 0.3 + Math.random() * 0.3,
+      tailLen: 40 + Math.random() * 60,
+      hue: Math.random() < 0.5 ? 200 : 30, // blue or amber
+      life: 0,
+      maxLife: 200 + Math.random() * 150,
+    };
+  }
+
+  function drawComet(c) {
+    c.life++;
+    var fadeIn = Math.min(c.life / 15, 1);
+    var fadeOut = Math.max(1 - (c.life - c.maxLife + 30) / 30, 0);
+    var a = c.alpha * fadeIn * (c.life > c.maxLife - 30 ? fadeOut : 1);
+    if (a <= 0) return;
+
+    // Tail (gradient line)
+    var angle = Math.atan2(c.dy, c.dx);
+    var tx = c.x - Math.cos(angle) * c.tailLen;
+    var ty = c.y - Math.sin(angle) * c.tailLen;
+    var grad = ctx.createLinearGradient(c.x, c.y, tx, ty);
+    grad.addColorStop(0, 'hsla(' + c.hue + ',70%,70%,' + a + ')');
+    grad.addColorStop(0.3, 'hsla(' + c.hue + ',50%,50%,' + (a * 0.4) + ')');
+    grad.addColorStop(1, 'hsla(' + c.hue + ',40%,40%,0)');
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(tx, ty);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = c.size * 0.8;
+    ctx.stroke();
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(' + c.hue + ',60%,80%,' + a + ')';
+    ctx.fill();
+    // Head glow
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(' + c.hue + ',50%,60%,' + (a * 0.15) + ')';
+    ctx.fill();
+
+    c.x += c.dx; c.y += c.dy;
+  }
+
+  // ── Structures (Dyson Sphere) ────────────────────────────
+  function createStructure() {
+    return {
+      x: w * (0.15 + Math.random() * 0.7),
+      y: h * (0.15 + Math.random() * 0.7),
+      r: 25 + Math.random() * 20,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: 0.0003 + Math.random() * 0.0005,
+      alpha: 0.025 + Math.random() * 0.02,
+      ringCount: 2 + Math.floor(Math.random() * 2),
+      starHue: 40 + Math.random() * 20,
+    };
+  }
+
+  function drawStructure(s, time) {
+    s.rotation += s.rotSpeed;
+    var a = s.alpha;
+    // Central star
+    var g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 0.25);
+    g.addColorStop(0, 'hsla(' + s.starHue + ',80%,70%,' + (a * 2.5) + ')');
+    g.addColorStop(0.5, 'hsla(' + s.starHue + ',60%,50%,' + (a * 1.2) + ')');
+    g.addColorStop(1, 'hsla(' + s.starHue + ',40%,30%,0)');
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r * 0.25, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // Dyson rings
+    ctx.strokeStyle = 'hsla(210,30%,50%,' + (a * 1.2) + ')';
+    ctx.lineWidth = 0.8;
+    for (var i = 0; i < s.ringCount; i++) {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rotation + (i * Math.PI / s.ringCount));
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s.r, s.r * 0.3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Orbital energy nodes (small dots on rings)
+    for (var j = 0; j < 4; j++) {
+      var nodeAngle = s.rotation * 2 + j * Math.PI * 0.5;
+      var nx = s.x + Math.cos(nodeAngle) * s.r * 0.9;
+      var ny = s.y + Math.sin(nodeAngle) * s.r * 0.3;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(190,70%,60%,' + (a * 2) + ')';
+      ctx.fill();
+    }
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r * 1.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'hsla(220,30%,40%,' + (a * 0.2) + ')';
+    ctx.fill();
+  }
+
+  // ── Initialization ───────────────────────────────────────
+  function init() {
+    resize();
+    stars = []; planets = []; ships = []; treasures = []; comets = []; structures = [];
+
+    // 75 stars
+    for (var i = 0; i < 75; i++) stars.push(createStar());
+
+    // 4 planets
+    for (var i = 0; i < 4; i++) planets.push(createPlanet());
+
+    // 12 ships: 4 fighters, 2 cruisers, 2 frigates, 2 scouts, 1 bomber, 1 mothership
+    var shipCounts = { fighter: 4, cruiser: 2, frigate: 2, scout: 2, bomber: 1, mothership: 1 };
+    for (var type in shipCounts) {
+      for (var j = 0; j < shipCounts[type]; j++) {
+        ships.push(createShip(type));
+      }
+    }
+
+    // Set up chase pairs: some fighters chase each other, scouts chase mothership
+    var fighters = ships.filter(function(s) { return s.type === 'fighter'; });
+    var scouts = ships.filter(function(s) { return s.type === 'scout'; });
+    var mothership = ships.find(function(s) { return s.type === 'mothership'; });
+    // Pair fighters: 0 chases 1, 1 chases 0 (dogfight), 2 chases 3
+    if (fighters.length >= 4) {
+      fighters[0].chaseTarget = fighters[1];
+      fighters[1].chaseTarget = fighters[0];
+      fighters[2].chaseTarget = fighters[3];
+    }
+    // Scouts escort mothership
+    scouts.forEach(function(s) { s.chaseTarget = mothership; });
+
+    // 5 treasure items
+    for (var i = 0; i < 5; i++) treasures.push(createTreasure());
+
+    // 1 Dyson sphere
+    structures.push(createStructure());
+
+    // First comet after 5-15s
+    nextCometTime = 5000 + Math.random() * 10000;
+  }
+
+  // ── Main draw loop ───────────────────────────────────────
   function draw(time) {
     if (paused) { animId = null; return; }
 
     ctx.clearRect(0, 0, w, h);
 
-    // Optional: very faint nebula gradient overlay
+    // Faint nebula gradient
     var grd = ctx.createRadialGradient(w * 0.7, h * 0.3, 0, w * 0.7, h * 0.3, w * 0.5);
-    grd.addColorStop(0, 'rgba(99, 102, 241, 0.02)');
-    grd.addColorStop(0.5, 'rgba(139, 92, 246, 0.01)');
+    grd.addColorStop(0, 'rgba(99, 102, 241, 0.015)');
+    grd.addColorStop(0.5, 'rgba(139, 92, 246, 0.008)');
     grd.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, w, h);
 
-    for (var i = 0; i < particles.length; i++) {
-      var p = particles[i];
+    // Second nebula (lower left)
+    var grd2 = ctx.createRadialGradient(w * 0.2, h * 0.8, 0, w * 0.2, h * 0.8, w * 0.4);
+    grd2.addColorStop(0, 'rgba(16, 185, 129, 0.01)');
+    grd2.addColorStop(0.6, 'rgba(34, 211, 238, 0.006)');
+    grd2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grd2;
+    ctx.fillRect(0, 0, w, h);
 
-      // Twinkling: oscillate alpha
-      var twinkle = Math.sin(time * p.twinkleSpeed + p.twinklePhase);
-      var alpha = p.alpha + twinkle * p.alpha * 0.6;
-      if (alpha < 0.02) alpha = 0.02;
+    // Draw layers back to front
+    // 1. Structures (furthest back)
+    for (var i = 0; i < structures.length; i++) drawStructure(structures[i], time);
 
-      // Draw particle
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      if (p.sat > 0) {
-        ctx.fillStyle = 'hsla(' + p.hue + ',' + p.sat + '%,75%,' + alpha + ')';
-      } else {
-        ctx.fillStyle = 'rgba(200,210,240,' + alpha + ')';
+    // 2. Planets
+    for (var i = 0; i < planets.length; i++) drawPlanet(planets[i], time);
+
+    // 3. Stars
+    for (var i = 0; i < stars.length; i++) drawStar(stars[i], time);
+
+    // 4. Treasure
+    for (var i = 0; i < treasures.length; i++) drawTreasure(treasures[i], time);
+
+    // 5. Ships
+    for (var i = 0; i < ships.length; i++) drawShip(ships[i], time);
+
+    // 6. Comets (foreground)
+    if (time > nextCometTime && comets.length < 3) {
+      comets.push(spawnComet());
+      nextCometTime = time + 8000 + Math.random() * 22000; // 8-30s between comets
+    }
+    for (var i = comets.length - 1; i >= 0; i--) {
+      drawComet(comets[i]);
+      if (comets[i].life > comets[i].maxLife || comets[i].x < -100 || comets[i].x > w + 100 || comets[i].y > h + 100) {
+        comets.splice(i, 1);
       }
-      ctx.fill();
-
-      // Subtle glow for larger particles
-      if (p.r > 1.5) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(140,160,255,' + (alpha * 0.12) + ')';
-        ctx.fill();
-      }
-
-      // Move
-      p.x += p.dx;
-      p.y += p.dy;
-
-      // Wrap around edges
-      if (p.x < -5) p.x = w + 5;
-      if (p.x > w + 5) p.x = -5;
-      if (p.y < -5) { p.y = h + 5; p.x = Math.random() * w; }
-      if (p.y > h + 5) { p.y = -5; p.x = Math.random() * w; }
     }
 
     animId = requestAnimationFrame(draw);

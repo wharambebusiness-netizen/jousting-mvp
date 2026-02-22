@@ -28,22 +28,233 @@
   <main class="page">
     <div class="page-header">
       <h1>Settings</h1>
+      <p class="page-header__subtitle">Control center for agent configuration, coordination, and system preferences</p>
     </div>
 
+    <!-- Agent Configuration -->
     <div class="section">
-      <p class="section__title">Default Configuration</p>
-      <article style="padding:var(--sp-6)">
-        <div id="settings-form"
-             hx-get="/views/settings-form"
-             hx-trigger="load"
-             hx-swap="innerHTML">
-          <div class="skeleton" style="height:200px"></div>
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M5.05 5.05l1.06 1.06M13.89 13.89l1.06 1.06M5.05 14.95l1.06-1.06M13.89 6.11l1.06-1.06"/></svg></span>
+          <div>
+            <p class="settings-section__title">Agent Configuration</p>
+            <p class="settings-section__desc">Default model, session limits, and budget caps for new chains</p>
+          </div>
         </div>
-      </article>
+        <article class="settings-card">
+          <div id="settings-form"
+               hx-get="/views/settings-form"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:180px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Git & Automation -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="2"/><circle cx="13" cy="13" r="2"/><path d="M7 9v2a2 2 0 002 2h2"/></svg></span>
+          <div>
+            <p class="settings-section__title">Git & Automation</p>
+            <p class="settings-section__desc">Auto-push, branch naming, and commit behavior</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="git-settings"
+               hx-get="/views/settings-git"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:100px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Coordination -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4v4H4zM12 4h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4z"/><path d="M8 6h4M6 8v4M14 8v4M8 14h4"/></svg></span>
+          <div>
+            <p class="settings-section__title">Coordination</p>
+            <p class="settings-section__desc">Multi-worker rate limiting, token budgets, and pool settings</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="coord-settings"
+               hx-get="/views/settings-coordination"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:160px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- UI Preferences -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M3 8h14"/><path d="M8 8v9"/></svg></span>
+          <div>
+            <p class="settings-section__title">UI Preferences</p>
+            <p class="settings-section__desc">Visual settings, particles, and default terminal theme</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="ui-settings"
+               hx-get="/views/settings-ui"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:100px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- System Info -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="2"/><path d="M8 8h4M8 11h2"/></svg></span>
+          <div>
+            <p class="settings-section__title">System</p>
+            <p class="settings-section__desc">Server status, uptime, and version information</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="system-info"
+               hx-get="/views/settings-system"
+               hx-trigger="load, every 30s"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:80px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="section">
+      <div class="settings-section settings-section--danger">
+        <div class="settings-section__header">
+          <span class="settings-section__icon settings-section__icon--danger"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L2 17h16L10 3z"/><path d="M10 8v4M10 14v.5"/></svg></span>
+          <div>
+            <p class="settings-section__title">Danger Zone</p>
+            <p class="settings-section__desc">Destructive operations — proceed with caution</p>
+          </div>
+        </div>
+        <article class="settings-card settings-card--danger">
+          <div class="settings-danger-grid">
+            <div class="settings-danger-item">
+              <div>
+                <p class="settings-danger-item__title">Reset Settings</p>
+                <p class="settings-danger-item__desc">Restore all settings to factory defaults</p>
+              </div>
+              <button class="btn btn--danger btn--sm" onclick="resetSettings()">Reset</button>
+            </div>
+            <div class="settings-danger-item">
+              <div>
+                <p class="settings-danger-item__title">Clear All Chains</p>
+                <p class="settings-danger-item__desc">Delete all chain records and session history</p>
+              </div>
+              <button class="btn btn--danger btn--sm" onclick="clearAllChains()">Clear</button>
+            </div>
+          </div>
+        </article>
+      </div>
     </div>
   </main>
 
   <div id="toast-container"></div>
   <script src="/app.js"></script>
+  <script>
+    function resetSettings() {
+      if (!confirm('Reset all settings to defaults? This cannot be undone.')) return;
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }).then(function(r) {
+        if (r.ok) {
+          showToast('Settings reset to defaults', 'success');
+          htmx.trigger(document.getElementById('settings-form'), 'reload');
+          htmx.trigger(document.getElementById('git-settings'), 'reload');
+          htmx.trigger(document.getElementById('ui-settings'), 'reload');
+        }
+      });
+    }
+
+    function clearAllChains() {
+      if (!confirm('Delete ALL chains and sessions? This cannot be undone.')) return;
+      fetch('/api/chains/clear', { method: 'POST' }).then(function(r) {
+        if (r.ok) showToast('All chains cleared', 'success');
+        else showToast('Failed to clear chains', 'error');
+      });
+    }
+
+    function saveAgentSettings(form) {
+      var fd = new FormData(form);
+      mergeSettings({
+        model: fd.get('model'),
+        maxTurns: parseInt(fd.get('maxTurns'), 10),
+        maxContinuations: parseInt(fd.get('maxContinuations'), 10),
+        maxBudgetUsd: parseFloat(fd.get('maxBudgetUsd'))
+      }, 'Agent settings saved');
+      return false;
+    }
+
+    // Merge helper: load current settings, apply overrides, save
+    function mergeSettings(overrides, msg) {
+      return fetch('/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+        Object.assign(s, overrides);
+        return fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s)
+        });
+      }).then(function() {
+        showToast(msg || 'Settings saved', 'success');
+      });
+    }
+
+    function saveGitSettings(form) {
+      var cb = form.querySelector('[name="autoPush"]');
+      mergeSettings({ autoPush: cb && cb.checked }, 'Git settings saved');
+      return false;
+    }
+
+    function saveUiSettings(form) {
+      var cb = form.querySelector('[name="particlesEnabled"]');
+      var theme = form.querySelector('[name="defaultTerminalTheme"]');
+      var particles = cb && cb.checked;
+      mergeSettings({
+        particlesEnabled: particles,
+        defaultTerminalTheme: theme ? theme.value : 'nebula'
+      }, 'UI preferences saved').then(function() {
+        var canvas = document.getElementById('space-particles');
+        if (canvas) canvas.style.display = particles ? '' : 'none';
+      });
+      return false;
+    }
+
+    function saveCoordSettings(form) {
+      var data = {};
+      new FormData(form).forEach(function(v, k) { data[k] = parseFloat(v) || 0; });
+      fetch('/api/coordination/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(function(r) {
+        if (r.ok) showToast('Coordination config updated', 'success');
+        else showToast('Failed to update (coordinator may not be active)', 'warning');
+      }).catch(function() {
+        showToast('Coordinator not running', 'warning');
+      });
+      return false;
+    }
+  </script>
 </body>
 </html>

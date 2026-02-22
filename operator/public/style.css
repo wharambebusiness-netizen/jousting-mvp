@@ -7,11 +7,11 @@
 
 /* === 1. Design Tokens === */
 :root[data-theme="dark"] {
-  /* Background layers — Deep space */
-  --bg-root:     #06061a;
-  --bg-surface:  #0b0b24;
-  --bg-raised:   #12123a;
-  --bg-overlay:  #1a1a4a;
+  /* Background layers — Deep void */
+  --bg-root:     #030308;
+  --bg-surface:  #08081a;
+  --bg-raised:   #0e0e2a;
+  --bg-overlay:  #16163a;
 
   /* Borders — cosmic edges */
   --border-subtle:  rgba(140,140,255,0.08);
@@ -122,9 +122,9 @@
 
 /* === 2. Pico CSS Overrides === */
 [data-theme="dark"] {
-  --pico-background-color: #06061a;
-  --pico-card-background-color: #0b0b24;
-  --pico-card-sectioning-background-color: #0b0b24;
+  --pico-background-color: var(--bg-root);
+  --pico-card-background-color: var(--bg-surface);
+  --pico-card-sectioning-background-color: var(--bg-surface);
   --pico-color: rgba(226,228,240,0.92);
   --pico-muted-color: rgba(154,156,192,0.55);
   --pico-muted-border-color: rgba(140,140,255,0.08);
@@ -133,7 +133,7 @@
   --pico-primary-focus: rgba(99,102,241,0.30);
   --pico-primary-inverse: #fff;
   --pico-border-color: rgba(140,140,255,0.08);
-  --pico-form-element-background-color: #050516;
+  --pico-form-element-background-color: #040410;
   --pico-form-element-border-color: rgba(140,140,255,0.14);
   --pico-form-element-focus-color: #6366f1;
   --pico-border-radius: 6px;
@@ -1173,21 +1173,183 @@ input::placeholder { color: var(--text-muted); }
 }
 
 /* === 29. Settings === */
+.settings-section {
+  margin-bottom: var(--sp-2);
+}
+.settings-section__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.settings-section__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.settings-section__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.settings-section__icon--danger {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+.settings-section__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+.settings-section__desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+.settings-card {
+  padding: var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+.settings-card--danger {
+  border-color: rgba(239,68,68,0.15);
+  background: rgba(239,68,68,0.03);
+}
+.settings-section--danger .settings-section__title {
+  color: var(--status-error);
+}
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--sp-6);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-5);
 }
 .settings-grid label {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-primary);
 }
 .settings-grid small {
   font-weight: 400;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  cursor: pointer;
+}
+.settings-toggle div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-toggle__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.settings-toggle small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.settings-actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.settings-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--status-info-bg);
+  border: 1px solid rgba(34,211,238,0.12);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-4);
+}
+.settings-notice code {
+  background: var(--bg-raised);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+.settings-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-4);
+}
+.settings-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-info-item__label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.settings-info-item__value {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+.settings-danger-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.settings-danger-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid rgba(239,68,68,0.08);
+}
+.settings-danger-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.settings-danger-item__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+.settings-danger-item__desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+.page-header__subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: var(--sp-1) 0 0;
 }
 
 /* === 30. Terminal Viewer === */

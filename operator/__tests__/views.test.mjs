@@ -699,6 +699,36 @@ describe('View Routes — Settings Form (P3)', () => {
     expect(res.text).toContain('Opus');
     expect(res.text).toContain('Haiku');
   });
+
+  it('returns git settings fragment', async () => {
+    const res = await get('/views/settings-git');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('name="autoPush"');
+    expect(res.text).toContain('Auto-push');
+  });
+
+  it('returns coordination settings fragment', async () => {
+    const res = await get('/views/settings-coordination');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('maxRequestsPerMinute');
+    expect(res.text).toContain('maxTokensPerMinute');
+  });
+
+  it('returns UI settings fragment', async () => {
+    const res = await get('/views/settings-ui');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('particlesEnabled');
+    expect(res.text).toContain('defaultTerminalTheme');
+    expect(res.text).toContain('Nebula');
+  });
+
+  it('returns system info fragment', async () => {
+    const res = await get('/views/settings-system');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Uptime');
+    expect(res.text).toContain('Memory');
+    expect(res.text).toContain('Node');
+  });
 });
 
 // ── Cost Summary Project Filter Tests (P3) ──────────────────

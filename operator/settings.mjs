@@ -17,9 +17,12 @@ const DEFAULTS = {
   maxContinuations: 5,
   maxBudgetUsd: 5.0,
   autoPush: false,
+  particlesEnabled: true,
+  defaultTerminalTheme: 'nebula',
 };
 
 const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
+const VALID_THEMES = ['nebula', 'aurora', 'solar', 'mars', 'pulsar', 'quasar', 'comet', 'stellar'];
 
 /**
  * Create a settings instance with its own path state.
@@ -43,6 +46,8 @@ export function createSettings(ctx) {
           maxContinuations: clampInt(data.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
           maxBudgetUsd: clampFloat(data.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
           autoPush: !!data.autoPush,
+          particlesEnabled: data.particlesEnabled !== false,
+          defaultTerminalTheme: VALID_THEMES.includes(data.defaultTerminalTheme) ? data.defaultTerminalTheme : DEFAULTS.defaultTerminalTheme,
         };
       } catch (_) {
         return { ...DEFAULTS };
@@ -65,6 +70,8 @@ export function createSettings(ctx) {
       maxContinuations: clampInt(settings.maxContinuations, 1, 20, DEFAULTS.maxContinuations),
       maxBudgetUsd: clampFloat(settings.maxBudgetUsd, 0, 100, DEFAULTS.maxBudgetUsd),
       autoPush: !!settings.autoPush,
+      particlesEnabled: settings.particlesEnabled !== false,
+      defaultTerminalTheme: VALID_THEMES.includes(settings.defaultTerminalTheme) ? settings.defaultTerminalTheme : DEFAULTS.defaultTerminalTheme,
     };
 
     const dir = dirname(settingsPath);
@@ -99,4 +106,4 @@ function clampFloat(value, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
-export { DEFAULTS, VALID_MODELS };
+export { DEFAULTS, VALID_MODELS, VALID_THEMES };

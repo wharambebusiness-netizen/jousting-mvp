@@ -561,7 +561,7 @@ export function createViewRoutes(ctx) {
     }
   });
 
-  // ── Settings Form Fragment ─────────────────────────────────
+  // ── Settings: Agent Configuration ──────────────────────────
   router.get('/settings-form', (_req, res) => {
     try {
       const settings = loadSettings();
@@ -572,41 +572,200 @@ export function createViewRoutes(ctx) {
 
       res.type('text/html').send(`
         <form id="settings-save-form"
-              hx-put="/api/settings"
-              hx-swap="none"
-              hx-on::after-request="if(event.detail.successful) showToast('Settings saved', 'success');">
+              onsubmit="return saveAgentSettings(this)">
           <div class="settings-grid">
             <label>
               Default Model
               <select name="model">${modelOptions}</select>
+              <small>Claude model for new chains</small>
             </label>
             <label>
               Max Turns
               <input type="number" name="maxTurns" value="${settings.maxTurns}" min="1" max="200">
-              <small style="color:var(--text-muted)">Per session (1-200)</small>
+              <small>Per session (1-200)</small>
             </label>
             <label>
               Max Continuations
               <input type="number" name="maxContinuations" value="${settings.maxContinuations}" min="1" max="20">
-              <small style="color:var(--text-muted)">Auto-continue limit (1-20)</small>
+              <small>Auto-continue limit (1-20)</small>
             </label>
             <label>
               Budget Cap (USD)
               <input type="number" name="maxBudgetUsd" value="${settings.maxBudgetUsd}" min="0" max="100" step="0.50">
-              <small style="color:var(--text-muted)">Max cost per chain ($0-$100)</small>
-            </label>
-            <label style="display:flex;flex-direction:row;align-items:center;gap:var(--sp-3)">
-              <input type="checkbox" name="autoPush" value="true" role="switch" ${settings.autoPush ? 'checked' : ''}>
-              Auto-push on completion
-              <small style="color:var(--text-muted);margin-left:auto">Push to remote when chains complete</small>
+              <small>Max cost per chain ($0-$100)</small>
             </label>
           </div>
-          <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-6)">
-            <button type="submit" class="btn btn--primary">Save Settings</button>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn--primary">Save</button>
             <button type="button" class="btn btn--ghost"
                     hx-get="/views/settings-form" hx-target="#settings-form" hx-swap="innerHTML">Reset</button>
           </div>
         </form>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Settings: Git & Automation ────────────────────────────
+  router.get('/settings-git', (_req, res) => {
+    try {
+      const settings = loadSettings();
+      res.type('text/html').send(`
+        <form id="git-settings-form"
+              onsubmit="return saveGitSettings(this)">
+          <div class="settings-row">
+            <label class="settings-toggle">
+              <input type="checkbox" name="autoPush" value="true" role="switch" ${settings.autoPush ? 'checked' : ''}>
+              <div>
+                <span class="settings-toggle__label">Auto-push on completion</span>
+                <small>Automatically push to remote when chains complete successfully</small>
+              </div>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn--primary">Save</button>
+          </div>
+        </form>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Settings: Coordination ────────────────────────────────
+  router.get('/settings-coordination', (_req, res) => {
+    try {
+      // Try to get current coordinator config
+      let rpmVal = 60, tpmVal = 100000, globalBudget = 50, workerBudget = 10;
+      if (ctx.coordinator) {
+        try {
+          const rlStatus = ctx.coordinator.rateLimiter.getStatus();
+          rpmVal = rlStatus.maxRequestsPerMinute || rpmVal;
+          tpmVal = rlStatus.maxTokensPerMinute || tpmVal;
+        } catch (_) {}
+        try {
+          const cStatus = ctx.coordinator.costAggregator.getStatus();
+          globalBudget = cStatus.globalBudgetUsd || globalBudget;
+          workerBudget = cStatus.perWorkerBudgetUsd || workerBudget;
+        } catch (_) {}
+      }
+      const coordActive = !!ctx.coordinator;
+
+      res.type('text/html').send(`
+        ${!coordActive ? '<p class="settings-notice"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--status-info)" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 10v.5"/></svg> Coordinator not active. Start the server with <code>--pool</code> to enable multi-worker coordination.</p>' : ''}
+        <form onsubmit="return saveCoordSettings(this)">
+          <div class="settings-grid">
+            <label>
+              Requests/min
+              <input type="number" name="maxRequestsPerMinute" value="${rpmVal}" min="1" max="1000" ${!coordActive ? 'disabled' : ''}>
+              <small>API rate limit (RPM)</small>
+            </label>
+            <label>
+              Tokens/min
+              <input type="number" name="maxTokensPerMinute" value="${tpmVal}" min="1000" max="10000000" step="1000" ${!coordActive ? 'disabled' : ''}>
+              <small>Token rate limit (TPM)</small>
+            </label>
+            <label>
+              Global Budget ($)
+              <input type="number" name="globalBudgetUsd" value="${globalBudget}" min="0" max="1000" step="1" ${!coordActive ? 'disabled' : ''}>
+              <small>Total budget across all workers</small>
+            </label>
+            <label>
+              Per-Worker Budget ($)
+              <input type="number" name="perWorkerBudgetUsd" value="${workerBudget}" min="0" max="100" step="0.5" ${!coordActive ? 'disabled' : ''}>
+              <small>Budget cap per individual worker</small>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn--primary" ${!coordActive ? 'disabled' : ''}>Apply</button>
+          </div>
+        </form>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Settings: UI Preferences ──────────────────────────────
+  router.get('/settings-ui', (_req, res) => {
+    try {
+      const settings = loadSettings();
+      const themes = ['nebula', 'aurora', 'solar', 'mars', 'pulsar', 'quasar', 'comet', 'stellar'];
+      const themeOptions = themes.map(t =>
+        `<option value="${t}"${settings.defaultTerminalTheme === t ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`
+      ).join('');
+
+      res.type('text/html').send(`
+        <form onsubmit="return saveUiSettings(this)">
+          <div class="settings-row">
+            <label class="settings-toggle">
+              <input type="checkbox" name="particlesEnabled" value="true" role="switch" ${settings.particlesEnabled ? 'checked' : ''}>
+              <div>
+                <span class="settings-toggle__label">Space Particles</span>
+                <small>Animated background particles, ships, comets, and cosmic objects</small>
+              </div>
+            </label>
+          </div>
+          <div class="settings-grid" style="margin-top:var(--sp-4)">
+            <label>
+              Default Terminal Theme
+              <select name="defaultTerminalTheme">${themeOptions}</select>
+              <small>Color theme for new terminal instances</small>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn--primary">Save</button>
+          </div>
+        </form>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Settings: System Info ─────────────────────────────────
+  router.get('/settings-system', (_req, res) => {
+    try {
+      const uptimeSec = process.uptime();
+      const hrs = Math.floor(uptimeSec / 3600);
+      const mins = Math.floor((uptimeSec % 3600) / 60);
+      const secs = Math.floor(uptimeSec % 60);
+      const uptimeStr = hrs > 0 ? `${hrs}h ${mins}m ${secs}s` : mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      const memMB = Math.round(process.memoryUsage().heapUsed / 1048576);
+      const nodeVer = process.version;
+      const platform = process.platform;
+
+      const registry = loadRegistry();
+      const chainCount = registry.chains ? registry.chains.length : 0;
+
+      res.type('text/html').send(`
+        <div class="settings-info-grid">
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">Uptime</span>
+            <span class="settings-info-item__value">${uptimeStr}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">Memory</span>
+            <span class="settings-info-item__value">${memMB} MB</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">Node</span>
+            <span class="settings-info-item__value">${nodeVer}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">Platform</span>
+            <span class="settings-info-item__value">${platform}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">Chains</span>
+            <span class="settings-info-item__value">${chainCount}</span>
+          </div>
+          <div class="settings-info-item">
+            <span class="settings-info-item__label">PID</span>
+            <span class="settings-info-item__value">${process.pid}</span>
+          </div>
+        </div>
       `);
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
