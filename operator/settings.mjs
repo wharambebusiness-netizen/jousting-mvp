@@ -19,6 +19,10 @@ const DEFAULTS = {
   autoPush: false,
   particlesEnabled: true,
   defaultTerminalTheme: 'nebula',
+  coordMaxRequestsPerMinute: 60,
+  coordMaxTokensPerMinute: 100000,
+  coordGlobalBudgetUsd: 50,
+  coordPerWorkerBudgetUsd: 10,
 };
 
 const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
@@ -48,6 +52,10 @@ export function createSettings(ctx) {
           autoPush: !!data.autoPush,
           particlesEnabled: data.particlesEnabled !== false,
           defaultTerminalTheme: VALID_THEMES.includes(data.defaultTerminalTheme) ? data.defaultTerminalTheme : DEFAULTS.defaultTerminalTheme,
+          coordMaxRequestsPerMinute: clampInt(data.coordMaxRequestsPerMinute, 1, 1000, DEFAULTS.coordMaxRequestsPerMinute),
+          coordMaxTokensPerMinute: clampInt(data.coordMaxTokensPerMinute, 1000, 10000000, DEFAULTS.coordMaxTokensPerMinute),
+          coordGlobalBudgetUsd: clampFloat(data.coordGlobalBudgetUsd, 0, 1000, DEFAULTS.coordGlobalBudgetUsd),
+          coordPerWorkerBudgetUsd: clampFloat(data.coordPerWorkerBudgetUsd, 0, 100, DEFAULTS.coordPerWorkerBudgetUsd),
         };
       } catch (_) {
         return { ...DEFAULTS };
@@ -72,6 +80,10 @@ export function createSettings(ctx) {
       autoPush: !!settings.autoPush,
       particlesEnabled: settings.particlesEnabled !== false,
       defaultTerminalTheme: VALID_THEMES.includes(settings.defaultTerminalTheme) ? settings.defaultTerminalTheme : DEFAULTS.defaultTerminalTheme,
+      coordMaxRequestsPerMinute: clampInt(settings.coordMaxRequestsPerMinute, 1, 1000, DEFAULTS.coordMaxRequestsPerMinute),
+      coordMaxTokensPerMinute: clampInt(settings.coordMaxTokensPerMinute, 1000, 10000000, DEFAULTS.coordMaxTokensPerMinute),
+      coordGlobalBudgetUsd: clampFloat(settings.coordGlobalBudgetUsd, 0, 1000, DEFAULTS.coordGlobalBudgetUsd),
+      coordPerWorkerBudgetUsd: clampFloat(settings.coordPerWorkerBudgetUsd, 0, 100, DEFAULTS.coordPerWorkerBudgetUsd),
     };
 
     const dir = dirname(settingsPath);

@@ -636,8 +636,12 @@ export function createViewRoutes(ctx) {
   // ── Settings: Coordination ────────────────────────────────
   router.get('/settings-coordination', (_req, res) => {
     try {
-      // Try to get current coordinator config
-      let rpmVal = 60, tpmVal = 100000, globalBudget = 50, workerBudget = 10;
+      const settings = loadSettings();
+      // Use live coordinator values if active, otherwise persisted settings
+      let rpmVal = settings.coordMaxRequestsPerMinute;
+      let tpmVal = settings.coordMaxTokensPerMinute;
+      let globalBudget = settings.coordGlobalBudgetUsd;
+      let workerBudget = settings.coordPerWorkerBudgetUsd;
       if (ctx.coordinator) {
         try {
           const rlStatus = ctx.coordinator.rateLimiter.getStatus();
@@ -653,32 +657,32 @@ export function createViewRoutes(ctx) {
       const coordActive = !!ctx.coordinator;
 
       res.type('text/html').send(`
-        ${!coordActive ? '<p class="settings-notice"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--status-info)" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 10v.5"/></svg> Coordinator not active. Start the server with <code>--pool</code> to enable multi-worker coordination.</p>' : ''}
+        ${!coordActive ? '<p class="settings-notice"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--status-info)" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 10v.5"/></svg> Coordinator not active. Values are saved and will apply when started with <code>--pool</code>.</p>' : ''}
         <form onsubmit="return saveCoordSettings(this)">
           <div class="settings-grid">
             <label>
               Requests/min
-              <input type="number" name="maxRequestsPerMinute" value="${rpmVal}" min="1" max="1000" ${!coordActive ? 'disabled' : ''}>
+              <input type="number" name="maxRequestsPerMinute" value="${rpmVal}" min="1" max="1000">
               <small>API rate limit (RPM)</small>
             </label>
             <label>
               Tokens/min
-              <input type="number" name="maxTokensPerMinute" value="${tpmVal}" min="1000" max="10000000" step="1000" ${!coordActive ? 'disabled' : ''}>
+              <input type="number" name="maxTokensPerMinute" value="${tpmVal}" min="1000" max="10000000" step="1000">
               <small>Token rate limit (TPM)</small>
             </label>
             <label>
               Global Budget ($)
-              <input type="number" name="globalBudgetUsd" value="${globalBudget}" min="0" max="1000" step="1" ${!coordActive ? 'disabled' : ''}>
+              <input type="number" name="globalBudgetUsd" value="${globalBudget}" min="0" max="1000" step="1">
               <small>Total budget across all workers</small>
             </label>
             <label>
               Per-Worker Budget ($)
-              <input type="number" name="perWorkerBudgetUsd" value="${workerBudget}" min="0" max="100" step="0.5" ${!coordActive ? 'disabled' : ''}>
+              <input type="number" name="perWorkerBudgetUsd" value="${workerBudget}" min="0" max="100" step="0.5">
               <small>Budget cap per individual worker</small>
             </label>
           </div>
           <div class="settings-actions">
-            <button type="submit" class="btn btn--primary" ${!coordActive ? 'disabled' : ''}>Apply</button>
+            <button type="submit" class="btn btn--primary">Save</button>
           </div>
         </form>
       `);

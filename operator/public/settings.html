@@ -241,18 +241,29 @@
     }
 
     function saveCoordSettings(form) {
-      var data = {};
-      new FormData(form).forEach(function(v, k) { data[k] = parseFloat(v) || 0; });
+      var fd = new FormData(form);
+      var rpm = parseFloat(fd.get('maxRequestsPerMinute')) || 60;
+      var tpm = parseFloat(fd.get('maxTokensPerMinute')) || 100000;
+      var gb = parseFloat(fd.get('globalBudgetUsd')) || 50;
+      var wb = parseFloat(fd.get('perWorkerBudgetUsd')) || 10;
+      // Always persist to settings
+      mergeSettings({
+        coordMaxRequestsPerMinute: rpm,
+        coordMaxTokensPerMinute: tpm,
+        coordGlobalBudgetUsd: gb,
+        coordPerWorkerBudgetUsd: wb
+      }, 'Coordination settings saved');
+      // Also apply live if coordinator is active
       fetch('/api/coordination/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).then(function(r) {
-        if (r.ok) showToast('Coordination config updated', 'success');
-        else showToast('Failed to update (coordinator may not be active)', 'warning');
-      }).catch(function() {
-        showToast('Coordinator not running', 'warning');
-      });
+        body: JSON.stringify({
+          maxRequestsPerMinute: rpm,
+          maxTokensPerMinute: tpm,
+          globalBudgetUsd: gb,
+          perWorkerBudgetUsd: wb
+        })
+      }).catch(function() {});
       return false;
     }
   </script>
