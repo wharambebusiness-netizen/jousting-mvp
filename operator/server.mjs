@@ -196,10 +196,10 @@ export function createApp(options = {}) {
   }
   app.use('/api', createTerminalMessageRoutes({ messageBus }));
 
-  // Claude terminal pool (Phase 15) — with shared memory for snapshots
+  // Claude terminal pool (Phase 15) — with shared memory for snapshots + coordinator for auto-dispatch
   let claudePool = null;
   if (options.claudePool === true) {
-    claudePool = createClaudePool({ events, projectDir, sharedMemory, log: () => {} });
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
   }

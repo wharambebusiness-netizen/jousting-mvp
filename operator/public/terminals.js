@@ -323,6 +323,13 @@ var sidebarFilterTimer = null;
       return;
     }
 
+    // Ctrl+Shift+D: toggle auto-dispatch on active Claude terminal
+    if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+      e.preventDefault();
+      if (activeTabId) toggleAutoDispatch(activeTabId);
+      return;
+    }
+
     // 1-5: quick layout switch (no modifiers, not in form fields)
     if (!e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey) {
       var layouts = { '1': 'single', '2': 'split-h', '3': 'split-v', '4': 'triple', '5': 'quad' };
@@ -424,6 +431,7 @@ function addClaudeTerminalInstance(id, state) {
       existing.model = state.model;
       existing.dangerouslySkipPermissions = state.dangerouslySkipPermissions;
       if (typeof state.autoHandoff !== 'undefined') existing.autoHandoff = !!state.autoHandoff;
+      if (typeof state.autoDispatch !== 'undefined') existing.autoDispatch = !!state.autoDispatch;
       if (typeof state.handoffCount !== 'undefined') existing.handoffCount = state.handoffCount;
     }
     updateStatusBar(id);
@@ -482,6 +490,7 @@ function addClaudeTerminalInstance(id, state) {
   // Status bar (Claude-specific: permission toggle, auto-handoff, kill, maximize)
   var permLabel = state && state.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
   var isAutoHandoff = state && state.autoHandoff;
+  var isAutoDispatch = state && state.autoDispatch;
   var handoffCount = (state && state.handoffCount) || 0;
   var statusBar = document.createElement('div');
   statusBar.className = 'term-status';
@@ -497,6 +506,7 @@ function addClaudeTerminalInstance(id, state) {
     '<span class="term-status__spacer"></span>' +
     '<span class="term-status__actions">' +
       '<button class="term-status__btn' + (isAutoHandoff ? ' term-status__btn--active' : '') + '" onclick="toggleAutoHandoff(\'' + escHtml(id) + '\')" data-action="toggle-handoff" title="Toggle auto-handoff (Ctrl+Shift+A)">\u21BB</button>' +
+      '<button class="term-status__btn' + (isAutoDispatch ? ' term-status__btn--active' : '') + '" onclick="toggleAutoDispatch(\'' + escHtml(id) + '\')" data-action="toggle-dispatch" title="Toggle auto-dispatch (Ctrl+Shift+D)">\u26A1</button>' +
       '<button class="term-status__btn" onclick="toggleClaudePermissions(\'' + escHtml(id) + '\')" data-action="toggle-perms" title="Toggle permission mode">\u{1F512}</button>' +
       '<button class="term-status__btn" onclick="claimTask(\'' + escHtml(id) + '\')" data-action="claim-task" title="Claim next task">&#9776;</button>' +
       '<button class="term-status__btn term-status__btn--danger" onclick="killClaudeInstance(\'' + escHtml(id) + '\')" data-action="kill">Kill</button>' +
@@ -589,6 +599,7 @@ function addClaudeTerminalInstance(id, state) {
     maximized: false,
     dangerouslySkipPermissions: state ? !!state.dangerouslySkipPermissions : false,
     autoHandoff: state ? !!state.autoHandoff : false,
+    autoDispatch: state ? !!state.autoDispatch : false,
     handoffCount: state ? (state.handoffCount || 0) : 0,
     binaryWs: null,
     coord: {
@@ -691,6 +702,7 @@ function submitNewClaude(e) {
   var model = form.model.value;
   var skipPerms = form.dangerouslySkipPermissions.checked;
   var autoHandoff = form.autoHandoff.checked;
+  var autoDispatch = form.autoDispatch.checked;
 
   if (!id) {
     showToast('Terminal ID is required', 'error');
@@ -711,6 +723,7 @@ function submitNewClaude(e) {
       model: model || undefined,
       dangerouslySkipPermissions: skipPerms,
       autoHandoff: autoHandoff,
+      autoDispatch: autoDispatch,
     }),
   })
     .then(function(r) {
@@ -724,6 +737,7 @@ function submitNewClaude(e) {
         model: model,
         dangerouslySkipPermissions: skipPerms,
         autoHandoff: autoHandoff,
+        autoDispatch: autoDispatch,
       });
       switchTab(id);
       showToast('Claude terminal ' + id + ' started', 'success');
@@ -861,6 +875,31 @@ function toggleAutoHandoff(id) {
     })
     .catch(function(err) {
       showToast('Failed to toggle auto-handoff: ' + err.message, 'error');
+    });
+}
+
+// ── Toggle auto-dispatch on a Claude terminal ─────────────────
+function toggleAutoDispatch(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') return;
+
+  fetch('/api/claude-terminals/' + encodeURIComponent(id) + '/toggle-auto-dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Toggle failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      inst.autoDispatch = data.autoDispatch;
+      updateStatusBar(id);
+      var label = data.autoDispatch ? 'enabled' : 'disabled';
+      inst.terminal.writeln('\r\n\x1b[33m[AUTO-DISPATCH] ' + label + '\x1b[0m');
+      showToast(id + ' auto-dispatch ' + label, 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to toggle auto-dispatch: ' + err.message, 'error');
     });
 }
 
@@ -1792,6 +1831,22 @@ function connectWS() {
         break;
       }
 
+      case 'claude-terminal:auto-dispatch-changed': {
+        var adId = msg.data.terminalId;
+        var adInst = instances.get(adId);
+        if (adInst && adInst.type === 'claude') {
+          adInst.autoDispatch = !!msg.data.autoDispatch;
+          updateStatusBar(adId);
+        }
+        break;
+      }
+
+      case 'claude-terminal:auto-dispatch': {
+        var dispId = msg.data.terminalId;
+        showToast(dispId + ' auto-dispatched task ' + msg.data.taskId, 'success');
+        break;
+      }
+
       // Auto-refresh shared memory panel when open
       case 'shared-memory:updated':
       case 'shared-memory:deleted':
@@ -2005,6 +2060,11 @@ function updateStatusBar(id) {
     var handoffToggle = statusBar.querySelector('[data-action="toggle-handoff"]');
     if (handoffToggle) {
       handoffToggle.className = 'term-status__btn' + (inst.autoHandoff ? ' term-status__btn--active' : '');
+    }
+    // Update auto-dispatch toggle button active state
+    var dispatchToggle = statusBar.querySelector('[data-action="toggle-dispatch"]');
+    if (dispatchToggle) {
+      dispatchToggle.className = 'term-status__btn' + (inst.autoDispatch ? ' term-status__btn--active' : '');
     }
     var killBtn = statusBar.querySelector('[data-action="kill"]');
     if (killBtn) killBtn.disabled = !inst.running;
@@ -3463,6 +3523,7 @@ window.killClaudeInstance = killClaudeInstance;
 window.removeClaudeInstance = removeClaudeInstance;
 window.toggleClaudePermissions = toggleClaudePermissions;
 window.toggleAutoHandoff = toggleAutoHandoff;
+window.toggleAutoDispatch = toggleAutoDispatch;
 window.toggleSidebar = toggleSidebar;
 window.refreshSidebarTree = refreshSidebarTree;
 window.filterSidebarTree = filterSidebarTree;

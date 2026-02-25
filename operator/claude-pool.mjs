@@ -18,6 +18,7 @@ import { createClaudeTerminal, isNodePtyAvailable, MIN_UPTIME_FOR_HANDOFF_MS } f
 
 const MAX_TERMINALS = 8;
 const FORCE_KILL_TIMEOUT_MS = 5000;
+const AUTO_DISPATCH_DELAY_MS = 2000;
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ const FORCE_KILL_TIMEOUT_MS = 5000;
  * @param {Function} [ctx.log] - Logger function
  * @param {number}   [ctx.maxTerminals] - Max concurrent terminals (default 8)
  * @param {object}   [ctx.sharedMemory] - Shared memory instance for cross-terminal state
+ * @param {object}   [ctx.coordinator] - Coordinator instance for auto-dispatch task claiming
  * @returns {object} Pool methods
  */
 export function createClaudePool(ctx) {
@@ -37,6 +39,7 @@ export function createClaudePool(ctx) {
   const log = ctx.log || console.log;
   const maxTerminals = ctx.maxTerminals ?? MAX_TERMINALS;
   const sharedMemory = ctx.sharedMemory || null;
+  const coordinator = ctx.coordinator || null;
 
   /** @type {Map<string, TerminalEntry>} */
   const terminals = new Map();
@@ -104,6 +107,7 @@ export function createClaudePool(ctx) {
       spawnedAt: new Date().toISOString(),
       stoppedAt: null,
       autoHandoff: !!opts.autoHandoff,
+      autoDispatch: !!opts.autoDispatch,
       handoffCount: opts._handoffCount || 0,
       assignedTask: null,
     };
@@ -210,11 +214,13 @@ export function createClaudePool(ctx) {
     }
 
     // Respawn with continueSession=true, carrying forward config
+    const hadAutoDispatch = entry.autoDispatch;
     const config = {
       ...entry.config,
       continueSession: true,
       resumeSessionId: undefined, // -c takes precedence
       autoHandoff: true,
+      autoDispatch: hadAutoDispatch,
       _handoffCount: newCount,
     };
 
@@ -227,6 +233,10 @@ export function createClaudePool(ctx) {
           terminalId: entry.id,
           handoffCount: newCount,
         });
+        // Auto-dispatch after handoff respawn (with delay for Claude to initialize)
+        if (hadAutoDispatch) {
+          setTimeout(() => maybeAutoDispatch(entry.id), AUTO_DISPATCH_DELAY_MS);
+        }
       })
       .catch((err) => {
         log(`[claude-pool] ${entry.id} auto-handoff failed: ${err.message}`);
@@ -252,6 +262,100 @@ export function createClaudePool(ctx) {
     entry.config.autoHandoff = !!enabled;
     return true;
   }
+
+  // ── Set Auto-Dispatch ─────────────────────────────────
+
+  /**
+   * Enable or disable auto-dispatch for a terminal.
+   * @param {string} terminalId
+   * @param {boolean} enabled
+   * @returns {boolean} true if updated
+   */
+  function setAutoDispatch(terminalId, enabled) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.autoDispatch = !!enabled;
+    entry.config.autoDispatch = !!enabled;
+    return true;
+  }
+
+  // ── Auto-Dispatch ──────────────────────────────────────
+
+  /**
+   * Attempt to auto-claim the next ready task and inject it into the terminal.
+   * Called after task completion or handoff respawn when autoDispatch is enabled.
+   * @param {string} terminalId
+   */
+  function maybeAutoDispatch(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return;
+    if (!entry.autoDispatch) return;
+    if (!coordinator) return;
+
+    const taskQueue = coordinator.taskQueue;
+    if (!taskQueue) return;
+
+    // Skip if terminal already has a task
+    if (entry.assignedTask) return;
+
+    // Skip if terminal is not running
+    if (entry.status !== 'running') return;
+
+    // Find next claimable task (respect deps)
+    const allTasks = taskQueue.getAll();
+    const pending = allTasks.filter(t => t.status === 'pending');
+
+    let claimable = null;
+    for (const task of pending) {
+      if (!task.deps || task.deps.length === 0) {
+        claimable = task;
+        break;
+      }
+      const depsComplete = task.deps.every(depId => {
+        const dep = allTasks.find(t => t.id === depId);
+        return dep && dep.status === 'complete';
+      });
+      if (depsComplete) {
+        claimable = task;
+        break;
+      }
+    }
+
+    if (!claimable) return;
+
+    try {
+      // Assign in task queue
+      taskQueue.assign(claimable.id, terminalId);
+      taskQueue.start(claimable.id);
+
+      // Track in pool
+      assignTask(terminalId, claimable);
+
+      // Write the task prompt to PTY
+      const prompt = `[AUTO-DISPATCH] Task ${claimable.id}: ${claimable.task}`;
+      write(terminalId, prompt + '\r');
+
+      log(`[claude-pool] ${terminalId} auto-dispatched task ${claimable.id}`);
+
+      events.emit('claude-terminal:auto-dispatch', {
+        terminalId,
+        taskId: claimable.id,
+        task: claimable.task,
+      });
+    } catch (err) {
+      log(`[claude-pool] ${terminalId} auto-dispatch failed: ${err.message}`);
+    }
+  }
+
+  // Listen for task completion to auto-dispatch next task
+  events.on('claude-terminal:task-completed', (data) => {
+    if (data.status === 'complete') {
+      const entry = terminals.get(data.terminalId);
+      if (entry && entry.autoDispatch) {
+        setTimeout(() => maybeAutoDispatch(data.terminalId), AUTO_DISPATCH_DELAY_MS);
+      }
+    }
+  });
 
   // ── Write ─────────────────────────────────────────────
 
@@ -499,6 +603,7 @@ export function createClaudePool(ctx) {
       model: termStatus.model,
       dangerouslySkipPermissions: termStatus.dangerouslySkipPermissions,
       autoHandoff: entry.autoHandoff,
+      autoDispatch: entry.autoDispatch,
       handoffCount: entry.handoffCount,
       cols: termStatus.cols,
       rows: termStatus.rows,
@@ -518,6 +623,7 @@ export function createClaudePool(ctx) {
     remove,
     respawn,
     setAutoHandoff,
+    setAutoDispatch,
     assignTask,
     releaseTask,
     getAssignedTask,
@@ -529,4 +635,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS };

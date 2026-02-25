@@ -77,7 +77,7 @@ vi.mock('../claude-terminal.mjs', async (importOriginal) => {
   };
 });
 
-const { createClaudePool, MAX_TERMINALS } = await import('../claude-pool.mjs');
+const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
 
 // ============================================================
@@ -561,6 +561,300 @@ describe('createClaudePool', () => {
       expect(task.priority).toBe(5);
     });
   });
+
+  // ── Auto-Dispatch (Phase 20) ─────────────────────
+
+  describe('auto-dispatch', () => {
+    it('setAutoDispatch enables/disables on a terminal', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').autoDispatch).toBe(false);
+      pool.setAutoDispatch('t1', true);
+      expect(pool.getTerminal('t1').autoDispatch).toBe(true);
+      pool.setAutoDispatch('t1', false);
+      expect(pool.getTerminal('t1').autoDispatch).toBe(false);
+    });
+
+    it('setAutoDispatch returns false for nonexistent', () => {
+      expect(pool.setAutoDispatch('nope', true)).toBe(false);
+    });
+
+    it('spawn tracks autoDispatch from opts', async () => {
+      await pool.spawn('t1', { autoDispatch: true });
+      expect(pool.getTerminal('t1').autoDispatch).toBe(true);
+    });
+
+    it('spawn defaults autoDispatch to false', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').autoDispatch).toBe(false);
+    });
+
+    it('formatEntry includes autoDispatch', async () => {
+      await pool.spawn('t1', { autoDispatch: true });
+      const t = pool.getTerminal('t1');
+      expect(t).toHaveProperty('autoDispatch', true);
+    });
+
+    it('auto-dispatch claims task after task-completed event', async () => {
+      // Create pool with coordinator
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Build feature', status: 'pending', deps: [], priority: 1 },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      const dispatched = [];
+      events.on('claude-terminal:auto-dispatch', (d) => dispatched.push(d));
+
+      // Simulate task completion
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'complete',
+      });
+
+      // Wait for delay
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+
+      expect(dispatched.length).toBe(1);
+      expect(dispatched[0].terminalId).toBe('d1');
+      expect(dispatched[0].taskId).toBe('q1');
+      expect(mockTaskQueue.assign).toHaveBeenCalledWith('q1', 'd1');
+      expect(mockTaskQueue.start).toHaveBeenCalledWith('q1');
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch skipped when disabled', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Build feature', status: 'pending', deps: [] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: false });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).not.toHaveBeenCalled();
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch skipped when no coordinator', async () => {
+      // Pool without coordinator (default)
+      await pool.spawn('t1', { autoDispatch: true });
+
+      const dispatched = [];
+      events.on('claude-terminal:auto-dispatch', (d) => dispatched.push(d));
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 't1', taskId: 'old-task', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(dispatched.length).toBe(0);
+    });
+
+    it('auto-dispatch skipped when no ready tasks', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => []),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).not.toHaveBeenCalled();
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch skipped when terminal already has task', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Build', status: 'pending', deps: [] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+      dispatchPool.assignTask('d1', { id: 'existing', task: 'Already running' });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'some-other', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).not.toHaveBeenCalled();
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch writes task prompt to PTY', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Implement login page', status: 'pending', deps: [] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+      const handle = dispatchPool.getTerminalHandle('d1');
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(handle.write).toHaveBeenCalledWith('[AUTO-DISPATCH] Task q1: Implement login page\r');
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch emits claude-terminal:auto-dispatch event', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Fix bug', status: 'pending', deps: [] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      const dispatched = [];
+      events.on('claude-terminal:auto-dispatch', (d) => dispatched.push(d));
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(dispatched.length).toBe(1);
+      expect(dispatched[0]).toEqual(expect.objectContaining({
+        terminalId: 'd1',
+        taskId: 'q1',
+        task: 'Fix bug',
+      }));
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch skips tasks with incomplete deps', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'dep1', task: 'Dep task', status: 'running', deps: [] },
+          { id: 'q1', task: 'Blocked', status: 'pending', deps: ['dep1'] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).not.toHaveBeenCalled();
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch claims task with completed deps', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'dep1', task: 'Dep task', status: 'complete', deps: [] },
+          { id: 'q1', task: 'Ready now', status: 'pending', deps: ['dep1'] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old', status: 'complete',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).toHaveBeenCalledWith('q1', 'd1');
+
+      await dispatchPool.shutdownAll();
+    });
+
+    it('auto-dispatch not triggered on failed task completion', async () => {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => [
+          { id: 'q1', task: 'Next', status: 'pending', deps: [] },
+        ]),
+        assign: vi.fn(),
+        start: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const dispatchPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+
+      await dispatchPool.spawn('d1', { autoDispatch: true });
+
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'd1', taskId: 'old-task', status: 'failed',
+      });
+
+      await new Promise(r => setTimeout(r, AUTO_DISPATCH_DELAY_MS + 100));
+      expect(mockTaskQueue.assign).not.toHaveBeenCalled();
+
+      await dispatchPool.shutdownAll();
+    });
+  });
 });
 
 // ============================================================
@@ -602,6 +896,7 @@ function createMockClaudePool() {
         model: opts.model || null,
         dangerouslySkipPermissions: !!opts.dangerouslySkipPermissions,
         autoHandoff: !!opts.autoHandoff,
+        autoDispatch: !!opts.autoDispatch,
         handoffCount: opts._handoffCount || 0,
         cols: opts.cols || 120,
         rows: opts.rows || 30,
@@ -644,6 +939,12 @@ function createMockClaudePool() {
       const t = terminals.get(id);
       if (!t) return false;
       t.autoHandoff = !!enabled;
+      return true;
+    }),
+    setAutoDispatch: vi.fn((id, enabled) => {
+      const t = terminals.get(id);
+      if (!t) return false;
+      t.autoDispatch = !!enabled;
       return true;
     }),
     assignTask: vi.fn((id, task) => {
@@ -796,6 +1097,13 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       const { status } = await api('/api/claude-terminals/x/complete-task', {
         method: 'POST',
         body: { status: 'complete' },
+      });
+      expect(status).toBe(503);
+    });
+
+    it('POST toggle-auto-dispatch returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/toggle-auto-dispatch', {
+        method: 'POST',
       });
       expect(status).toBe(503);
     });
@@ -988,6 +1296,41 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       expect(status).toBe(201);
       expect(mockPool.spawn).toHaveBeenCalledWith('ah-test', expect.objectContaining({
         autoHandoff: true,
+      }));
+    });
+
+    // ── POST toggle-auto-dispatch (Phase 20) ─────
+
+    it('POST toggle-auto-dispatch toggles state', async () => {
+      const adEvents = [];
+      routeEvents.on('claude-terminal:auto-dispatch-changed', (d) => adEvents.push(d));
+
+      const { status, body } = await api('/api/claude-terminals/rt1/toggle-auto-dispatch', {
+        method: 'POST',
+      });
+      expect(status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(typeof body.autoDispatch).toBe('boolean');
+      expect(mockPool.setAutoDispatch).toHaveBeenCalled();
+      expect(adEvents.length).toBe(1);
+      expect(adEvents[0].terminalId).toBe('rt1');
+    });
+
+    it('POST toggle-auto-dispatch returns 404 for unknown', async () => {
+      const { status } = await api('/api/claude-terminals/nonexistent/toggle-auto-dispatch', {
+        method: 'POST',
+      });
+      expect(status).toBe(404);
+    });
+
+    it('POST create accepts autoDispatch option', async () => {
+      const { status } = await api('/api/claude-terminals', {
+        method: 'POST',
+        body: { id: 'ad-test', autoDispatch: true },
+      });
+      expect(status).toBe(201);
+      expect(mockPool.spawn).toHaveBeenCalledWith('ad-test', expect.objectContaining({
+        autoDispatch: true,
       }));
     });
 

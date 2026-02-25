@@ -11,6 +11,7 @@
 //   POST   /claude-terminals/:id/resize   Resize terminal
 //   POST   /claude-terminals/:id/toggle-permissions  Toggle --dangerously-skip-permissions
 //   POST   /claude-terminals/:id/toggle-auto-handoff Toggle auto-handoff (Phase 15E)
+//   POST   /claude-terminals/:id/toggle-auto-dispatch Toggle auto-dispatch (Phase 20)
 //   DELETE /claude-terminals/:id          Kill + remove terminal
 //   POST   /claude-terminals/:id/respawn  Kill + respawn with new config
 //
@@ -71,6 +72,7 @@ export function createClaudeTerminalRoutes(ctx) {
       model,
       dangerouslySkipPermissions,
       autoHandoff,
+      autoDispatch,
       systemPrompt,
       resumeSessionId,
       continueSession,
@@ -92,6 +94,7 @@ export function createClaudeTerminalRoutes(ctx) {
         model,
         dangerouslySkipPermissions: !!dangerouslySkipPermissions,
         autoHandoff: !!autoHandoff,
+        autoDispatch: !!autoDispatch,
         systemPrompt,
         resumeSessionId,
         continueSession: !!continueSession,
@@ -165,6 +168,26 @@ export function createClaudeTerminalRoutes(ctx) {
     });
 
     res.json({ ok: true, terminalId: req.params.id, autoHandoff: newState });
+  });
+
+  // ── POST /claude-terminals/:id/toggle-auto-dispatch ──
+
+  router.post('/claude-terminals/:id/toggle-auto-dispatch', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    const newState = !terminal.autoDispatch;
+    const ok = claudePool.setAutoDispatch(req.params.id, newState);
+    if (!ok) return res.status(404).json({ error: 'Terminal not found' });
+
+    events.emit('claude-terminal:auto-dispatch-changed', {
+      terminalId: req.params.id,
+      autoDispatch: newState,
+    });
+
+    res.json({ ok: true, terminalId: req.params.id, autoDispatch: newState });
   });
 
   // ── POST /claude-terminals/:id/respawn ────────────────

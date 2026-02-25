@@ -198,6 +198,10 @@
             <input type="checkbox" name="autoHandoff" checked>
             Auto-Handoff <small>(auto-continue on context exhaustion)</small>
           </label>
+          <label>
+            <input type="checkbox" name="autoDispatch">
+            Auto-Dispatch <small>(auto-claim next task on completion)</small>
+          </label>
           <footer>
             <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-claude-dialog').close()">Cancel</button>
             <button type="submit" class="btn btn--primary">Start Terminal</button>
@@ -357,6 +361,7 @@
         <kbd>Ctrl+Shift+M</kbd><span>Maximize / restore panel</span>
         <kbd>Ctrl+B</kbd><span>Toggle file sidebar</span>
         <kbd>Ctrl+Shift+A</kbd><span>Toggle auto-handoff</span>
+        <kbd>Ctrl+Shift+D</kbd><span>Toggle auto-dispatch</span>
         <kbd>Ctrl+M</kbd><span>Shared memory panel</span>
         <kbd>Ctrl+Shift+I</kbd><span>Terminal messages panel</span>
         <kbd>1-5</kbd><span>Layout: single / split-h / split-v / triple / quad</span>
