@@ -333,6 +333,13 @@ var sidebarFilterTimer = null;
       return;
     }
 
+    // Ctrl+Shift+E: toggle auto-complete on active Claude terminal
+    if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+      e.preventDefault();
+      if (activeTabId) toggleAutoComplete(activeTabId);
+      return;
+    }
+
     // 1-5: quick layout switch (no modifiers, not in form fields)
     if (!e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey) {
       var layouts = { '1': 'single', '2': 'split-h', '3': 'split-v', '4': 'triple', '5': 'quad' };
@@ -435,6 +442,7 @@ function addClaudeTerminalInstance(id, state) {
       existing.dangerouslySkipPermissions = state.dangerouslySkipPermissions;
       if (typeof state.autoHandoff !== 'undefined') existing.autoHandoff = !!state.autoHandoff;
       if (typeof state.autoDispatch !== 'undefined') existing.autoDispatch = !!state.autoDispatch;
+      if (typeof state.autoComplete !== 'undefined') existing.autoComplete = !!state.autoComplete;
       if (typeof state.handoffCount !== 'undefined') existing.handoffCount = state.handoffCount;
     }
     updateStatusBar(id);
@@ -494,6 +502,7 @@ function addClaudeTerminalInstance(id, state) {
   var permLabel = state && state.dangerouslySkipPermissions ? '\u26A0 No Perms' : '\u2705 Safe';
   var isAutoHandoff = state && state.autoHandoff;
   var isAutoDispatch = state && state.autoDispatch;
+  var isAutoComplete = state && state.autoComplete;
   var handoffCount = (state && state.handoffCount) || 0;
   var statusBar = document.createElement('div');
   statusBar.className = 'term-status';
@@ -510,6 +519,7 @@ function addClaudeTerminalInstance(id, state) {
     '<span class="term-status__actions">' +
       '<button class="term-status__btn' + (isAutoHandoff ? ' term-status__btn--active' : '') + '" onclick="toggleAutoHandoff(\'' + escHtml(id) + '\')" data-action="toggle-handoff" title="Toggle auto-handoff (Ctrl+Shift+A)">\u21BB</button>' +
       '<button class="term-status__btn' + (isAutoDispatch ? ' term-status__btn--active' : '') + '" onclick="toggleAutoDispatch(\'' + escHtml(id) + '\')" data-action="toggle-dispatch" title="Toggle auto-dispatch (Ctrl+Shift+D)">\u26A1</button>' +
+      '<button class="term-status__btn' + (isAutoComplete ? ' term-status__btn--active' : '') + '" onclick="toggleAutoComplete(\'' + escHtml(id) + '\')" data-action="toggle-complete" title="Toggle auto-complete (Ctrl+Shift+E)">\u2713</button>' +
       '<button class="term-status__btn" onclick="toggleClaudePermissions(\'' + escHtml(id) + '\')" data-action="toggle-perms" title="Toggle permission mode">\u{1F512}</button>' +
       '<button class="term-status__btn" onclick="claimTask(\'' + escHtml(id) + '\')" data-action="claim-task" title="Claim next task">&#9776;</button>' +
       '<button class="term-status__btn term-status__btn--danger" onclick="killClaudeInstance(\'' + escHtml(id) + '\')" data-action="kill">Kill</button>' +
@@ -603,6 +613,7 @@ function addClaudeTerminalInstance(id, state) {
     dangerouslySkipPermissions: state ? !!state.dangerouslySkipPermissions : false,
     autoHandoff: state ? !!state.autoHandoff : false,
     autoDispatch: state ? !!state.autoDispatch : false,
+    autoComplete: state ? !!state.autoComplete : false,
     handoffCount: state ? (state.handoffCount || 0) : 0,
     binaryWs: null,
     coord: {
@@ -706,6 +717,7 @@ function submitNewClaude(e) {
   var skipPerms = form.dangerouslySkipPermissions.checked;
   var autoHandoff = form.autoHandoff.checked;
   var autoDispatch = form.autoDispatch.checked;
+  var autoComplete = form.autoComplete.checked;
 
   if (!id) {
     showToast('Terminal ID is required', 'error');
@@ -727,6 +739,7 @@ function submitNewClaude(e) {
       dangerouslySkipPermissions: skipPerms,
       autoHandoff: autoHandoff,
       autoDispatch: autoDispatch,
+      autoComplete: autoComplete,
     }),
   })
     .then(function(r) {
@@ -741,6 +754,7 @@ function submitNewClaude(e) {
         dangerouslySkipPermissions: skipPerms,
         autoHandoff: autoHandoff,
         autoDispatch: autoDispatch,
+        autoComplete: autoComplete,
       });
       switchTab(id);
       showToast('Claude terminal ' + id + ' started', 'success');
@@ -903,6 +917,31 @@ function toggleAutoDispatch(id) {
     })
     .catch(function(err) {
       showToast('Failed to toggle auto-dispatch: ' + err.message, 'error');
+    });
+}
+
+// ── Toggle auto-complete on a Claude terminal ─────────────────
+function toggleAutoComplete(id) {
+  var inst = instances.get(id);
+  if (!inst || inst.type !== 'claude') return;
+
+  fetch('/api/claude-terminals/' + encodeURIComponent(id) + '/toggle-auto-complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Toggle failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      inst.autoComplete = data.autoComplete;
+      updateStatusBar(id);
+      var label = data.autoComplete ? 'enabled' : 'disabled';
+      inst.terminal.writeln('\r\n\x1b[33m[AUTO-COMPLETE] ' + label + '\x1b[0m');
+      showToast(id + ' auto-complete ' + label, 'success');
+    })
+    .catch(function(err) {
+      showToast('Failed to toggle auto-complete: ' + err.message, 'error');
     });
 }
 
@@ -1850,6 +1889,22 @@ function connectWS() {
         break;
       }
 
+      case 'claude-terminal:auto-complete-changed': {
+        var acId = msg.data.terminalId;
+        var acInst = instances.get(acId);
+        if (acInst && acInst.type === 'claude') {
+          acInst.autoComplete = !!msg.data.autoComplete;
+          updateStatusBar(acId);
+        }
+        break;
+      }
+
+      case 'claude-terminal:auto-complete': {
+        var compId = msg.data.terminalId;
+        showToast(compId + ' auto-completed task ' + msg.data.taskId, 'success');
+        break;
+      }
+
       // Auto-refresh shared memory panel when open
       case 'shared-memory:updated':
       case 'shared-memory:deleted':
@@ -2068,6 +2123,11 @@ function updateStatusBar(id) {
     var dispatchToggle = statusBar.querySelector('[data-action="toggle-dispatch"]');
     if (dispatchToggle) {
       dispatchToggle.className = 'term-status__btn' + (inst.autoDispatch ? ' term-status__btn--active' : '');
+    }
+    // Update auto-complete toggle button active state
+    var completeToggle = statusBar.querySelector('[data-action="toggle-complete"]');
+    if (completeToggle) {
+      completeToggle.className = 'term-status__btn' + (inst.autoComplete ? ' term-status__btn--active' : '');
     }
     var killBtn = statusBar.querySelector('[data-action="kill"]');
     if (killBtn) killBtn.disabled = !inst.running;
@@ -3522,6 +3582,7 @@ function refreshPoolStatus() {
       el('pool-waiting').textContent = data.waiting + ' waiting';
       el('pool-tasks').textContent = data.withTask + ' tasks';
       el('pool-dispatch').textContent = data.withAutoDispatch + ' auto-dispatch';
+      el('pool-complete').textContent = data.withAutoComplete + ' auto-complete';
     })
     .catch(function() { /* ignore */ });
 }
@@ -3551,6 +3612,7 @@ window.removeClaudeInstance = removeClaudeInstance;
 window.toggleClaudePermissions = toggleClaudePermissions;
 window.toggleAutoHandoff = toggleAutoHandoff;
 window.toggleAutoDispatch = toggleAutoDispatch;
+window.toggleAutoComplete = toggleAutoComplete;
 window.toggleSidebar = toggleSidebar;
 window.refreshSidebarTree = refreshSidebarTree;
 window.filterSidebarTree = filterSidebarTree;

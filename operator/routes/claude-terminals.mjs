@@ -12,6 +12,7 @@
 //   POST   /claude-terminals/:id/toggle-permissions  Toggle --dangerously-skip-permissions
 //   POST   /claude-terminals/:id/toggle-auto-handoff Toggle auto-handoff (Phase 15E)
 //   POST   /claude-terminals/:id/toggle-auto-dispatch Toggle auto-dispatch (Phase 20)
+//   POST   /claude-terminals/:id/toggle-auto-complete Toggle auto-complete (Phase 22)
 //   DELETE /claude-terminals/:id          Kill + remove terminal
 //   POST   /claude-terminals/:id/respawn  Kill + respawn with new config
 //
@@ -82,6 +83,7 @@ export function createClaudeTerminalRoutes(ctx) {
       dangerouslySkipPermissions,
       autoHandoff,
       autoDispatch,
+      autoComplete,
       systemPrompt,
       resumeSessionId,
       continueSession,
@@ -104,6 +106,7 @@ export function createClaudeTerminalRoutes(ctx) {
         dangerouslySkipPermissions: !!dangerouslySkipPermissions,
         autoHandoff: !!autoHandoff,
         autoDispatch: !!autoDispatch,
+        autoComplete: autoComplete !== undefined ? !!autoComplete : undefined,
         systemPrompt,
         resumeSessionId,
         continueSession: !!continueSession,
@@ -197,6 +200,26 @@ export function createClaudeTerminalRoutes(ctx) {
     });
 
     res.json({ ok: true, terminalId: req.params.id, autoDispatch: newState });
+  });
+
+  // ── POST /claude-terminals/:id/toggle-auto-complete ──
+
+  router.post('/claude-terminals/:id/toggle-auto-complete', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    const newState = !terminal.autoComplete;
+    const ok = claudePool.setAutoComplete(req.params.id, newState);
+    if (!ok) return res.status(404).json({ error: 'Terminal not found' });
+
+    events.emit('claude-terminal:auto-complete-changed', {
+      terminalId: req.params.id,
+      autoComplete: newState,
+    });
+
+    res.json({ ok: true, terminalId: req.params.id, autoComplete: newState });
   });
 
   // ── POST /claude-terminals/:id/respawn ────────────────

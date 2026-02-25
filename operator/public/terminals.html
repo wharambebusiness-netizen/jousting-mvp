@@ -92,6 +92,7 @@
       <span class="pool-status__sep">|</span>
       <span class="pool-status__item" id="pool-tasks" title="Terminals with assigned tasks">0 tasks</span>
       <span class="pool-status__item" id="pool-dispatch" title="Auto-dispatch enabled">0 auto-dispatch</span>
+      <span class="pool-status__item" id="pool-complete" title="Auto-complete enabled">0 auto-complete</span>
     </div>
 
     <!-- Tab Bar -->
@@ -213,6 +214,10 @@
           <label>
             <input type="checkbox" name="autoDispatch">
             Auto-Dispatch <small>(auto-claim next task on completion)</small>
+          </label>
+          <label>
+            <input type="checkbox" name="autoComplete">
+            Auto-Complete <small>(detect task completion from idle state)</small>
           </label>
           <footer>
             <button type="button" class="btn btn--ghost" onclick="document.getElementById('new-claude-dialog').close()">Cancel</button>
@@ -374,6 +379,7 @@
         <kbd>Ctrl+B</kbd><span>Toggle file sidebar</span>
         <kbd>Ctrl+Shift+A</kbd><span>Toggle auto-handoff</span>
         <kbd>Ctrl+Shift+D</kbd><span>Toggle auto-dispatch</span>
+        <kbd>Ctrl+Shift+E</kbd><span>Toggle auto-complete</span>
         <kbd>Ctrl+M</kbd><span>Shared memory panel</span>
         <kbd>Ctrl+Shift+I</kbd><span>Terminal messages panel</span>
         <kbd>1-5</kbd><span>Layout: single / split-h / split-v / triple / quad</span>

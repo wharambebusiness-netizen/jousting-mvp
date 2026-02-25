@@ -63,6 +63,9 @@ function createFakeTerminal(id, pid = 100) {
     _triggerContextWarning(info) {
       for (const fn of listeners['context-warning']) fn(info);
     },
+    getOutputBuffer() {
+      return 'mock output buffer';
+    },
   };
 }
 
@@ -77,7 +80,7 @@ vi.mock('../claude-terminal.mjs', async (importOriginal) => {
   };
 });
 
-const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS } = await import('../claude-pool.mjs');
+const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
 
 // ============================================================
@@ -856,6 +859,256 @@ describe('createClaudePool', () => {
     });
   });
 
+  // ── Auto-Complete Detection (Phase 22) ──────────
+
+  describe('auto-complete', () => {
+    it('setAutoComplete enables/disables on a terminal', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').autoComplete).toBe(false);
+      pool.setAutoComplete('t1', true);
+      expect(pool.getTerminal('t1').autoComplete).toBe(true);
+      pool.setAutoComplete('t1', false);
+      expect(pool.getTerminal('t1').autoComplete).toBe(false);
+    });
+
+    it('setAutoComplete returns false for nonexistent', () => {
+      expect(pool.setAutoComplete('nope', true)).toBe(false);
+    });
+
+    it('spawn defaults autoComplete to match autoDispatch', async () => {
+      await pool.spawn('t1', { autoDispatch: true });
+      expect(pool.getTerminal('t1').autoComplete).toBe(true);
+      await pool.spawn('t2', { autoDispatch: false });
+      expect(pool.getTerminal('t2').autoComplete).toBe(false);
+    });
+
+    it('spawn allows explicit autoComplete override', async () => {
+      await pool.spawn('t1', { autoDispatch: true, autoComplete: false });
+      expect(pool.getTerminal('t1').autoComplete).toBe(false);
+      expect(pool.getTerminal('t1').autoDispatch).toBe(true);
+    });
+
+    it('formatEntry includes autoComplete', async () => {
+      await pool.spawn('t1', { autoComplete: true });
+      const t = pool.getTerminal('t1');
+      expect(t).toHaveProperty('autoComplete', true);
+    });
+
+    it('exports COMPLETION_IDLE_THRESHOLD_MS constant', () => {
+      expect(COMPLETION_IDLE_THRESHOLD_MS).toBe(30000);
+    });
+
+    it('exports MIN_ACTIVITY_BYTES constant', () => {
+      expect(MIN_ACTIVITY_BYTES).toBe(100);
+    });
+
+    // Helper to create pool with coordinator for auto-complete timer tests
+    function createAutoCompletePool() {
+      const mockTaskQueue = {
+        getAll: vi.fn(() => []),
+        assign: vi.fn(),
+        start: vi.fn(),
+        complete: vi.fn(),
+      };
+      const mockCoordinator = { taskQueue: mockTaskQueue };
+      const acPool = createClaudePool({
+        events, projectDir: '/tmp/pool-test', coordinator: mockCoordinator, log: () => {},
+      });
+      return { acPool, mockTaskQueue };
+    }
+
+    // Use fake timers to avoid 30s real waits
+    describe('timer-based detection', () => {
+      beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('auto-completes after idle threshold following sufficient activity', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        const completed = [];
+        events.on('claude-terminal:auto-complete', (d) => completed.push(d));
+        const taskCompleted = [];
+        events.on('claude-terminal:task-completed', (d) => taskCompleted.push(d));
+
+        // Simulate enough activity
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(MIN_ACTIVITY_BYTES + 50) });
+
+        // Advance past completion threshold
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(completed.length).toBe(1);
+        expect(completed[0].terminalId).toBe('ac1');
+        expect(completed[0].taskId).toBe('task-1');
+        expect(mockTaskQueue.complete).toHaveBeenCalledWith('task-1', expect.any(String));
+        expect(taskCompleted.find(t => t.autoCompleted)).toBeTruthy();
+
+        await acPool.shutdownAll();
+      });
+
+      it('auto-complete skipped when disabled', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: false });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('auto-complete skipped with insufficient activity', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        // Send less than MIN_ACTIVITY_BYTES
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(10) });
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('auto-complete timer resets on new data', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        // Advance to just under threshold
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS - 1000);
+
+        // Send more data — resets the timer
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'more output' });
+
+        // Advance past original threshold but not past reset
+        vi.advanceTimersByTime(5000);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('auto-complete skipped when no task assigned', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        // No task assigned
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('completion watch stops on task release', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        // Release task before threshold
+        acPool.releaseTask('ac1');
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('completion watch stops on terminal exit', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        // Trigger terminal exit
+        acPool.getTerminalHandle('ac1')._triggerExit(0);
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('setAutoComplete clears timer when disabling', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        // Disable auto-complete before threshold
+        acPool.setAutoComplete('ac1', false);
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(mockTaskQueue.complete).not.toHaveBeenCalled();
+
+        await acPool.shutdownAll();
+      });
+
+      it('auto-complete emits both auto-complete and task-completed events', async () => {
+        const { acPool, mockTaskQueue } = createAutoCompletePool();
+
+        await acPool.spawn('ac1', { autoComplete: true });
+        acPool.assignTask('ac1', { id: 'task-1', task: 'Fix bug' });
+
+        const autoCompleteEvents = [];
+        const taskCompletedEvents = [];
+        events.on('claude-terminal:auto-complete', (d) => autoCompleteEvents.push(d));
+        events.on('claude-terminal:task-completed', (d) => taskCompletedEvents.push(d));
+
+        events.emit('claude-terminal:data', { terminalId: 'ac1', data: 'x'.repeat(200) });
+
+        vi.advanceTimersByTime(COMPLETION_IDLE_THRESHOLD_MS + 100);
+
+        expect(autoCompleteEvents.length).toBe(1);
+        expect(autoCompleteEvents[0]).toMatchObject({ terminalId: 'ac1', taskId: 'task-1', task: 'Fix bug' });
+
+        const tcEvent = taskCompletedEvents.find(e => e.autoCompleted);
+        expect(tcEvent).toBeTruthy();
+        expect(tcEvent.status).toBe('complete');
+        expect(tcEvent.terminalId).toBe('ac1');
+
+        await acPool.shutdownAll();
+      });
+    });
+
+    it('getPoolStatus counts withAutoComplete correctly', async () => {
+      await pool.spawn('t1', { autoComplete: true });
+      await pool.spawn('t2', { autoComplete: false });
+      const status = pool.getPoolStatus();
+      expect(status.withAutoComplete).toBe(1);
+    });
+  });
+
   // ── Activity Tracking (Phase 21) ─────────────────
 
   describe('activity tracking', () => {
@@ -976,6 +1229,7 @@ function createMockClaudePool() {
         dangerouslySkipPermissions: !!opts.dangerouslySkipPermissions,
         autoHandoff: !!opts.autoHandoff,
         autoDispatch: !!opts.autoDispatch,
+        autoComplete: opts.autoComplete !== undefined ? !!opts.autoComplete : !!opts.autoDispatch,
         handoffCount: opts._handoffCount || 0,
         cols: opts.cols || 120,
         rows: opts.rows || 30,
@@ -1026,6 +1280,12 @@ function createMockClaudePool() {
       t.autoDispatch = !!enabled;
       return true;
     }),
+    setAutoComplete: vi.fn((id, enabled) => {
+      const t = terminals.get(id);
+      if (!t) return false;
+      t.autoComplete = !!enabled;
+      return true;
+    }),
     assignTask: vi.fn((id, task) => {
       const t = terminals.get(id);
       if (!t) return false;
@@ -1057,7 +1317,7 @@ function createMockClaudePool() {
       running: [...terminals.values()].filter(t => t.status === 'running').length,
       stopped: [...terminals.values()].filter(t => t.status !== 'running').length,
       active: [...terminals.values()].filter(t => t.status === 'running').length,
-      idle: 0, waiting: 0, withTask: 0, withAutoDispatch: 0,
+      idle: 0, waiting: 0, withTask: 0, withAutoDispatch: 0, withAutoComplete: 0,
       maxTerminals: 8,
     })),
     shutdownAll: vi.fn(async () => {}),
@@ -1190,6 +1450,13 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
 
     it('POST toggle-auto-dispatch returns 503', async () => {
       const { status } = await api('/api/claude-terminals/x/toggle-auto-dispatch', {
+        method: 'POST',
+      });
+      expect(status).toBe(503);
+    });
+
+    it('POST toggle-auto-complete returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/toggle-auto-complete', {
         method: 'POST',
       });
       expect(status).toBe(503);
@@ -1437,6 +1704,41 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       expect(status).toBe(201);
       expect(mockPool.spawn).toHaveBeenCalledWith('ad-test', expect.objectContaining({
         autoDispatch: true,
+      }));
+    });
+
+    // ── POST toggle-auto-complete (Phase 22) ─────
+
+    it('POST toggle-auto-complete toggles state', async () => {
+      const acEvents = [];
+      routeEvents.on('claude-terminal:auto-complete-changed', (d) => acEvents.push(d));
+
+      const { status, body } = await api('/api/claude-terminals/rt1/toggle-auto-complete', {
+        method: 'POST',
+      });
+      expect(status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(typeof body.autoComplete).toBe('boolean');
+      expect(mockPool.setAutoComplete).toHaveBeenCalled();
+      expect(acEvents.length).toBe(1);
+      expect(acEvents[0].terminalId).toBe('rt1');
+    });
+
+    it('POST toggle-auto-complete returns 404 for unknown', async () => {
+      const { status } = await api('/api/claude-terminals/nonexistent/toggle-auto-complete', {
+        method: 'POST',
+      });
+      expect(status).toBe(404);
+    });
+
+    it('POST create accepts autoComplete option', async () => {
+      const { status } = await api('/api/claude-terminals', {
+        method: 'POST',
+        body: { id: 'ac-test', autoComplete: true },
+      });
+      expect(status).toBe(201);
+      expect(mockPool.spawn).toHaveBeenCalledWith('ac-test', expect.objectContaining({
+        autoComplete: true,
       }));
     });
 

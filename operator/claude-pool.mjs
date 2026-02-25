@@ -20,6 +20,8 @@ const MAX_TERMINALS = 8;
 const FORCE_KILL_TIMEOUT_MS = 5000;
 const AUTO_DISPATCH_DELAY_MS = 2000;
 const IDLE_THRESHOLD_MS = 10000; // 10s of no output = idle
+const COMPLETION_IDLE_THRESHOLD_MS = 30000; // 30s idle after activity = task complete
+const MIN_ACTIVITY_BYTES = 100; // min output before auto-complete triggers
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -110,9 +112,12 @@ export function createClaudePool(ctx) {
       stoppedAt: null,
       autoHandoff: !!opts.autoHandoff,
       autoDispatch: !!opts.autoDispatch,
+      autoComplete: opts.autoComplete !== undefined ? !!opts.autoComplete : !!opts.autoDispatch,
       handoffCount: opts._handoffCount || 0,
       assignedTask: null,
       lastActivityAt: now,
+      _completionTimer: null,
+      _taskActivityBytes: 0,
     };
 
     terminals.set(terminalId, entry);
@@ -219,12 +224,14 @@ export function createClaudePool(ctx) {
 
     // Respawn with continueSession=true, carrying forward config
     const hadAutoDispatch = entry.autoDispatch;
+    const hadAutoComplete = entry.autoComplete;
     const config = {
       ...entry.config,
       continueSession: true,
       resumeSessionId: undefined, // -c takes precedence
       autoHandoff: true,
       autoDispatch: hadAutoDispatch,
+      autoComplete: hadAutoComplete,
       _handoffCount: newCount,
     };
 
@@ -359,6 +366,136 @@ export function createClaudePool(ctx) {
         setTimeout(() => maybeAutoDispatch(data.terminalId), AUTO_DISPATCH_DELAY_MS);
       }
     }
+  });
+
+  // ── Auto-Complete Detection ───────────────────────────
+
+  /**
+   * Reset the completion idle timer for a terminal.
+   * Called on each PTY data event when terminal has an active task.
+   * @param {string} terminalId
+   */
+  function resetCompletionTimer(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return;
+
+    // Clear existing timer
+    if (entry._completionTimer) {
+      clearTimeout(entry._completionTimer);
+      entry._completionTimer = null;
+    }
+
+    // Start new idle timer
+    entry._completionTimer = setTimeout(() => {
+      entry._completionTimer = null;
+      maybeAutoComplete(terminalId);
+    }, COMPLETION_IDLE_THRESHOLD_MS);
+  }
+
+  /**
+   * Stop completion watching for a terminal (clear timer + reset bytes).
+   * @param {string} terminalId
+   */
+  function stopCompletionWatch(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return;
+    if (entry._completionTimer) {
+      clearTimeout(entry._completionTimer);
+      entry._completionTimer = null;
+    }
+    entry._taskActivityBytes = 0;
+  }
+
+  /**
+   * Auto-complete a task after sustained idle following meaningful activity.
+   * @param {string} terminalId
+   */
+  function maybeAutoComplete(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return;
+    if (!entry.autoComplete) return;
+    if (!entry.assignedTask) return;
+    if (entry.status !== 'running') return;
+
+    // Require minimum activity to avoid false positives
+    if (entry._taskActivityBytes < MIN_ACTIVITY_BYTES) return;
+
+    const taskId = entry.assignedTask.taskId;
+    const taskDesc = entry.assignedTask.task;
+    const result = entry.terminal.getOutputBuffer();
+
+    log(`[claude-pool] ${terminalId} auto-completing task ${taskId} (${entry._taskActivityBytes} bytes activity, ${COMPLETION_IDLE_THRESHOLD_MS}ms idle)`);
+
+    try {
+      // Update coordination queue if available
+      if (coordinator && coordinator.taskQueue) {
+        coordinator.taskQueue.complete(taskId, result);
+      }
+
+      // Release from pool (emits task-released)
+      releaseTask(terminalId);
+
+      // Reset completion state
+      entry._taskActivityBytes = 0;
+
+      // Emit task-completed (triggers auto-dispatch)
+      events.emit('claude-terminal:task-completed', {
+        terminalId,
+        taskId,
+        status: 'complete',
+        result,
+        autoCompleted: true,
+      });
+
+      // Emit auto-complete event for UI
+      events.emit('claude-terminal:auto-complete', {
+        terminalId,
+        taskId,
+        task: taskDesc,
+      });
+    } catch (err) {
+      log(`[claude-pool] ${terminalId} auto-complete failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Enable or disable auto-complete for a terminal.
+   * @param {string} terminalId
+   * @param {boolean} enabled
+   * @returns {boolean} true if updated
+   */
+  function setAutoComplete(terminalId, enabled) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.autoComplete = !!enabled;
+    entry.config.autoComplete = !!enabled;
+    if (!enabled) {
+      stopCompletionWatch(terminalId);
+    }
+    return true;
+  }
+
+  // Track PTY activity for completion detection
+  events.on('claude-terminal:data', (data) => {
+    const entry = terminals.get(data.terminalId);
+    if (!entry || !entry.autoComplete || !entry.assignedTask) return;
+    if (entry.status !== 'running') return;
+
+    // Accumulate activity bytes
+    entry._taskActivityBytes += (data.data ? data.data.length : 0);
+
+    // Reset idle timer (starts/restarts on each data event)
+    resetCompletionTimer(data.terminalId);
+  });
+
+  // Stop completion watch when task is released manually
+  events.on('claude-terminal:task-released', (data) => {
+    stopCompletionWatch(data.terminalId);
+  });
+
+  // Stop completion watch when terminal exits
+  events.on('claude-terminal:exit', (data) => {
+    stopCompletionWatch(data.terminalId);
   });
 
   // ── Write ─────────────────────────────────────────────
@@ -620,6 +757,7 @@ export function createClaudePool(ctx) {
       dangerouslySkipPermissions: termStatus.dangerouslySkipPermissions,
       autoHandoff: entry.autoHandoff,
       autoDispatch: entry.autoDispatch,
+      autoComplete: entry.autoComplete,
       handoffCount: entry.handoffCount,
       cols: termStatus.cols,
       rows: termStatus.rows,
@@ -638,7 +776,7 @@ export function createClaudePool(ctx) {
    * @returns {object} { total, running, stopped, active, idle, waiting, withTask, withAutoDispatch }
    */
   function getPoolStatus() {
-    let running = 0, stopped = 0, active = 0, idle = 0, waiting = 0, withTask = 0, withAutoDispatch = 0;
+    let running = 0, stopped = 0, active = 0, idle = 0, waiting = 0, withTask = 0, withAutoDispatch = 0, withAutoComplete = 0;
     for (const entry of terminals.values()) {
       if (entry.status === 'running') running++;
       else stopped++;
@@ -648,6 +786,7 @@ export function createClaudePool(ctx) {
       else if (state === 'waiting') waiting++;
       if (entry.assignedTask) withTask++;
       if (entry.autoDispatch) withAutoDispatch++;
+      if (entry.autoComplete) withAutoComplete++;
     }
     return {
       total: terminals.size,
@@ -658,6 +797,7 @@ export function createClaudePool(ctx) {
       waiting,
       withTask,
       withAutoDispatch,
+      withAutoComplete,
       maxTerminals,
     };
   }
@@ -671,6 +811,7 @@ export function createClaudePool(ctx) {
     respawn,
     setAutoHandoff,
     setAutoDispatch,
+    setAutoComplete,
     assignTask,
     releaseTask,
     getAssignedTask,
@@ -683,4 +824,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES };
