@@ -288,5 +288,32 @@ export function createCoordinationRoutes(ctx) {
     }
   });
 
+  // ── Dependency Management (Phase 53) ─────────────────────
+
+  // POST /api/coordination/tasks/:id/deps — add dependency
+  router.post('/coordination/tasks/:id/deps', (req, res) => {
+    const { depId } = req.body || {};
+    if (!depId || typeof depId !== 'string') return res.status(400).json({ error: 'depId is required' });
+    try {
+      const task = coordinator.addDep(req.params.id, depId);
+      res.json(task);
+    } catch (err) {
+      if (err.message.includes('cycle')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found') || err.message.includes('Not found')) return res.status(404).json({ error: err.message });
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/coordination/tasks/:id/deps/:depId — remove dependency
+  router.delete('/coordination/tasks/:id/deps/:depId', (req, res) => {
+    try {
+      const task = coordinator.removeDep(req.params.id, req.params.depId);
+      res.json(task);
+    } catch (err) {
+      if (err.message.includes('not found') || err.message.includes('Not found')) return res.status(404).json({ error: err.message });
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   return router;
 }

@@ -468,6 +468,7 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     'coord:worktree-created', 'coord:worktree-removed', 'coord:worktree-merged',
     'coord:conflicts-detected', 'coord:config-updated',
     'coord:rate-adjusted',
+    'coord:dep-added', 'coord:dep-removed',
     'claude-terminal:spawned', 'claude-terminal:exit',
     'claude-terminal:error', 'claude-terminal:removed',
     'claude-terminal:respawned', 'claude-terminal:permission-changed',
@@ -491,6 +492,8 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     'notification:new',
     'cost:alert',
     'perf:slow-request',
+    'settings:changed',
+    'coordinator:reconfigured',
   ];
 
   const bridgeHandlers = [];

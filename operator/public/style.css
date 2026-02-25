@@ -5003,3 +5003,18 @@ details[open] > .tree-summary .tree-icon--dir {
   margin-top: var(--sp-2);
   text-align: center;
 }
+
+/* === DAG edit mode (Phase 53) === */
+.dag-edit-mode { cursor: crosshair; }
+.dag-edit-mode .dag-node { cursor: crosshair; }
+.dag-node--source { outline: 2px solid #f59e0b; outline-offset: 2px; }
+.dag-edge--removing { stroke: #ef4444 !important; stroke-width: 3; }
+.dag-edit-toolbar { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.dag-edit-toolbar .btn--active { background: var(--accent); color: #fff; }
+.dep-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; background: var(--bg-overlay, #2a2a3e); border-radius: 1rem; font-size: .8rem; margin: .125rem; }
+.dep-chip__remove { cursor: pointer; opacity: .7; font-size: .9rem; line-height: 1; }
+.dep-chip__remove:hover { opacity: 1; color: #ef4444; }
+.dep-add-autocomplete { position: relative; display: inline-block; }
+.dep-add-autocomplete__list { position: absolute; top: 100%; left: 0; background: var(--bg-surface, #1e1e2e); border: 1px solid var(--border-default, #333); border-radius: .5rem; max-height: 200px; overflow-y: auto; z-index: 100; min-width: 200px; }
+.dep-add-autocomplete__item { padding: .375rem .75rem; cursor: pointer; font-size: .85rem; }
+.dep-add-autocomplete__item:hover { background: var(--accent-bg, rgba(99,102,241,.1)); }

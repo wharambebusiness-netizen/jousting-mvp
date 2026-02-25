@@ -537,6 +537,72 @@ export function createTaskQueue(options = {}) {
     tasks.clear();
   }
 
+  /**
+   * Add a dependency to an existing task.
+   * @param {string} taskId - Task to add dependency to
+   * @param {string} depId - Task that must complete first
+   * @returns {object} Updated task
+   */
+  function addDep(taskId, depId) {
+    const task = tasks.get(taskId);
+    if (!task) throw new Error(`Task "${taskId}" not found`);
+
+    if (!tasks.has(depId)) throw new Error(`Dependency task "${depId}" not found`);
+
+    if (task.status !== 'pending' && task.status !== 'assigned') {
+      throw new Error(`Cannot modify deps of ${task.status} task`);
+    }
+
+    if (taskId === depId) throw new Error('Cannot add self-dependency');
+
+    // Check if dep already exists (idempotent)
+    if (task.deps.includes(depId)) return { ...task };
+
+    // Cycle detection: walk depId's transitive deps to see if taskId is reachable
+    // If taskId is an ancestor of depId (i.e., depId transitively depends on taskId),
+    // then adding depId as a dep of taskId would create a cycle.
+    const visited = new Set();
+    const queue = [depId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (visited.has(current)) continue;
+      visited.add(current);
+      const t = tasks.get(current);
+      if (!t) continue;
+      for (const d of t.deps) {
+        if (d === taskId) throw new Error('Adding dependency would create cycle');
+        if (!visited.has(d)) queue.push(d);
+      }
+    }
+
+    task.deps.push(depId);
+    log(`[queue] Added dep ${depId} to task ${taskId}`);
+    return { ...task };
+  }
+
+  /**
+   * Remove a dependency from an existing task.
+   * @param {string} taskId - Task to remove dependency from
+   * @param {string} depId - Dependency to remove
+   * @returns {object} Updated task
+   */
+  function removeDep(taskId, depId) {
+    const task = tasks.get(taskId);
+    if (!task) throw new Error(`Task "${taskId}" not found`);
+
+    if (task.status !== 'pending' && task.status !== 'assigned') {
+      throw new Error(`Cannot modify deps of ${task.status} task`);
+    }
+
+    const idx = task.deps.indexOf(depId);
+    if (idx !== -1) {
+      task.deps.splice(idx, 1);
+      log(`[queue] Removed dep ${depId} from task ${taskId}`);
+    }
+
+    return { ...task };
+  }
+
   return {
     add,
     remove,
@@ -547,6 +613,8 @@ export function createTaskQueue(options = {}) {
     cancel,
     update,
     retry,
+    addDep,
+    removeDep,
     get,
     getAll,
     getReady,

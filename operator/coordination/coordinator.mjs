@@ -478,6 +478,7 @@ export function createCoordinator(ctx) {
     for (const [event, handler] of Object.entries(handlers)) {
       events.off(event, handler);
     }
+    events.off('settings:changed', handleSettingsChanged);
   }
 
   // ── Lifecycle ─────────────────────────────────────────
@@ -758,6 +759,64 @@ export function createCoordinator(ctx) {
     events.emit('coord:config-updated', updates);
   }
 
+  // ── Settings Hot-Reload (Phase 52) ──────────────────────
+
+  // Mapping from settings keys to coordinator-relevant fields
+  const COORD_SETTINGS_MAP = {
+    coordMaxRequestsPerMinute: 'maxRequestsPerMinute',
+    coordMaxTokensPerMinute: 'maxTokensPerMinute',
+    coordGlobalBudgetUsd: 'globalBudgetUsd',
+    coordPerWorkerBudgetUsd: 'perWorkerBudgetUsd',
+  };
+
+  /**
+   * Handle settings:changed events — reconfigure subsystems when
+   * coordinator-related settings change.
+   */
+  function handleSettingsChanged(data) {
+    const changes = data?.changes;
+    if (!changes) return;
+
+    const rateUpdates = {};
+    const costUpdates = {};
+    const reconfigured = {};
+
+    for (const [settingKey, coordKey] of Object.entries(COORD_SETTINGS_MAP)) {
+      if (changes[settingKey]) {
+        const newValue = changes[settingKey].to;
+        reconfigured[settingKey] = newValue;
+
+        if (coordKey === 'maxRequestsPerMinute' || coordKey === 'maxTokensPerMinute') {
+          rateUpdates[coordKey] = newValue;
+        } else {
+          costUpdates[coordKey] = newValue;
+        }
+      }
+    }
+
+    // Nothing coordinator-related changed
+    if (Object.keys(reconfigured).length === 0) return;
+
+    // Reconfigure rate limiter
+    if (Object.keys(rateUpdates).length > 0) {
+      rateLimiter.reconfigure(rateUpdates);
+      if (adaptiveLimiter) {
+        adaptiveLimiter.updateBaseline(rateUpdates);
+      }
+    }
+
+    // Reconfigure cost aggregator
+    if (Object.keys(costUpdates).length > 0) {
+      costAggregator.reconfigure(costUpdates);
+    }
+
+    log('[coord] Reconfigured from settings change');
+    events.emit('coordinator:reconfigured', { changes: reconfigured });
+  }
+
+  // Subscribe to settings:changed if events available
+  events.on('settings:changed', handleSettingsChanged);
+
   // ── Status ────────────────────────────────────────────
 
   /**
@@ -777,6 +836,32 @@ export function createCoordinator(ctx) {
     };
   }
 
+  // ── Dependency Management (Phase 53) ─────────────────────
+
+  /**
+   * Add a dependency to a task.
+   * @param {string} taskId
+   * @param {string} depId
+   * @returns {object} Updated task
+   */
+  function addDep(taskId, depId) {
+    const result = taskQueue.addDep(taskId, depId);
+    events.emit('coord:dep-added', { taskId, depId });
+    return result;
+  }
+
+  /**
+   * Remove a dependency from a task.
+   * @param {string} taskId
+   * @param {string} depId
+   * @returns {object} Updated task
+   */
+  function removeDep(taskId, depId) {
+    const result = taskQueue.removeDep(taskId, depId);
+    events.emit('coord:dep-removed', { taskId, depId });
+    return result;
+  }
+
   return {
     // Lifecycle
     start,
@@ -787,6 +872,8 @@ export function createCoordinator(ctx) {
     // Task management
     addTask,
     addTasks,
+    addDep,
+    removeDep,
 
     // Subsystem access
     taskQueue,

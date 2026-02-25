@@ -239,12 +239,41 @@ export function createCostAggregator(options = {}) {
     log(`[cost] Budgets updated: global=$${globalBudgetUsd}, per-worker=$${perWorkerBudgetUsd}`);
   }
 
+  /**
+   * Reconfigure budget thresholds at runtime (Phase 52 hot-reload).
+   * Updates budget caps without resetting current spending totals.
+   * @param {object} updates
+   * @param {number} [updates.globalBudgetUsd]
+   * @param {number} [updates.perWorkerBudgetUsd]
+   */
+  function reconfigure(updates) {
+    if (updates.globalBudgetUsd != null && updates.globalBudgetUsd > 0) {
+      globalBudgetUsd = updates.globalBudgetUsd;
+      // Reset flags if budget raised above current totals
+      if (globalTotalUsd < globalBudgetUsd) {
+        globalExceeded = false;
+        globalWarned = globalTotalUsd >= globalBudgetUsd * WARNING_THRESHOLD;
+      }
+    }
+    if (updates.perWorkerBudgetUsd != null && updates.perWorkerBudgetUsd > 0) {
+      perWorkerBudgetUsd = updates.perWorkerBudgetUsd;
+      for (const record of workers.values()) {
+        if (record.totalUsd < perWorkerBudgetUsd) {
+          record.exceeded = false;
+          record.warned = record.totalUsd >= perWorkerBudgetUsd * WARNING_THRESHOLD;
+        }
+      }
+    }
+    log(`[cost] Reconfigured: global=$${globalBudgetUsd}, per-worker=$${perWorkerBudgetUsd}`);
+  }
+
   return {
     record,
     checkBudget,
     getStatus,
     getWorkerCost,
     updateBudgets,
+    reconfigure,
     reset,
   };
 }

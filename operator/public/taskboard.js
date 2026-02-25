@@ -38,6 +38,10 @@
   var templateData = null;    // cached templates from API
   var selectedTemplate = null; // template being previewed
 
+  // DAG Edit Mode (Phase 53)
+  var dagEditMode = false;
+  var dagEditSource = null;  // source node ID for edge drawing
+
   // ── DOM refs ────────────────────────────────────────────────
   var columns = {
     pending:  document.getElementById('col-pending'),
@@ -622,7 +626,89 @@
     document.getElementById('detail-id').textContent = task.id;
     document.getElementById('detail-status').textContent = task.status;
     document.getElementById('detail-worker').textContent = task.assignedTo || '—';
-    document.getElementById('detail-deps').textContent = task.deps && task.deps.length ? task.deps.join(', ') : '—';
+    // Render deps — editable chips for pending/assigned tasks (Phase 53)
+    var editable = task.status === 'pending' || task.status === 'assigned';
+    var depsEl = document.getElementById('detail-deps');
+    if (editable && task.deps) {
+      var depsHtml = '';
+      for (var di = 0; di < task.deps.length; di++) {
+        var depIdStr = task.deps[di];
+        depsHtml += '<span class="dep-chip">' + escapeHtml(depIdStr) +
+          ' <span class="dep-chip__remove" data-remove-dep="' + escapeHtml(depIdStr) + '" title="Remove dependency">&times;</span></span>';
+      }
+      if (task.deps.length === 0) depsHtml = '—';
+      depsHtml += ' <span class="dep-add-autocomplete" id="dep-add-wrap">' +
+        '<button class="btn btn--sm" id="dep-add-btn" type="button" title="Add dependency">+ Dep</button>' +
+        '<div class="dep-add-autocomplete__list" id="dep-add-list" style="display:none"></div></span>';
+      depsEl.innerHTML = depsHtml;
+
+      // Remove dep click handlers
+      depsEl.querySelectorAll('[data-remove-dep]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var removeId = btn.getAttribute('data-remove-dep');
+          fetch('/api/coordination/tasks/' + encodeURIComponent(taskId) + '/deps/' + encodeURIComponent(removeId), { method: 'DELETE' })
+            .then(function (r) {
+              if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+              return r.json();
+            })
+            .then(function (updatedTask) {
+              if (typeof showToast === 'function') showToast('Dep removed', 'success');
+              tasks[taskId] = updatedTask;
+              openDetail(taskId);
+              loadTasks();
+            })
+            .catch(function (err) {
+              if (typeof showToast === 'function') showToast(err.message, 'error');
+            });
+        });
+      });
+
+      // Add dep button + autocomplete
+      var addBtn = document.getElementById('dep-add-btn');
+      var addList = document.getElementById('dep-add-list');
+      if (addBtn && addList) {
+        addBtn.addEventListener('click', function () {
+          if (addList.style.display !== 'none') { addList.style.display = 'none'; return; }
+          // Populate with available tasks (not self, not already a dep)
+          var items = '';
+          var taskIds = Object.keys(tasks);
+          for (var ti = 0; ti < taskIds.length; ti++) {
+            var tid = taskIds[ti];
+            if (tid === taskId) continue;
+            if (task.deps && task.deps.indexOf(tid) !== -1) continue;
+            items += '<div class="dep-add-autocomplete__item" data-add-dep="' + escapeHtml(tid) + '">' + escapeHtml(tid) + '</div>';
+          }
+          addList.innerHTML = items || '<div class="dep-add-autocomplete__item" style="opacity:.5">No tasks available</div>';
+          addList.style.display = '';
+        });
+        addList.addEventListener('click', function (ev) {
+          var item = ev.target.closest('[data-add-dep]');
+          if (!item) return;
+          var newDepId = item.getAttribute('data-add-dep');
+          addList.style.display = 'none';
+          fetch('/api/coordination/tasks/' + encodeURIComponent(taskId) + '/deps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ depId: newDepId }),
+          })
+            .then(function (r) {
+              if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+              return r.json();
+            })
+            .then(function (updatedTask) {
+              if (typeof showToast === 'function') showToast('Dep added', 'success');
+              tasks[taskId] = updatedTask;
+              openDetail(taskId);
+              loadTasks();
+            })
+            .catch(function (err) {
+              if (typeof showToast === 'function') showToast(err.message, 'error');
+            });
+        });
+      }
+    } else {
+      depsEl.textContent = task.deps && task.deps.length ? task.deps.join(', ') : '—';
+    }
     document.getElementById('detail-created').textContent = task.createdAt || '—';
     document.getElementById('detail-started').textContent = task.startedAt || '—';
     document.getElementById('detail-completed').textContent = task.completedAt || '—';
@@ -642,8 +728,7 @@
       errorRow.style.display = 'none';
     }
 
-    // Editable only for pending/assigned
-    var editable = task.status === 'pending' || task.status === 'assigned';
+    // Editable only for pending/assigned (editable var declared above for dep chips)
     var detailForm = document.getElementById('detail-form');
     var saveBtn = document.getElementById('detail-save-btn');
     if (editable) {
@@ -800,7 +885,7 @@
       var cx1 = x1 + (x2 - x1) * 0.4;
       var cx2 = x2 - (x2 - x1) * 0.4;
 
-      edgesHtml += '<path d="M ' + x1 + ' ' + y1 + ' C ' + cx1 + ' ' + y1 + ', ' + cx2 + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" class="' + edgeClass + '" marker-end="url(#' + markerId + ')"/>';
+      edgesHtml += '<path d="M ' + x1 + ' ' + y1 + ' C ' + cx1 + ' ' + y1 + ', ' + cx2 + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" class="' + edgeClass + '" data-from="' + escapeHtml(edge.from) + '" data-to="' + escapeHtml(edge.to) + '" marker-end="url(#' + markerId + ')"' + (dagEditMode ? ' style="cursor:pointer;pointer-events:stroke"' : '') + '/>';
     }
 
     // Render nodes
@@ -824,15 +909,156 @@
     dagContainer.innerHTML = '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" width="' + svgW + '" height="' + svgH + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Task dependency graph">' +
       defs + edgesHtml + nodesHtml + '</svg>';
 
+    // Apply edit mode class if active
+    if (dagEditMode) dagContainer.classList.add('dag-edit-mode');
+    else dagContainer.classList.remove('dag-edit-mode');
+
+    // Highlight source node in edit mode
+    if (dagEditMode && dagEditSource) {
+      var srcNode = dagContainer.querySelector('.dag-node[data-id="' + dagEditSource + '"]');
+      if (srcNode) srcNode.classList.add('dag-node--source');
+    }
+
     // Click handler for nodes
     var svgEl = dagContainer.querySelector('svg');
     if (svgEl) {
       svgEl.addEventListener('click', function (e) {
         var node = e.target.closest('.dag-node');
+
+        if (dagEditMode) {
+          if (!node || !node.dataset.id) {
+            // Clicked empty space — cancel selection
+            dagEditSource = null;
+            dagContainer.querySelectorAll('.dag-node--source').forEach(function (n) { n.classList.remove('dag-node--source'); });
+            return;
+          }
+
+          var clickedId = node.dataset.id;
+
+          if (!dagEditSource) {
+            // First click: set source
+            dagEditSource = clickedId;
+            node.classList.add('dag-node--source');
+          } else {
+            // Second click: add dep (target depends on source)
+            var targetId = clickedId;
+            if (targetId === dagEditSource) {
+              // Clicked same node — cancel
+              dagEditSource = null;
+              dagContainer.querySelectorAll('.dag-node--source').forEach(function (n) { n.classList.remove('dag-node--source'); });
+              return;
+            }
+            fetch('/api/coordination/tasks/' + encodeURIComponent(targetId) + '/deps', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ depId: dagEditSource }),
+            })
+              .then(function (r) {
+                if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+                return r.json();
+              })
+              .then(function () {
+                if (typeof showToast === 'function') showToast('Dependency added', 'success');
+                dagEditSource = null;
+                loadGraph();
+                loadTasks();
+              })
+              .catch(function (err) {
+                if (typeof showToast === 'function') showToast(err.message, 'error');
+                dagEditSource = null;
+                dagContainer.querySelectorAll('.dag-node--source').forEach(function (n) { n.classList.remove('dag-node--source'); });
+              });
+          }
+          return;
+        }
+
+        // Normal mode: open detail
         if (node && node.dataset.id) {
           openDetail(node.dataset.id);
         }
       });
+
+      // Edge click handler for removing deps in edit mode
+      svgEl.addEventListener('click', function (e) {
+        if (!dagEditMode) return;
+        var path = e.target.closest('.dag-edge');
+        if (!path) return;
+
+        // Toggle removing state on the edge
+        if (path.classList.contains('dag-edge--removing')) {
+          // Second click: actually remove the dep
+          var fromId = path.dataset.from;
+          var toId = path.dataset.to;
+          if (fromId && toId) {
+            fetch('/api/coordination/tasks/' + encodeURIComponent(toId) + '/deps/' + encodeURIComponent(fromId), {
+              method: 'DELETE',
+            })
+              .then(function (r) {
+                if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+                return r.json();
+              })
+              .then(function () {
+                if (typeof showToast === 'function') showToast('Dependency removed', 'success');
+                loadGraph();
+                loadTasks();
+              })
+              .catch(function (err) {
+                if (typeof showToast === 'function') showToast(err.message, 'error');
+              });
+          }
+        } else {
+          // First click: highlight for removal
+          svgEl.querySelectorAll('.dag-edge--removing').forEach(function (p) { p.classList.remove('dag-edge--removing'); });
+          path.classList.add('dag-edge--removing');
+        }
+      });
+    }
+
+    // Render edit toolbar
+    renderDagEditToolbar();
+  }
+
+  // ── DAG Edit Toolbar (Phase 53) ──────────────────────────
+
+  function renderDagEditToolbar() {
+    var existing = document.getElementById('dag-edit-toolbar');
+    if (existing) existing.remove();
+
+    if (currentView !== 'dag') return;
+
+    var toolbar = document.createElement('div');
+    toolbar.id = 'dag-edit-toolbar';
+    toolbar.className = 'dag-edit-toolbar';
+
+    var editBtn = document.createElement('button');
+    editBtn.className = 'btn btn--sm' + (dagEditMode ? ' btn--active' : '');
+    editBtn.textContent = dagEditMode ? 'Exit Edit' : 'Edit Deps';
+    editBtn.title = 'Toggle DAG edit mode (e)';
+    editBtn.addEventListener('click', function () {
+      toggleDagEditMode();
+    });
+    toolbar.appendChild(editBtn);
+
+    if (dagEditMode) {
+      var hint = document.createElement('span');
+      hint.style.fontSize = '0.8rem';
+      hint.style.color = 'var(--text-muted)';
+      hint.textContent = dagEditSource
+        ? 'Click target node to add dep from "' + dagEditSource + '"'
+        : 'Click source node, then target node to add dependency';
+      toolbar.appendChild(hint);
+    }
+
+    dagView.insertBefore(toolbar, dagContainer);
+  }
+
+  function toggleDagEditMode() {
+    dagEditMode = !dagEditMode;
+    dagEditSource = null;
+    if (cachedGraph) {
+      renderGraph(cachedGraph);
+    } else {
+      renderDagEditToolbar();
     }
   }
 
@@ -1157,12 +1383,25 @@
     var tag = (e.target.tagName || '').toLowerCase();
     var inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
 
-    // Escape always works — close dialogs, clear search
+    // Escape always works — close dialogs, clear search, cancel DAG edit
     if (e.key === 'Escape') {
       if (addTaskDialog.open) { addTaskDialog.close(); e.preventDefault(); return; }
       if (detailDialog.open) { detailDialog.close(); e.preventDefault(); return; }
       if (shortcutsDialog.open) { shortcutsDialog.close(); e.preventDefault(); return; }
       if (templateDialog.open) { templateDialog.close(); e.preventDefault(); return; }
+      // Phase 53: cancel DAG edit source selection or exit edit mode
+      if (dagEditMode) {
+        if (dagEditSource) {
+          dagEditSource = null;
+          var dagEl = document.getElementById('dag-container');
+          if (dagEl) dagEl.querySelectorAll('.dag-node--source').forEach(function (n) { n.classList.remove('dag-node--source'); });
+          renderDagEditToolbar();
+        } else {
+          toggleDagEditMode();
+        }
+        e.preventDefault();
+        return;
+      }
       if (inInput && boardSearch === e.target) {
         boardSearch.value = '';
         filterText = '';
@@ -1216,6 +1455,20 @@
     // t — templates
     if (e.key === 't' || e.key === 'T') {
       openTemplateDialog();
+      e.preventDefault();
+      return;
+    }
+
+    // e — toggle DAG edit mode (Phase 53)
+    if (e.key === 'e' || e.key === 'E') {
+      if (currentView === 'dag') {
+        toggleDagEditMode();
+      } else {
+        switchView('dag');
+        dagEditMode = true;
+        dagEditSource = null;
+        loadGraph();
+      }
       e.preventDefault();
       return;
     }
@@ -1327,6 +1580,10 @@
         } else {
           loadTasks();
         }
+      } else if (ev === 'coord:dep-added' || ev === 'coord:dep-removed') {
+        // Dependency graph changed — reload tasks and graph (Phase 53)
+        loadTasks();
+        if (currentView === 'dag') loadGraph();
       } else if (ev === 'dlq:added' || ev === 'dlq:retried' || ev === 'dlq:dismissed') {
         // Dead letter queue changed — reload DLQ section
         loadDeadLetters();

@@ -54,6 +54,8 @@ import { createSecretVault } from './secrets.mjs';
 import { createSecretRoutes } from './routes/secrets.mjs';
 import { createSearchEngine } from './search.mjs';
 import { createSearchRoutes } from './routes/search.mjs';
+import { createBackupManager } from './backup.mjs';
+import { createBackupRoutes } from './routes/backup.mjs';
 import { createTerminalSessionStore } from './terminal-sessions.mjs';
 import { createTerminalSessionRoutes } from './routes/terminal-sessions.mjs';
 import { createBulkRoutes } from './routes/bulk.mjs';
@@ -117,7 +119,7 @@ export function createApp(options = {}) {
 
   // Create registry and settings instances (factory pattern, multi-instance safe)
   const registry = options.registry || createRegistry({ operatorDir, log: () => {} });
-  const settings = options.settings || createSettings({ operatorDir });
+  const settings = options.settings || createSettings({ operatorDir, events });
 
   // Auth layer (Phase 27) — opt out with auth: false for backward-compat
   let auth = null;
@@ -471,6 +473,15 @@ export function createApp(options = {}) {
   });
   app.use('/api', createSearchRoutes({ searchEngine }));
 
+  // Backup manager (Phase 51) — full state backup/restore
+  let backupManager = null;
+  if (options.backupManager && typeof options.backupManager === 'object') {
+    backupManager = options.backupManager;
+  } else if (options.backup !== false) {
+    backupManager = createBackupManager({ operatorDir, log: logger });
+  }
+  app.use('/api', createBackupRoutes({ backupManager, coordinator }));
+
   // Health checker & metrics collector (Phase 34) — created after all subsystems
   const healthChecker = options.healthChecker || createHealthChecker({
     coordinator,
@@ -660,6 +671,9 @@ export function createApp(options = {}) {
     // Clean up webhook manager
     if (webhookManager) webhookManager.destroy();
 
+    // Stop settings file watcher (Phase 52)
+    if (settings.stopWatch) settings.stopWatch();
+
     // Clean up file watchers
     if (fileWatcher) fileWatcher.unwatchAll();
 
@@ -697,7 +711,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
@@ -736,6 +750,16 @@ Options:
   --no-auth       Disable authentication (not recommended)
   --log-level LVL Log level: debug, info, warn, error (default: info)
   -h, --help      Show this help
+
+Subcommands (against running server):
+  status       Show system health
+  tasks        List/add/cancel tasks
+  search       Global search
+  backup       Create backup
+  restore      Restore from backup
+  metrics      Show Prometheus metrics
+  perf         Show performance stats
+  help         Show subcommand help
 `);
     process.exit(0);
   }
@@ -757,6 +781,17 @@ const isMain = process.argv[1] &&
   resolve(process.argv[1]).replace(/\\/g, '/').includes('operator/server');
 
 if (isMain) {
+  // CLI subcommand detection (Phase 54)
+  const subcommands = ['status', 'tasks', 'search', 'backup', 'restore', 'metrics', 'perf', 'help'];
+  const firstArg = process.argv[2];
+  if (firstArg && subcommands.includes(firstArg)) {
+    const { runCommand } = await import('./cli.mjs');
+    const operatorDir = resolve(import.meta.dirname || '.', '.');
+    const result = await runCommand(firstArg, process.argv.slice(3), { operatorDir });
+    if (result.output) console.log(result.output);
+    process.exit(result.exitCode);
+  }
+
   const args = parseCliArgs();
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 

@@ -211,6 +211,26 @@ export function createRateLimiter(options = {}) {
     log(`[rate] Limits updated: ${maxRequestsPerMinute} req/min, ${maxTokensPerMinute} tok/min`);
   }
 
+  /**
+   * Reconfigure rate limits at runtime (Phase 52 hot-reload).
+   * Updates max values and recalculates refill rates. Does NOT reset current bucket counts.
+   * @param {object} updates
+   * @param {number} [updates.maxRequestsPerMinute]
+   * @param {number} [updates.maxTokensPerMinute]
+   */
+  function reconfigure(updates) {
+    if (updates.maxRequestsPerMinute != null && updates.maxRequestsPerMinute > 0) {
+      maxRequestsPerMinute = updates.maxRequestsPerMinute;
+      // Cap current bucket to new max (don't reset)
+      requestBucket = Math.min(requestBucket, maxRequestsPerMinute);
+    }
+    if (updates.maxTokensPerMinute != null && updates.maxTokensPerMinute > 0) {
+      maxTokensPerMinute = updates.maxTokensPerMinute;
+      tokenBucket = Math.min(tokenBucket, maxTokensPerMinute);
+    }
+    log(`[rate] Reconfigured: ${maxRequestsPerMinute} req/min, ${maxTokensPerMinute} tok/min`);
+  }
+
   return {
     tryAcquire,
     acquire,
@@ -218,6 +238,7 @@ export function createRateLimiter(options = {}) {
     getStatus,
     getWorkerStats,
     updateLimits,
+    reconfigure,
     reset,
   };
 }
