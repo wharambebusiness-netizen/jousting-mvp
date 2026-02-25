@@ -95,13 +95,20 @@
       <span class="pool-status__item" id="pool-complete" title="Auto-complete enabled">0 auto-complete</span>
     </div>
 
-    <!-- Swarm Control Bar (Phase 24) -->
+    <!-- Swarm Control Bar (Phase 24+25) -->
     <div class="swarm-bar" id="swarm-bar" style="display:none">
       <span class="swarm-dot" id="swarm-dot"></span>
       <span id="swarm-label">Swarm: Off</span>
       <span class="pool-status__sep">|</span>
       <span id="swarm-terminals">0/0 terminals</span>
       <span id="swarm-pending">0 pending</span>
+      <span class="swarm-stat swarm-stat--success" id="swarm-completed" style="display:none">0 done</span>
+      <span class="swarm-stat swarm-stat--error" id="swarm-failed" style="display:none">0 failed</span>
+      <span class="swarm-stat swarm-stat--warning" id="swarm-recovered" style="display:none">0 recovered</span>
+      <span class="swarm-stat" id="swarm-throughput" style="display:none">0 tasks/hr</span>
+      <div class="swarm-progress" id="swarm-progress" style="display:none">
+        <div class="swarm-progress__bar" id="swarm-progress-bar"></div>
+      </div>
       <button class="btn btn--sm btn--primary" id="swarm-start-btn" onclick="openSwarmConfig()">Start Swarm</button>
       <button class="btn btn--sm btn--danger" id="swarm-stop-btn" style="display:none" onclick="stopSwarm()">Stop Swarm</button>
     </div>

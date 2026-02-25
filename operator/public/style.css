@@ -2256,6 +2256,24 @@ details[open] > .tree-summary .tree-icon--dir {
 .swarm-dot.inactive {
   background: var(--text-muted, #505278);
 }
+.swarm-stat--success { color: var(--status-success, #10b981); }
+.swarm-stat--error { color: var(--status-error, #ef4444); }
+.swarm-stat--warning { color: var(--status-warning, #f59e0b); }
+.swarm-progress {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  min-width: 60px;
+  max-width: 200px;
+}
+.swarm-progress__bar {
+  height: 100%;
+  background: var(--accent, #6366f1);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  min-width: 0;
+}
 
 .term-tabs {
   display: flex;

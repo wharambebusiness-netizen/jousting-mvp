@@ -457,6 +457,14 @@ export function createClaudeTerminalRoutes(ctx) {
     });
   });
 
+  // GET /claude-terminals/swarm/metrics
+  router.get('/claude-terminals/swarm/metrics', (_req, res) => {
+    if (!claudePool) {
+      return res.json({ available: false });
+    }
+    res.json({ available: true, ...claudePool.getSwarmMetrics() });
+  });
+
   // POST /claude-terminals/swarm/stop
   router.post('/claude-terminals/swarm/stop', (_req, res) => {
     if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });

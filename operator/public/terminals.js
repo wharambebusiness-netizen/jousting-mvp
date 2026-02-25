@@ -1988,6 +1988,11 @@ function connectWS() {
         refreshSwarmStatus();
         break;
       }
+      case 'claude-terminal:task-recovered': {
+        showToast(msg.data.terminalId + ' crashed — task ' + msg.data.taskId + ' returned to queue', 'warning');
+        refreshSwarmStatus();
+        break;
+      }
 
       // Auto-refresh shared memory panel when open
       case 'shared-memory:updated':
@@ -3787,6 +3792,12 @@ function updateSwarmBar(data) {
   var pending = document.getElementById('swarm-pending');
   var startBtn = document.getElementById('swarm-start-btn');
   var stopBtn = document.getElementById('swarm-stop-btn');
+  var completedEl = document.getElementById('swarm-completed');
+  var failedEl = document.getElementById('swarm-failed');
+  var recoveredEl = document.getElementById('swarm-recovered');
+  var throughputEl = document.getElementById('swarm-throughput');
+  var progressWrap = document.getElementById('swarm-progress');
+  var progressBar = document.getElementById('swarm-progress-bar');
 
   if (!dot || !label) return;
 
@@ -3806,6 +3817,53 @@ function updateSwarmBar(data) {
 
   if (terms) terms.textContent = (data.running || 0) + '/' + (data.maxTerminals || 0) + ' terminals';
   if (pending) pending.textContent = (data.pending || 0) + ' pending';
+
+  // Metrics (Phase 25)
+  var m = data.metrics || {};
+  var showMetrics = data.enabled && m.startedAt;
+  if (completedEl) {
+    completedEl.textContent = (m.tasksCompleted || 0) + ' done';
+    completedEl.style.display = showMetrics ? '' : 'none';
+  }
+  if (failedEl) {
+    failedEl.textContent = (m.tasksFailed || 0) + ' failed';
+    failedEl.style.display = showMetrics && (m.tasksFailed > 0) ? '' : 'none';
+  }
+  if (recoveredEl) {
+    recoveredEl.textContent = (m.tasksRecovered || 0) + ' recovered';
+    recoveredEl.style.display = showMetrics && (m.tasksRecovered > 0) ? '' : 'none';
+  }
+  if (throughputEl) {
+    throughputEl.textContent = (m.tasksPerHour || 0) + ' tasks/hr';
+    throughputEl.style.display = showMetrics ? '' : 'none';
+  }
+
+  // Progress bar
+  if (progressWrap && progressBar) {
+    var completed = m.tasksCompleted || 0;
+    var failed = m.tasksFailed || 0;
+    var pendingCount = data.pending || 0;
+    var total = completed + failed + pendingCount + (data.running || 0);
+    if (showMetrics && total > 0) {
+      var pct = Math.round(((completed + failed) / total) * 100);
+      progressBar.style.width = pct + '%';
+      progressWrap.style.display = '';
+      progressWrap.title = pct + '% (' + (completed + failed) + '/' + total + ')';
+    } else {
+      progressWrap.style.display = 'none';
+    }
+
+    // "All complete" detection
+    if (showMetrics && pendingCount === 0 && (data.running || 0) === 0 && completed > 0) {
+      // Avoid duplicate toasts by checking a flag
+      if (!updateSwarmBar._allCompleteFired) {
+        updateSwarmBar._allCompleteFired = true;
+        showToast('Swarm complete! ' + completed + ' tasks done' + (failed > 0 ? ', ' + failed + ' failed' : ''), 'success');
+      }
+    } else {
+      updateSwarmBar._allCompleteFired = false;
+    }
+  }
 }
 
 // ── Expose to window for onclick handlers ────────────────────
