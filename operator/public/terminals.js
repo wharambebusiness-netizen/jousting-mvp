@@ -175,9 +175,10 @@ var sidebarFilterTimer = null;
     loadInstances();
     loadClaudeTerminals();
     refreshPoolStatus();
+    refreshSwarmStatus();
   });
-  // Start pool status polling (every 5s)
-  setInterval(refreshPoolStatus, 5000);
+  // Start pool status + swarm status polling (every 5s)
+  setInterval(function() { refreshPoolStatus(); refreshSwarmStatus(); }, 5000);
   // Close previous WS connection (HTMX boost re-runs scripts without full page unload)
   if (wsHandle) { wsHandle.close(); wsHandle = null; }
   connectWS();
@@ -337,6 +338,13 @@ var sidebarFilterTimer = null;
     if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
       e.preventDefault();
       if (activeTabId) toggleAutoComplete(activeTabId);
+      return;
+    }
+
+    // Ctrl+Shift+S: toggle swarm mode
+    if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+      e.preventDefault();
+      toggleSwarm();
       return;
     }
 
@@ -1956,6 +1964,28 @@ function connectWS() {
       case 'claude-terminal:auto-complete': {
         var compId = msg.data.terminalId;
         showToast(compId + ' auto-completed task ' + msg.data.taskId, 'success');
+        break;
+      }
+
+      // Swarm events (Phase 24)
+      case 'claude-terminal:swarm-started': {
+        showToast('Swarm started (min=' + msg.data.minTerminals + ', max=' + msg.data.maxTerminals + ')', 'success');
+        refreshSwarmStatus();
+        break;
+      }
+      case 'claude-terminal:swarm-stopped': {
+        showToast('Swarm stopped — terminals finishing current tasks', 'info');
+        refreshSwarmStatus();
+        break;
+      }
+      case 'claude-terminal:swarm-scaled-up': {
+        showToast('Swarm scaled up: ' + msg.data.terminalId + ' (' + msg.data.pendingTasks + ' pending)', 'info');
+        refreshSwarmStatus();
+        break;
+      }
+      case 'claude-terminal:swarm-scaled-down': {
+        showToast('Swarm scaled down: ' + msg.data.terminalId, 'info');
+        refreshSwarmStatus();
         break;
       }
 
@@ -3668,6 +3698,116 @@ function refreshPoolStatus() {
     .catch(function() { /* ignore */ });
 }
 
+// ── Swarm Mode (Phase 24) ──────────────────────────────────
+
+function openSwarmConfig() {
+  var dialog = document.getElementById('swarm-config-dialog');
+  if (!dialog) return;
+  dialog.showModal();
+}
+
+function submitSwarmConfig(e) {
+  if (e) e.preventDefault();
+  var form = document.getElementById('swarm-config-form');
+  if (!form) return false;
+  var body = {
+    minTerminals: parseInt(form.minTerminals.value) || 2,
+    maxTerminals: parseInt(form.maxTerminals.value) || 8,
+    model: form.model.value || 'sonnet',
+    scaleUpThreshold: parseInt(form.scaleUpThreshold.value) || 2,
+    systemPrompt: form.systemPrompt.value || null,
+    dangerouslySkipPermissions: form.dangerouslySkipPermissions.checked,
+  };
+  fetch('/api/claude-terminals/swarm/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        showToast('Swarm start failed: ' + data.error, 'error');
+      } else {
+        showToast('Swarm started — seeded ' + data.seeded + ' terminals', 'success');
+        updateSwarmBar(data.swarm);
+      }
+    })
+    .catch(function(err) { showToast('Swarm start error: ' + err.message, 'error'); });
+  var dialog = document.getElementById('swarm-config-dialog');
+  if (dialog) dialog.close();
+  return false;
+}
+
+function stopSwarm() {
+  fetch('/api/claude-terminals/swarm/stop', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        showToast('Swarm stop failed: ' + data.error, 'error');
+      } else {
+        showToast('Swarm stopped', 'info');
+        updateSwarmBar(data.swarm);
+      }
+    })
+    .catch(function(err) { showToast('Swarm stop error: ' + err.message, 'error'); });
+}
+
+function toggleSwarm() {
+  var bar = document.getElementById('swarm-bar');
+  if (!bar) return;
+  var dot = document.getElementById('swarm-dot');
+  var isActive = dot && dot.classList.contains('active');
+  if (isActive) {
+    stopSwarm();
+  } else {
+    openSwarmConfig();
+  }
+}
+
+function refreshSwarmStatus() {
+  fetch('/api/claude-terminals/swarm/status')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var bar = document.getElementById('swarm-bar');
+      if (!bar) return;
+      if (!data.available) {
+        bar.style.display = 'none';
+        return;
+      }
+      bar.style.display = 'flex';
+      updateSwarmBar(data);
+    })
+    .catch(function() { /* ignore */ });
+}
+
+function updateSwarmBar(data) {
+  var dot = document.getElementById('swarm-dot');
+  var label = document.getElementById('swarm-label');
+  var terms = document.getElementById('swarm-terminals');
+  var pending = document.getElementById('swarm-pending');
+  var startBtn = document.getElementById('swarm-start-btn');
+  var stopBtn = document.getElementById('swarm-stop-btn');
+
+  if (!dot || !label) return;
+
+  if (data.enabled) {
+    dot.className = 'swarm-dot active';
+    label.textContent = 'Swarm: Active';
+    label.style.color = 'var(--status-success, #10b981)';
+    if (startBtn) startBtn.style.display = 'none';
+    if (stopBtn) stopBtn.style.display = '';
+  } else {
+    dot.className = 'swarm-dot inactive';
+    label.textContent = 'Swarm: Off';
+    label.style.color = '';
+    if (startBtn) startBtn.style.display = '';
+    if (stopBtn) stopBtn.style.display = 'none';
+  }
+
+  if (terms) terms.textContent = (data.running || 0) + '/' + (data.maxTerminals || 0) + ' terminals';
+  if (pending) pending.textContent = (data.pending || 0) + ' pending';
+}
+
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
 window.setLayout = setLayout;
@@ -3713,6 +3853,10 @@ window.clearAllMessages = clearAllMessages;
 window.claimTask = claimTask;
 window.releaseTask = releaseTask;
 window.completeTask = completeTask;
+window.openSwarmConfig = openSwarmConfig;
+window.submitSwarmConfig = submitSwarmConfig;
+window.stopSwarm = stopSwarm;
+window.toggleSwarm = toggleSwarm;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

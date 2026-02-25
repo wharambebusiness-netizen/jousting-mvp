@@ -95,6 +95,17 @@
       <span class="pool-status__item" id="pool-complete" title="Auto-complete enabled">0 auto-complete</span>
     </div>
 
+    <!-- Swarm Control Bar (Phase 24) -->
+    <div class="swarm-bar" id="swarm-bar" style="display:none">
+      <span class="swarm-dot" id="swarm-dot"></span>
+      <span id="swarm-label">Swarm: Off</span>
+      <span class="pool-status__sep">|</span>
+      <span id="swarm-terminals">0/0 terminals</span>
+      <span id="swarm-pending">0 pending</span>
+      <button class="btn btn--sm btn--primary" id="swarm-start-btn" onclick="openSwarmConfig()">Start Swarm</button>
+      <button class="btn btn--sm btn--danger" id="swarm-stop-btn" style="display:none" onclick="stopSwarm()">Stop Swarm</button>
+    </div>
+
     <!-- Tab Bar -->
     <div class="term-tabs" id="term-tabs" role="tablist" aria-label="Orchestrator instances">
       <!-- Tabs rendered dynamically by terminals.js -->
@@ -389,6 +400,50 @@
     </article>
   </dialog>
 
+  <!-- Swarm Config Dialog (Phase 24) -->
+  <dialog class="term-dialog" id="swarm-config-dialog" style="max-width:480px">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('swarm-config-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Start Swarm</h3>
+      </header>
+      <form id="swarm-config-form" onsubmit="return submitSwarmConfig(event)">
+        <label>
+          Min Terminals <small>(initial seed)</small>
+          <input type="number" name="minTerminals" value="2" min="1" max="8" step="1">
+        </label>
+        <label>
+          Max Terminals <small>(scale ceiling)</small>
+          <input type="number" name="maxTerminals" value="8" min="1" max="32" step="1">
+        </label>
+        <label>
+          Model
+          <select name="model">
+            <option value="sonnet" selected>Sonnet</option>
+            <option value="haiku">Haiku</option>
+            <option value="opus">Opus</option>
+          </select>
+        </label>
+        <label>
+          Scale-up Threshold <small>(pending tasks per terminal)</small>
+          <input type="number" name="scaleUpThreshold" value="2" min="1" max="10" step="1">
+        </label>
+        <label>
+          System Prompt <small>(optional, appended to each terminal)</small>
+          <textarea name="systemPrompt" rows="2" placeholder="Additional instructions for swarm terminals..." style="resize:vertical"></textarea>
+        </label>
+        <label>
+          <input type="checkbox" name="dangerouslySkipPermissions" checked>
+          Skip Permissions
+        </label>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('swarm-config-dialog').close()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Start Swarm</button>
+        </footer>
+      </form>
+    </article>
+  </dialog>
+
   <!-- Keyboard Shortcuts Help -->
   <dialog class="term-dialog shortcuts-dialog" id="shortcuts-dialog">
     <article>
@@ -410,6 +465,7 @@
         <kbd>Ctrl+Shift+A</kbd><span>Toggle auto-handoff</span>
         <kbd>Ctrl+Shift+D</kbd><span>Toggle auto-dispatch</span>
         <kbd>Ctrl+Shift+E</kbd><span>Toggle auto-complete</span>
+        <kbd>Ctrl+Shift+S</kbd><span>Toggle swarm mode</span>
         <kbd>Ctrl+M</kbd><span>Shared memory panel</span>
         <kbd>Ctrl+Shift+I</kbd><span>Terminal messages panel</span>
         <kbd>1-5</kbd><span>Layout: single / split-h / split-v / triple / quad</span>

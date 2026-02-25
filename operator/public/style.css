@@ -2231,6 +2231,32 @@ details[open] > .tree-summary .tree-icon--dir {
 .pool-status__idle { color: var(--clr-warning, #f59e0b); }
 .pool-status__waiting { color: var(--clr-info, #6366f1); }
 
+/* Swarm Bar (Phase 24) */
+.swarm-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.75rem;
+  color: var(--clr-muted);
+}
+.swarm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.swarm-dot.active {
+  background: var(--status-success, #10b981);
+  box-shadow: 0 0 6px var(--glow-success, rgba(16,185,129,0.4));
+  animation: pulse 2s infinite;
+}
+.swarm-dot.inactive {
+  background: var(--text-muted, #505278);
+}
+
 .term-tabs {
   display: flex;
   gap: 2px;

@@ -375,6 +375,100 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json({ terminalId: req.params.id, task: task || null });
   });
 
+  // ── Swarm Mode (Phase 24) ───────────────────────────
+
+  // GET /claude-terminals/swarm/status
+  router.get('/claude-terminals/swarm/status', (_req, res) => {
+    if (!claudePool) {
+      return res.json({ available: false, enabled: false });
+    }
+    const coordinator = ctx.coordinator;
+    const swarm = claudePool.getSwarmState();
+    res.json({
+      available: !!coordinator,
+      ...swarm,
+      poolStatus: claudePool.getPoolStatus(),
+    });
+  });
+
+  // POST /claude-terminals/swarm/start
+  router.post('/claude-terminals/swarm/start', async (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const coordinator = ctx.coordinator;
+    if (!coordinator) {
+      return res.status(503).json({ error: 'Coordinator not available — start with --swarm or --pool flag' });
+    }
+
+    const {
+      minTerminals = 2,
+      maxTerminals = 8,
+      projectDir: swarmProjectDir,
+      model = 'sonnet',
+      systemPrompt,
+      scaleUpThreshold = 2,
+      dangerouslySkipPermissions = true,
+    } = req.body || {};
+
+    // Enable swarm mode on the pool
+    claudePool.setSwarmMode({
+      enabled: true,
+      minTerminals: Math.max(1, Math.min(8, parseInt(minTerminals) || 2)),
+      maxTerminals: Math.max(1, Math.min(32, parseInt(maxTerminals) || 8)),
+      projectDir: swarmProjectDir || undefined,
+      model,
+      systemPrompt: systemPrompt || null,
+      scaleUpThreshold: Math.max(1, Math.min(10, parseInt(scaleUpThreshold) || 2)),
+      dangerouslySkipPermissions: !!dangerouslySkipPermissions,
+    });
+
+    // Start coordinator if in init state
+    if (coordinator.getState() === 'init') {
+      coordinator.start();
+    }
+
+    // Seed minTerminals immediately
+    const min = Math.max(1, Math.min(8, parseInt(minTerminals) || 2));
+    let seeded = 0;
+    for (let i = 0; i < min; i++) {
+      const swarmId = 'swarm-seed-' + i;
+      try {
+        await claudePool.spawn(swarmId, {
+          projectDir: swarmProjectDir || undefined,
+          model,
+          dangerouslySkipPermissions: !!dangerouslySkipPermissions,
+          systemPrompt: systemPrompt || undefined,
+          autoHandoff: true,
+          autoDispatch: true,
+          autoComplete: true,
+          _swarmManaged: true,
+        });
+        seeded++;
+      } catch (err) {
+        // May fail if max reached or node-pty unavailable
+        break;
+      }
+    }
+
+    res.json({
+      ok: true,
+      swarm: claudePool.getSwarmState(),
+      seeded,
+    });
+  });
+
+  // POST /claude-terminals/swarm/stop
+  router.post('/claude-terminals/swarm/stop', (_req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    claudePool.setSwarmMode({ enabled: false });
+
+    res.json({
+      ok: true,
+      swarm: claudePool.getSwarmState(),
+    });
+  });
+
   // ── DELETE /claude-terminals/:id ──────────────────────
 
   router.delete('/claude-terminals/:id', (req, res) => {

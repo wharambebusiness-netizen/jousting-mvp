@@ -143,13 +143,28 @@ export function createApp(options = {}) {
     pool = options.pool;
   }
 
-  // Coordinator for inter-orchestrator coordination (requires pool)
+  // Null pool stub for coordinator when no real pool exists (swarm-only mode)
+  function createNullPool() {
+    return {
+      activeCount: () => 0,
+      sendTo: () => {},
+      getStatus: () => [],
+      shutdownAll: async () => {},
+    };
+  }
+
+  // Coordinator for inter-orchestrator coordination (requires pool or swarm mode)
   let coordinator = null;
-  if (pool && options.coordination !== false) {
+  const needsCoordinator = (pool && options.coordination !== false) || options.swarm;
+  if (needsCoordinator) {
+    const coordPool = pool || createNullPool();
     const coordOpts = typeof options.coordination === 'object' ? options.coordination : {};
+    if (options.swarm && !coordOpts.persistPath) {
+      coordOpts.persistPath = join(operatorDir, '.data', 'task-queue.json');
+    }
     coordinator = createCoordinator({
       events,
-      pool,
+      pool: coordPool,
       options: coordOpts,
       log: () => {},
     });
@@ -354,6 +369,7 @@ function parseCliArgs() {
       host:     { type: 'string', default: DEFAULT_HOST },
       operator: { type: 'boolean', default: false },
       pool:     { type: 'boolean', default: false },
+      swarm:    { type: 'boolean', default: false },
       help:     { type: 'boolean', short: 'h', default: false },
     },
     strict: true,
@@ -371,6 +387,7 @@ Options:
   --host HOST     Host to bind to (default: ${DEFAULT_HOST})
   --operator      Combined mode: also run operator daemon
   --pool          Enable process pool + coordinator (task board, multi-orchestrator)
+  --swarm         Enable swarm mode (coordinator + Claude pool for autonomous task draining)
   -h, --help      Show this help
 `);
     process.exit(0);
@@ -381,6 +398,7 @@ Options:
     host: values.host,
     operator: values.operator,
     pool: values.pool,
+    swarm: values.swarm,
   };
 }
 
@@ -397,6 +415,11 @@ if (isMain) {
   // Pool mode: enable process pool + coordinator for task board / multi-orchestrator
   if (args.pool) {
     appOptions.pool = true;
+  }
+
+  // Swarm mode: enable coordinator (without process pool) for autonomous task draining
+  if (args.swarm) {
+    appOptions.swarm = true;
   }
 
   // Combined mode: wire up chain execution via operator's runChain
@@ -436,6 +459,9 @@ if (isMain) {
     }
     if (args.pool) {
       console.log('Pool mode: process pool + coordinator active');
+    }
+    if (args.swarm) {
+      console.log('Swarm mode: coordinator active (use /terminals UI to start swarm)');
     }
   });
 }

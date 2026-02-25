@@ -254,6 +254,8 @@ export function createWebSocketHandler({ server, events, claudePool }) {
     'claude-terminal:task-completed',
     'claude-terminal:auto-dispatch', 'claude-terminal:auto-dispatch-changed',
     'claude-terminal:auto-complete', 'claude-terminal:auto-complete-changed',
+    'claude-terminal:swarm-started', 'claude-terminal:swarm-stopped',
+    'claude-terminal:swarm-scaled-up', 'claude-terminal:swarm-scaled-down',
     'shared-memory:updated', 'shared-memory:deleted',
     'shared-memory:cleared', 'shared-memory:snapshot-written',
     'terminal-message:sent', 'terminal-message:broadcast',

@@ -22,6 +22,9 @@ const AUTO_DISPATCH_DELAY_MS = 2000;
 const IDLE_THRESHOLD_MS = 10000; // 10s of no output = idle
 const COMPLETION_IDLE_THRESHOLD_MS = 30000; // 30s idle after activity = task complete
 const MIN_ACTIVITY_BYTES = 100; // min output before auto-complete triggers
+const SWARM_SCALE_CHECK_MS = 5000;       // scale-up check interval
+const SWARM_SCALE_DOWN_IDLE_MS = 60000;  // kill idle swarm terminal after 60s
+const SWARM_ID_PREFIX = 'swarm-';
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -46,6 +49,24 @@ export function createClaudePool(ctx) {
 
   /** @type {Map<string, TerminalEntry>} */
   const terminals = new Map();
+
+  // ── Effective max (raised by swarm mode) ─────────────
+  let _effectiveMaxTerminals = maxTerminals;
+
+  // ── Swarm State ──────────────────────────────────────
+  let swarmState = {
+    enabled: false,
+    minTerminals: 1,
+    maxTerminals: 16,
+    projectDir: ctx.projectDir,
+    model: 'sonnet',
+    dangerouslySkipPermissions: true,
+    systemPrompt: null,
+    scaleUpThreshold: 2,
+    _scaleTimer: null,
+    _counter: 0,
+    _tickCount: 0,
+  };
 
   // ── Spawn ─────────────────────────────────────────────
 
@@ -75,8 +96,8 @@ export function createClaudePool(ctx) {
       terminals.delete(terminalId);
     }
 
-    if (activeCount() >= maxTerminals) {
-      throw new Error(`Maximum terminals (${maxTerminals}) reached`);
+    if (activeCount() >= _effectiveMaxTerminals) {
+      throw new Error(`Maximum terminals (${_effectiveMaxTerminals}) reached`);
     }
 
     // Check node-pty availability
@@ -116,6 +137,7 @@ export function createClaudePool(ctx) {
       handoffCount: opts._handoffCount || 0,
       assignedTask: null,
       lastActivityAt: now,
+      swarmManaged: !!opts._swarmManaged,
       _completionTimer: null,
       _taskActivityBytes: 0,
     };
@@ -225,6 +247,7 @@ export function createClaudePool(ctx) {
     // Respawn with continueSession=true, carrying forward config
     const hadAutoDispatch = entry.autoDispatch;
     const hadAutoComplete = entry.autoComplete;
+    const savedTask = entry.assignedTask;
     const config = {
       ...entry.config,
       continueSession: true,
@@ -240,17 +263,39 @@ export function createClaudePool(ctx) {
 
     spawn(entry.id, config)
       .then(() => {
+        // Restore carried task on new entry
+        if (savedTask && coordinator) {
+          const newEntry = terminals.get(entry.id);
+          if (newEntry) {
+            newEntry.assignedTask = savedTask;
+            newEntry._taskActivityBytes = 0;
+            // Re-inject task context after Claude initializes
+            setTimeout(() => {
+              write(entry.id, `[CONTEXT-RESUMED] Continuing task ${savedTask.taskId}: ${savedTask.task}\r`);
+              if (newEntry.autoComplete) resetCompletionTimer(entry.id);
+            }, AUTO_DISPATCH_DELAY_MS);
+          }
+        }
+
         events.emit('claude-terminal:handoff', {
           terminalId: entry.id,
           handoffCount: newCount,
         });
         // Auto-dispatch after handoff respawn (with delay for Claude to initialize)
-        if (hadAutoDispatch) {
+        // Skip if task was carried over from the previous session
+        if (hadAutoDispatch && !savedTask) {
           setTimeout(() => maybeAutoDispatch(entry.id), AUTO_DISPATCH_DELAY_MS);
         }
       })
       .catch((err) => {
         log(`[claude-pool] ${entry.id} auto-handoff failed: ${err.message}`);
+        // If we had a saved task and handoff failed, release it back to pending
+        if (savedTask && coordinator && coordinator.taskQueue) {
+          try {
+            coordinator.taskQueue.fail(savedTask.taskId, 'Handoff respawn failed');
+            coordinator.taskQueue.retry(savedTask.taskId);
+          } catch { /* task may already be in terminal state */ }
+        }
         events.emit('claude-terminal:error', {
           terminalId: entry.id,
           error: `Auto-handoff failed: ${err.message}`,
@@ -656,6 +701,13 @@ export function createClaudePool(ctx) {
    * @returns {Promise<void>}
    */
   async function shutdownAll() {
+    // Stop swarm mode if active
+    if (swarmState._scaleTimer) {
+      clearInterval(swarmState._scaleTimer);
+      swarmState._scaleTimer = null;
+      swarmState.enabled = false;
+    }
+
     const ids = [...terminals.keys()];
     if (ids.length === 0) return;
 
@@ -776,6 +828,7 @@ export function createClaudePool(ctx) {
       assignedTask: entry.assignedTask || null,
       lastActivityAt: entry.lastActivityAt,
       activityState: getActivityState(entry),
+      swarmManaged: entry.swarmManaged || false,
     };
   }
 
@@ -806,7 +859,157 @@ export function createClaudePool(ctx) {
       withTask,
       withAutoDispatch,
       withAutoComplete,
-      maxTerminals,
+      maxTerminals: _effectiveMaxTerminals,
+    };
+  }
+
+  // ── Swarm Mode ───────────────────────────────────────────
+
+  /**
+   * Count pending tasks that are claimable (all deps met).
+   * @returns {number}
+   */
+  function countClaimableTasks() {
+    if (!coordinator) return 0;
+    const taskQueue = coordinator.taskQueue;
+    if (!taskQueue) return 0;
+
+    const allTasks = taskQueue.getAll();
+    const pending = allTasks.filter(t => t.status === 'pending');
+    let count = 0;
+    for (const task of pending) {
+      if (!task.deps || task.deps.length === 0) {
+        count++;
+        continue;
+      }
+      const depsComplete = task.deps.every(depId => {
+        const dep = allTasks.find(t => t.id === depId);
+        return dep && dep.status === 'complete';
+      });
+      if (depsComplete) count++;
+    }
+    return count;
+  }
+
+  /**
+   * Swarm scale-up/scale-down check (runs on interval).
+   */
+  function _swarmScaleCheck() {
+    if (!swarmState.enabled) return;
+
+    swarmState._tickCount++;
+
+    // Scale-up: spawn if pending tasks exist and no idle terminals
+    const readyTasks = countClaimableTasks();
+    let idleTerminals = 0;
+    for (const entry of terminals.values()) {
+      if (entry.status === 'running' && !entry.assignedTask && getActivityState(entry) === 'idle') {
+        idleTerminals++;
+      }
+    }
+
+    if (readyTasks > 0 && idleTerminals === 0 && activeCount() < _effectiveMaxTerminals) {
+      const swarmId = SWARM_ID_PREFIX + swarmState._counter++;
+      const swarmOpts = {
+        projectDir: swarmState.projectDir,
+        model: swarmState.model,
+        dangerouslySkipPermissions: swarmState.dangerouslySkipPermissions,
+        systemPrompt: swarmState.systemPrompt,
+        autoHandoff: true,
+        autoDispatch: true,
+        autoComplete: true,
+        _swarmManaged: true,
+      };
+      spawn(swarmId, swarmOpts)
+        .then(() => {
+          log(`[claude-pool] Swarm scaled up: ${swarmId} (${readyTasks} pending tasks)`);
+          events.emit('claude-terminal:swarm-scaled-up', {
+            terminalId: swarmId,
+            pendingTasks: readyTasks,
+            activeTerminals: activeCount(),
+          });
+          // Trigger auto-dispatch after spawn delay
+          setTimeout(() => maybeAutoDispatch(swarmId), AUTO_DISPATCH_DELAY_MS);
+        })
+        .catch((err) => {
+          log(`[claude-pool] Swarm scale-up failed: ${err.message}`);
+        });
+    }
+
+    // Scale-down: every 6th tick (~30s), kill oldest idle swarm terminal
+    if (swarmState._tickCount % 6 === 0) {
+      let oldestIdleId = null;
+      let oldestIdleTime = Infinity;
+      for (const entry of terminals.values()) {
+        if (!entry.swarmManaged) continue;
+        if (entry.status !== 'running') continue;
+        if (entry.assignedTask) continue;
+        const state = getActivityState(entry);
+        if (state !== 'idle') continue;
+        const idleMs = Date.now() - new Date(entry.lastActivityAt).getTime();
+        if (idleMs >= SWARM_SCALE_DOWN_IDLE_MS && new Date(entry.spawnedAt).getTime() < oldestIdleTime) {
+          oldestIdleTime = new Date(entry.spawnedAt).getTime();
+          oldestIdleId = entry.id;
+        }
+      }
+
+      if (oldestIdleId && activeCount() > swarmState.minTerminals) {
+        log(`[claude-pool] Swarm scaling down: ${oldestIdleId}`);
+        kill(oldestIdleId);
+        events.emit('claude-terminal:swarm-scaled-down', {
+          terminalId: oldestIdleId,
+          activeTerminals: activeCount() - 1,
+        });
+      }
+    }
+  }
+
+  /**
+   * Enable or disable swarm mode.
+   * @param {object} opts - { enabled, minTerminals, maxTerminals, projectDir, model, ... }
+   * @returns {object} Updated swarmState summary
+   */
+  function setSwarmMode(opts = {}) {
+    Object.assign(swarmState, opts);
+
+    if (swarmState.enabled) {
+      _effectiveMaxTerminals = Math.max(maxTerminals, swarmState.maxTerminals);
+      if (!swarmState._scaleTimer) {
+        swarmState._tickCount = 0;
+        swarmState._scaleTimer = setInterval(_swarmScaleCheck, SWARM_SCALE_CHECK_MS);
+      }
+      events.emit('claude-terminal:swarm-started', {
+        minTerminals: swarmState.minTerminals,
+        maxTerminals: swarmState.maxTerminals,
+        model: swarmState.model,
+      });
+    } else {
+      _effectiveMaxTerminals = maxTerminals;
+      if (swarmState._scaleTimer) {
+        clearInterval(swarmState._scaleTimer);
+        swarmState._scaleTimer = null;
+      }
+      events.emit('claude-terminal:swarm-stopped', {});
+    }
+
+    return getSwarmState();
+  }
+
+  /**
+   * Get current swarm state summary.
+   * @returns {object}
+   */
+  function getSwarmState() {
+    return {
+      enabled: swarmState.enabled,
+      minTerminals: swarmState.minTerminals,
+      maxTerminals: swarmState.maxTerminals,
+      model: swarmState.model,
+      dangerouslySkipPermissions: swarmState.dangerouslySkipPermissions,
+      systemPrompt: swarmState.systemPrompt,
+      scaleUpThreshold: swarmState.scaleUpThreshold,
+      running: activeCount(),
+      pending: countClaimableTasks(),
     };
   }
 
@@ -829,8 +1032,10 @@ export function createClaudePool(ctx) {
     activeCount,
     getPoolStatus,
     findNextClaimableTask,
+    setSwarmMode,
+    getSwarmState,
     shutdownAll,
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX };
