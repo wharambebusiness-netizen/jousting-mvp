@@ -196,6 +196,10 @@
             <input type="text" name="terminalId" placeholder="e.g. claude-1" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens, underscores">
           </label>
           <label>
+            Project Directory <small>(optional, defaults to server project)</small>
+            <input type="text" name="projectDir" placeholder="/path/to/project" autocomplete="off">
+          </label>
+          <label>
             Model
             <select name="model">
               <option value="opus" selected>Opus</option>
@@ -356,6 +360,32 @@
         <button class="btn btn--sm btn--ghost" onclick="refreshMemoryPanel()">Refresh</button>
         <button class="btn btn--sm btn--ghost" style="color:var(--clr-error)" onclick="clearAllMemory()">Clear All</button>
       </footer>
+    </article>
+  </dialog>
+
+  <!-- Task Completion Dialog -->
+  <dialog class="term-dialog" id="task-complete-dialog" style="max-width:420px">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('task-complete-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3 id="task-complete-title">Complete Task</h3>
+      </header>
+      <form id="task-complete-form" onsubmit="return submitTaskComplete(event)">
+        <input type="hidden" name="terminalId" id="task-complete-terminal-id">
+        <input type="hidden" name="status" id="task-complete-status">
+        <label id="task-complete-result-label">
+          Result summary <small>(optional)</small>
+          <input type="text" name="result" id="task-complete-result" placeholder="Brief summary of what was done" autocomplete="off">
+        </label>
+        <label id="task-complete-error-label" style="display:none">
+          Error reason <small>(optional)</small>
+          <input type="text" name="error" id="task-complete-error" placeholder="What went wrong" autocomplete="off">
+        </label>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('task-complete-dialog').close()">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="task-complete-submit">Complete</button>
+        </footer>
+      </form>
     </article>
   </dialog>
 

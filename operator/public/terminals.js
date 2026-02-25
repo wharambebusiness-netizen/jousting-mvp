@@ -548,12 +548,25 @@ function addClaudeTerminalInstance(id, state) {
   // Wire search bar events
   (function(instanceId, sBar, sAddon) {
     var input = sBar.querySelector('.term-search__input');
+    var countEl = sBar.querySelector('[data-search-count]');
+    var searchOpts = { decorations: { matchOverviewRuler: '#888' } };
+
+    // Listen for result changes to show match count
+    if (sAddon && sAddon.onDidChangeResults) {
+      sAddon.onDidChangeResults(function(e) {
+        if (!countEl) return;
+        if (e.resultCount === 0) { countEl.textContent = 'No results'; }
+        else if (e.resultIndex < 0) { countEl.textContent = e.resultCount + ' matches'; }
+        else { countEl.textContent = (e.resultIndex + 1) + '/' + e.resultCount; }
+      });
+    }
+
     input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
         if (sAddon) {
-          if (e.shiftKey) { sAddon.findPrevious(input.value); }
-          else { sAddon.findNext(input.value); }
+          if (e.shiftKey) { sAddon.findPrevious(input.value, searchOpts); }
+          else { sAddon.findNext(input.value, searchOpts); }
         }
       }
       if (e.key === 'Escape') {
@@ -562,13 +575,14 @@ function addClaudeTerminalInstance(id, state) {
       }
     });
     input.addEventListener('input', function() {
-      if (sAddon && input.value) sAddon.findNext(input.value);
+      if (sAddon && input.value) sAddon.findNext(input.value, searchOpts);
+      if (!input.value && countEl) countEl.textContent = '';
     });
     sBar.querySelector('[data-search-prev]').addEventListener('click', function() {
-      if (sAddon && input.value) sAddon.findPrevious(input.value);
+      if (sAddon && input.value) sAddon.findPrevious(input.value, searchOpts);
     });
     sBar.querySelector('[data-search-next]').addEventListener('click', function() {
-      if (sAddon && input.value) sAddon.findNext(input.value);
+      if (sAddon && input.value) sAddon.findNext(input.value, searchOpts);
     });
     sBar.querySelector('[data-search-close]').addEventListener('click', function() {
       closeTerminalSearch(instanceId);
@@ -644,47 +658,76 @@ function addClaudeTerminalInstance(id, state) {
 function connectClaudeBinaryWs(inst) {
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(inst.id);
-  var ws = new WebSocket(url);
+  var backoff = 1000;
+  var maxBackoff = 15000;
+  var reconnectTimer = null;
 
-  ws.onopen = function() {
-    inst.terminal.writeln('\x1b[32m--- Connected ---\x1b[0m');
+  function connect() {
+    var ws = new WebSocket(url);
 
-    // Send resize on connect
-    var dims = inst.fitAddon.proposeDimensions();
-    if (dims) {
-      ws.send('\x01' + JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
-    }
-  };
+    ws.onopen = function() {
+      backoff = 1000; // reset on success
+      inst.terminal.writeln('\x1b[32m--- Connected ---\x1b[0m');
 
-  ws.onmessage = function(evt) {
-    // Raw PTY output → write to xterm
-    inst.terminal.write(evt.data);
-  };
+      // Send resize on connect
+      var dims = inst.fitAddon.proposeDimensions();
+      if (dims) {
+        ws.send('\x01' + JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+      }
+    };
 
-  ws.onclose = function() {
-    inst.terminal.writeln('\r\n\x1b[31m--- Disconnected ---\x1b[0m');
-    inst.binaryWs = null;
-  };
+    ws.onmessage = function(evt) {
+      // Raw PTY output → write to xterm
+      inst.terminal.write(evt.data);
+    };
 
-  ws.onerror = function() {
-    inst.terminal.writeln('\r\n\x1b[31m--- WebSocket Error ---\x1b[0m');
-  };
+    ws.onclose = function() {
+      inst.binaryWs = null;
+      // Only reconnect if terminal is still running and not explicitly closed
+      if (inst.running && !inst._binaryWsClosed) {
+        inst.terminal.writeln('\r\n\x1b[33m--- Reconnecting... ---\x1b[0m');
+        reconnectTimer = setTimeout(function() {
+          reconnectTimer = null;
+          if (inst.running && !inst._binaryWsClosed) connect();
+        }, backoff);
+        backoff = Math.min(backoff * 2, maxBackoff);
+      } else {
+        inst.terminal.writeln('\r\n\x1b[31m--- Disconnected ---\x1b[0m');
+      }
+    };
 
-  inst.binaryWs = ws;
+    ws.onerror = function() {
+      // onclose will fire after onerror, no need to log here
+    };
+
+    inst.binaryWs = ws;
+  }
+
+  // Flag to distinguish explicit close from unexpected disconnect
+  inst._binaryWsClosed = false;
+
+  connect();
 
   // User input → WS → PTY
   inst.terminal.onData(function(data) {
-    if (ws.readyState === 1) { // OPEN
-      ws.send(data);
+    if (inst.binaryWs && inst.binaryWs.readyState === 1) {
+      inst.binaryWs.send(data);
     }
   });
 
   // Resize → WS control message
   inst.terminal.onResize(function(size) {
-    if (ws.readyState === 1) {
-      ws.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+    if (inst.binaryWs && inst.binaryWs.readyState === 1) {
+      inst.binaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
     }
   });
+
+  // Store cleanup function
+  inst._closeBinaryWs = function() {
+    inst._binaryWsClosed = true;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (inst.binaryWs) { try { inst.binaryWs.close(); } catch(e) { /* noop */ } inst.binaryWs = null; }
+  };
 }
 
 // ── New terminal chooser ─────────────────────────────────────
@@ -713,6 +756,7 @@ function submitNewClaude(e) {
   var form = e.target;
   var dialog = document.getElementById('new-claude-dialog');
   var id = form.terminalId.value.trim();
+  var projectDir = form.projectDir.value.trim();
   var model = form.model.value;
   var skipPerms = form.dangerouslySkipPermissions.checked;
   var autoHandoff = form.autoHandoff.checked;
@@ -735,6 +779,7 @@ function submitNewClaude(e) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       id: id,
+      projectDir: projectDir || undefined,
       model: model || undefined,
       dangerouslySkipPermissions: skipPerms,
       autoHandoff: autoHandoff,
@@ -773,11 +818,9 @@ function killClaudeInstance(id) {
   var inst = instances.get(id);
   if (!inst || inst.type !== 'claude') return;
 
-  // Close binary WS
-  if (inst.binaryWs) {
-    try { inst.binaryWs.close(); } catch(e) { /* noop */ }
-    inst.binaryWs = null;
-  }
+  // Close binary WS (stops reconnect)
+  if (inst._closeBinaryWs) inst._closeBinaryWs();
+  else if (inst.binaryWs) { try { inst.binaryWs.close(); } catch(e) { /* noop */ } inst.binaryWs = null; }
 
   // Kill via API
   fetch('/api/claude-terminals/' + encodeURIComponent(id), { method: 'DELETE' })
@@ -808,10 +851,9 @@ function removeClaudeInstance(id) {
     return;
   }
 
-  // Close binary WS if still open
-  if (inst.binaryWs) {
-    try { inst.binaryWs.close(); } catch(e) { /* noop */ }
-  }
+  // Close binary WS (stops reconnect)
+  if (inst._closeBinaryWs) inst._closeBinaryWs();
+  else if (inst.binaryWs) { try { inst.binaryWs.close(); } catch(e) { /* noop */ } }
 
   // DELETE from API
   fetch('/api/claude-terminals/' + encodeURIComponent(id), { method: 'DELETE' })
@@ -1072,12 +1114,24 @@ function addTerminalInstance(id, state) {
   (function(instanceId, sBar, sAddon) {
     var input = sBar.querySelector('.term-search__input');
     var countEl = sBar.querySelector('[data-search-count]');
+    var searchOpts = { decorations: { matchOverviewRuler: '#888' } };
+
+    // Listen for result changes to show match count
+    if (sAddon && sAddon.onDidChangeResults) {
+      sAddon.onDidChangeResults(function(e) {
+        if (!countEl) return;
+        if (e.resultCount === 0) { countEl.textContent = 'No results'; }
+        else if (e.resultIndex < 0) { countEl.textContent = e.resultCount + ' matches'; }
+        else { countEl.textContent = (e.resultIndex + 1) + '/' + e.resultCount; }
+      });
+    }
+
     input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
         if (sAddon) {
-          if (e.shiftKey) { sAddon.findPrevious(input.value); }
-          else { sAddon.findNext(input.value); }
+          if (e.shiftKey) { sAddon.findPrevious(input.value, searchOpts); }
+          else { sAddon.findNext(input.value, searchOpts); }
         }
       }
       if (e.key === 'Escape') {
@@ -1087,15 +1141,15 @@ function addTerminalInstance(id, state) {
     });
     input.addEventListener('input', function() {
       if (sAddon && input.value) {
-        sAddon.findNext(input.value);
+        sAddon.findNext(input.value, searchOpts);
       }
       if (!input.value && countEl) countEl.textContent = '';
     });
     sBar.querySelector('[data-search-prev]').addEventListener('click', function() {
-      if (sAddon && input.value) sAddon.findPrevious(input.value);
+      if (sAddon && input.value) sAddon.findPrevious(input.value, searchOpts);
     });
     sBar.querySelector('[data-search-next]').addEventListener('click', function() {
-      if (sAddon && input.value) sAddon.findNext(input.value);
+      if (sAddon && input.value) sAddon.findNext(input.value, searchOpts);
     });
     sBar.querySelector('[data-search-close]').addEventListener('click', function() {
       closeTerminalSearch(instanceId);
@@ -3224,10 +3278,34 @@ function releaseTask(terminalId) {
 }
 
 function completeTask(terminalId, status) {
-  var result = status === 'complete' ? prompt('Result summary (optional):') : null;
-  var error = status === 'failed' ? prompt('Error reason (optional):') : null;
+  var dialog = document.getElementById('task-complete-dialog');
+  if (!dialog) return;
+
+  // Configure dialog for complete vs failed
+  var isComplete = status === 'complete';
+  document.getElementById('task-complete-title').textContent = isComplete ? 'Complete Task' : 'Fail Task';
+  document.getElementById('task-complete-terminal-id').value = terminalId;
+  document.getElementById('task-complete-status').value = status;
+  document.getElementById('task-complete-result-label').style.display = isComplete ? '' : 'none';
+  document.getElementById('task-complete-error-label').style.display = isComplete ? 'none' : '';
+  document.getElementById('task-complete-result').value = '';
+  document.getElementById('task-complete-error').value = '';
+  document.getElementById('task-complete-submit').textContent = isComplete ? 'Complete' : 'Mark Failed';
+  document.getElementById('task-complete-submit').className = isComplete ? 'btn btn--primary' : 'btn btn--danger';
+
+  dialog.showModal();
+}
+
+function submitTaskComplete(e) {
+  e.preventDefault();
+  var form = e.target;
+  var dialog = document.getElementById('task-complete-dialog');
+  var terminalId = form.terminalId.value;
+  var status = form.status.value;
 
   var body = { status: status };
+  var result = form.result.value.trim();
+  var error = form.error.value.trim();
   if (result) body.result = result;
   if (error) body.error = error;
 
@@ -3242,6 +3320,9 @@ function completeTask(terminalId, status) {
     })
     .then(function(data) { showToast('Task ' + data.status, data.status === 'complete' ? 'success' : 'error'); })
     .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+
+  dialog.close();
+  return false;
 }
 
 function updateTaskIndicator(terminalId) {

@@ -1185,7 +1185,7 @@
   // ── WebSocket Real-Time Updates ─────────────────────────────
 
   if (typeof createWS === 'function') {
-    wsHandle = createWS(['coord:*'], function (msg) {
+    wsHandle = createWS(['coord:*', 'claude-terminal:task-assigned', 'claude-terminal:task-released', 'claude-terminal:task-completed'], function (msg) {
       var ev = msg.event;
       var data = msg.data || {};
 
@@ -1221,6 +1221,35 @@
       } else if (ev === 'coord:all-complete') {
         loadTasks();
         if (typeof showToast === 'function') showToast('All tasks complete', 'success');
+      } else if (ev === 'claude-terminal:task-assigned') {
+        // Terminal claimed a task — refresh to show assignment
+        if (data.taskId && tasks[data.taskId]) {
+          tasks[data.taskId].status = 'in-progress';
+          tasks[data.taskId].assignedTo = data.terminalId || null;
+          renderBoard();
+        } else {
+          loadTasks();
+        }
+      } else if (ev === 'claude-terminal:task-released') {
+        // Terminal released a task — refresh to show it back as pending
+        if (data.taskId && tasks[data.taskId]) {
+          tasks[data.taskId].status = 'pending';
+          tasks[data.taskId].assignedTo = null;
+          renderBoard();
+        } else {
+          loadTasks();
+        }
+      } else if (ev === 'claude-terminal:task-completed') {
+        // Terminal completed a task
+        if (data.taskId && tasks[data.taskId]) {
+          tasks[data.taskId].status = data.status === 'failed' ? 'failed' : 'complete';
+          tasks[data.taskId].completedAt = new Date().toISOString();
+          if (data.result) tasks[data.taskId].result = data.result;
+          if (data.error) tasks[data.taskId].error = data.error;
+          renderBoard();
+        } else {
+          loadTasks();
+        }
       }
     });
   }

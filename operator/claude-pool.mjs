@@ -290,6 +290,35 @@ export function createClaudePool(ctx) {
     return true;
   }
 
+  // ── Task Claiming Utility ─────────────────────────────
+
+  /**
+   * Find the next claimable task from the task queue.
+   * Returns the highest-priority pending task whose deps are all complete.
+   * @returns {object|null} claimable task or null
+   */
+  function findNextClaimableTask() {
+    if (!coordinator) return null;
+    const taskQueue = coordinator.taskQueue;
+    if (!taskQueue) return null;
+
+    const allTasks = taskQueue.getAll();
+    const pending = allTasks.filter(t => t.status === 'pending');
+
+    // Sort by priority descending (higher priority first)
+    pending.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+    for (const task of pending) {
+      if (!task.deps || task.deps.length === 0) return task;
+      const depsComplete = task.deps.every(depId => {
+        const dep = allTasks.find(t => t.id === depId);
+        return dep && dep.status === 'complete';
+      });
+      if (depsComplete) return task;
+    }
+    return null;
+  }
+
   // ── Auto-Dispatch ──────────────────────────────────────
 
   /**
@@ -303,37 +332,16 @@ export function createClaudePool(ctx) {
     if (!entry.autoDispatch) return;
     if (!coordinator) return;
 
-    const taskQueue = coordinator.taskQueue;
-    if (!taskQueue) return;
-
     // Skip if terminal already has a task
     if (entry.assignedTask) return;
 
     // Skip if terminal is not running
     if (entry.status !== 'running') return;
 
-    // Find next claimable task (respect deps)
-    const allTasks = taskQueue.getAll();
-    const pending = allTasks.filter(t => t.status === 'pending');
-
-    let claimable = null;
-    for (const task of pending) {
-      if (!task.deps || task.deps.length === 0) {
-        claimable = task;
-        break;
-      }
-      const depsComplete = task.deps.every(depId => {
-        const dep = allTasks.find(t => t.id === depId);
-        return dep && dep.status === 'complete';
-      });
-      if (depsComplete) {
-        claimable = task;
-        break;
-      }
-    }
-
+    const claimable = findNextClaimableTask();
     if (!claimable) return;
 
+    const taskQueue = coordinator.taskQueue;
     try {
       // Assign in task queue
       taskQueue.assign(claimable.id, terminalId);
@@ -820,6 +828,7 @@ export function createClaudePool(ctx) {
     getTerminalHandle,
     activeCount,
     getPoolStatus,
+    findNextClaimableTask,
     shutdownAll,
   };
 }

@@ -256,7 +256,7 @@ export function createClaudeTerminalRoutes(ctx) {
       return res.status(409).json({ error: 'Terminal already has an assigned task', task: current });
     }
 
-    // Need coordinator to assign a task
+    // Need coordinator for task queue access
     const coordinator = ctx.coordinator;
     if (!coordinator) {
       return res.status(503).json({ error: 'Coordinator not available — start with --pool flag' });
@@ -267,27 +267,8 @@ export function createClaudeTerminalRoutes(ctx) {
       return res.status(503).json({ error: 'Task queue not available' });
     }
 
-    // Find next assignable pending task (respect deps)
-    const allTasks = taskQueue.getAll();
-    const pending = allTasks.filter(t => t.status === 'pending');
-
-    // Find first task whose deps are all complete
-    let claimable = null;
-    for (const task of pending) {
-      if (!task.deps || task.deps.length === 0) {
-        claimable = task;
-        break;
-      }
-      const depsComplete = task.deps.every(depId => {
-        const dep = allTasks.find(t => t.id === depId);
-        return dep && dep.status === 'complete';
-      });
-      if (depsComplete) {
-        claimable = task;
-        break;
-      }
-    }
-
+    // Use shared utility (priority-sorted, dep-aware)
+    const claimable = claudePool.findNextClaimableTask();
     if (!claimable) {
       return res.json({ claimed: false, message: 'No pending tasks available' });
     }
