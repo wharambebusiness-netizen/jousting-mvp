@@ -4146,3 +4146,29 @@ details[open] > .tree-summary .tree-icon--dir {
   line-height: 1;
   font-weight: 700;
 }
+
+/* ── Terminal Task Indicator (Phase 19) ────── */
+.term-task-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--accent-bg, rgba(99,102,241,0.14));
+  border-bottom: 1px solid var(--border-subtle, rgba(140,140,255,0.08));
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9cc0);
+}
+.term-task-badge {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-hover, #818cf8);
+  font-weight: 600;
+}
+.term-task-indicator .btn--xs {
+  padding: 1px 5px;
+  font-size: 0.7rem;
+  min-width: auto;
+  line-height: 1.2;
+}

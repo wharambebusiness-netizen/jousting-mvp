@@ -498,10 +498,17 @@ function addClaudeTerminalInstance(id, state) {
     '<span class="term-status__actions">' +
       '<button class="term-status__btn' + (isAutoHandoff ? ' term-status__btn--active' : '') + '" onclick="toggleAutoHandoff(\'' + escHtml(id) + '\')" data-action="toggle-handoff" title="Toggle auto-handoff (Ctrl+Shift+A)">\u21BB</button>' +
       '<button class="term-status__btn" onclick="toggleClaudePermissions(\'' + escHtml(id) + '\')" data-action="toggle-perms" title="Toggle permission mode">\u{1F512}</button>' +
+      '<button class="term-status__btn" onclick="claimTask(\'' + escHtml(id) + '\')" data-action="claim-task" title="Claim next task">&#9776;</button>' +
       '<button class="term-status__btn term-status__btn--danger" onclick="killClaudeInstance(\'' + escHtml(id) + '\')" data-action="kill">Kill</button>' +
       '<button class="term-status__btn" onclick="toggleMaximize(\'' + escHtml(id) + '\')" data-action="maximize" title="Maximize/Restore">\u26F6</button>' +
     '</span>';
   panel.appendChild(statusBar);
+
+  // Task indicator bar (Phase 19, hidden by default)
+  var taskIndicator = document.createElement('div');
+  taskIndicator.className = 'term-task-indicator';
+  taskIndicator.style.display = 'none';
+  panel.appendChild(taskIndicator);
 
   // Search bar (hidden by default)
   var searchBar = document.createElement('div');
@@ -596,6 +603,9 @@ function addClaudeTerminalInstance(id, state) {
   if (isRunning) {
     connectClaudeBinaryWs(inst);
   }
+
+  // Load assigned task state (Phase 19)
+  loadTerminalTask(id);
 
   updateEmptyState();
   applyViewMode();
@@ -1790,6 +1800,34 @@ function connectWS() {
         var memDialog = document.getElementById('memory-dialog');
         if (memDialog && memDialog.open) {
           refreshMemoryPanel();
+        }
+        break;
+      }
+
+      // Terminal task bridge (Phase 19)
+      case 'claude-terminal:task-assigned': {
+        var taskInst = instances.get(msg.data.terminalId);
+        if (taskInst) {
+          taskInst.assignedTask = { taskId: msg.data.taskId, task: msg.data.task, category: msg.data.category };
+          updateTaskIndicator(msg.data.terminalId);
+          showToast(msg.data.terminalId + ' claimed task: ' + (msg.data.task || '').slice(0, 60), 'success');
+        }
+        break;
+      }
+      case 'claude-terminal:task-released': {
+        var relInst = instances.get(msg.data.terminalId);
+        if (relInst) {
+          relInst.assignedTask = null;
+          updateTaskIndicator(msg.data.terminalId);
+        }
+        break;
+      }
+      case 'claude-terminal:task-completed': {
+        var compInst = instances.get(msg.data.terminalId);
+        if (compInst) {
+          compInst.assignedTask = null;
+          updateTaskIndicator(msg.data.terminalId);
+          showToast(msg.data.terminalId + ' ' + msg.data.status + ' task ' + msg.data.taskId, msg.data.status === 'complete' ? 'success' : 'error');
         }
         break;
       }
@@ -3029,6 +3067,94 @@ function clearAllMemory() {
     });
 }
 
+// ── Terminal Task Bridge (Phase 19) ──────────────────────
+
+function claimTask(terminalId) {
+  fetch('/api/claude-terminals/' + encodeURIComponent(terminalId) + '/claim-task', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) { return r.json().then(function(d) { return { status: r.status, body: d }; }); })
+    .then(function(res) {
+      if (res.body.claimed) {
+        showToast('Claimed task: ' + (res.body.task.task || '').slice(0, 60), 'success');
+      } else if (res.body.message) {
+        showToast(res.body.message, 'info');
+      } else {
+        showToast(res.body.error || 'Failed to claim task', 'error');
+      }
+    })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function releaseTask(terminalId) {
+  fetch('/api/claude-terminals/' + encodeURIComponent(terminalId) + '/release-task', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() { showToast('Task released', 'success'); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function completeTask(terminalId, status) {
+  var result = status === 'complete' ? prompt('Result summary (optional):') : null;
+  var error = status === 'failed' ? prompt('Error reason (optional):') : null;
+
+  var body = { status: status };
+  if (result) body.result = result;
+  if (error) body.error = error;
+
+  fetch('/api/claude-terminals/' + encodeURIComponent(terminalId) + '/complete-task', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function(data) { showToast('Task ' + data.status, data.status === 'complete' ? 'success' : 'error'); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function updateTaskIndicator(terminalId) {
+  var inst = instances.get(terminalId);
+  if (!inst || !inst.panel) return;
+  var indicator = inst.panel.querySelector('.term-task-indicator');
+  if (!indicator) return;
+
+  var task = inst.assignedTask;
+  if (task) {
+    indicator.innerHTML = '<span class="term-task-badge" title="' + escapeHtml(task.task || task.taskId) + '">'
+      + '&#9654; ' + escapeHtml((task.task || task.taskId || '').slice(0, 40))
+      + '</span>'
+      + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'complete\')" title="Complete task">&#10004;</button>'
+      + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'failed\')" title="Fail task">&#10008;</button>'
+      + '<button class="btn btn--xs btn--ghost" onclick="releaseTask(\'' + escapeHtml(terminalId) + '\')" title="Release task">&#8617;</button>';
+    indicator.style.display = 'flex';
+  } else {
+    indicator.innerHTML = '';
+    indicator.style.display = 'none';
+  }
+}
+
+function loadTerminalTask(terminalId) {
+  fetch('/api/claude-terminals/' + encodeURIComponent(terminalId) + '/task')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var inst = instances.get(terminalId);
+      if (inst && data.task) {
+        inst.assignedTask = data.task;
+        updateTaskIndicator(terminalId);
+      }
+    })
+    .catch(function() { /* ignore */ });
+}
+
 // ── Terminal Messages Panel (Phase 18) ───────────────────────
 
 function toggleMessagePanel() {
@@ -3353,6 +3479,9 @@ window.closeThreadView = closeThreadView;
 window.sendThreadReply = sendThreadReply;
 window.deleteMessage = deleteMessage;
 window.clearAllMessages = clearAllMessages;
+window.claimTask = claimTask;
+window.releaseTask = releaseTask;
+window.completeTask = completeTask;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

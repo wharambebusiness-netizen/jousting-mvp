@@ -204,8 +204,8 @@ export function createApp(options = {}) {
     claudePool = options.claudePool;
   }
 
-  // Claude terminal routes
-  app.use('/api', createClaudeTerminalRoutes({ claudePool, events }));
+  // Claude terminal routes (Phase 19: coordinator passed for task bridge)
+  app.use('/api', createClaudeTerminalRoutes({ claudePool, events, coordinator }));
 
   // Resolve missions dir
   const missionsDir = join(projectDir, 'orchestrator', 'missions');

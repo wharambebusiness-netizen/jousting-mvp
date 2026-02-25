@@ -470,6 +470,97 @@ describe('createClaudePool', () => {
   it('exports MAX_TERMINALS constant', () => {
     expect(MAX_TERMINALS).toBe(8);
   });
+
+  // ── Task Assignment (Phase 19) ────────────────────
+
+  describe('task assignment', () => {
+    it('assignTask stores task on terminal', async () => {
+      await pool.spawn('t1');
+      const ok = pool.assignTask('t1', { id: 'task-1', task: 'Do stuff', category: 'dev', priority: 3 });
+      expect(ok).toBe(true);
+      const task = pool.getAssignedTask('t1');
+      expect(task).toBeTruthy();
+      expect(task.taskId).toBe('task-1');
+      expect(task.task).toBe('Do stuff');
+      expect(task.category).toBe('dev');
+      expect(task.priority).toBe(3);
+      expect(task.assignedAt).toBeTruthy();
+    });
+
+    it('assignTask emits claude-terminal:task-assigned', async () => {
+      const assigned = [];
+      events.on('claude-terminal:task-assigned', (d) => assigned.push(d));
+      await pool.spawn('t1');
+      pool.assignTask('t1', { id: 'task-2', task: 'Build feature' });
+      expect(assigned.length).toBe(1);
+      expect(assigned[0].terminalId).toBe('t1');
+      expect(assigned[0].taskId).toBe('task-2');
+    });
+
+    it('assignTask returns false for unknown terminal', () => {
+      expect(pool.assignTask('nope', { id: 'task-1', task: 'x' })).toBe(false);
+    });
+
+    it('getAssignedTask returns null when no task', async () => {
+      await pool.spawn('t1');
+      expect(pool.getAssignedTask('t1')).toBeNull();
+    });
+
+    it('getAssignedTask returns null for unknown terminal', () => {
+      expect(pool.getAssignedTask('nope')).toBeNull();
+    });
+
+    it('releaseTask clears and returns task', async () => {
+      await pool.spawn('t1');
+      pool.assignTask('t1', { id: 'task-3', task: 'Fix bug' });
+      const released = pool.releaseTask('t1');
+      expect(released).toBeTruthy();
+      expect(released.taskId).toBe('task-3');
+      expect(pool.getAssignedTask('t1')).toBeNull();
+    });
+
+    it('releaseTask emits claude-terminal:task-released', async () => {
+      const released = [];
+      events.on('claude-terminal:task-released', (d) => released.push(d));
+      await pool.spawn('t1');
+      pool.assignTask('t1', { id: 'task-4', task: 'Refactor' });
+      pool.releaseTask('t1');
+      expect(released.length).toBe(1);
+      expect(released[0].terminalId).toBe('t1');
+      expect(released[0].taskId).toBe('task-4');
+    });
+
+    it('releaseTask returns null when no task assigned', async () => {
+      await pool.spawn('t1');
+      expect(pool.releaseTask('t1')).toBeNull();
+    });
+
+    it('releaseTask returns null for unknown terminal', () => {
+      expect(pool.releaseTask('nope')).toBeNull();
+    });
+
+    it('formatEntry includes assignedTask', async () => {
+      await pool.spawn('t1');
+      pool.assignTask('t1', { id: 'task-5', task: 'Test' });
+      const t = pool.getTerminal('t1');
+      expect(t.assignedTask).toBeTruthy();
+      expect(t.assignedTask.taskId).toBe('task-5');
+    });
+
+    it('formatEntry shows null assignedTask when none', async () => {
+      await pool.spawn('t1');
+      const t = pool.getTerminal('t1');
+      expect(t.assignedTask).toBeNull();
+    });
+
+    it('assignTask defaults category and priority', async () => {
+      await pool.spawn('t1');
+      pool.assignTask('t1', { id: 'task-6', task: 'Minimal' });
+      const task = pool.getAssignedTask('t1');
+      expect(task.category).toBeNull();
+      expect(task.priority).toBe(5);
+    });
+  });
 });
 
 // ============================================================
@@ -554,6 +645,31 @@ function createMockClaudePool() {
       if (!t) return false;
       t.autoHandoff = !!enabled;
       return true;
+    }),
+    assignTask: vi.fn((id, task) => {
+      const t = terminals.get(id);
+      if (!t) return false;
+      t.assignedTask = {
+        taskId: task.id,
+        task: task.task,
+        category: task.category || null,
+        priority: task.priority || 5,
+        metadata: task.metadata || null,
+        assignedAt: new Date().toISOString(),
+      };
+      return true;
+    }),
+    releaseTask: vi.fn((id) => {
+      const t = terminals.get(id);
+      if (!t || !t.assignedTask) return null;
+      const released = t.assignedTask;
+      t.assignedTask = null;
+      return released;
+    }),
+    getAssignedTask: vi.fn((id) => {
+      const t = terminals.get(id);
+      if (!t) return null;
+      return t.assignedTask || null;
     }),
     activeCount: () => [...terminals.values()].filter(t => t.status === 'running').length,
     shutdownAll: vi.fn(async () => {}),
@@ -653,6 +769,33 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
     it('DELETE returns 503', async () => {
       const { status } = await api('/api/claude-terminals/x', {
         method: 'DELETE',
+      });
+      expect(status).toBe(503);
+    });
+
+    it('GET task returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/task');
+      expect(status).toBe(503);
+    });
+
+    it('POST claim-task returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/claim-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(503);
+    });
+
+    it('POST release-task returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/release-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(503);
+    });
+
+    it('POST complete-task returns 503', async () => {
+      const { status } = await api('/api/claude-terminals/x/complete-task', {
+        method: 'POST',
+        body: { status: 'complete' },
       });
       expect(status).toBe(503);
     });
@@ -867,6 +1010,86 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
     it('DELETE returns 404 for unknown', async () => {
       const { status } = await api('/api/claude-terminals/ghost', {
         method: 'DELETE',
+      });
+      expect(status).toBe(404);
+    });
+
+    // ── Task Bridge (Phase 19) ─────────────────────
+
+    it('GET /api/claude-terminals/:id/task returns null when no task', async () => {
+      // Ensure rt1 exists
+      await api('/api/claude-terminals', { method: 'POST', body: { id: 'task-t1' } });
+      const { status, body } = await api('/api/claude-terminals/task-t1/task');
+      expect(status).toBe(200);
+      expect(body.terminalId).toBe('task-t1');
+      expect(body.task).toBeNull();
+    });
+
+    it('GET /api/claude-terminals/:id/task returns 404 for unknown', async () => {
+      const { status } = await api('/api/claude-terminals/nonexistent/task');
+      expect(status).toBe(404);
+    });
+
+    it('POST claim-task returns 503 when no coordinator', async () => {
+      const { status, body } = await api('/api/claude-terminals/task-t1/claim-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(503);
+      expect(body.error).toContain('Coordinator not available');
+    });
+
+    it('POST release-task returns 404 when no assigned task', async () => {
+      const { status, body } = await api('/api/claude-terminals/task-t1/release-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(404);
+      expect(body.error).toContain('no assigned task');
+    });
+
+    it('POST complete-task returns 404 when no assigned task', async () => {
+      const { status, body } = await api('/api/claude-terminals/task-t1/complete-task', {
+        method: 'POST',
+        body: { status: 'complete' },
+      });
+      expect(status).toBe(404);
+      expect(body.error).toContain('no assigned task');
+    });
+
+    it('POST complete-task rejects invalid status', async () => {
+      // First assign a task manually on the mock
+      mockPool.assignTask('task-t1', { id: 'tq-1', task: 'Test task' });
+      const { status, body } = await api('/api/claude-terminals/task-t1/complete-task', {
+        method: 'POST',
+        body: { status: 'invalid' },
+      });
+      expect(status).toBe(400);
+      expect(body.error).toContain('must be');
+      // Clean up
+      mockPool.releaseTask('task-t1');
+    });
+
+    it('POST claim-task returns 409 when already has task', async () => {
+      mockPool.assignTask('task-t1', { id: 'tq-2', task: 'Existing task' });
+      const { status, body } = await api('/api/claude-terminals/task-t1/claim-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(409);
+      expect(body.error).toContain('already has an assigned task');
+      // Clean up
+      mockPool.releaseTask('task-t1');
+    });
+
+    it('POST claim-task returns 404 for unknown terminal', async () => {
+      const { status } = await api('/api/claude-terminals/nonexistent/claim-task', {
+        method: 'POST',
+      });
+      expect(status).toBe(404);
+    });
+
+    it('POST release-task returns 503 for unknown terminal (no pool check)', async () => {
+      // release-task doesn't check getTerminal, it checks getAssignedTask
+      const { status } = await api('/api/claude-terminals/nonexistent/release-task', {
+        method: 'POST',
       });
       expect(status).toBe(404);
     });

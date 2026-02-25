@@ -250,6 +250,8 @@ export function createWebSocketHandler({ server, events, claudePool }) {
     'claude-terminal:respawned', 'claude-terminal:permission-changed',
     'claude-terminal:handoff', 'claude-terminal:context-warning',
     'claude-terminal:auto-handoff-changed',
+    'claude-terminal:task-assigned', 'claude-terminal:task-released',
+    'claude-terminal:task-completed',
     'shared-memory:updated', 'shared-memory:deleted',
     'shared-memory:cleared', 'shared-memory:snapshot-written',
     'terminal-message:sent', 'terminal-message:broadcast',

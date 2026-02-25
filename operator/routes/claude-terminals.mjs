@@ -186,6 +186,159 @@ export function createClaudeTerminalRoutes(ctx) {
     }
   });
 
+  // ── POST /claude-terminals/:id/claim-task ───────────
+  // Phase 19: Claim the next pending task from the coordinator
+
+  router.post('/claude-terminals/:id/claim-task', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    // Check if already has a task
+    const current = claudePool.getAssignedTask(req.params.id);
+    if (current) {
+      return res.status(409).json({ error: 'Terminal already has an assigned task', task: current });
+    }
+
+    // Need coordinator to assign a task
+    const coordinator = ctx.coordinator;
+    if (!coordinator) {
+      return res.status(503).json({ error: 'Coordinator not available — start with --pool flag' });
+    }
+
+    const taskQueue = coordinator.taskQueue;
+    if (!taskQueue) {
+      return res.status(503).json({ error: 'Task queue not available' });
+    }
+
+    // Find next assignable pending task (respect deps)
+    const allTasks = taskQueue.getAll();
+    const pending = allTasks.filter(t => t.status === 'pending');
+
+    // Find first task whose deps are all complete
+    let claimable = null;
+    for (const task of pending) {
+      if (!task.deps || task.deps.length === 0) {
+        claimable = task;
+        break;
+      }
+      const depsComplete = task.deps.every(depId => {
+        const dep = allTasks.find(t => t.id === depId);
+        return dep && dep.status === 'complete';
+      });
+      if (depsComplete) {
+        claimable = task;
+        break;
+      }
+    }
+
+    if (!claimable) {
+      return res.json({ claimed: false, message: 'No pending tasks available' });
+    }
+
+    try {
+      // Assign in task queue
+      taskQueue.assign(claimable.id, req.params.id);
+      taskQueue.start(claimable.id);
+
+      // Track in pool
+      claudePool.assignTask(req.params.id, claimable);
+
+      res.json({ claimed: true, task: claimable });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── POST /claude-terminals/:id/release-task ─────────
+  // Phase 19: Release assigned task without completing
+
+  router.post('/claude-terminals/:id/release-task', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const current = claudePool.getAssignedTask(req.params.id);
+    if (!current) {
+      return res.status(404).json({ error: 'Terminal has no assigned task' });
+    }
+
+    // Release from pool
+    const released = claudePool.releaseTask(req.params.id);
+
+    // Try to reset task status back to pending in the queue
+    const coordinator = ctx.coordinator;
+    if (coordinator) {
+      try {
+        const tq = coordinator.taskQueue;
+        if (tq) {
+          // Fail then retry puts it back to pending
+          tq.fail(released.taskId, 'Released by terminal');
+          tq.retry(released.taskId);
+        }
+      } catch { /* task may already be in a terminal state */ }
+    }
+
+    res.json({ released: true, taskId: released.taskId });
+  });
+
+  // ── POST /claude-terminals/:id/complete-task ────────
+  // Phase 19: Mark assigned task as complete or failed
+
+  router.post('/claude-terminals/:id/complete-task', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const current = claudePool.getAssignedTask(req.params.id);
+    if (!current) {
+      return res.status(404).json({ error: 'Terminal has no assigned task' });
+    }
+
+    const { status, result, error } = req.body || {};
+
+    if (status !== 'complete' && status !== 'failed') {
+      return res.status(400).json({ error: 'status must be "complete" or "failed"' });
+    }
+
+    const coordinator = ctx.coordinator;
+    if (coordinator) {
+      try {
+        const tq = coordinator.taskQueue;
+        if (tq) {
+          if (status === 'complete') {
+            tq.complete(current.taskId, result || null);
+          } else {
+            tq.fail(current.taskId, error || 'Failed by terminal');
+          }
+        }
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
+      }
+    }
+
+    // Clear from pool
+    claudePool.releaseTask(req.params.id);
+
+    events.emit('claude-terminal:task-completed', {
+      terminalId: req.params.id,
+      taskId: current.taskId,
+      status,
+    });
+
+    res.json({ completed: true, taskId: current.taskId, status });
+  });
+
+  // ── GET /claude-terminals/:id/task ──────────────────
+  // Phase 19: Get currently assigned task
+
+  router.get('/claude-terminals/:id/task', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    const task = claudePool.getAssignedTask(req.params.id);
+    res.json({ terminalId: req.params.id, task: task || null });
+  });
+
   // ── DELETE /claude-terminals/:id ──────────────────────
 
   router.delete('/claude-terminals/:id', (req, res) => {

@@ -105,6 +105,7 @@ export function createClaudePool(ctx) {
       stoppedAt: null,
       autoHandoff: !!opts.autoHandoff,
       handoffCount: opts._handoffCount || 0,
+      assignedTask: null,
     };
 
     terminals.set(terminalId, entry);
@@ -431,6 +432,62 @@ export function createClaudePool(ctx) {
 
   // ── Helpers ───────────────────────────────────────────
 
+  // ── Task Assignment (Phase 19) ───────────────────────
+
+  /**
+   * Assign a task to a terminal.
+   * @param {string} terminalId
+   * @param {object} task - { id, task, category, priority, metadata }
+   * @returns {boolean}
+   */
+  function assignTask(terminalId, task) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.assignedTask = {
+      taskId: task.id,
+      task: task.task,
+      category: task.category || null,
+      priority: task.priority || 5,
+      metadata: task.metadata || null,
+      assignedAt: new Date().toISOString(),
+    };
+    events.emit('claude-terminal:task-assigned', {
+      terminalId,
+      taskId: task.id,
+      task: task.task,
+      category: task.category || null,
+    });
+    return true;
+  }
+
+  /**
+   * Release a terminal's assigned task (without completing it).
+   * @param {string} terminalId
+   * @returns {object|null} The released task info, or null
+   */
+  function releaseTask(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry || !entry.assignedTask) return null;
+    const released = entry.assignedTask;
+    entry.assignedTask = null;
+    events.emit('claude-terminal:task-released', {
+      terminalId,
+      taskId: released.taskId,
+    });
+    return released;
+  }
+
+  /**
+   * Get the assigned task for a terminal.
+   * @param {string} terminalId
+   * @returns {object|null}
+   */
+  function getAssignedTask(terminalId) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return null;
+    return entry.assignedTask || null;
+  }
+
   function formatEntry(entry) {
     const termStatus = entry.terminal.getStatus();
     return {
@@ -449,6 +506,7 @@ export function createClaudePool(ctx) {
       stoppedAt: entry.stoppedAt,
       exitCode: termStatus.exitCode,
       exitSignal: termStatus.exitSignal,
+      assignedTask: entry.assignedTask || null,
     };
   }
 
@@ -460,6 +518,9 @@ export function createClaudePool(ctx) {
     remove,
     respawn,
     setAutoHandoff,
+    assignTask,
+    releaseTask,
+    getAssignedTask,
     getStatus,
     getTerminal,
     getTerminalHandle,
