@@ -174,7 +174,10 @@ var sidebarFilterTimer = null;
   ensureXtermLoaded(function() {
     loadInstances();
     loadClaudeTerminals();
+    refreshPoolStatus();
   });
+  // Start pool status polling (every 5s)
+  setInterval(refreshPoolStatus, 5000);
   // Close previous WS connection (HTMX boost re-runs scripts without full page unload)
   if (wsHandle) { wsHandle.close(); wsHandle = null; }
   connectWS();
@@ -3497,6 +3500,30 @@ function relativeTime(isoString) {
 function escapeHtml(str) {
   if (typeof str !== 'string') str = String(str);
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Pool Status (Phase 21) ────────────────────────────────────
+
+function refreshPoolStatus() {
+  fetch('/api/claude-terminals/pool-status')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var bar = document.getElementById('pool-status-bar');
+      if (!bar) return;
+      if (!data.available || data.total === 0) {
+        bar.style.display = 'none';
+        return;
+      }
+      bar.style.display = 'flex';
+      var el = function(id) { return document.getElementById(id); };
+      el('pool-running').textContent = data.running + '/' + data.maxTerminals + ' running';
+      el('pool-active').textContent = data.active + ' active';
+      el('pool-idle').textContent = data.idle + ' idle';
+      el('pool-waiting').textContent = data.waiting + ' waiting';
+      el('pool-tasks').textContent = data.withTask + ' tasks';
+      el('pool-dispatch').textContent = data.withAutoDispatch + ' auto-dispatch';
+    })
+    .catch(function() { /* ignore */ });
 }
 
 // ── Expose to window for onclick handlers ────────────────────

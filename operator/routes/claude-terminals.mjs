@@ -43,6 +43,15 @@ export function createClaudeTerminalRoutes(ctx) {
     });
   });
 
+  // ── GET /claude-terminals/pool-status ────────────────
+
+  router.get('/claude-terminals/pool-status', (_req, res) => {
+    if (!claudePool) {
+      return res.json({ available: false });
+    }
+    res.json({ available: true, ...claudePool.getPoolStatus() });
+  });
+
   // ── GET /claude-terminals/available ───────────────────
 
   router.get('/claude-terminals/available', async (_req, res) => {

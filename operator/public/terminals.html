@@ -82,6 +82,18 @@
       </div>
     </div>
 
+    <!-- Pool Status Bar -->
+    <div class="pool-status-bar" id="pool-status-bar" style="display:none">
+      <span class="pool-status__item" id="pool-running" title="Running terminals">0 running</span>
+      <span class="pool-status__sep">|</span>
+      <span class="pool-status__item pool-status__active" id="pool-active" title="Active (producing output)">0 active</span>
+      <span class="pool-status__item pool-status__idle" id="pool-idle" title="Idle (no output >10s)">0 idle</span>
+      <span class="pool-status__item pool-status__waiting" id="pool-waiting" title="Waiting (has task, idle)">0 waiting</span>
+      <span class="pool-status__sep">|</span>
+      <span class="pool-status__item" id="pool-tasks" title="Terminals with assigned tasks">0 tasks</span>
+      <span class="pool-status__item" id="pool-dispatch" title="Auto-dispatch enabled">0 auto-dispatch</span>
+    </div>
+
     <!-- Tab Bar -->
     <div class="term-tabs" id="term-tabs" role="tablist" aria-label="Orchestrator instances">
       <!-- Tabs rendered dynamically by terminals.js -->

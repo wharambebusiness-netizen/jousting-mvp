@@ -19,6 +19,7 @@ import { createClaudeTerminal, isNodePtyAvailable, MIN_UPTIME_FOR_HANDOFF_MS } f
 const MAX_TERMINALS = 8;
 const FORCE_KILL_TIMEOUT_MS = 5000;
 const AUTO_DISPATCH_DELAY_MS = 2000;
+const IDLE_THRESHOLD_MS = 10000; // 10s of no output = idle
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -99,23 +100,26 @@ export function createClaudePool(ctx) {
     });
 
     // Create pool entry
+    const now = new Date().toISOString();
     const entry = {
       id: terminalId,
       terminal,
       status: 'running',
       config: { ...opts },
-      spawnedAt: new Date().toISOString(),
+      spawnedAt: now,
       stoppedAt: null,
       autoHandoff: !!opts.autoHandoff,
       autoDispatch: !!opts.autoDispatch,
       handoffCount: opts._handoffCount || 0,
       assignedTask: null,
+      lastActivityAt: now,
     };
 
     terminals.set(terminalId, entry);
 
     // Wire terminal events to EventBus
     terminal.on('data', (data) => {
+      entry.lastActivityAt = new Date().toISOString();
       events.emit('claude-terminal:data', {
         terminalId,
         data,
@@ -592,6 +596,18 @@ export function createClaudePool(ctx) {
     return entry.assignedTask || null;
   }
 
+  /**
+   * Compute activity state for a terminal entry.
+   * @param {object} entry
+   * @returns {'active'|'idle'|'waiting'|'stopped'}
+   */
+  function getActivityState(entry) {
+    if (entry.status !== 'running') return 'stopped';
+    const idleMs = Date.now() - new Date(entry.lastActivityAt).getTime();
+    if (idleMs < IDLE_THRESHOLD_MS) return 'active';
+    return entry.assignedTask ? 'waiting' : 'idle';
+  }
+
   function formatEntry(entry) {
     const termStatus = entry.terminal.getStatus();
     return {
@@ -612,6 +628,37 @@ export function createClaudePool(ctx) {
       exitCode: termStatus.exitCode,
       exitSignal: termStatus.exitSignal,
       assignedTask: entry.assignedTask || null,
+      lastActivityAt: entry.lastActivityAt,
+      activityState: getActivityState(entry),
+    };
+  }
+
+  /**
+   * Get aggregate pool status summary.
+   * @returns {object} { total, running, stopped, active, idle, waiting, withTask, withAutoDispatch }
+   */
+  function getPoolStatus() {
+    let running = 0, stopped = 0, active = 0, idle = 0, waiting = 0, withTask = 0, withAutoDispatch = 0;
+    for (const entry of terminals.values()) {
+      if (entry.status === 'running') running++;
+      else stopped++;
+      const state = getActivityState(entry);
+      if (state === 'active') active++;
+      else if (state === 'idle') idle++;
+      else if (state === 'waiting') waiting++;
+      if (entry.assignedTask) withTask++;
+      if (entry.autoDispatch) withAutoDispatch++;
+    }
+    return {
+      total: terminals.size,
+      running,
+      stopped,
+      active,
+      idle,
+      waiting,
+      withTask,
+      withAutoDispatch,
+      maxTerminals,
     };
   }
 
@@ -631,8 +678,9 @@ export function createClaudePool(ctx) {
     getTerminal,
     getTerminalHandle,
     activeCount,
+    getPoolStatus,
     shutdownAll,
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS };

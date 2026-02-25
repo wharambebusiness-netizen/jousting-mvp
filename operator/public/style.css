@@ -2215,6 +2215,22 @@ details[open] > .tree-summary .tree-icon--dir {
 }
 
 /* Tab bar */
+/* Pool Status Bar (Phase 21) */
+.pool-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--bg-card);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.75rem;
+  color: var(--clr-muted);
+}
+.pool-status__sep { opacity: 0.3; }
+.pool-status__active { color: var(--clr-success, #10b981); }
+.pool-status__idle { color: var(--clr-warning, #f59e0b); }
+.pool-status__waiting { color: var(--clr-info, #6366f1); }
+
 .term-tabs {
   display: flex;
   gap: 2px;

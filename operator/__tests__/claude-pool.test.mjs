@@ -77,7 +77,7 @@ vi.mock('../claude-terminal.mjs', async (importOriginal) => {
   };
 });
 
-const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS } = await import('../claude-pool.mjs');
+const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
 
 // ============================================================
@@ -855,6 +855,85 @@ describe('createClaudePool', () => {
       await dispatchPool.shutdownAll();
     });
   });
+
+  // ── Activity Tracking (Phase 21) ─────────────────
+
+  describe('activity tracking', () => {
+    it('formatEntry includes lastActivityAt', async () => {
+      await pool.spawn('t1');
+      const t = pool.getTerminal('t1');
+      expect(t).toHaveProperty('lastActivityAt');
+      expect(typeof t.lastActivityAt).toBe('string');
+    });
+
+    it('formatEntry includes activityState', async () => {
+      await pool.spawn('t1');
+      const t = pool.getTerminal('t1');
+      expect(t).toHaveProperty('activityState');
+      expect(['active', 'idle', 'waiting', 'stopped']).toContain(t.activityState);
+    });
+
+    it('newly spawned terminal is active', async () => {
+      await pool.spawn('t1');
+      expect(pool.getTerminal('t1').activityState).toBe('active');
+    });
+
+    it('terminal data updates lastActivityAt', async () => {
+      await pool.spawn('t1');
+      const before = pool.getTerminal('t1').lastActivityAt;
+      await new Promise(r => setTimeout(r, 20));
+      pool.getTerminalHandle('t1')._triggerData('hello');
+      const after = pool.getTerminal('t1').lastActivityAt;
+      expect(new Date(after).getTime()).toBeGreaterThanOrEqual(new Date(before).getTime());
+    });
+
+    it('stopped terminal has stopped activityState', async () => {
+      await pool.spawn('t1');
+      pool.getTerminalHandle('t1')._triggerExit(0);
+      await new Promise(r => setTimeout(r, 20));
+      expect(pool.getTerminal('t1').activityState).toBe('stopped');
+    });
+
+    it('exports IDLE_THRESHOLD_MS constant', () => {
+      expect(IDLE_THRESHOLD_MS).toBe(10000);
+    });
+
+    it('getPoolStatus returns aggregate stats', async () => {
+      await pool.spawn('t1');
+      await pool.spawn('t2');
+      const status = pool.getPoolStatus();
+      expect(status.total).toBe(2);
+      expect(status.running).toBe(2);
+      expect(status.stopped).toBe(0);
+      expect(status.active).toBe(2);
+      expect(status.maxTerminals).toBe(8);
+      expect(typeof status.idle).toBe('number');
+      expect(typeof status.waiting).toBe('number');
+      expect(typeof status.withTask).toBe('number');
+      expect(typeof status.withAutoDispatch).toBe('number');
+    });
+
+    it('getPoolStatus counts withTask correctly', async () => {
+      await pool.spawn('t1');
+      await pool.spawn('t2');
+      pool.assignTask('t1', { id: 'x', task: 'Test' });
+      const status = pool.getPoolStatus();
+      expect(status.withTask).toBe(1);
+    });
+
+    it('getPoolStatus counts withAutoDispatch correctly', async () => {
+      await pool.spawn('t1', { autoDispatch: true });
+      await pool.spawn('t2', { autoDispatch: false });
+      const status = pool.getPoolStatus();
+      expect(status.withAutoDispatch).toBe(1);
+    });
+
+    it('getPoolStatus returns zeroes for empty pool', () => {
+      const status = pool.getPoolStatus();
+      expect(status.total).toBe(0);
+      expect(status.running).toBe(0);
+    });
+  });
 });
 
 // ============================================================
@@ -973,6 +1052,14 @@ function createMockClaudePool() {
       return t.assignedTask || null;
     }),
     activeCount: () => [...terminals.values()].filter(t => t.status === 'running').length,
+    getPoolStatus: vi.fn(() => ({
+      total: terminals.size,
+      running: [...terminals.values()].filter(t => t.status === 'running').length,
+      stopped: [...terminals.values()].filter(t => t.status !== 'running').length,
+      active: [...terminals.values()].filter(t => t.status === 'running').length,
+      idle: 0, waiting: 0, withTask: 0, withAutoDispatch: 0,
+      maxTerminals: 8,
+    })),
     shutdownAll: vi.fn(async () => {}),
     _terminals: terminals,
   };
@@ -1107,6 +1194,12 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       });
       expect(status).toBe(503);
     });
+
+    it('GET pool-status returns available:false without pool', async () => {
+      const { status, body } = await api('/api/claude-terminals/pool-status');
+      expect(status).toBe(200);
+      expect(body.available).toBe(false);
+    });
   });
 
   // ── With pool ────────────────────────────────────
@@ -1126,6 +1219,19 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       expect(status).toBe(200);
       expect(body.available).toBe(true);
       expect(Array.isArray(body.terminals)).toBe(true);
+    });
+
+    // ── GET pool-status ────────────────────────
+
+    it('GET /api/claude-terminals/pool-status returns aggregate stats', async () => {
+      const { status, body } = await api('/api/claude-terminals/pool-status');
+      expect(status).toBe(200);
+      expect(body.available).toBe(true);
+      expect(typeof body.total).toBe('number');
+      expect(typeof body.running).toBe('number');
+      expect(typeof body.active).toBe('number');
+      expect(typeof body.idle).toBe('number');
+      expect(typeof body.maxTerminals).toBe('number');
     });
 
     // ── GET available ────────────────────────────
