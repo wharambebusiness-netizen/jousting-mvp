@@ -1345,6 +1345,7 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
       events: routeEvents,
       claudePool: mockPool || undefined,
       coordination: false,
+      auth: false,
     });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
@@ -1529,7 +1530,9 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
         body: {},
       });
       expect(status).toBe(400);
-      expect(body.error).toContain('id is required');
+      expect(body.error).toBe('Validation failed');
+      expect(body.field).toBe('id');
+      expect(body.details).toContain('required');
     });
 
     it('POST rejects invalid id chars', async () => {
@@ -1538,7 +1541,9 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
         body: { id: 'bad id!' },
       });
       expect(status).toBe(400);
-      expect(body.error).toContain('must match');
+      expect(body.error).toBe('Validation failed');
+      expect(body.field).toBe('id');
+      expect(body.details).toContain('pattern');
     });
 
     it('POST accepts valid id with dashes and underscores', async () => {

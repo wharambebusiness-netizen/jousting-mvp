@@ -394,7 +394,7 @@
       })
       .then(function (data) {
         tasks = {};
-        var arr = Array.isArray(data) ? data : [];
+        var arr = Array.isArray(data) ? data : (data && data.items ? data.items : []);
         for (var i = 0; i < arr.length; i++) {
           tasks[arr[i].id] = arr[i];
         }
@@ -562,34 +562,52 @@
   // ── Batch Operations ────────────────────────────────────────
 
   function batchCancel() {
-    var ids = Object.keys(selected);
-    var pending = 0;
-    for (var i = 0; i < ids.length; i++) {
-      var t = tasks[ids[i]];
-      if (t && (t.status === 'pending' || t.status === 'assigned')) {
-        cancelTask(ids[i]);
-        pending++;
-      }
-    }
-    if (pending === 0) {
+    var ids = Object.keys(selected).filter(function (id) {
+      var t = tasks[id];
+      return t && (t.status === 'pending' || t.status === 'assigned');
+    });
+    if (ids.length === 0) {
       if (typeof showToast === 'function') showToast('No cancellable tasks selected', 'error');
+      return;
     }
+    fetch('/api/bulk/tasks/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (typeof showToast === 'function') showToast('Cancelled ' + body.succeeded + '/' + body.total + ' tasks', body.failed > 0 ? 'warning' : 'success');
+        loadTasks();
+      })
+      .catch(function (err) {
+        if (typeof showToast === 'function') showToast('Batch cancel failed: ' + err.message, 'error');
+      });
     clearSelection();
   }
 
   function batchRetry() {
-    var ids = Object.keys(selected);
-    var pending = 0;
-    for (var i = 0; i < ids.length; i++) {
-      var t = tasks[ids[i]];
-      if (t && (t.status === 'failed' || t.status === 'cancelled')) {
-        retryTask(ids[i]);
-        pending++;
-      }
-    }
-    if (pending === 0) {
+    var ids = Object.keys(selected).filter(function (id) {
+      var t = tasks[id];
+      return t && (t.status === 'failed' || t.status === 'cancelled');
+    });
+    if (ids.length === 0) {
       if (typeof showToast === 'function') showToast('No retryable tasks selected', 'error');
+      return;
     }
+    fetch('/api/bulk/tasks/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (typeof showToast === 'function') showToast('Retried ' + body.succeeded + '/' + body.total + ' tasks', body.failed > 0 ? 'warning' : 'success');
+        loadTasks();
+      })
+      .catch(function (err) {
+        if (typeof showToast === 'function') showToast('Batch retry failed: ' + err.message, 'error');
+      });
     clearSelection();
   }
 
@@ -1022,6 +1040,35 @@
     renderBoard();
   });
 
+  // ── Export Events (Phase 36) ─────────────────────────────────
+
+  var exportBtn = document.getElementById('export-btn');
+  var exportMenu = document.getElementById('export-menu');
+
+  if (exportBtn && exportMenu) {
+    exportBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      exportMenu.style.display = exportMenu.style.display === 'none' ? 'flex' : 'none';
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function () {
+      if (exportMenu) exportMenu.style.display = 'none';
+    });
+
+    // Export option clicks
+    exportMenu.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-format]');
+      if (!btn) return;
+      var format = btn.dataset.format;
+      var url = '/api/export/tasks?format=' + encodeURIComponent(format);
+      if (filterStatus) url += '&status=' + encodeURIComponent(filterStatus);
+      if (filterCategory) url += '&category=' + encodeURIComponent(filterCategory);
+      window.location.href = url;
+      exportMenu.style.display = 'none';
+    });
+  }
+
   // ── Batch Bar Events ────────────────────────────────────────
 
   document.getElementById('batch-select-all').addEventListener('click', function () {
@@ -1073,6 +1120,36 @@
     }
     addTask(data);
   });
+
+  // ── Category Auto-Detect (Phase 33) ───────────────────────────
+
+  var addTaskDescInput = addTaskForm.querySelector('input[name="task"]');
+  var addTaskCatInput = addTaskForm.querySelector('input[name="category"]');
+
+  if (addTaskDescInput && addTaskCatInput) {
+    addTaskDescInput.addEventListener('blur', function () {
+      var desc = addTaskDescInput.value.trim();
+      var cat = addTaskCatInput.value.trim();
+      if (!desc || cat) return; // skip if no text or category already set
+      fetch('/api/coordination/categories/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: desc }),
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.category && !addTaskCatInput.value.trim()) {
+            addTaskCatInput.value = data.category;
+            addTaskCatInput.classList.add('auto-detected');
+          }
+        })
+        .catch(function () { /* ignore detection errors */ });
+    });
+
+    addTaskCatInput.addEventListener('input', function () {
+      addTaskCatInput.classList.remove('auto-detected');
+    });
+  }
 
   // ── Keyboard Shortcuts ──────────────────────────────────────
 
@@ -1185,7 +1262,7 @@
   // ── WebSocket Real-Time Updates ─────────────────────────────
 
   if (typeof createWS === 'function') {
-    wsHandle = createWS(['coord:*', 'claude-terminal:task-assigned', 'claude-terminal:task-released', 'claude-terminal:task-completed'], function (msg) {
+    wsHandle = createWS(['coord:*', 'claude-terminal:task-assigned', 'claude-terminal:task-released', 'claude-terminal:task-completed', 'dlq:*'], function (msg) {
       var ev = msg.event;
       var data = msg.data || {};
 
@@ -1250,9 +1327,112 @@
         } else {
           loadTasks();
         }
+      } else if (ev === 'dlq:added' || ev === 'dlq:retried' || ev === 'dlq:dismissed') {
+        // Dead letter queue changed — reload DLQ section
+        loadDeadLetters();
+        if (ev === 'dlq:added' && typeof showToast === 'function') {
+          showToast('Task moved to dead letter queue: ' + (data.taskId || ''));
+        }
       }
     });
   }
+
+  // ── Dead Letter Queue (Phase 32) ─────────────────────────────
+
+  var dlqEntries = [];
+
+  function loadDeadLetters() {
+    fetch('/api/coordination/dead-letters')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        dlqEntries = data.entries || [];
+        renderDeadLetters(data.entries || [], data.total || 0);
+      })
+      .catch(function () { /* DLQ not available */ });
+  }
+
+  function renderDeadLetters(list, total) {
+    var section = document.getElementById('dlq-section');
+    var container = document.getElementById('dlq-list');
+    var badge = document.getElementById('dlq-badge');
+    if (!section || !container) return;
+
+    // Count pending entries
+    var pendingCount = list.filter(function (e) { return e.status === 'pending'; }).length;
+    badge.textContent = String(pendingCount);
+
+    if (total === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = '';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i];
+      var statusClass = 'dlq-status--' + e.status;
+      var taskDesc = typeof e.task === 'string' ? e.task : (e.task && e.task.task ? e.task.task : e.taskId || '?');
+      var timeAgo = e.failedAt ? new Date(e.failedAt).toLocaleString() : '';
+      html += '<div class="task-board__dlq-card" data-dlq-id="' + e.id + '">';
+      html += '<div class="task-board__dlq-card-header">';
+      html += '<span class="task-board__dlq-status ' + statusClass + '">' + e.status + '</span>';
+      html += '<span class="task-board__dlq-task-id">' + (e.taskId || '') + '</span>';
+      if (e.category) html += '<span class="task-board__dlq-category">' + e.category + '</span>';
+      html += '</div>';
+      html += '<div class="task-board__dlq-desc">' + escapeHtml(taskDesc) + '</div>';
+      if (e.error) html += '<div class="task-board__dlq-error">' + escapeHtml(String(e.error)) + '</div>';
+      html += '<div class="task-board__dlq-meta">Retries: ' + (e.retryCount || 0) + ' | Failed: ' + timeAgo + '</div>';
+      html += '<div class="task-board__dlq-actions">';
+      if (e.status === 'pending') {
+        html += '<button class="btn btn--sm" onclick="window._dlqRetry(\'' + e.id + '\')">Retry</button>';
+        html += '<button class="btn btn--sm btn--ghost" onclick="window._dlqDismiss(\'' + e.id + '\')">Dismiss</button>';
+      }
+      html += '<button class="btn btn--sm btn--ghost" onclick="window._dlqDelete(\'' + e.id + '\')">Delete</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  window._dlqRetry = function (id) {
+    fetch('/api/coordination/dead-letters/' + id + '/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          if (typeof showToast === 'function') showToast('Task re-queued for retry');
+          loadDeadLetters();
+          loadTasks();
+        }
+      });
+  };
+
+  window._dlqDismiss = function (id) {
+    var reason = prompt('Dismissal reason (optional):') || '';
+    fetch('/api/coordination/dead-letters/' + id + '/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason }) })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          if (typeof showToast === 'function') showToast('Dead letter dismissed');
+          loadDeadLetters();
+        }
+      });
+  };
+
+  window._dlqDelete = function (id) {
+    fetch('/api/coordination/dead-letters/' + id, { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          if (typeof showToast === 'function') showToast('Dead letter removed');
+          loadDeadLetters();
+        }
+      });
+  };
 
   // ── Drop Zone Setup ─────────────────────────────────────────
   setupDropZones();
@@ -1261,9 +1441,11 @@
   loadTasks();
   loadStatus();
   loadTemplates();
+  loadDeadLetters();
   refreshTimer = setInterval(function () {
     loadTasks();
     loadStatus();
+    loadDeadLetters();
   }, 10000);
 
   // Cleanup on page unload (full navigation)

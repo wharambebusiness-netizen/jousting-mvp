@@ -34,6 +34,10 @@
         <span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M7 8h6M7 11h4"/></svg></span>
         <span class="sidebar-nav__label">Tasks</span>
       </a></li>
+      <li><a href="/timeline" class="sidebar-nav__link" data-page="/timeline">
+        <span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v14"/><circle cx="10" cy="6" r="2"/><circle cx="10" cy="11" r="2"/><circle cx="10" cy="16" r="1.5"/></svg></span>
+        <span class="sidebar-nav__label">Timeline</span>
+      </a></li>
       <li><a href="/projects" class="sidebar-nav__link" data-page="/projects">
         <span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5A1.5 1.5 0 014.5 4h3.172a1.5 1.5 0 011.06.44L10 5.706a1.5 1.5 0 001.06.44H15.5A1.5 1.5 0 0117 7.646V14.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 14.5V5.5z"/></svg></span>
         <span class="sidebar-nav__label">Projects</span>
@@ -76,6 +80,7 @@
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
         <button class="btn btn--sm btn--ghost" id="messages-toggle" onclick="toggleMessagePanel()" title="Terminal Messages (Ctrl+Shift+I)" aria-label="Toggle terminal messages panel" style="position:relative">&#9993;<span class="msg-unread-badge" id="msg-unread-badge" style="display:none"></span></button>
+        <button class="btn btn--sm btn--ghost" id="sessions-toggle" onclick="toggleSessionHistory()" title="Session History" aria-label="Toggle session history panel">&#128196;</button>
         <button class="btn btn--sm btn--ghost" id="memory-toggle" onclick="toggleMemoryPanel()" title="Shared Memory (Ctrl+M)" aria-label="Toggle shared memory panel">&#128200;</button>
         <button class="btn btn--sm btn--ghost" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle file sidebar (Ctrl+B)" aria-label="Toggle file sidebar">&#128193;</button>
         <button class="btn btn--sm btn--primary" id="add-terminal-btn" onclick="openNewTerminal()" title="New terminal" aria-label="New terminal">+ New</button>
@@ -209,6 +214,12 @@
           <h3>New Claude Terminal</h3>
         </header>
         <form id="new-claude-form" onsubmit="return submitNewClaude(event)">
+          <label>
+            Template <small>(optional, pre-fills config)</small>
+            <select name="template" onchange="applyClaudeTemplate(this)">
+              <option value="">Custom / No template</option>
+            </select>
+          </label>
           <label>
             Terminal ID
             <input type="text" name="terminalId" placeholder="e.g. claude-1" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens, underscores">
@@ -446,6 +457,46 @@
         <footer>
           <button type="button" class="btn btn--ghost" onclick="document.getElementById('swarm-config-dialog').close()">Cancel</button>
           <button type="submit" class="btn btn--primary">Start Swarm</button>
+        </footer>
+      </form>
+    </article>
+  </dialog>
+
+  <!-- Session History Dialog (Phase 48) -->
+  <dialog class="term-dialog" id="sessions-dialog" style="max-width:700px">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('sessions-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Session History</h3>
+      </header>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;align-items:center">
+        <select id="sessions-filter" onchange="refreshSessionsList()" style="max-width:140px">
+          <option value="all">All</option>
+          <option value="completed">Completed</option>
+          <option value="running">Running</option>
+        </select>
+        <span id="sessions-count" style="color:var(--text-muted,#888);font-size:0.85em"></span>
+      </div>
+      <div id="sessions-list" style="max-height:400px;overflow-y:auto"></div>
+    </article>
+  </dialog>
+
+  <!-- Save Template Dialog (Phase 48) -->
+  <dialog class="term-dialog" id="save-template-dialog">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('save-template-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Save as Template</h3>
+      </header>
+      <form id="save-template-form" onsubmit="return submitSaveTemplate(event)">
+        <input type="hidden" name="terminalId" id="save-template-terminal-id">
+        <label>
+          Template Name
+          <input type="text" name="name" placeholder="e.g. my-workflow" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens, underscores">
+        </label>
+        <footer>
+          <button type="button" class="btn btn--ghost" onclick="document.getElementById('save-template-dialog').close()">Cancel</button>
+          <button type="submit" class="btn btn--primary">Save Template</button>
         </footer>
       </form>
     </article>

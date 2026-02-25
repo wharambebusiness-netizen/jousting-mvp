@@ -44,7 +44,7 @@ function _actionMessage(path, ok) {
   return ok ? 'Success' : 'Action failed';
 }
 
-// ── WebSocket Utility (reconnect with exponential backoff) ───
+// ── WebSocket Utility (reconnect with exponential backoff + Phase 49 reliability) ───
 
 function createWS(subscriptions, onMessage, opts) {
   opts = opts || {};
@@ -55,12 +55,73 @@ function createWS(subscriptions, onMessage, opts) {
   var ws = null;
   var closed = false;
 
-  function updateDot(state) {
+  // Phase 49: replay + quality tracking
+  var _lastSeq = -1;          // last received sequence number
+  var _reconnectCount = 0;    // number of reconnects
+  var _latency = null;        // last ping-pong RTT in ms
+  var _reconnectTimer = null; // active reconnect countdown timer
+  var _countdownInterval = null; // banner countdown interval
+
+  function updateDot(state, attempt) {
     if (!opts.trackStatus) return;
     var dot = document.getElementById('ws-dot');
     if (!dot) return;
     dot.className = (dot.className.includes('sidebar-nav__ws-dot') ? 'sidebar-nav__ws-dot ' : '') + 'ws-dot ws-dot--' + state;
-    dot.title = 'WebSocket: ' + state;
+    if (state === 'reconnecting' && attempt) {
+      dot.title = 'WebSocket: Reconnecting... (attempt ' + attempt + ')';
+    } else {
+      dot.title = 'WebSocket: ' + state;
+    }
+  }
+
+  // Phase 49: reconnection banner
+  function showReconnectBanner(delayMs, attempt) {
+    hideBanner();
+    var banner = document.createElement('div');
+    banner.id = 'ws-reconnect-banner';
+    banner.className = 'ws-reconnect-banner';
+    var secs = Math.ceil(delayMs / 1000);
+    banner.innerHTML =
+      '<span class="ws-reconnect-banner__msg">Connection lost. Reconnecting in ' +
+      '<span id="ws-reconnect-countdown">' + secs + '</span>s...' +
+      ' (attempt ' + attempt + ')</span>' +
+      '<button class="ws-reconnect-banner__btn" onclick="(function(){' +
+        'var b=document.getElementById(\'ws-reconnect-banner\');' +
+        'if(b)b.remove();' +
+        'window._wsReconnectNow && window._wsReconnectNow();' +
+      '})()">Reconnect Now</button>' +
+      '<button class="ws-reconnect-banner__dismiss" onclick="document.getElementById(\'ws-reconnect-banner\')&&document.getElementById(\'ws-reconnect-banner\').remove()" title="Dismiss">&times;</button>';
+    document.body.insertBefore(banner, document.body.firstChild);
+    // Start countdown
+    var remaining = secs;
+    _countdownInterval = setInterval(function() {
+      remaining--;
+      var el = document.getElementById('ws-reconnect-countdown');
+      if (el) el.textContent = remaining > 0 ? remaining : 0;
+      if (remaining <= 0) {
+        clearInterval(_countdownInterval);
+        _countdownInterval = null;
+      }
+    }, 1000);
+  }
+
+  function hideBanner() {
+    if (_countdownInterval) { clearInterval(_countdownInterval); _countdownInterval = null; }
+    var banner = document.getElementById('ws-reconnect-banner');
+    if (banner) banner.remove();
+  }
+
+  // Expose for "Reconnect Now" button
+  window._wsReconnectNow = function() {
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+    backoff = 1000;
+    connect();
+  };
+
+  // Phase 49: latency badge update
+  function updateQuality() {
+    if (!opts.onQuality) return;
+    opts.onQuality({ latency: _latency, reconnects: _reconnectCount, connected: true });
   }
 
   function connect() {
@@ -72,26 +133,95 @@ function createWS(subscriptions, onMessage, opts) {
     ws.onopen = function() {
       backoff = 1000;
       updateDot('connected');
+      hideBanner();
       ws.send(JSON.stringify({ subscribe: subscriptions }));
+      // Phase 49: request replay of missed events on reconnect
+      if (_reconnectCount > 0 && _lastSeq >= 0) {
+        ws.send(JSON.stringify({ type: 'replay', afterSeq: _lastSeq }));
+      }
       if (opts.onConnect) opts.onConnect();
     };
 
     ws.onmessage = function(e) {
-      try { onMessage(JSON.parse(e.data)); } catch (_) {}
+      try {
+        var msg = JSON.parse(e.data);
+
+        // Phase 49: track sequence numbers from bridged events
+        if (msg.event && typeof msg.seq === 'number' && msg.seq > _lastSeq) {
+          _lastSeq = msg.seq;
+        }
+
+        // Phase 49: handle server-side heartbeat ping
+        if (msg.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+
+        // Phase 49: handle pong from server (response to client-initiated ping — latency measurement)
+        if (msg.type === 'pong' && msg._pingTs) {
+          _latency = Date.now() - msg._pingTs;
+          updateQuality();
+          return;
+        }
+
+        // Phase 49: handle replay response
+        if (msg.type === 'replay') {
+          var replayed = msg.events || [];
+          if (replayed.length > 0) {
+            showToast('Replayed ' + replayed.length + ' missed event' + (replayed.length !== 1 ? 's' : ''), 'info');
+            for (var i = 0; i < replayed.length; i++) {
+              var re = replayed[i];
+              if (re.seq > _lastSeq) _lastSeq = re.seq;
+              try { onMessage({ event: re.event, data: re.data, seq: re.seq, replayed: true }); } catch (_) {}
+              if (opts.onReplay) opts.onReplay(re);
+            }
+          }
+          return;
+        }
+
+        // Phase 49: handle replay gap notification
+        if (msg.type === 'replay-gap') {
+          showToast('Missed ' + msg.missed + ' event' + (msg.missed !== 1 ? 's' : '') + ' during disconnection', 'warning');
+          return;
+        }
+
+        onMessage(msg);
+      } catch (_) {}
     };
 
     ws.onclose = function() {
-      updateDot('disconnected');
+      _reconnectCount++;
+      updateDot('reconnecting', _reconnectCount);
       if (opts.onDisconnect) opts.onDisconnect();
       if (!closed) {
-        setTimeout(connect, backoff);
+        // Show banner for extended disconnection (backoff > 1s means second+ attempt)
+        if (backoff > 1000) {
+          showReconnectBanner(backoff, _reconnectCount);
+        }
+        _reconnectTimer = setTimeout(function() {
+          _reconnectTimer = null;
+          connect();
+        }, backoff);
         backoff = Math.min(backoff * 2, maxBackoff);
+      } else {
+        updateDot('disconnected');
       }
     };
   }
 
   connect();
-  return { close: function() { closed = true; if (ws) ws.close(); } };
+  return {
+    close: function() {
+      closed = true;
+      hideBanner();
+      window._wsReconnectNow = null;
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+      if (ws) ws.close();
+    },
+    getLastSeq: function() { return _lastSeq; },
+    getLatency: function() { return _latency; },
+    getReconnectCount: function() { return _reconnectCount; },
+  };
 }
 
 // ── Page Cleanup on HTMX Navigation ─────────────────────────
@@ -106,6 +236,177 @@ document.body.addEventListener('htmx:beforeSwap', function () {
   }
   _pageCleanups = [];
 });
+
+// ── Notification Bell (Phase 41) ─────────────────────────────
+
+(function() {
+  // Inject bell into sidebar nav (between links and footer)
+  var sidebar = document.getElementById('sidebar-nav');
+  if (!sidebar) return;
+
+  var bell = document.createElement('div');
+  bell.className = 'sidebar-nav__notif';
+  bell.innerHTML = '<button class="sidebar-nav__notif-btn" id="notif-bell" title="Notifications" aria-label="Notifications">' +
+    '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M10 2a5 5 0 00-5 5c0 4-2 5-2 5h14s-2-1-2-5a5 5 0 00-5-5z"/>' +
+    '<path d="M8.5 17a1.5 1.5 0 003 0"/></svg>' +
+    '<span class="notif-badge" id="notif-badge" style="display:none">0</span></button>';
+
+  // Insert before the first footer
+  var footers = sidebar.querySelectorAll('.sidebar-nav__footer');
+  if (footers.length > 0) {
+    sidebar.insertBefore(bell, footers[0]);
+  } else {
+    sidebar.appendChild(bell);
+  }
+
+  // Dropdown
+  var dropdown = document.createElement('div');
+  dropdown.className = 'notif-dropdown';
+  dropdown.id = 'notif-dropdown';
+  dropdown.style.display = 'none';
+  dropdown.innerHTML = '<div class="notif-dropdown__header">' +
+    '<span class="notif-dropdown__title">Notifications</span>' +
+    '<button class="notif-dropdown__mark-all" id="notif-mark-all">Mark all read</button></div>' +
+    '<div class="notif-dropdown__list" id="notif-list"></div>';
+  document.body.appendChild(dropdown);
+
+  var badgeEl = document.getElementById('notif-badge');
+  var bellBtn = document.getElementById('notif-bell');
+  var dropdownEl = document.getElementById('notif-dropdown');
+  var listEl = document.getElementById('notif-list');
+  var markAllBtn = document.getElementById('notif-mark-all');
+
+  function updateBadge(count) {
+    if (!badgeEl) return;
+    if (count > 0) {
+      badgeEl.textContent = count > 99 ? '99+' : String(count);
+      badgeEl.style.display = '';
+    } else {
+      badgeEl.style.display = 'none';
+    }
+  }
+
+  function fetchUnreadCount() {
+    fetch('/api/notifications/unread-count')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) { if (data) updateBadge(data.count); })
+      .catch(function() {});
+  }
+
+  var severityIcon = {
+    success: '&#10003;', error: '&#10007;', warning: '&#9888;', info: '&#8505;'
+  };
+
+  function renderNotifications(items) {
+    if (!listEl) return;
+    if (!items || items.length === 0) {
+      listEl.innerHTML = '<div class="notif-dropdown__empty">No notifications</div>';
+      return;
+    }
+    listEl.innerHTML = items.map(function(n) {
+      return '<div class="notif-item' + (n.read ? '' : ' notif-item--unread') + '" data-id="' + n.id + '">' +
+        '<span class="notif-item__icon notif-item__icon--' + n.severity + '">' + (severityIcon[n.severity] || '') + '</span>' +
+        '<div class="notif-item__body"><div class="notif-item__title">' + n.title + '</div>' +
+        '<div class="notif-item__msg">' + n.message + '</div></div>' +
+        '<button class="notif-item__dismiss" data-dismiss="' + n.id + '" title="Dismiss">&times;</button></div>';
+    }).join('');
+  }
+
+  function loadNotifications() {
+    fetch('/api/notifications?limit=20')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        renderNotifications(data.items);
+        updateBadge(data.unreadCount);
+      })
+      .catch(function() {});
+  }
+
+  // Toggle dropdown
+  if (bellBtn) {
+    bellBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var isOpen = dropdownEl.style.display !== 'none';
+      if (isOpen) {
+        dropdownEl.style.display = 'none';
+      } else {
+        loadNotifications();
+        // Position dropdown near bell
+        var rect = bellBtn.getBoundingClientRect();
+        dropdownEl.style.top = rect.top + 'px';
+        dropdownEl.style.left = (rect.right + 8) + 'px';
+        dropdownEl.style.display = '';
+      }
+    });
+  }
+
+  // Close dropdown on outside click
+  document.addEventListener('click', function(e) {
+    if (dropdownEl && dropdownEl.style.display !== 'none') {
+      if (!dropdownEl.contains(e.target) && e.target !== bellBtn) {
+        dropdownEl.style.display = 'none';
+      }
+    }
+  });
+
+  // Mark all read
+  if (markAllBtn) {
+    markAllBtn.addEventListener('click', function() {
+      fetch('/api/notifications/read-all', { method: 'POST' })
+        .then(function() { loadNotifications(); })
+        .catch(function() {});
+    });
+  }
+
+  // Dismiss button delegation
+  if (listEl) {
+    listEl.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-dismiss]');
+      if (btn) {
+        var id = btn.getAttribute('data-dismiss');
+        fetch('/api/notifications/' + id, { method: 'DELETE' })
+          .then(function() { loadNotifications(); })
+          .catch(function() {});
+      }
+    });
+  }
+
+  // Initial fetch
+  fetchUnreadCount();
+
+  // WS subscription for real-time badge updates
+  createWS(['notification:*'], function(msg) {
+    if (msg.event === 'notification:new') {
+      fetchUnreadCount();
+      // If dropdown is open, refresh it
+      if (dropdownEl && dropdownEl.style.display !== 'none') {
+        loadNotifications();
+      }
+    }
+  });
+})();
+
+// ── User Preferences (Phase 39) ─────────────────────────────
+
+window._userPrefs = null;
+
+(function() {
+  fetch('/api/preferences')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(prefs) {
+      if (!prefs) return;
+      window._userPrefs = prefs;
+
+      // Apply sidebar collapsed state
+      var sidebar = document.getElementById('project-sidebar');
+      if (sidebar && prefs.sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+      }
+    })
+    .catch(function() {});
+})();
 
 // ── Branch Name Auto-Generation ──────────────────────────────
 
@@ -360,6 +661,162 @@ document.addEventListener('keydown', function(e) {
     if (searchInput) searchInput.focus();
   }
 });
+
+// ── Command Palette (Phase 46) — Ctrl+K / Cmd+K ─────────────
+
+(function() {
+  var overlay = document.createElement('div');
+  overlay.className = 'search-palette';
+  overlay.id = 'search-palette';
+  overlay.style.display = 'none';
+  overlay.innerHTML =
+    '<div class="search-palette__box">' +
+      '<input type="text" class="search-input" id="search-palette-input" placeholder="Search tasks, messages, chains, terminals..." autocomplete="off" />' +
+      '<div class="search-recent" id="search-recent"></div>' +
+      '<div class="search-results" id="search-results"></div>' +
+      '<div class="search-empty" id="search-empty" style="display:none">No results found</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  var paletteEl = document.getElementById('search-palette');
+  var inputEl = document.getElementById('search-palette-input');
+  var resultsEl = document.getElementById('search-results');
+  var emptyEl = document.getElementById('search-empty');
+  var recentEl = document.getElementById('search-recent');
+  var debounceTimer = null;
+
+  var sourceIcons = {
+    tasks: '\u2611', messages: '\u2709', audit: '\u{1F4CB}',
+    chains: '\u26D3', terminals: '\u25B6', memory: '\u{1F4BE}'
+  };
+
+  var sourcePages = {
+    tasks: '/taskboard', messages: '/terminals', audit: '/timeline',
+    chains: '/chains/', terminals: '/terminals', memory: '/terminals'
+  };
+
+  function openPalette() {
+    paletteEl.style.display = '';
+    inputEl.value = '';
+    resultsEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+    renderRecent();
+    setTimeout(function() { inputEl.focus(); }, 50);
+  }
+
+  function closePalette() {
+    paletteEl.style.display = 'none';
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+  }
+
+  function getRecent() {
+    try { return JSON.parse(localStorage.getItem('search-recent') || '[]'); } catch { return []; }
+  }
+
+  function saveRecent(query) {
+    var list = getRecent().filter(function(q) { return q !== query; });
+    list.unshift(query);
+    if (list.length > 5) list = list.slice(0, 5);
+    localStorage.setItem('search-recent', JSON.stringify(list));
+  }
+
+  function renderRecent() {
+    var list = getRecent();
+    if (list.length === 0) { recentEl.innerHTML = ''; return; }
+    recentEl.innerHTML = '<div class="search-recent__label">Recent</div>' +
+      list.map(function(q) {
+        return '<button class="search-recent__item" data-query="' + q.replace(/"/g, '&quot;') + '">' + q + '</button>';
+      }).join('');
+  }
+
+  function renderResults(data) {
+    if (!data || !data.results || data.results.length === 0) {
+      resultsEl.innerHTML = '';
+      emptyEl.style.display = '';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    resultsEl.innerHTML = data.results.map(function(r) {
+      var icon = sourceIcons[r.source] || '';
+      var page = r.source === 'chains' ? '/chains/' + r.id : (sourcePages[r.source] || '/');
+      return '<a class="search-result" href="' + page + '" data-source="' + r.source + '">' +
+        '<span class="search-result__badge">' + icon + ' ' + r.source + '</span>' +
+        '<span class="search-result__title">' + (r.title || r.id) + '</span>' +
+        '<span class="search-result__snippet">' + (r.snippet || '') + '</span>' +
+      '</a>';
+    }).join('');
+  }
+
+  function doSearch(query) {
+    if (!query || query.trim().length === 0) {
+      resultsEl.innerHTML = '';
+      emptyEl.style.display = 'none';
+      renderRecent();
+      return;
+    }
+    recentEl.innerHTML = '';
+    fetch('/api/search?q=' + encodeURIComponent(query.trim()) + '&limit=15')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data) {
+          renderResults(data);
+          saveRecent(query.trim());
+        }
+      })
+      .catch(function() {
+        resultsEl.innerHTML = '';
+        emptyEl.style.display = '';
+      });
+  }
+
+  // Debounced input
+  if (inputEl) {
+    inputEl.addEventListener('input', function() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function() { doSearch(inputEl.value); }, 300);
+    });
+  }
+
+  // Click recent search
+  if (recentEl) {
+    recentEl.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-query]');
+      if (btn) {
+        inputEl.value = btn.dataset.query;
+        doSearch(btn.dataset.query);
+      }
+    });
+  }
+
+  // Click result closes palette
+  if (resultsEl) {
+    resultsEl.addEventListener('click', function() {
+      closePalette();
+    });
+  }
+
+  // Click backdrop closes
+  paletteEl.addEventListener('click', function(e) {
+    if (e.target === paletteEl) closePalette();
+  });
+
+  // Escape closes
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && paletteEl.style.display !== 'none') {
+      e.preventDefault();
+      closePalette();
+    }
+    // Ctrl+K / Cmd+K opens
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      if (paletteEl.style.display === 'none') openPalette();
+      else closePalette();
+    }
+  });
+
+  window._openSearchPalette = openPalette;
+  window._closeSearchPalette = closePalette;
+})();
 
 // ── Bulk Chain Actions ────────────────────────────────────────
 

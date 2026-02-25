@@ -176,6 +176,7 @@ var sidebarFilterTimer = null;
     loadClaudeTerminals();
     refreshPoolStatus();
     refreshSwarmStatus();
+    loadTemplatesIntoDropdown();
   });
   // Start pool status + swarm status polling (every 5s)
   setInterval(function() { refreshPoolStatus(); refreshSwarmStatus(); }, 5000);
@@ -664,6 +665,23 @@ function addClaudeTerminalInstance(id, state) {
   }
 }
 
+// ── Binary WS reconnect overlay helper ───────────────────────
+function updateBinaryReconnectOverlay(inst, attempt) {
+  if (!inst.panel) return;
+  var existing = inst.panel.querySelector('.term-panel__overlay');
+  if (!existing) {
+    var overlay = document.createElement('div');
+    overlay.className = 'term-panel__overlay';
+    inst.panel.style.position = 'relative';
+    inst.panel.appendChild(overlay);
+    existing = overlay;
+  }
+  existing.innerHTML = '<div class="term-panel__overlay-msg">' +
+    '<div class="term-loading__spinner"></div>' +
+    'Connection lost — Reconnecting... (attempt ' + attempt + ')' +
+    '</div>';
+}
+
 // ── Binary WebSocket for Claude terminal PTY I/O ─────────────
 function connectClaudeBinaryWs(inst) {
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -671,12 +689,19 @@ function connectClaudeBinaryWs(inst) {
   var backoff = 1000;
   var maxBackoff = 15000;
   var reconnectTimer = null;
+  var reconnectAttempts = 0;
 
   function connect() {
     var ws = new WebSocket(url);
 
     ws.onopen = function() {
+      reconnectAttempts = 0;
       backoff = 1000; // reset on success
+      // Remove any reconnect overlay
+      if (inst.panel) {
+        var overlay = inst.panel.querySelector('.term-panel__overlay');
+        if (overlay) overlay.remove();
+      }
       inst.terminal.writeln('\x1b[32m--- Connected ---\x1b[0m');
 
       // Send resize on connect
@@ -687,15 +712,29 @@ function connectClaudeBinaryWs(inst) {
     };
 
     ws.onmessage = function(evt) {
+      var data = evt.data;
+      // Phase 49: handle binary WS control messages (heartbeat ping/pong)
+      if (typeof data === 'string' && data.charCodeAt(0) === 1) {
+        try {
+          var ctrl = JSON.parse(data.slice(1));
+          if (ctrl.type === 'ping') {
+            // Respond with pong
+            ws.send('\x01' + JSON.stringify({ type: 'pong' }));
+          }
+        } catch (_) { /* ignore bad control */ }
+        return;
+      }
       // Raw PTY output → write to xterm
-      inst.terminal.write(evt.data);
+      inst.terminal.write(data);
     };
 
     ws.onclose = function() {
       inst.binaryWs = null;
       // Only reconnect if terminal is still running and not explicitly closed
       if (inst.running && !inst._binaryWsClosed) {
-        inst.terminal.writeln('\r\n\x1b[33m--- Reconnecting... ---\x1b[0m');
+        reconnectAttempts++;
+        inst.terminal.writeln('\r\n\x1b[33m--- Reconnecting... (attempt ' + reconnectAttempts + ') ---\x1b[0m');
+        updateBinaryReconnectOverlay(inst, reconnectAttempts);
         reconnectTimer = setTimeout(function() {
           reconnectTimer = null;
           if (inst.running && !inst._binaryWsClosed) connect();
@@ -3906,6 +3945,218 @@ function updateSwarmBar(data) {
   }
 }
 
+// ── Session History (Phase 48) ───────────────────────────────
+
+function toggleSessionHistory() {
+  var dialog = document.getElementById('sessions-dialog');
+  if (!dialog) return;
+  if (dialog.open) {
+    dialog.close();
+  } else {
+    dialog.showModal();
+    refreshSessionsList();
+  }
+}
+
+function refreshSessionsList() {
+  var filter = document.getElementById('sessions-filter');
+  var status = filter ? filter.value : 'all';
+  fetch('/api/claude-terminals/sessions?status=' + encodeURIComponent(status) + '&limit=50')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var list = document.getElementById('sessions-list');
+      var countEl = document.getElementById('sessions-count');
+      if (!list) return;
+      var sessions = data.sessions || [];
+      if (countEl) countEl.textContent = sessions.length + ' session' + (sessions.length !== 1 ? 's' : '');
+      if (sessions.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted,#888);padding:1rem">No sessions recorded yet.</p>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < sessions.length; i++) {
+        html += renderSessionCard(sessions[i]);
+      }
+      list.innerHTML = html;
+    })
+    .catch(function() {
+      var list = document.getElementById('sessions-list');
+      if (list) list.innerHTML = '<p style="color:var(--status-error,#ef4444)">Failed to load sessions.</p>';
+    });
+}
+
+function renderSessionCard(s) {
+  var statusDot = s.endedAt
+    ? '<span style="color:var(--text-muted,#888)">&#9679;</span>'
+    : '<span style="color:var(--status-success,#10b981)">&#9679;</span>';
+  var duration = '';
+  if (s.duration && s.duration > 0) {
+    var secs = Math.round(s.duration / 1000);
+    if (secs < 60) duration = secs + 's';
+    else if (secs < 3600) duration = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+    else duration = Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+  }
+  var model = s.config && s.config.model ? s.config.model : '';
+  var summary = s.outputSummary ? s.outputSummary.slice(0, 80) + (s.outputSummary.length > 80 ? '...' : '') : '';
+  var html = '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:0.75rem;margin-bottom:0.5rem">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem">'
+    + '<div style="font-weight:600">' + statusDot + ' ' + escapeHtml(s.id) + '</div>'
+    + '<div style="display:flex;gap:0.4rem">'
+    + '<button class="btn btn--xs btn--primary" onclick="resumeSession(\'' + escapeHtml(s.id) + '\')" title="Resume: spawn new terminal with same config + context">Resume</button>'
+    + '<button class="btn btn--xs btn--ghost" onclick="cloneSession(\'' + escapeHtml(s.id) + '\')" title="Clone: spawn new terminal with same config">Clone</button>'
+    + '</div></div>'
+    + '<div style="font-size:0.8em;color:var(--text-muted,#888);margin-top:0.25rem">'
+    + (model ? '<span style="margin-right:0.5rem">' + escapeHtml(model) + '</span>' : '')
+    + (duration ? '<span style="margin-right:0.5rem">' + escapeHtml(duration) + '</span>' : '')
+    + (s.handoffCount ? '<span style="margin-right:0.5rem">handoffs: ' + s.handoffCount + '</span>' : '')
+    + (s.taskHistory && s.taskHistory.length > 0 ? '<span>tasks: ' + escapeHtml(s.taskHistory.join(', ')) + '</span>' : '')
+    + '</div>'
+    + (summary ? '<div style="font-size:0.75em;color:var(--text-muted,#888);margin-top:0.25rem;font-family:monospace;white-space:pre-wrap">' + escapeHtml(summary) + '</div>' : '')
+    + '</div>';
+  return html;
+}
+
+function resumeSession(sessionId) {
+  var nextNum = 1;
+  var newId = 'resume-' + nextNum;
+  while (instances.has(newId)) { nextNum++; newId = 'resume-' + nextNum; }
+
+  fetch('/api/claude-terminals/sessions/' + encodeURIComponent(sessionId) + '/resume', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: newId }),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Resume failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      addClaudeTerminalInstance(data.terminalId, { status: 'running' });
+      switchTab(data.terminalId);
+      document.getElementById('sessions-dialog').close();
+      showToast('Resumed session as ' + data.terminalId, 'success');
+    })
+    .catch(function(err) {
+      showToast('Resume failed: ' + err.message, 'error');
+    });
+}
+
+function cloneSession(sessionId) {
+  var nextNum = 1;
+  var newId = 'clone-' + nextNum;
+  while (instances.has(newId)) { nextNum++; newId = 'clone-' + nextNum; }
+
+  fetch('/api/claude-terminals/sessions/' + encodeURIComponent(sessionId) + '/clone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: newId }),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Clone failed'); });
+      return r.json();
+    })
+    .then(function(data) {
+      addClaudeTerminalInstance(data.terminalId, { status: 'running' });
+      switchTab(data.terminalId);
+      document.getElementById('sessions-dialog').close();
+      showToast('Cloned session as ' + data.terminalId, 'success');
+    })
+    .catch(function(err) {
+      showToast('Clone failed: ' + err.message, 'error');
+    });
+}
+
+// ── Template Support (Phase 48) ──────────────────────────────
+
+var _sessionTemplates = [];
+
+function loadTemplatesIntoDropdown() {
+  fetch('/api/claude-terminals/templates')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _sessionTemplates = data.templates || [];
+      var sel = document.querySelector('#new-claude-form select[name="template"]');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Custom / No template</option>';
+      for (var i = 0; i < _sessionTemplates.length; i++) {
+        var t = _sessionTemplates[i];
+        sel.innerHTML += '<option value="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + (t.builtin ? ' (built-in)' : '') + '</option>';
+      }
+    })
+    .catch(function() { /* ignore — templates are optional */ });
+}
+
+function applyClaudeTemplate(selectEl) {
+  var name = selectEl.value;
+  if (!name) return;
+  var tpl = null;
+  for (var i = 0; i < _sessionTemplates.length; i++) {
+    if (_sessionTemplates[i].name === name) { tpl = _sessionTemplates[i]; break; }
+  }
+  if (!tpl) return;
+  var form = document.getElementById('new-claude-form');
+  if (!form) return;
+  if (tpl.model) form.model.value = tpl.model;
+  if (tpl.projectDir) form.projectDir.value = tpl.projectDir;
+  if (tpl.systemPrompt !== undefined && tpl.systemPrompt !== null) {
+    var sysInput = form.querySelector('input[name="systemPrompt"],textarea[name="systemPrompt"]');
+    if (sysInput) sysInput.value = tpl.systemPrompt;
+  }
+  if (tpl.dangerouslySkipPermissions !== undefined) {
+    form.dangerouslySkipPermissions.checked = !!tpl.dangerouslySkipPermissions;
+  }
+}
+
+function openSaveTemplateDialog(terminalId) {
+  var dialog = document.getElementById('save-template-dialog');
+  if (!dialog) return;
+  document.getElementById('save-template-terminal-id').value = terminalId || '';
+  dialog.showModal();
+}
+
+function submitSaveTemplate(e) {
+  e.preventDefault();
+  var form = e.target;
+  var dialog = document.getElementById('save-template-dialog');
+  var name = form.name.value.trim();
+  var terminalId = form.terminalId.value;
+
+  if (!name) {
+    showToast('Template name is required', 'error');
+    return false;
+  }
+
+  // Build config from current terminal's state (if terminalId provided)
+  var config = { name: name };
+  if (terminalId) {
+    var inst = instances.get(terminalId);
+    if (inst) {
+      config.model = inst.model || undefined;
+      config.dangerouslySkipPermissions = !!inst.dangerouslySkipPermissions;
+    }
+  }
+
+  fetch('/api/claude-terminals/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Save failed'); });
+      return r.json();
+    })
+    .then(function() {
+      showToast('Template "' + name + '" saved', 'success');
+      loadTemplatesIntoDropdown();
+    })
+    .catch(function(err) {
+      showToast('Save template failed: ' + err.message, 'error');
+    });
+
+  dialog.close();
+  return false;
+}
+
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
 window.setLayout = setLayout;
@@ -3955,6 +4206,13 @@ window.openSwarmConfig = openSwarmConfig;
 window.submitSwarmConfig = submitSwarmConfig;
 window.stopSwarm = stopSwarm;
 window.toggleSwarm = toggleSwarm;
+window.toggleSessionHistory = toggleSessionHistory;
+window.refreshSessionsList = refreshSessionsList;
+window.resumeSession = resumeSession;
+window.cloneSession = cloneSession;
+window.applyClaudeTemplate = applyClaudeTemplate;
+window.openSaveTemplateDialog = openSaveTemplateDialog;
+window.submitSaveTemplate = submitSaveTemplate;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

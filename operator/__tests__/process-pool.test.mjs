@@ -54,6 +54,7 @@ function startServer(extraOpts = {}) {
     operatorDir: extraOpts.operatorDir || TEST_DIR,
     events,
     enableFileWatcher: false,
+    auth: false,
     ...extraOpts,
   });
   return new Promise((resolve) => {

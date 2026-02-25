@@ -704,6 +704,7 @@ describe('REST routes integration (via server)', () => {
       sharedMemory: false,
       claudePool: false,
       enableFileWatcher: false,
+      auth: false,
     });
     server = result.server;
     close = result.close;
@@ -822,6 +823,7 @@ describe('503 guard when no message bus', () => {
       sharedMemory: false,
       claudePool: false,
       enableFileWatcher: false,
+      auth: false,
     });
 
     await new Promise((resolve) => {

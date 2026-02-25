@@ -20,6 +20,7 @@
 
 import { Router } from 'express';
 import { isNodePtyAvailable } from '../claude-terminal.mjs';
+import { validateBody } from '../validation.mjs';
 
 /**
  * Create Claude terminal API routes.
@@ -73,7 +74,12 @@ export function createClaudeTerminalRoutes(ctx) {
 
   // ── POST /claude-terminals ────────────────────────────
 
-  router.post('/claude-terminals', async (req, res) => {
+  router.post('/claude-terminals', validateBody({
+    id: { type: 'string', required: true, pattern: /^[a-zA-Z0-9_-]+$/ },
+    model: { type: 'string' },
+    cols: { type: 'number', min: 1 },
+    rows: { type: 'number', min: 1 },
+  }), async (req, res) => {
     if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
 
     const {
@@ -91,14 +97,6 @@ export function createClaudeTerminalRoutes(ctx) {
       cols,
       rows,
     } = req.body;
-
-    if (!id || typeof id !== 'string') {
-      return res.status(400).json({ error: 'id is required' });
-    }
-
-    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-      return res.status(400).json({ error: 'id must match [a-zA-Z0-9_-]+' });
-    }
 
     try {
       const result = await claudePool.spawn(id, {

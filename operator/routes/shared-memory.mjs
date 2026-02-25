@@ -15,6 +15,7 @@
 // ============================================================
 
 import { Router } from 'express';
+import { validateBody, paginationParams, paginatedResponse } from '../validation.mjs';
 
 export function createSharedMemoryRoutes(ctx) {
   const { sharedMemory } = ctx;
@@ -33,13 +34,26 @@ export function createSharedMemoryRoutes(ctx) {
 
   // ── Key-Value CRUD ──────────────────────────────────────
 
-  // List all keys (with optional prefix filter)
+  // List all keys (with optional prefix filter and pagination)
   router.get('/shared-memory', (req, res) => {
     try {
       const prefix = req.query.prefix || undefined;
-      const allEntries = sharedMemory.entries(prefix);
+      const { limit, offset } = paginationParams(req, { limit: 100, offset: 0 });
+      const allKeys = sharedMemory.keys(prefix);
+      const total = allKeys.length;
+      const pageKeys = allKeys.slice(offset, offset + limit);
+
+      // Build entries object for paginated keys (backward compat)
+      const allEntries = {};
+      for (const key of pageKeys) {
+        allEntries[key] = sharedMemory.getEntry(key);
+      }
+
+      const envelope = paginatedResponse({ items: pageKeys, total, limit, offset });
       res.json({
-        count: Object.keys(allEntries).length,
+        ...envelope,
+        // Backward compat aliases
+        count: pageKeys.length,
         entries: allEntries,
       });
     } catch (err) {
@@ -65,14 +79,18 @@ export function createSharedMemoryRoutes(ctx) {
   });
 
   // Set value (key in body or query param)
-  router.put('/shared-memory/key', (req, res) => {
+  router.put('/shared-memory/key', (req, res, next) => {
+    // Phase 29: validate key is present in query or body
+    const key = (req.query && req.query.key) || (req.body && req.body.key);
+    if (!key) {
+      return res.status(400).json({ error: 'Validation failed', field: 'key', details: 'key is required (query param or body)' });
+    }
+    next();
+  }, (req, res) => {
     try {
       const key = req.query.key || req.body.key;
       const { value, source } = req.body;
 
-      if (!key) {
-        return res.status(400).json({ error: 'Key is required (query param or body)' });
-      }
       if (value === undefined) {
         return res.status(400).json({ error: 'Request body must include "value"' });
       }

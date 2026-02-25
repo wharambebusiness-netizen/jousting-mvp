@@ -98,7 +98,7 @@ let appInstance, baseUrl, events;
 
 function startServer() {
   events = new EventBus();
-  appInstance = createApp({ operatorDir: TEST_DIR, events });
+  appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
   return new Promise((resolve) => {
     appInstance.server.listen(0, '127.0.0.1', () => {
       const port = appInstance.server.address().port;
@@ -1788,7 +1788,7 @@ describe('Worker Health Endpoint with Pool (Phase 8)', () => {
     };
 
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -1894,7 +1894,7 @@ describe('Instance Config Endpoint (Phase 8)', () => {
     };
 
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -1935,7 +1935,7 @@ describe('Instance Config Endpoint (Phase 8)', () => {
     };
 
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, coordination: false, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -1976,7 +1976,7 @@ describe('Coordination Metrics & Config Endpoints (Phase 9)', () => {
     };
 
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2014,7 +2014,7 @@ describe('Coordination Metrics & Config Endpoints (Phase 9)', () => {
     };
 
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2040,7 +2040,7 @@ describe('Coordination Metrics & Config Endpoints (Phase 9)', () => {
     // Restart server without pool → no coordinator
     await stopServer();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2067,7 +2067,7 @@ describe('Terminals Page Phase 10 Elements', () => {
   beforeAll(async () => {
     setupTestDir();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2127,7 +2127,7 @@ describe('Terminals Page Phase 11 Elements', () => {
   beforeAll(async () => {
     setupTestDir();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2176,7 +2176,7 @@ describe('Task Board Page (Phase 12)', () => {
   beforeAll(async () => {
     setupTestDir();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2323,7 +2323,7 @@ describe('Task Board Enhancements (Phase 13)', () => {
 
   beforeAll(async () => {
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2556,7 +2556,7 @@ describe('Phase 14 — DAG + Templates', () => {
   it('GET /api/coordination/graph returns 503 without coordinator', async () => {
     await stopServer();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2588,7 +2588,7 @@ describe('Phase 14 — DAG + Templates', () => {
       activeCount: () => 1,
     };
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2678,7 +2678,7 @@ describe('Coordination CRUD & Operations (Phase 16)', () => {
   beforeAll(async () => {
     setupTestDir();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
@@ -2742,8 +2742,10 @@ describe('Coordination CRUD & Operations (Phase 16)', () => {
   it('GET /api/coordination/tasks lists all tasks', async () => {
     const { status, body } = await api('/api/coordination/tasks');
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.some(t => t.id === 'crud-1')).toBe(true);
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(body.items.some(t => t.id === 'crud-1')).toBe(true);
+    expect(typeof body.total).toBe('number');
+    expect(typeof body.hasMore).toBe('boolean');
   });
 
   it('GET /api/coordination/tasks/:id returns task detail', async () => {
@@ -2881,7 +2883,7 @@ describe('Coordination CRUD & Operations (Phase 16)', () => {
   it('all coordination endpoints return 503 without pool', async () => {
     // Spin up a server without pool
     const ev2 = new EventBus();
-    const app2 = createApp({ operatorDir: TEST_DIR, events: ev2 });
+    const app2 = createApp({ operatorDir: TEST_DIR, events: ev2, auth: false });
     const { port: p2 } = await new Promise((resolve) => {
       app2.server.listen(0, '127.0.0.1', () => resolve({ port: app2.server.address().port }));
     });
@@ -2919,7 +2921,7 @@ describe('Phase 15E: Auto-Handoff', () => {
   beforeAll(async () => {
     setupTestDir();
     events = new EventBus();
-    appInstance = createApp({ operatorDir: TEST_DIR, events });
+    appInstance = createApp({ operatorDir: TEST_DIR, events, auth: false });
     await new Promise((resolve) => {
       appInstance.server.listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;

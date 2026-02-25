@@ -651,6 +651,7 @@ describe('REST routes integration (via server)', () => {
       sharedMemory: createSharedMemory({ events: new EventBus() }),
       claudePool: false,
       enableFileWatcher: false,
+      auth: false,
     });
     app = result.app;
     server = result.server;

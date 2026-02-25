@@ -24,9 +24,12 @@
 //   GET  /api/coordination/metrics       - Task throughput & metrics
 //   GET  /api/coordination/adaptive-rate - Adaptive rate limiter status
 //   POST /api/coordination/config        - Hot-reconfigure coordinator
+//   GET  /api/coordination/categories    - List known categories
+//   POST /api/coordination/categories/detect - Preview auto-detect category for text
 // ============================================================
 
 import { Router } from 'express';
+import { validateBody, paginationParams, paginatedResponse } from '../validation.mjs';
 
 // ── Built-in Task Templates ─────────────────────────────────
 
@@ -137,11 +140,28 @@ export function createCoordinationRoutes(ctx) {
 
   // ── Task Management ─────────────────────────────────────
 
-  router.get('/coordination/tasks', (_req, res) => {
-    res.json(coordinator.taskQueue.getAll());
+  router.get('/coordination/tasks', (req, res) => {
+    const { limit, offset } = paginationParams(req);
+    const status = req.query.status || undefined;
+    const category = req.query.category || undefined;
+
+    let all = coordinator.taskQueue.getAll();
+
+    // Filter by status/category if specified
+    if (status) all = all.filter(t => t.status === status);
+    if (category) all = all.filter(t => t.category === category);
+
+    const total = all.length;
+    const items = all.slice(offset, offset + limit);
+
+    res.json(paginatedResponse({ items, total, limit, offset }));
   });
 
-  router.post('/coordination/tasks', (req, res) => {
+  router.post('/coordination/tasks', validateBody({
+    task: { type: 'string', required: true },
+    priority: { type: 'number', min: 1, max: 10 },
+    category: { type: 'string' },
+  }), (req, res) => {
     try {
       const task = coordinator.addTask(req.body);
       res.status(201).json(task);
@@ -150,7 +170,9 @@ export function createCoordinationRoutes(ctx) {
     }
   });
 
-  router.post('/coordination/tasks/batch', (req, res) => {
+  router.post('/coordination/tasks/batch', validateBody({
+    tasks: { type: 'array', required: true },
+  }), (req, res) => {
     try {
       const tasks = coordinator.addTasks(req.body.tasks || []);
       res.status(201).json(tasks);
@@ -243,6 +265,27 @@ export function createCoordinationRoutes(ctx) {
     const updates = req.body || {};
     coordinator.updateOptions(updates);
     res.json({ ok: true, rateLimiter: coordinator.rateLimiter.getStatus(), costs: coordinator.costAggregator.getStatus() });
+  });
+
+  // ── Category Detection (Phase 33) ─────────────────────────
+
+  router.get('/coordination/categories', (_req, res) => {
+    if (coordinator.categoryDetector) {
+      res.json(coordinator.categoryDetector.getCategories());
+    } else {
+      res.json([]);
+    }
+  });
+
+  router.post('/coordination/categories/detect', validateBody({
+    text: { type: 'string', required: true },
+  }), (req, res) => {
+    if (coordinator.categoryDetector) {
+      const category = coordinator.categoryDetector.detect(req.body.text);
+      res.json({ category });
+    } else {
+      res.json({ category: null });
+    }
   });
 
   return router;

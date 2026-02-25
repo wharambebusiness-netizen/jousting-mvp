@@ -20,6 +20,8 @@ import { createRateLimiter } from './rate-limiter.mjs';
 import { createCostAggregator } from './cost-aggregator.mjs';
 import { createWorktreeManager } from './worktree-manager.mjs';
 import { createAdaptiveLimiter } from './adaptive-limiter.mjs';
+import { createCategoryDetector } from './category-detector.mjs';
+import { createCostForecaster } from './cost-forecaster.mjs';
 
 // ── Lifecycle States ────────────────────────────────────────
 
@@ -60,6 +62,8 @@ const STATES = new Set(['init', 'running', 'draining', 'stopped']);
  * @param {number} [ctx.options.adaptiveBackoffFactor=0.5] - Multiply limits by this on each backoff level
  * @param {number} [ctx.options.adaptiveMaxBackoffLevel=4] - Maximum backoff depth
  * @param {number} [ctx.options.adaptiveRecoveryIntervalMs=30000] - Interval between recovery steps
+ * @param {object} [ctx.deadLetterQueue] - Dead letter queue for permanently-failed tasks
+ * @param {number} [ctx.options.maxTaskRetries=3] - Max retries before routing to DLQ
  * @param {Function} [ctx.log] - Logger
  * @returns {object} Coordinator methods
  */
@@ -72,6 +76,11 @@ export function createCoordinator(ctx) {
   if (!pool) throw new Error('Coordinator requires a process pool');
 
   let state = 'init';
+
+  // ── Dead Letter Queue (Phase 32) ─────────────────────────
+  const deadLetterQueue = ctx.deadLetterQueue || null;
+  const maxTaskRetries = opts.maxTaskRetries ?? 3;
+  const taskRetryCounts = new Map(); // taskId -> number of failures
 
   // ── Sub-systems ─────────────────────────────────────────
 
@@ -124,6 +133,20 @@ export function createCoordinator(ctx) {
         })
       : null
   );
+
+  // ── Category Detector (Phase 33) ──────────────────────────
+
+  const categoryDetector = ctx.categoryDetector || createCategoryDetector({
+    customRules: opts.categoryRules || [],
+  });
+
+  // ── Cost Forecaster (Phase 43) ───────────────────────────
+
+  const costForecaster = ctx.costForecaster || createCostForecaster({
+    events,
+    costAggregator,
+    log,
+  });
 
   // ── Rate Limiter Tick ─────────────────────────────────────
 
@@ -301,6 +324,7 @@ export function createCoordinator(ctx) {
 
   /**
    * Handle coord:failed — worker's task failed.
+   * Tracks retry counts and routes to DLQ after maxTaskRetries.
    */
   handlers['coord:failed'] = (data) => {
     const { workerId, taskId, error } = data;
@@ -315,6 +339,25 @@ export function createCoordinator(ctx) {
       log(`[coord] Task ${taskId} failed on ${workerId}: ${error}`);
 
       events.emit('coord:task-failed', { taskId, workerId, error });
+
+      // Track retry count and route to DLQ if exceeded
+      const retries = (taskRetryCounts.get(taskId) || 0) + 1;
+      taskRetryCounts.set(taskId, retries);
+
+      if (deadLetterQueue && retries >= maxTaskRetries) {
+        // Route to dead letter queue
+        deadLetterQueue.add({
+          taskId,
+          task: task,
+          category: task?.category || null,
+          error,
+          workerId,
+          failedAt: new Date().toISOString(),
+          retryCount: retries,
+          metadata: task?.metadata || {},
+        });
+        log(`[coord] Task ${taskId} routed to DLQ after ${retries} failures`);
+      }
 
       // Cancel dependent tasks
       const cancelled = taskQueue.cancel(taskId);
@@ -522,6 +565,12 @@ export function createCoordinator(ctx) {
    * @returns {object} Created task
    */
   function addTask(taskDef) {
+    // Auto-detect category if not specified
+    if (!taskDef.category && taskDef.task) {
+      const detected = categoryDetector.detect(taskDef.task);
+      if (detected) taskDef.category = detected;
+    }
+
     const task = taskQueue.add(taskDef);
     log(`[coord] Added task ${task.id}`);
 
@@ -550,6 +599,14 @@ export function createCoordinator(ctx) {
    * @returns {object[]} Created tasks
    */
   function addTasks(taskDefs) {
+    // Auto-detect categories for tasks without explicit category
+    for (const def of taskDefs) {
+      if (!def.category && def.task) {
+        const detected = categoryDetector.detect(def.task);
+        if (detected) def.category = detected;
+      }
+    }
+
     const created = taskDefs.map(def => taskQueue.add(def));
 
     if (state === 'running') {
@@ -736,6 +793,9 @@ export function createCoordinator(ctx) {
     costAggregator,
     worktreeManager,
     adaptiveLimiter,
+    deadLetterQueue,
+    categoryDetector,
+    costForecaster,
 
     // Status + Metrics
     getStatus,

@@ -573,6 +573,7 @@ describe('Coordination Integration — End-to-End IPC', () => {
           globalBudgetUsd: 50,
           perWorkerBudgetUsd: 10,
         },
+        auth: false,
       });
       return new Promise((resolve) => {
         appInstance.server.listen(0, '127.0.0.1', () => {

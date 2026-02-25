@@ -555,6 +555,7 @@ describe('Swarm Mode — Server Standalone Coordinator', () => {
       sharedMemory: false,
       messageBus: false,
       enableFileWatcher: false,
+      auth: false,
     });
 
     expect(result.coordinator).toBeDefined();
@@ -579,6 +580,7 @@ describe('Swarm Mode — Server Standalone Coordinator', () => {
       sharedMemory: false,
       messageBus: false,
       enableFileWatcher: false,
+      auth: false,
     });
 
     // Coordinator should exist
@@ -602,6 +604,7 @@ describe('Swarm Mode — Server Standalone Coordinator', () => {
       sharedMemory: false,
       messageBus: false,
       enableFileWatcher: false,
+      auth: false,
     });
 
     expect(result.coordinator).toBeTruthy();

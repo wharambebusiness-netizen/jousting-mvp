@@ -18,6 +18,12 @@ import { renderTerminalViewer } from '../views/terminal.mjs';
 import { escapeHtml, formatCost, formatDuration, relativeTime, statusLabel } from '../views/helpers.mjs';
 import { renderAnalyticsPanel } from '../views/analytics.mjs';
 import { renderProjectsPanel, renderFileTree } from '../views/projects.mjs';
+import { renderTimeline as renderTimelineView, renderTimelineSummary } from '../views/timeline.mjs';
+import {
+  renderSystemHealth, renderActiveTerminals, renderTaskSummary,
+  renderRecentNotifications, renderCostBurnRate,
+} from '../views/dashboard-widgets.mjs';
+import { categorizeAction, generateSummary, CATEGORY_ACTIONS } from './timeline.mjs';
 import { scanDirectory } from './files.mjs';
 import { getGitFileStatus } from './git.mjs';
 
@@ -1024,6 +1030,136 @@ export function createViewRoutes(ctx) {
       res.type('text/html').send(html);
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Timeline Fragment (Phase 37) ─────────────────────────
+  router.get('/timeline', (req, res) => {
+    try {
+      const auditLog = ctx.auditLog;
+      if (!auditLog) {
+        return res.type('text/html').send('<p>Audit log not available.</p>');
+      }
+
+      const since = req.query.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const until = req.query.until || undefined;
+      const category = req.query.category || '';
+      const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
+
+      let queryOpts = { since, until, limit: 10000 };
+      let result = auditLog.query(queryOpts);
+      let entries = result.entries;
+
+      // Post-filter by category if specified
+      if (category && CATEGORY_ACTIONS[category]) {
+        const allowedActions = new Set(CATEGORY_ACTIONS[category]);
+        entries = entries.filter(e => allowedActions.has(e.action));
+      }
+
+      // Limit + enrich
+      const enriched = entries.slice(0, limit).map(e => ({
+        ...e,
+        category: categorizeAction(e.action),
+        summary: generateSummary(e),
+      }));
+
+      res.type('text/html').send(renderTimelineView(enriched));
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  router.get('/timeline-summary', (req, res) => {
+    try {
+      const auditLog = ctx.auditLog;
+      if (!auditLog) {
+        return res.type('text/html').send('');
+      }
+
+      const since = req.query.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const until = req.query.until || undefined;
+
+      const result = auditLog.query({ since, until, limit: 10000 });
+      const counts = { terminal: 0, task: 0, swarm: 0, system: 0, memory: 0 };
+      let total = 0;
+      for (const entry of result.entries) {
+        const cat = categorizeAction(entry.action);
+        counts[cat] = (counts[cat] || 0) + 1;
+        total++;
+      }
+      counts.total = total;
+
+      res.type('text/html').send(renderTimelineSummary(counts));
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Dashboard Widget Fragments (Phase 47) ──────────────────
+
+  router.get('/dashboard/health', (_req, res) => {
+    try {
+      const data = ctx.healthChecker ? ctx.healthChecker.check() : null;
+      res.type('text/html').send(renderSystemHealth(data));
+    } catch (err) {
+      res.type('text/html').send(renderSystemHealth(null));
+    }
+  });
+
+  router.get('/dashboard/terminals', (_req, res) => {
+    try {
+      const poolStatus = ctx.claudePool ? ctx.claudePool.getPoolStatus() : null;
+      res.type('text/html').send(renderActiveTerminals(poolStatus));
+    } catch (err) {
+      res.type('text/html').send(renderActiveTerminals(null));
+    }
+  });
+
+  router.get('/dashboard/tasks', (_req, res) => {
+    try {
+      const metrics = ctx.coordinator ? ctx.coordinator.getMetrics() : null;
+      res.type('text/html').send(renderTaskSummary(metrics));
+    } catch (err) {
+      res.type('text/html').send(renderTaskSummary(null));
+    }
+  });
+
+  router.get('/dashboard/notifications', (_req, res) => {
+    try {
+      const result = ctx.notifications ? ctx.notifications.getAll({ limit: 5 }) : null;
+      res.type('text/html').send(renderRecentNotifications(result));
+    } catch (err) {
+      res.type('text/html').send(renderRecentNotifications(null));
+    }
+  });
+
+  router.get('/dashboard/cost', (_req, res) => {
+    try {
+      const forecast = ctx.costForecaster ? ctx.costForecaster.getForecast() : null;
+      res.type('text/html').send(renderCostBurnRate(forecast));
+    } catch (err) {
+      res.type('text/html').send(renderCostBurnRate(null));
+    }
+  });
+
+  // ── WS Stats Fragment (Phase 49) ────────────────────────────
+  router.get('/ws-stats', (_req, res) => {
+    try {
+      const wsStats = ctx.wss ? ctx.wss.getStats() : null;
+      if (!wsStats) {
+        res.type('text/html').send('<span class="text-muted" style="font-size:0.75rem">WS stats unavailable</span>');
+        return;
+      }
+      res.type('text/html').send(
+        `<div class="ws-stats" style="display:flex;gap:var(--sp-4);font-size:0.75rem;color:var(--text-secondary)">` +
+        `<span title="Connected JSON clients"><strong>${wsStats.connectedClients}</strong> clients</span>` +
+        `<span title="Binary terminal WS clients"><strong>${wsStats.binaryClients}</strong> terminals</span>` +
+        `<span title="Messages sent"><strong>${wsStats.totalMessagesSent}</strong> sent</span>` +
+        `<span title="Replay requests"><strong>${wsStats.replayRequests}</strong> replays</span>` +
+        `</div>`
+      );
+    } catch (err) {
+      res.type('text/html').send(`<span class="text-muted">Error: ${escapeHtml(err.message)}</span>`);
     }
   });
 

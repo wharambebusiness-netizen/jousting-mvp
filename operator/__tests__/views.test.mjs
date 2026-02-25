@@ -295,7 +295,7 @@ function saveRegistry(data) { createRegistry({ operatorDir: TEST_DIR }).save(dat
 function setupApp() {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_DIR, { recursive: true });
-  appCtx = createApp({ operatorDir: TEST_DIR });
+  appCtx = createApp({ operatorDir: TEST_DIR, auth: false });
 }
 
 function teardownApp() {

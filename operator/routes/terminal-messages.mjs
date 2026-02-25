@@ -15,6 +15,7 @@
 // ============================================================
 
 import { Router } from 'express';
+import { validateBody, paginationParams, paginatedResponse } from '../validation.mjs';
 
 export function createTerminalMessageRoutes(ctx) {
   const { messageBus } = ctx;
@@ -36,12 +37,20 @@ export function createTerminalMessageRoutes(ctx) {
     try {
       const terminalId = req.query.terminalId || undefined;
       const category = req.query.category || undefined;
-      const offset = parseInt(req.query.offset) || 0;
-      let limit = parseInt(req.query.limit) || 50;
-      if (limit > 200) limit = 200;
+      const { limit, offset } = paginationParams(req);
 
+      // Get total count (unfiltered by pagination but filtered by terminalId/category)
+      const allMsgs = messageBus.getAll({ terminalId, category });
+      const total = allMsgs.length;
       const msgs = messageBus.getAll({ terminalId, limit, offset, category });
-      res.json({ count: msgs.length, messages: msgs });
+
+      const envelope = paginatedResponse({ items: msgs, total, limit, offset });
+      res.json({
+        ...envelope,
+        // Backward compat aliases
+        count: msgs.length,
+        messages: msgs,
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -100,7 +109,10 @@ export function createTerminalMessageRoutes(ctx) {
 
   // ── Send message ──────────────────────────────────────────
 
-  router.post('/terminal-messages', (req, res) => {
+  router.post('/terminal-messages', validateBody({
+    to: { type: 'string' },
+    content: { type: 'string', required: true },
+  }), (req, res) => {
     try {
       const { from, to, content, category, replyTo } = req.body || {};
       const msg = messageBus.send({ from, to, content, category, replyTo });
