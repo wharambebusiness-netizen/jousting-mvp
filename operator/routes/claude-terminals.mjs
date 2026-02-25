@@ -84,6 +84,7 @@ export function createClaudeTerminalRoutes(ctx) {
       autoHandoff,
       autoDispatch,
       autoComplete,
+      capabilities,
       systemPrompt,
       resumeSessionId,
       continueSession,
@@ -107,6 +108,7 @@ export function createClaudeTerminalRoutes(ctx) {
         autoHandoff: !!autoHandoff,
         autoDispatch: !!autoDispatch,
         autoComplete: autoComplete !== undefined ? !!autoComplete : undefined,
+        capabilities: Array.isArray(capabilities) ? capabilities : undefined,
         systemPrompt,
         resumeSessionId,
         continueSession: !!continueSession,
@@ -222,6 +224,31 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json({ ok: true, terminalId: req.params.id, autoComplete: newState });
   });
 
+  // ── POST /claude-terminals/:id/capabilities ──────────
+  // Phase 26: Set task category capabilities for routing
+
+  router.post('/claude-terminals/:id/capabilities', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    const { capabilities } = req.body;
+    if (capabilities !== null && !Array.isArray(capabilities)) {
+      return res.status(400).json({ error: 'capabilities must be an array of strings or null' });
+    }
+
+    const ok = claudePool.setCapabilities(req.params.id, capabilities);
+    if (!ok) return res.status(404).json({ error: 'Terminal not found' });
+
+    events.emit('claude-terminal:capabilities-changed', {
+      terminalId: req.params.id,
+      capabilities: capabilities || null,
+    });
+
+    res.json({ ok: true, terminalId: req.params.id, capabilities: capabilities || null });
+  });
+
   // ── POST /claude-terminals/:id/respawn ────────────────
 
   router.post('/claude-terminals/:id/respawn', async (req, res) => {
@@ -267,8 +294,8 @@ export function createClaudeTerminalRoutes(ctx) {
       return res.status(503).json({ error: 'Task queue not available' });
     }
 
-    // Use shared utility (priority-sorted, dep-aware)
-    const claimable = claudePool.findNextClaimableTask();
+    // Use shared utility (priority-sorted, dep-aware, affinity-scored)
+    const claimable = claudePool.findNextClaimableTask(req.params.id);
     if (!claimable) {
       return res.json({ claimed: false, message: 'No pending tasks available' });
     }
@@ -356,6 +383,7 @@ export function createClaudeTerminalRoutes(ctx) {
     events.emit('claude-terminal:task-completed', {
       terminalId: req.params.id,
       taskId: current.taskId,
+      category: current.category || null,
       status,
     });
 

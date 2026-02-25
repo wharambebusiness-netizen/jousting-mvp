@@ -26,6 +26,9 @@ const SWARM_SCALE_CHECK_MS = 5000;       // scale-up check interval
 const SWARM_SCALE_DOWN_IDLE_MS = 60000;  // kill idle swarm terminal after 60s
 const SWARM_ID_PREFIX = 'swarm-';
 const SWARM_MAX_CRASH_RETRIES = 3;       // max respawn attempts per crashed terminal
+const MAX_TASK_HISTORY = 5;              // max categories tracked per terminal
+const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history category
+const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -150,6 +153,8 @@ export function createClaudePool(ctx) {
       assignedTask: null,
       lastActivityAt: now,
       swarmManaged: !!opts._swarmManaged,
+      capabilities: opts.capabilities || null,
+      _taskHistory: [],
       _completionTimer: null,
       _taskActivityBytes: 0,
     };
@@ -386,10 +391,12 @@ export function createClaudePool(ctx) {
 
   /**
    * Find the next claimable task from the task queue.
-   * Returns the highest-priority pending task whose deps are all complete.
+   * When terminalId is provided, uses affinity scoring (history + capabilities).
+   * Otherwise returns the highest-priority pending task whose deps are all complete.
+   * @param {string} [terminalId] - Optional terminal for affinity-based selection
    * @returns {object|null} claimable task or null
    */
-  function findNextClaimableTask() {
+  function findNextClaimableTask(terminalId) {
     if (!coordinator) return null;
     const taskQueue = coordinator.taskQueue;
     if (!taskQueue) return null;
@@ -397,18 +404,65 @@ export function createClaudePool(ctx) {
     const allTasks = taskQueue.getAll();
     const pending = allTasks.filter(t => t.status === 'pending');
 
-    // Sort by priority descending (higher priority first)
-    pending.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-
+    // Filter to tasks with deps met
+    const claimable = [];
     for (const task of pending) {
-      if (!task.deps || task.deps.length === 0) return task;
+      if (!task.deps || task.deps.length === 0) {
+        claimable.push(task);
+        continue;
+      }
       const depsComplete = task.deps.every(depId => {
         const dep = allTasks.find(t => t.id === depId);
         return dep && dep.status === 'complete';
       });
-      if (depsComplete) return task;
+      if (depsComplete) claimable.push(task);
     }
-    return null;
+
+    if (claimable.length === 0) return null;
+
+    // If no terminalId, fall back to priority-only
+    const entry = terminalId ? terminals.get(terminalId) : null;
+
+    if (!entry) {
+      claimable.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+      return claimable[0];
+    }
+
+    // Capability filtering: skip tasks whose category is not in capabilities
+    const caps = entry.capabilities;
+    const filtered = caps
+      ? claimable.filter(t => !t.category || caps.includes(t.category))
+      : claimable;
+
+    if (filtered.length === 0) return null;
+
+    // Affinity scoring: base = priority, + bonuses for history match
+    const history = entry._taskHistory || [];
+    const mostRecent = history.length > 0 ? history[history.length - 1] : null;
+
+    filtered.sort((a, b) => {
+      const scoreA = _affinityScore(a, history, mostRecent);
+      const scoreB = _affinityScore(b, history, mostRecent);
+      return scoreB - scoreA;
+    });
+
+    return filtered[0];
+  }
+
+  /**
+   * Compute affinity score for a task relative to a terminal's history.
+   * @param {object} task
+   * @param {string[]} history - Recent category history
+   * @param {string|null} mostRecent - Most recent category
+   * @returns {number} score
+   */
+  function _affinityScore(task, history, mostRecent) {
+    let score = task.priority ?? 0;
+    const cat = task.category;
+    if (!cat || history.length === 0) return score;
+    if (history.includes(cat)) score += AFFINITY_CATEGORY_BONUS;
+    if (mostRecent && cat === mostRecent) score += AFFINITY_RECENT_BONUS;
+    return score;
   }
 
   // ── Auto-Dispatch ──────────────────────────────────────
@@ -430,7 +484,7 @@ export function createClaudePool(ctx) {
     // Skip if terminal is not running
     if (entry.status !== 'running') return;
 
-    const claimable = findNextClaimableTask();
+    const claimable = findNextClaimableTask(terminalId);
     if (!claimable) return;
 
     const taskQueue = coordinator.taskQueue;
@@ -458,11 +512,18 @@ export function createClaudePool(ctx) {
     }
   }
 
-  // Listen for task completion to auto-dispatch next task + track metrics
+  // Listen for task completion to auto-dispatch next task + track metrics + history
   events.on('claude-terminal:task-completed', (data) => {
     if (data.status === 'complete') {
       swarmState._metrics.tasksCompleted++;
+      // Track completed task category in terminal's history
       const entry = terminals.get(data.terminalId);
+      if (entry && data.category) {
+        entry._taskHistory.push(data.category);
+        if (entry._taskHistory.length > MAX_TASK_HISTORY) {
+          entry._taskHistory.shift();
+        }
+      }
       if (entry && entry.autoDispatch) {
         setTimeout(() => maybeAutoDispatch(data.terminalId), AUTO_DISPATCH_DELAY_MS);
       }
@@ -525,6 +586,7 @@ export function createClaudePool(ctx) {
 
     const taskId = entry.assignedTask.taskId;
     const taskDesc = entry.assignedTask.task;
+    const taskCategory = entry.assignedTask.category || null;
     const result = entry.terminal.getOutputBuffer();
 
     log(`[claude-pool] ${terminalId} auto-completing task ${taskId} (${entry._taskActivityBytes} bytes activity, ${COMPLETION_IDLE_THRESHOLD_MS}ms idle)`);
@@ -541,11 +603,12 @@ export function createClaudePool(ctx) {
       // Reset completion state
       entry._taskActivityBytes = 0;
 
-      // Emit task-completed (triggers auto-dispatch)
+      // Emit task-completed (triggers auto-dispatch + history tracking)
       events.emit('claude-terminal:task-completed', {
         terminalId,
         taskId,
         status: 'complete',
+        category: taskCategory,
         result,
         autoCompleted: true,
       });
@@ -575,6 +638,21 @@ export function createClaudePool(ctx) {
     if (!enabled) {
       stopCompletionWatch(terminalId);
     }
+    return true;
+  }
+
+  // ── Set Capabilities ──────────────────────────────────
+
+  /**
+   * Set capability categories for a terminal (limits which tasks it claims).
+   * @param {string} terminalId
+   * @param {string[]|null} capabilities - Array of category strings, or null for all
+   * @returns {boolean} true if updated
+   */
+  function setCapabilities(terminalId, capabilities) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.capabilities = Array.isArray(capabilities) ? [...capabilities] : null;
     return true;
   }
 
@@ -879,6 +957,8 @@ export function createClaudePool(ctx) {
       lastActivityAt: entry.lastActivityAt,
       activityState: getActivityState(entry),
       swarmManaged: entry.swarmManaged || false,
+      capabilities: entry.capabilities || null,
+      taskHistory: [...(entry._taskHistory || [])],
     };
   }
 
@@ -1136,6 +1216,7 @@ export function createClaudePool(ctx) {
     setAutoHandoff,
     setAutoDispatch,
     setAutoComplete,
+    setCapabilities,
     assignTask,
     releaseTask,
     getAssignedTask,
@@ -1152,4 +1233,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS };

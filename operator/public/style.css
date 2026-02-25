@@ -4232,3 +4232,30 @@ details[open] > .tree-summary .tree-icon--dir {
   min-width: auto;
   line-height: 1.2;
 }
+
+/* Task history + capability badges (Phase 26) */
+.term-task-indicator { flex-wrap: wrap; }
+.term-task-history, .term-task-caps {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  margin-left: 4px;
+}
+.term-task-history::before { content: '\1F4CB '; font-size: 0.65rem; }
+.term-task-caps::before { content: '\2699 '; font-size: 0.65rem; }
+.term-task-cat {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(99,102,241,0.18);
+  color: var(--accent-hover, #818cf8);
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+.term-task-cap {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(16,185,129,0.18);
+  color: var(--status-success, #10b981);
+  font-size: 0.65rem;
+  font-weight: 500;
+}

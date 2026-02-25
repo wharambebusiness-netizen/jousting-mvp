@@ -637,6 +637,8 @@ function addClaudeTerminalInstance(id, state) {
     autoDispatch: state ? !!state.autoDispatch : false,
     autoComplete: state ? !!state.autoComplete : false,
     handoffCount: state ? (state.handoffCount || 0) : 0,
+    capabilities: state ? (state.capabilities || null) : null,
+    taskHistory: state ? (state.taskHistory || []) : [],
     binaryWs: null,
     coord: {
       tasks: { total: 0, pending: 0, assigned: 0, running: 0, complete: 0, failed: 0, cancelled: 0 },
@@ -2027,9 +2029,23 @@ function connectWS() {
       case 'claude-terminal:task-completed': {
         var compInst = instances.get(msg.data.terminalId);
         if (compInst) {
+          // Track category in history on completion
+          if (msg.data.status === 'complete' && msg.data.category) {
+            compInst.taskHistory = compInst.taskHistory || [];
+            compInst.taskHistory.push(msg.data.category);
+            if (compInst.taskHistory.length > 5) compInst.taskHistory.shift();
+          }
           compInst.assignedTask = null;
           updateTaskIndicator(msg.data.terminalId);
           showToast(msg.data.terminalId + ' ' + msg.data.status + ' task ' + msg.data.taskId, msg.data.status === 'complete' ? 'success' : 'error');
+        }
+        break;
+      }
+      case 'claude-terminal:capabilities-changed': {
+        var capInst = instances.get(msg.data.terminalId);
+        if (capInst) {
+          capInst.capabilities = msg.data.capabilities;
+          updateTaskIndicator(msg.data.terminalId);
         }
         break;
       }
@@ -3367,13 +3383,37 @@ function updateTaskIndicator(terminalId) {
   if (!indicator) return;
 
   var task = inst.assignedTask;
-  if (task) {
-    indicator.innerHTML = '<span class="term-task-badge" title="' + escapeHtml(task.task || task.taskId) + '">'
-      + '&#9654; ' + escapeHtml((task.task || task.taskId || '').slice(0, 40))
-      + '</span>'
-      + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'complete\')" title="Complete task">&#10004;</button>'
-      + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'failed\')" title="Fail task">&#10008;</button>'
-      + '<button class="btn btn--xs btn--ghost" onclick="releaseTask(\'' + escapeHtml(terminalId) + '\')" title="Release task">&#8617;</button>';
+  var history = inst.taskHistory || [];
+  var caps = inst.capabilities || null;
+  var hasInfo = task || history.length > 0 || caps;
+
+  if (hasInfo) {
+    var html = '';
+    if (task) {
+      html += '<span class="term-task-badge" title="' + escapeHtml(task.task || task.taskId) + '">'
+        + '&#9654; ' + escapeHtml((task.task || task.taskId || '').slice(0, 40))
+        + '</span>'
+        + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'complete\')" title="Complete task">&#10004;</button>'
+        + '<button class="btn btn--xs btn--ghost" onclick="completeTask(\'' + escapeHtml(terminalId) + '\',\'failed\')" title="Fail task">&#10008;</button>'
+        + '<button class="btn btn--xs btn--ghost" onclick="releaseTask(\'' + escapeHtml(terminalId) + '\')" title="Release task">&#8617;</button>';
+    }
+    // Task history badges
+    if (history.length > 0) {
+      html += '<span class="term-task-history" title="Recent task categories">';
+      for (var i = 0; i < history.length; i++) {
+        html += '<span class="term-task-cat">' + escapeHtml(history[i]) + '</span>';
+      }
+      html += '</span>';
+    }
+    // Capabilities badges
+    if (caps && caps.length > 0) {
+      html += '<span class="term-task-caps" title="Capabilities: ' + escapeHtml(caps.join(', ')) + '">';
+      for (var j = 0; j < caps.length; j++) {
+        html += '<span class="term-task-cap">' + escapeHtml(caps[j]) + '</span>';
+      }
+      html += '</span>';
+    }
+    indicator.innerHTML = html;
     indicator.style.display = 'flex';
   } else {
     indicator.innerHTML = '';
