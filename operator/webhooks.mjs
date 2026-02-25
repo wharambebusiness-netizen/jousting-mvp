@@ -213,20 +213,17 @@ export function createWebhookManager(ctx = {}) {
     let statusCode = null;
     let error = null;
 
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      pendingTimers.add(timer);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    pendingTimers.add(timer);
 
+    try {
       const res = await fetchFn(wh.url, {
         method: 'POST',
         headers,
         body,
         signal: controller.signal,
       });
-
-      clearTimeout(timer);
-      pendingTimers.delete(timer);
 
       statusCode = res.status;
 
@@ -239,6 +236,9 @@ export function createWebhookManager(ctx = {}) {
     } catch (err) {
       status = 'failed';
       error = err.message || 'Network error';
+    } finally {
+      clearTimeout(timer);
+      pendingTimers.delete(timer);
     }
 
     const latencyMs = Date.now() - startMs;

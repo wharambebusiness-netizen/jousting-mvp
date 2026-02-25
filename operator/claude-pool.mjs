@@ -513,7 +513,7 @@ export function createClaudePool(ctx) {
   }
 
   // Listen for task completion to auto-dispatch next task + track metrics + history
-  events.on('claude-terminal:task-completed', (data) => {
+  const _onTaskCompleted = (data) => {
     if (data.status === 'complete') {
       swarmState._metrics.tasksCompleted++;
       // Track completed task category in terminal's history
@@ -530,7 +530,8 @@ export function createClaudePool(ctx) {
     } else if (data.status === 'failed') {
       swarmState._metrics.tasksFailed++;
     }
-  });
+  };
+  events.on('claude-terminal:task-completed', _onTaskCompleted);
 
   // ── Auto-Complete Detection ───────────────────────────
 
@@ -657,7 +658,7 @@ export function createClaudePool(ctx) {
   }
 
   // Track PTY activity for completion detection
-  events.on('claude-terminal:data', (data) => {
+  const _onData = (data) => {
     const entry = terminals.get(data.terminalId);
     if (!entry || !entry.autoComplete || !entry.assignedTask) return;
     if (entry.status !== 'running') return;
@@ -667,17 +668,20 @@ export function createClaudePool(ctx) {
 
     // Reset idle timer (starts/restarts on each data event)
     resetCompletionTimer(data.terminalId);
-  });
+  };
+  events.on('claude-terminal:data', _onData);
 
   // Stop completion watch when task is released manually
-  events.on('claude-terminal:task-released', (data) => {
+  const _onTaskReleased = (data) => {
     stopCompletionWatch(data.terminalId);
-  });
+  };
+  events.on('claude-terminal:task-released', _onTaskReleased);
 
   // Stop completion watch when terminal exits
-  events.on('claude-terminal:exit', (data) => {
+  const _onExit = (data) => {
     stopCompletionWatch(data.terminalId);
-  });
+  };
+  events.on('claude-terminal:exit', _onExit);
 
   // ── Write ─────────────────────────────────────────────
 
@@ -828,6 +832,16 @@ export function createClaudePool(ctx) {
    * Kill all running terminals.
    * @returns {Promise<void>}
    */
+  /**
+   * Remove all EventBus listeners registered by the pool.
+   */
+  function destroy() {
+    events.off('claude-terminal:task-completed', _onTaskCompleted);
+    events.off('claude-terminal:data', _onData);
+    events.off('claude-terminal:task-released', _onTaskReleased);
+    events.off('claude-terminal:exit', _onExit);
+  }
+
   async function shutdownAll() {
     // Stop swarm mode if active
     if (swarmState._scaleTimer) {
@@ -837,7 +851,16 @@ export function createClaudePool(ctx) {
     }
 
     const ids = [...terminals.keys()];
-    if (ids.length === 0) return;
+
+    // Clear all completion timers
+    for (const id of ids) {
+      stopCompletionWatch(id);
+    }
+
+    if (ids.length === 0) {
+      destroy();
+      return;
+    }
 
     // Kill all running terminals
     for (const id of ids) {
@@ -861,6 +884,8 @@ export function createClaudePool(ctx) {
         });
       });
     }));
+
+    destroy();
   }
 
   // ── Helpers ───────────────────────────────────────────
@@ -1034,11 +1059,13 @@ export function createClaudePool(ctx) {
       if (!entry.swarmManaged || entry.status !== 'stopped') continue;
       const crashes = swarmState._crashCounts.get(entry.id) || 0;
       if (crashes >= SWARM_MAX_CRASH_RETRIES) continue;
-      swarmState._crashCounts.set(entry.id, crashes + 1);
+      const newCrashCount = crashes + 1;
 
       // Remove stopped entry and respawn with fresh ID
       terminals.delete(entry.id);
       const freshId = SWARM_ID_PREFIX + swarmState._counter++;
+      // Transfer crash count to new ID for lineage tracking
+      swarmState._crashCounts.set(freshId, newCrashCount);
       const swarmOpts = {
         projectDir: swarmState.projectDir,
         model: swarmState.model,
@@ -1135,7 +1162,10 @@ export function createClaudePool(ctx) {
    * @returns {object} Updated swarmState summary
    */
   function setSwarmMode(opts = {}) {
-    Object.assign(swarmState, opts);
+    const SWARM_CONFIG_KEYS = ['enabled', 'minTerminals', 'maxTerminals', 'projectDir', 'model', 'dangerouslySkipPermissions', 'systemPrompt', 'scaleUpThreshold'];
+    for (const key of SWARM_CONFIG_KEYS) {
+      if (key in opts) swarmState[key] = opts[key];
+    }
 
     if (swarmState.enabled) {
       _effectiveMaxTerminals = Math.max(maxTerminals, swarmState.maxTerminals);
@@ -1230,6 +1260,7 @@ export function createClaudePool(ctx) {
     getSwarmState,
     getSwarmMetrics,
     shutdownAll,
+    destroy,
   };
 }
 

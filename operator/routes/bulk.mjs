@@ -15,6 +15,7 @@
 // ============================================================
 
 import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
 
 const MAX_BULK_IDS = 100;
 
@@ -166,22 +167,21 @@ export function createBulkRoutes(ctx) {
     const err = validateIds(req.body);
     if (err) return res.status(400).json(err);
 
+    const regData = registry.load();
     const results = req.body.ids.map(id => {
       try {
-        const regData = registry.load();
         const chain = regData.chains.find(c => c.id === id);
         if (!chain) {
           return { id, success: false, error: 'Chain not found' };
         }
-        // Archive by setting status to 'archived'
         chain.status = 'archived';
         chain.updatedAt = new Date().toISOString();
-        registry.save(regData);
         return { id, success: true };
       } catch (e) {
         return { id, success: false, error: e.message };
       }
     });
+    registry.save(regData);
 
     const resp = bulkResponse(results);
 
@@ -216,7 +216,7 @@ export function createBulkRoutes(ctx) {
         let requeued = null;
         if (coordinator && coordinator.taskQueue) {
           const newTask = {
-            id: (taskDef.taskId || id) + '-retry-' + Date.now(),
+            id: (taskDef.taskId || id) + '-retry-' + randomBytes(4).toString('hex'),
             task: typeof taskDef.task === 'string'
               ? taskDef.task
               : (taskDef.task?.task || taskDef.task?.description || ''),

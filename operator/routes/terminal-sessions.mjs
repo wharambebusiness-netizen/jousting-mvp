@@ -43,8 +43,8 @@ export function createTerminalSessionRoutes(ctx) {
     if (offset !== undefined) opts.offset = parseInt(offset, 10);
     if (sort) opts.sort = sort;
 
-    const sessions = sessionStore.listSessions(opts);
-    res.json({ sessions, total: sessions.length, available: true });
+    const result = sessionStore.listSessions(opts);
+    res.json({ sessions: result.items, total: result.total, available: true });
   });
 
   // ── GET /claude-terminals/sessions/:id ─────────────────

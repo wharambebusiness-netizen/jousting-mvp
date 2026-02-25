@@ -651,6 +651,9 @@ export function createApp(options = {}) {
     // Shut down Claude terminal pool
     if (claudePool) claudePool.shutdownAll().catch(() => {});
 
+    // Clean up notifications
+    if (notifications) notifications.destroy();
+
     // Clean up cost forecaster
     if (costForecaster) costForecaster.destroy();
 

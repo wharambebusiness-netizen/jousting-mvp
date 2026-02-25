@@ -100,7 +100,7 @@ export function createTimelineRoutes(ctx) {
 
       // Always query without limit/offset so we can compute correct totals
       // after category post-filtering, then paginate ourselves
-      let result = auditLog.query({ since, until });
+      let result = auditLog.query({ since, until, limit: 100000, offset: 0 });
       let entries = result.entries;
 
       // Post-filter by category if specified
@@ -130,7 +130,7 @@ export function createTimelineRoutes(ctx) {
       const since = req.query.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const until = req.query.until || undefined;
 
-      const result = auditLog.query({ since, until, limit: 10000 });
+      const result = auditLog.query({ since, until, limit: 100000, offset: 0 });
       const counts = {};
       for (const cat of ALL_CATEGORIES) counts[cat] = 0;
 

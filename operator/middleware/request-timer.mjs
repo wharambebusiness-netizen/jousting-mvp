@@ -87,11 +87,15 @@ export function createRequestTimer(ctx = {}) {
 
   // Ring buffer of recent slow requests
   const slowRequests = [];
+  let totalSlowCount = 0;
 
   // ── Helpers ────────────────────────────────────────────────
 
+  const MAX_ROUTES = 500;
+
   function getOrCreateRoute(routeKey) {
     if (!routeData.has(routeKey)) {
+      if (routeData.size >= MAX_ROUTES) return null;
       routeData.set(routeKey, {
         route: routeKey,
         count: 0,
@@ -100,48 +104,36 @@ export function createRequestTimer(ctx = {}) {
         maxMs: 0,
         errorCount: 0,
         lastCalledAt: null,
-        _samples: [],       // sorted ascending for percentile calc
+        _samples: [],
       });
     }
     return routeData.get(routeKey);
   }
 
   /**
-   * Insert a duration into the sorted sample buffer (fixed size).
+   * Insert a duration into the sample buffer (circular, oldest-by-time eviction).
    */
   function insertSample(entry, durationMs) {
-    const samples = entry._samples;
-
-    // Binary search insertion to keep sorted
-    let lo = 0;
-    let hi = samples.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (samples[mid] < durationMs) lo = mid + 1;
-      else hi = mid;
-    }
-    samples.splice(lo, 0, durationMs);
-
-    // Evict oldest if over capacity — remove from start (smallest values if full, which is
-    // fine since we want a recent window). Actually evict based on position to keep representative
-    // sample: remove the first element when at capacity.
-    if (samples.length > SAMPLE_BUFFER_SIZE) {
-      samples.shift();
+    entry._samples.push(durationMs);
+    if (entry._samples.length > SAMPLE_BUFFER_SIZE) {
+      entry._samples.shift(); // remove oldest by time
     }
   }
 
   function computePercentiles(entry) {
     const s = entry._samples;
     if (s.length === 0) return { p50Ms: 0, p95Ms: 0, p99Ms: 0 };
+    const sorted = [...s].sort((a, b) => a - b);
     return {
-      p50Ms: percentile(s, 50),
-      p95Ms: percentile(s, 95),
-      p99Ms: percentile(s, 99),
+      p50Ms: percentile(sorted, 50),
+      p95Ms: percentile(sorted, 95),
+      p99Ms: percentile(sorted, 99),
     };
   }
 
   function recordRequest(routeKey, durationMs, statusCode) {
     const entry = getOrCreateRoute(routeKey);
+    if (!entry) return;
 
     entry.count += 1;
     entry.totalMs += durationMs;
@@ -191,6 +183,7 @@ export function createRequestTimer(ctx = {}) {
           };
 
           slowRequests.push(slowEntry);
+          totalSlowCount += 1;
           if (slowRequests.length > maxEntries) {
             slowRequests.shift();
           }
@@ -267,9 +260,17 @@ export function createRequestTimer(ctx = {}) {
   /**
    * Clears all timing data and slow request history.
    */
+  /**
+   * Cumulative total of slow requests (monotonic counter).
+   */
+  function getSlowRequestCount() {
+    return totalSlowCount;
+  }
+
   function reset() {
     routeData.clear();
     slowRequests.length = 0;
+    totalSlowCount = 0;
   }
 
   return {
@@ -277,6 +278,7 @@ export function createRequestTimer(ctx = {}) {
     getStats,
     getRouteStats,
     getSlowRequests,
+    getSlowRequestCount,
     reset,
   };
 }

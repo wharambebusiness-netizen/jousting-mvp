@@ -71,7 +71,7 @@ describe('createTerminalSessionStore', () => {
   it('starts with zero sessions', () => {
     const store = createTerminalSessionStore();
     expect(store.count).toBe(0);
-    expect(store.listSessions()).toEqual([]);
+    expect(store.listSessions()).toEqual({ items: [], total: 0 });
   });
 });
 
@@ -209,7 +209,8 @@ describe('listSessions', () => {
     events.emit('claude-terminal:exit', { terminalId: 'b', exitCode: 0 });
 
     const all = store.listSessions();
-    expect(all.length).toBe(2);
+    expect(all.items.length).toBe(2);
+    expect(all.total).toBe(2);
   });
 
   it('filters to completed sessions when status=completed', () => {
@@ -221,8 +222,9 @@ describe('listSessions', () => {
     events.emit('claude-terminal:exit', { terminalId: 'r2', exitCode: 0 });
 
     const completed = store.listSessions({ status: 'completed' });
-    expect(completed.length).toBe(1);
-    expect(completed[0].id).toBe('r2');
+    expect(completed.items.length).toBe(1);
+    expect(completed.total).toBe(1);
+    expect(completed.items[0].id).toBe('r2');
   });
 
   it('filters to running sessions when status=running', () => {
@@ -234,8 +236,9 @@ describe('listSessions', () => {
     events.emit('claude-terminal:exit', { terminalId: 'rr2', exitCode: 0 });
 
     const running = store.listSessions({ status: 'running' });
-    expect(running.length).toBe(1);
-    expect(running[0].id).toBe('rr1');
+    expect(running.items.length).toBe(1);
+    expect(running.total).toBe(1);
+    expect(running.items[0].id).toBe('rr1');
   });
 
   it('paginates with limit/offset', () => {
@@ -248,11 +251,13 @@ describe('listSessions', () => {
 
     const page1 = store.listSessions({ limit: 2, offset: 0 });
     const page2 = store.listSessions({ limit: 2, offset: 2 });
-    expect(page1.length).toBe(2);
-    expect(page2.length).toBe(2);
+    expect(page1.items.length).toBe(2);
+    expect(page1.total).toBe(5);
+    expect(page2.items.length).toBe(2);
+    expect(page2.total).toBe(5);
     // Ensure no overlap
-    const ids1 = page1.map(s => s.id);
-    const ids2 = page2.map(s => s.id);
+    const ids1 = page1.items.map(s => s.id);
+    const ids2 = page2.items.map(s => s.id);
     expect(ids1.every(id => !ids2.includes(id))).toBe(true);
   });
 });
@@ -359,7 +364,7 @@ describe('clear', () => {
 
     store.clear();
     expect(store.count).toBe(0);
-    expect(store.listSessions()).toEqual([]);
+    expect(store.listSessions()).toEqual({ items: [], total: 0 });
   });
 });
 

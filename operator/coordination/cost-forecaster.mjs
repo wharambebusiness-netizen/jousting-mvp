@@ -99,8 +99,9 @@ export function createCostForecaster(ctx = {}) {
     if (costAggregator) {
       const status = costAggregator.getStatus();
       const total = status.globalBudgetUsd || 0;
-      const remaining = total > 0 ? Math.max(0, total - _totalCost) : 0;
-      const usagePercent = total > 0 ? Math.round((_totalCost / total) * 10000) / 10000 : 0;
+      const spent = status.globalTotalUsd || _totalCost;
+      const remaining = total > 0 ? Math.max(0, total - spent) : 0;
+      const usagePercent = total > 0 ? Math.round((spent / total) * 10000) / 10000 : 0;
       budget = { total, remaining, usagePercent };
     }
 

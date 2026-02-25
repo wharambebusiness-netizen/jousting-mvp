@@ -85,13 +85,17 @@ export function createSecretVault(ctx = {}) {
   }
 
   function _decrypt({ iv, tag, ciphertext }) {
-    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(tag, 'hex'));
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(ciphertext, 'hex')),
-      decipher.final(),
-    ]);
-    return decrypted.toString('utf8');
+    try {
+      const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'hex'));
+      decipher.setAuthTag(Buffer.from(tag, 'hex'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(ciphertext, 'hex')),
+        decipher.final(),
+      ]);
+      return decrypted.toString('utf8');
+    } catch (_err) {
+      throw new Error('Failed to decrypt secret');
+    }
   }
 
   // ── Validation ──────────────────────────────────────────
@@ -280,6 +284,9 @@ export function createSecretVault(ctx = {}) {
     entries.clear();
     if (data && data.entries && typeof data.entries === 'object') {
       for (const [name, entry] of Object.entries(data.entries)) {
+        if (typeof name !== 'string' || name.length === 0) continue;
+        if (!entry || typeof entry !== 'object') continue;
+        if (typeof entry.iv !== 'string' || typeof entry.tag !== 'string' || typeof entry.ciphertext !== 'string') continue;
         entries.set(name, entry);
       }
     }

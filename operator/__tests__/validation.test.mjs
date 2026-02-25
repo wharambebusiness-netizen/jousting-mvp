@@ -300,7 +300,7 @@ describe('errorHandler', () => {
     mw(err, req, res, next);
 
     expect(res._status).toBe(500);
-    expect(res._json.error).toBe('Something broke');
+    expect(res._json.error).toBe('Internal server error');
     expect(res._json.code).toBe('INTERNAL_ERROR');
     expect(res._json.reqId).toBe('req-456');
     expect(logger.error).toHaveBeenCalled();
@@ -346,7 +346,7 @@ describe('errorHandler', () => {
     mw(err, req, res, vi.fn());
 
     expect(res._status).toBe(500);
-    expect(res._json.error).toBe('fail');
+    expect(res._json.error).toBe('Internal server error');
   });
 });
 

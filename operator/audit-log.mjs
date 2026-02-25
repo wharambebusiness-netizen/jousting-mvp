@@ -42,6 +42,12 @@ export function createAuditLog(ctx = {}) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 
+  // ── In-memory entry counter (avoids full file read on every record) ──
+
+  let entryCount = (persistPath && existsSync(persistPath))
+    ? readFileSync(persistPath, 'utf8').split('\n').filter(Boolean).length
+    : 0;
+
   // ── Listeners for cleanup ──────────────────────────────
 
   const listeners = [];
@@ -69,9 +75,12 @@ export function createAuditLog(ctx = {}) {
       events.emit('audit:recorded', entry);
     }
 
+    entryCount++;
+
     // Auto-rotate if over limit
-    if (persistPath && count() > maxEntries) {
+    if (persistPath && entryCount > maxEntries) {
       rotate();
+      entryCount = 0;
     }
   }
 

@@ -110,6 +110,7 @@ export function createTerminalMessageRoutes(ctx) {
   // ── Send message ──────────────────────────────────────────
 
   router.post('/terminal-messages', validateBody({
+    from: { type: 'string', required: true },
     to: { type: 'string' },
     content: { type: 'string', required: true },
   }), (req, res) => {

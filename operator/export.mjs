@@ -134,7 +134,7 @@ export function flattenObject(obj, prefix = '', sep = '_') {
  */
 export function setExportHeaders(res, filename, format) {
   const ext = format === 'csv' ? 'csv' : format === 'jsonl' ? 'jsonl' : 'json';
-  const contentType = format === 'csv' ? 'text/csv' : 'application/json';
+  const contentType = format === 'csv' ? 'text/csv' : format === 'jsonl' ? 'application/x-ndjson' : 'application/json';
 
   res.set('Content-Disposition', `attachment; filename="${filename}.${ext}"`);
   res.set('Content-Type', contentType);

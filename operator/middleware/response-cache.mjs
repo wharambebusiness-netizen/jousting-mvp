@@ -112,25 +112,28 @@ export function createResponseCache(ctx = {}) {
       // Intercept res.json() to capture the response
       const originalJson = res.json.bind(res);
       res.json = function cacheInterceptJson(body) {
-        // Store in cache
-        const entry = {
-          body,
-          statusCode: res.statusCode || 200,
-          headers: {},
-          expiresAt: Date.now() + ttl,
-          accessedAt: Date.now(),
-        };
+        // Only cache successful responses (2xx)
+        const statusCode = res.statusCode || 200;
+        if (statusCode >= 200 && statusCode < 300) {
+          const entry = {
+            body,
+            statusCode,
+            headers: {},
+            expiresAt: Date.now() + ttl,
+            accessedAt: Date.now(),
+          };
 
-        // Capture Content-Type if set
-        const ct = res.getHeader('content-type');
-        if (ct) entry.headers['content-type'] = ct;
+          // Capture Content-Type if set
+          const ct = res.getHeader('content-type');
+          if (ct) entry.headers['content-type'] = ct;
 
-        cache.set(key, entry);
+          cache.set(key, entry);
 
-        // Evict if over capacity
-        if (cache.size > maxEntries) evictLRU();
+          // Evict if over capacity
+          if (cache.size > maxEntries) evictLRU();
 
-        log(`[cache] Stored: ${key} (ttl=${ttl}ms)`);
+          log(`[cache] Stored: ${key} (ttl=${ttl}ms)`);
+        }
 
         // Call original json
         return originalJson(body);

@@ -565,6 +565,7 @@ export function createCoordinator(ctx) {
    * @returns {object} Created task
    */
   function addTask(taskDef) {
+    taskDef = { ...taskDef };
     // Auto-detect category if not specified
     if (!taskDef.category && taskDef.task) {
       const detected = categoryDetector.detect(taskDef.task);
@@ -600,14 +601,15 @@ export function createCoordinator(ctx) {
    */
   function addTasks(taskDefs) {
     // Auto-detect categories for tasks without explicit category
-    for (const def of taskDefs) {
+    const cloned = taskDefs.map(def => ({ ...def }));
+    for (const def of cloned) {
       if (!def.category && def.task) {
         const detected = categoryDetector.detect(def.task);
         if (detected) def.category = detected;
       }
     }
 
-    const created = taskDefs.map(def => taskQueue.add(def));
+    const created = cloned.map(def => taskQueue.add(def));
 
     if (state === 'running') {
       const assignments = workAssigner.assignAll();

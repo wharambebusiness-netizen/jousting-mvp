@@ -162,7 +162,8 @@ export function createHealthChecker(ctx = {}) {
    * Lightweight readiness probe.
    */
   function ready() {
-    return { ok: true };
+    const result = check();
+    return { ok: result.status !== 'unhealthy' };
   }
 
   return { check, ready };

@@ -15,7 +15,7 @@ export function errorHandler(logger) {
   return (err, req, res, _next) => {
     const status = err.status || 500;
     const code = err.code || 'INTERNAL_ERROR';
-    const message = err.message || 'Internal server error';
+    const message = status >= 500 ? 'Internal server error' : (err.message || 'Internal server error');
 
     if (logger && typeof logger.error === 'function') {
       logger.error('Unhandled error', { error: message, code, status, path: req.path, reqId: req.id });

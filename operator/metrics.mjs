@@ -158,12 +158,12 @@ export function createMetricsCollector(ctx = {}) {
           lines.push(`jousting_http_request_duration_ms{route="${routeLabel}",quantile="0.99"} ${num(s.p99Ms)}`);
         }
 
-        const slowReqs = safe(() => requestTimer.getSlowRequests(1000));
-        if (slowReqs != null) {
+        const slowCount = safe(() => requestTimer.getSlowRequestCount ? requestTimer.getSlowRequestCount() : null);
+        if (slowCount != null) {
           lines.push('');
           lines.push('# HELP jousting_http_slow_requests_total Total slow HTTP requests');
           lines.push('# TYPE jousting_http_slow_requests_total counter');
-          lines.push(`jousting_http_slow_requests_total ${num(slowReqs.length)}`);
+          lines.push(`jousting_http_slow_requests_total ${num(slowCount)}`);
         }
       }
     }

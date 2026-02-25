@@ -720,12 +720,17 @@ document.addEventListener('keydown', function(e) {
     localStorage.setItem('search-recent', JSON.stringify(list));
   }
 
+  function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
   function renderRecent() {
     var list = getRecent();
     if (list.length === 0) { recentEl.innerHTML = ''; return; }
     recentEl.innerHTML = '<div class="search-recent__label">Recent</div>' +
       list.map(function(q) {
-        return '<button class="search-recent__item" data-query="' + q.replace(/"/g, '&quot;') + '">' + q + '</button>';
+        return '<button class="search-recent__item" data-query="' + escapeHtml(q) + '">' + escapeHtml(q) + '</button>';
       }).join('');
   }
 
@@ -738,11 +743,11 @@ document.addEventListener('keydown', function(e) {
     emptyEl.style.display = 'none';
     resultsEl.innerHTML = data.results.map(function(r) {
       var icon = sourceIcons[r.source] || '';
-      var page = r.source === 'chains' ? '/chains/' + r.id : (sourcePages[r.source] || '/');
-      return '<a class="search-result" href="' + page + '" data-source="' + r.source + '">' +
-        '<span class="search-result__badge">' + icon + ' ' + r.source + '</span>' +
-        '<span class="search-result__title">' + (r.title || r.id) + '</span>' +
-        '<span class="search-result__snippet">' + (r.snippet || '') + '</span>' +
+      var page = r.source === 'chains' ? '/chains/' + escapeHtml(r.id) : (sourcePages[r.source] || '/');
+      return '<a class="search-result" href="' + page + '" data-source="' + escapeHtml(r.source) + '">' +
+        '<span class="search-result__badge">' + icon + ' ' + escapeHtml(r.source) + '</span>' +
+        '<span class="search-result__title">' + escapeHtml(r.title || r.id) + '</span>' +
+        '<span class="search-result__snippet">' + escapeHtml(r.snippet || '') + '</span>' +
       '</a>';
     }).join('');
   }

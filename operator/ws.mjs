@@ -423,9 +423,13 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
           const missed = oldest - 1 - afterSeq;
           safeSendTracked(ws, { type: 'replay-gap', missed });
         } else {
-          // Return all events since afterSeq
-          const missed = replayBuffer.since(afterSeq);
-          safeSendTracked(ws, { type: 'replay', events: missed, currentSeq: current });
+          // Return all events since afterSeq, filtered by subscriptions
+          const allEvents = replayBuffer.since(afterSeq);
+          const subs = clientSubscriptions.get(ws);
+          const filtered = subs && subs.size > 0
+            ? allEvents.filter(e => matchesAnyPattern(e.event, subs))
+            : allEvents;
+          safeSendTracked(ws, { type: 'replay', events: filtered, currentSeq: current });
         }
       }
     });

@@ -241,11 +241,12 @@ export function createTerminalSessionStore(ctx = {}) {
     });
 
     // Pagination
+    const total = result.length;
     const sliced = typeof limit === 'number'
       ? result.slice(offset, offset + limit)
       : result.slice(offset);
 
-    return sliced.map(s => ({ ...s }));
+    return { items: sliced.map(s => ({ ...s })), total };
   }
 
   /**

@@ -174,10 +174,10 @@ describe('setExportHeaders', () => {
     expect(res._headers['Content-Type']).toBe('application/json');
   });
 
-  it('sets Content-Type application/json for jsonl format', () => {
+  it('sets Content-Type application/x-ndjson for jsonl format', () => {
     const res = mockRes();
     setExportHeaders(res, 'data', 'jsonl');
-    expect(res._headers['Content-Type']).toBe('application/json');
+    expect(res._headers['Content-Type']).toBe('application/x-ndjson');
   });
 
   it('sets correct extension for jsonl', () => {
