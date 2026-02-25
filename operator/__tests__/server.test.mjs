@@ -2649,6 +2649,268 @@ describe('Phase 14 — DAG + Templates', () => {
   });
 });
 
+// ── Phase 16: Coordination Endpoint Coverage ──────────────────
+
+describe('Coordination CRUD & Operations (Phase 16)', () => {
+  let appInstance, baseUrl, events;
+
+  const mockPool = {
+    getStatus: () => [{ id: 'w1', status: 'running' }],
+    getWorker: () => null,
+    spawn: () => {},
+    kill: () => true,
+    sendTo: () => true,
+    updateConfig: () => true,
+    remove: () => true,
+    shutdownAll: async () => {},
+    activeCount: () => 1,
+  };
+
+  async function api(path, options = {}) {
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options,
+    });
+    const body = await res.json();
+    return { status: res.status, body };
+  }
+
+  beforeAll(async () => {
+    setupTestDir();
+    events = new EventBus();
+    appInstance = createApp({ operatorDir: TEST_DIR, events, pool: mockPool });
+    await new Promise((resolve) => {
+      appInstance.server.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${appInstance.server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    if (appInstance) await appInstance.close();
+    teardownTestDir();
+  });
+
+  // ── Status ────────────────────────────────────────────
+
+  it('GET /api/coordination/status returns coordinator state', async () => {
+    const { status, body } = await api('/api/coordination/status');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('state');
+    expect(body).toHaveProperty('tasks');
+    expect(body).toHaveProperty('rateLimiter');
+    expect(body).toHaveProperty('costs');
+  });
+
+  // ── Lifecycle ─────────────────────────────────────────
+
+  it('POST /api/coordination/start starts coordinator', async () => {
+    const { status, body } = await api('/api/coordination/start', { method: 'POST' });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.state).toBe('running');
+  });
+
+  it('POST /api/coordination/drain transitions to draining', async () => {
+    const { status, body } = await api('/api/coordination/drain', { method: 'POST' });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.state).toBe('draining');
+  });
+
+  it('POST /api/coordination/start works from draining state', async () => {
+    const { status, body } = await api('/api/coordination/start', { method: 'POST' });
+    expect(status).toBe(200);
+    expect(body.state).toBe('running');
+  });
+
+  // ── Task CRUD ─────────────────────────────────────────
+
+  it('POST /api/coordination/tasks creates a task', async () => {
+    const { status, body } = await api('/api/coordination/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ id: 'crud-1', task: 'Test task one', priority: 5, category: 'testing' }),
+    });
+    expect(status).toBe(201);
+    expect(body.id).toBe('crud-1');
+    expect(body.task).toBe('Test task one');
+    expect(body.priority).toBe(5);
+    expect(body.status).toBe('pending');
+  });
+
+  it('GET /api/coordination/tasks lists all tasks', async () => {
+    const { status, body } = await api('/api/coordination/tasks');
+    expect(status).toBe(200);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.some(t => t.id === 'crud-1')).toBe(true);
+  });
+
+  it('GET /api/coordination/tasks/:id returns task detail', async () => {
+    const { status, body } = await api('/api/coordination/tasks/crud-1');
+    expect(status).toBe(200);
+    expect(body.id).toBe('crud-1');
+    expect(body.task).toBe('Test task one');
+  });
+
+  it('GET /api/coordination/tasks/:id returns 404 for unknown task', async () => {
+    const { status, body } = await api('/api/coordination/tasks/nonexistent');
+    expect(status).toBe(404);
+    expect(body.error).toBe('Task not found');
+  });
+
+  it('POST /api/coordination/tasks/batch creates multiple tasks', async () => {
+    const { status, body } = await api('/api/coordination/tasks/batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        tasks: [
+          { id: 'batch-a', task: 'Batch A', priority: 1 },
+          { id: 'batch-b', task: 'Batch B', priority: 2, deps: ['batch-a'] },
+        ],
+      }),
+    });
+    expect(status).toBe(201);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBe(2);
+  });
+
+  it('PATCH /api/coordination/tasks/:id updates task fields', async () => {
+    const { status, body } = await api('/api/coordination/tasks/crud-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ task: 'Updated task description', priority: 10 }),
+    });
+    expect(status).toBe(200);
+    expect(body.task).toBe('Updated task description');
+    expect(body.priority).toBe(10);
+  });
+
+  it('POST /api/coordination/tasks/:id/cancel cancels a pending task', async () => {
+    const { status, body } = await api('/api/coordination/tasks/crud-1/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Not needed' }),
+    });
+    expect(status).toBe(200);
+    expect(body.cancelled).toEqual(expect.arrayContaining(['crud-1']));
+  });
+
+  it('POST /api/coordination/tasks/:id/retry retries a cancelled task', async () => {
+    const { status, body } = await api('/api/coordination/tasks/crud-1/retry', {
+      method: 'POST',
+    });
+    expect(status).toBe(200);
+    expect(body.id).toBe('crud-1');
+    expect(body.status).toBe('pending');
+  });
+
+  // ── Progress ──────────────────────────────────────────
+
+  it('GET /api/coordination/progress returns task progress summary', async () => {
+    const { status, body } = await api('/api/coordination/progress');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('total');
+    expect(body).toHaveProperty('pending');
+    expect(body).toHaveProperty('complete');
+    expect(body).toHaveProperty('failed');
+    expect(typeof body.total).toBe('number');
+  });
+
+  // ── Rate Limiter ──────────────────────────────────────
+
+  it('GET /api/coordination/rate-limit returns rate limiter status', async () => {
+    const { status, body } = await api('/api/coordination/rate-limit');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('maxRequestsPerMinute');
+    expect(body).toHaveProperty('maxTokensPerMinute');
+    expect(body).toHaveProperty('requestBucket');
+    expect(body).toHaveProperty('tokenBucket');
+  });
+
+  // ── Costs ─────────────────────────────────────────────
+
+  it('GET /api/coordination/costs returns cost aggregation', async () => {
+    const { status, body } = await api('/api/coordination/costs');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('globalBudgetUsd');
+    expect(body).toHaveProperty('globalTotalUsd');
+    expect(body).toHaveProperty('workers');
+  });
+
+  // ── Adaptive Rate ─────────────────────────────────────
+
+  it('GET /api/coordination/adaptive-rate returns adaptive rate status', async () => {
+    const { status, body } = await api('/api/coordination/adaptive-rate');
+    expect(status).toBe(200);
+    expect(body).toHaveProperty('enabled');
+    // Default is enabled
+    if (body.enabled) {
+      expect(body).toHaveProperty('backoffLevel');
+      expect(body).toHaveProperty('state');
+    }
+  });
+
+  // ── Hot-Reconfiguration ───────────────────────────────
+
+  it('POST /api/coordination/config applies rate and budget updates', async () => {
+    const { status, body } = await api('/api/coordination/config', {
+      method: 'POST',
+      body: JSON.stringify({ maxRequestsPerMinute: 200, globalBudgetUsd: 100 }),
+    });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.rateLimiter.maxRequestsPerMinute).toBe(200);
+    expect(body.costs.globalBudgetUsd).toBe(100);
+  });
+
+  // ── Stop (must be last before 503 test) ────────────────
+
+  it('POST /api/coordination/stop stops coordinator', async () => {
+    const { status, body } = await api('/api/coordination/stop', { method: 'POST' });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.state).toBe('stopped');
+  });
+
+  it('POST /api/coordination/start fails after stop', async () => {
+    const { status, body } = await api('/api/coordination/start', { method: 'POST' });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/Cannot restart/);
+  });
+
+  // ── 503 without coordinator ───────────────────────────
+
+  it('all coordination endpoints return 503 without pool', async () => {
+    // Spin up a server without pool
+    const ev2 = new EventBus();
+    const app2 = createApp({ operatorDir: TEST_DIR, events: ev2 });
+    const { port: p2 } = await new Promise((resolve) => {
+      app2.server.listen(0, '127.0.0.1', () => resolve({ port: app2.server.address().port }));
+    });
+
+    const endpoints = [
+      { path: '/api/coordination/status', method: 'GET' },
+      { path: '/api/coordination/tasks', method: 'GET' },
+      { path: '/api/coordination/tasks', method: 'POST' },
+      { path: '/api/coordination/progress', method: 'GET' },
+      { path: '/api/coordination/rate-limit', method: 'GET' },
+      { path: '/api/coordination/costs', method: 'GET' },
+      { path: '/api/coordination/start', method: 'POST' },
+      { path: '/api/coordination/drain', method: 'POST' },
+      { path: '/api/coordination/stop', method: 'POST' },
+    ];
+
+    for (const ep of endpoints) {
+      const res = await fetch(`http://127.0.0.1:${p2}${ep.path}`, {
+        method: ep.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: ep.method === 'POST' ? '{}' : undefined,
+      });
+      expect(res.status).toBe(503);
+    }
+
+    await app2.close();
+  });
+});
+
 // ── Phase 15E: Auto-Handoff UI Elements ─────────────────────
 
 describe('Phase 15E: Auto-Handoff', () => {

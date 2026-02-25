@@ -302,6 +302,20 @@ var sidebarFilterTimer = null;
       return;
     }
 
+    // Ctrl+M: shared memory panel
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      toggleMemoryPanel();
+      return;
+    }
+
+    // Ctrl+Shift+I: terminal messages panel
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
+      e.preventDefault();
+      toggleMessagePanel();
+      return;
+    }
+
     // Ctrl+Shift+A: toggle auto-handoff on active Claude terminal
     if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
       e.preventDefault();
@@ -1342,6 +1356,8 @@ function connectWS() {
     'handoff:*',
     'coord:*',
     'claude-terminal:*',
+    'shared-memory:*',
+    'terminal-message:*',
   ], function(msg) {
     if (!msg || !msg.event || !msg.data) return;
 
@@ -1762,6 +1778,35 @@ function connectWS() {
         if (ahInst && ahInst.type === 'claude') {
           ahInst.autoHandoff = !!msg.data.autoHandoff;
           updateStatusBar(ahId);
+        }
+        break;
+      }
+
+      // Auto-refresh shared memory panel when open
+      case 'shared-memory:updated':
+      case 'shared-memory:deleted':
+      case 'shared-memory:cleared':
+      case 'shared-memory:snapshot-written': {
+        var memDialog = document.getElementById('memory-dialog');
+        if (memDialog && memDialog.open) {
+          refreshMemoryPanel();
+        }
+        break;
+      }
+
+      // Terminal messages (Phase 18)
+      case 'terminal-message:sent':
+      case 'terminal-message:broadcast':
+      case 'terminal-message:deleted':
+      case 'terminal-message:cleared': {
+        var msgDialog = document.getElementById('messages-dialog');
+        if (msgDialog && msgDialog.open) {
+          refreshMessagePanel();
+        }
+        updateMessageUnreadBadge();
+        // Toast on targeted message to active terminal
+        if (msg.event === 'terminal-message:sent' && msg.data.to && activeTabId && msg.data.to === activeTabId) {
+          showToast('Message from ' + msg.data.from + ': ' + msg.data.content.slice(0, 60), 'info');
         }
         break;
       }
@@ -2825,6 +2870,449 @@ function setupDropTargets() {
   });
 }
 
+// ── Shared Memory Panel (Phase 17) ──────────────────────────
+
+function toggleMemoryPanel() {
+  var dialog = document.getElementById('memory-dialog');
+  if (!dialog) return;
+  if (dialog.open) { dialog.close(); } else { dialog.showModal(); refreshMemoryPanel(); }
+}
+
+function refreshMemoryPanel() {
+  // Fetch keys
+  fetch('/api/shared-memory')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('memory-entries');
+      var countBadge = document.getElementById('memory-key-count');
+      if (!container) return;
+
+      var count = data.count || 0;
+      if (countBadge) countBadge.textContent = count;
+
+      if (count === 0) {
+        container.innerHTML = '<p class="text-muted">No keys stored yet.</p>';
+        return;
+      }
+
+      var html = '<table class="memory-table" style="width:100%;font-size:0.85rem"><thead><tr><th>Key</th><th>Value</th><th>Source</th><th></th></tr></thead><tbody>';
+      var entries = data.entries || {};
+      var keys = Object.keys(entries).sort();
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var e = entries[k];
+        var val = typeof e.value === 'object' ? JSON.stringify(e.value) : String(e.value);
+        if (val.length > 80) val = val.slice(0, 80) + '...';
+        html += '<tr><td><code>' + escapeHtml(k) + '</code></td><td>' + escapeHtml(val) + '</td><td><small>' + escapeHtml(e.source || '') + '</small></td>';
+        html += '<td><button class="btn btn--xs btn--ghost" onclick="deleteMemoryKey(\'' + escapeHtml(k) + '\')" title="Delete">&times;</button></td></tr>';
+      }
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    })
+    .catch(function() {
+      var container = document.getElementById('memory-entries');
+      if (container) container.innerHTML = '<p class="text-muted">Failed to load shared memory.</p>';
+    });
+
+  // Fetch snapshots
+  fetch('/api/shared-memory-snapshots')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('memory-snapshots');
+      var countBadge = document.getElementById('memory-snapshot-count');
+      if (!container) return;
+
+      var count = data.count || 0;
+      if (countBadge) countBadge.textContent = count;
+
+      if (count === 0) {
+        container.innerHTML = '<p class="text-muted">No snapshots yet.</p>';
+        return;
+      }
+
+      var html = '';
+      var snaps = data.snapshots || {};
+      var ids = Object.keys(snaps).sort();
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i];
+        var s = snaps[id];
+        var snap = s.snapshot || {};
+        html += '<details class="memory-snapshot-card" style="margin-bottom:var(--sp-2);padding:var(--sp-2);border:1px solid rgba(255,255,255,0.06);border-radius:var(--sp-1)">';
+        html += '<summary style="cursor:pointer"><strong>' + escapeHtml(id) + '</strong>';
+        if (snap.model) html += ' <span class="badge badge--neutral">' + escapeHtml(snap.model) + '</span>';
+        if (snap.handoffCount) html += ' <span class="badge badge--neutral">handoff #' + snap.handoffCount + '</span>';
+        if (snap.reason) html += ' <small style="color:var(--clr-text-muted)">(' + escapeHtml(snap.reason) + ')</small>';
+        html += '</summary>';
+        if (snap.lastOutput) {
+          html += '<pre style="font-size:0.75rem;max-height:120px;overflow-y:auto;margin-top:var(--sp-1);padding:var(--sp-1);background:var(--bg-root);border-radius:2px">' + escapeHtml(snap.lastOutput.slice(-500)) + '</pre>';
+        }
+        if (snap.taskId) html += '<p style="margin:var(--sp-1) 0 0"><small>Task: ' + escapeHtml(snap.taskId) + '</small></p>';
+        if (snap.metadata) html += '<p style="margin:var(--sp-1) 0 0"><small>Metadata: ' + escapeHtml(JSON.stringify(snap.metadata)) + '</small></p>';
+        html += '</details>';
+      }
+      container.innerHTML = html;
+    })
+    .catch(function() {
+      var container = document.getElementById('memory-snapshots');
+      if (container) container.innerHTML = '<p class="text-muted">Failed to load snapshots.</p>';
+    });
+}
+
+function addMemoryKey() {
+  var keyInput = document.getElementById('memory-new-key');
+  var valInput = document.getElementById('memory-new-value');
+  if (!keyInput || !valInput) return;
+
+  var key = keyInput.value.trim();
+  var val = valInput.value.trim();
+  if (!key) { showToast('Key is required', 'error'); return; }
+
+  // Try to parse as JSON, fallback to string
+  var parsed = val;
+  try { parsed = JSON.parse(val); } catch (_) { /* use as string */ }
+
+  fetch('/api/shared-memory/key?key=' + encodeURIComponent(key), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: parsed, source: 'ui' }),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      keyInput.value = '';
+      valInput.value = '';
+      showToast('Key "' + key + '" saved', 'success');
+      refreshMemoryPanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function deleteMemoryKey(key) {
+  fetch('/api/shared-memory/key?key=' + encodeURIComponent(key), {
+    method: 'DELETE',
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      showToast('Key "' + key + '" deleted', 'success');
+      refreshMemoryPanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function clearAllMemory() {
+  if (!confirm('Clear ALL shared memory keys? This cannot be undone.')) return;
+
+  // Fetch all keys and delete them one by one (no bulk clear API yet)
+  fetch('/api/shared-memory')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var keys = Object.keys(data.entries || {});
+      return Promise.all(keys.map(function(k) {
+        return fetch('/api/shared-memory/key?key=' + encodeURIComponent(k), { method: 'DELETE' });
+      }));
+    })
+    .then(function() {
+      showToast('Shared memory cleared', 'success');
+      refreshMemoryPanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+// ── Terminal Messages Panel (Phase 18) ───────────────────────
+
+function toggleMessagePanel() {
+  var dialog = document.getElementById('messages-dialog');
+  if (!dialog) return;
+  if (dialog.open) { dialog.close(); } else { dialog.showModal(); populateRecipientDropdown(); refreshMessagePanel(); }
+}
+
+function populateRecipientDropdown() {
+  var fromSel = document.getElementById('msg-from');
+  var toSel = document.getElementById('msg-to');
+  if (!fromSel || !toSel) return;
+
+  // Collect known Claude terminal IDs
+  var termIds = [];
+  instances.forEach(function(inst, id) {
+    if (inst.type === 'claude') termIds.push(id);
+  });
+
+  // From dropdown
+  fromSel.innerHTML = '<option value="">From...</option>';
+  termIds.forEach(function(id) {
+    fromSel.innerHTML += '<option value="' + id + '">' + id + '</option>';
+  });
+  // Auto-select active terminal
+  if (activeTabId && termIds.indexOf(activeTabId) !== -1) {
+    fromSel.value = activeTabId;
+  }
+
+  // To dropdown
+  toSel.innerHTML = '<option value="">Broadcast (all)</option>';
+  termIds.forEach(function(id) {
+    toSel.innerHTML += '<option value="' + id + '">' + id + '</option>';
+  });
+}
+
+function refreshMessagePanel() {
+  fetch('/api/terminal-messages?limit=50')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('msg-list');
+      var countBadge = document.getElementById('msg-count');
+      if (!container) return;
+
+      var msgs = data.messages || [];
+      if (countBadge) countBadge.textContent = data.count || 0;
+
+      if (msgs.length === 0) {
+        container.innerHTML = '<p class="text-muted">No messages yet.</p>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < msgs.length; i++) {
+        html += renderMessageCard(msgs[i]);
+      }
+      container.innerHTML = html;
+    })
+    .catch(function() {
+      var container = document.getElementById('msg-list');
+      if (container) container.innerHTML = '<p class="text-muted">Failed to load messages.</p>';
+    });
+
+  updateMessageUnreadBadge();
+}
+
+function renderMessageCard(msg) {
+  var html = '<div class="msg-card" style="padding:var(--sp-2);border:1px solid rgba(255,255,255,0.06);border-radius:var(--sp-1);margin-bottom:var(--sp-1)">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-1)">';
+  html += '<span><strong>' + escapeHtml(msg.from) + '</strong>';
+  if (msg.to) {
+    html += ' &rarr; <strong>' + escapeHtml(msg.to) + '</strong>';
+  } else {
+    html += ' <span class="badge badge--neutral" style="font-size:0.7rem">broadcast</span>';
+  }
+  html += '</span>';
+  html += '<span style="display:flex;gap:var(--sp-1);align-items:center">';
+  if (msg.category && msg.category !== 'general') {
+    html += '<span class="badge badge--neutral" style="font-size:0.7rem">' + escapeHtml(msg.category) + '</span>';
+  }
+  html += '<small style="color:var(--clr-text-muted)">' + relativeTime(msg.timestamp) + '</small>';
+  html += '</span>';
+  html += '</div>';
+  html += '<div style="font-size:0.85rem;white-space:pre-wrap;word-break:break-word">' + escapeHtml(msg.content.length > 500 ? msg.content.slice(0, 500) + '...' : msg.content) + '</div>';
+  html += '<div style="display:flex;gap:var(--sp-1);margin-top:var(--sp-1)">';
+  if (msg.replyTo) {
+    html += '<small style="color:var(--clr-text-muted)">reply</small>';
+  }
+  html += '<button class="btn btn--xs btn--ghost" onclick="openThread(\'' + msg.id + '\')" title="View thread">thread</button>';
+  html += '<button class="btn btn--xs btn--ghost" onclick="deleteMessage(\'' + msg.id + '\')" title="Delete" style="color:var(--clr-error)">&times;</button>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function sendTerminalMessage() {
+  var fromSel = document.getElementById('msg-from');
+  var toSel = document.getElementById('msg-to');
+  var catSel = document.getElementById('msg-category');
+  var contentEl = document.getElementById('msg-content');
+  if (!fromSel || !contentEl) return;
+
+  var from = fromSel.value;
+  var to = toSel ? toSel.value : '';
+  var category = catSel ? catSel.value : 'general';
+  var content = contentEl.value.trim();
+
+  if (!from) { showToast('Select a "From" terminal', 'error'); return; }
+  if (!content) { showToast('Message content is required', 'error'); return; }
+
+  var body = { from: from, content: content, category: category };
+  if (to) body.to = to;
+
+  fetch('/api/terminal-messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      contentEl.value = '';
+      showToast('Message sent', 'success');
+      refreshMessagePanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function openThread(messageId) {
+  var threadView = document.getElementById('msg-thread-view');
+  var listView = document.getElementById('msg-list');
+  if (!threadView || !listView) return;
+
+  document.getElementById('msg-thread-root').value = messageId;
+
+  fetch('/api/terminal-messages/' + messageId + '/thread')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('msg-thread-list');
+      if (!container) return;
+
+      var msgs = data.messages || [];
+      if (msgs.length === 0) {
+        container.innerHTML = '<p class="text-muted">No thread messages.</p>';
+      } else {
+        var html = '';
+        for (var i = 0; i < msgs.length; i++) {
+          html += renderMessageCard(msgs[i]);
+        }
+        container.innerHTML = html;
+      }
+
+      listView.parentElement.querySelector('div:first-of-type').style.display = 'none';
+      listView.style.display = 'none';
+      threadView.style.display = 'block';
+    })
+    .catch(function() {
+      showToast('Failed to load thread', 'error');
+    });
+}
+
+function closeThreadView() {
+  var threadView = document.getElementById('msg-thread-view');
+  var listView = document.getElementById('msg-list');
+  if (!threadView || !listView) return;
+
+  threadView.style.display = 'none';
+  listView.style.display = '';
+  listView.parentElement.querySelector('div:first-of-type').style.display = '';
+}
+
+function sendThreadReply() {
+  var rootId = document.getElementById('msg-thread-root').value;
+  var replyInput = document.getElementById('msg-thread-reply');
+  var fromSel = document.getElementById('msg-from');
+  if (!rootId || !replyInput || !fromSel) return;
+
+  var content = replyInput.value.trim();
+  var from = fromSel.value;
+  if (!from) { showToast('Select a "From" terminal first', 'error'); return; }
+  if (!content) { showToast('Reply content is required', 'error'); return; }
+
+  // Find the last message in the thread to reply to
+  fetch('/api/terminal-messages/' + rootId + '/thread')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var msgs = data.messages || [];
+      var replyTo = msgs.length > 0 ? msgs[msgs.length - 1].id : rootId;
+      return fetch('/api/terminal-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: from, content: content, replyTo: replyTo }),
+      });
+    })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      replyInput.value = '';
+      showToast('Reply sent', 'success');
+      openThread(rootId); // Refresh thread
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function deleteMessage(messageId) {
+  fetch('/api/terminal-messages/' + messageId, { method: 'DELETE' })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      showToast('Message deleted', 'success');
+      refreshMessagePanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function clearAllMessages() {
+  if (!confirm('Clear ALL terminal messages? This cannot be undone.')) return;
+  fetch('/api/terminal-messages', { method: 'DELETE' })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(d) { throw new Error(d.error); });
+      return r.json();
+    })
+    .then(function() {
+      showToast('All messages cleared', 'success');
+      refreshMessagePanel();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function updateMessageUnreadBadge() {
+  var badge = document.getElementById('msg-unread-badge');
+  if (!badge) return;
+
+  // Sum unread for all active Claude terminals
+  var totalUnread = 0;
+  var promises = [];
+  instances.forEach(function(inst, id) {
+    if (inst.type === 'claude') {
+      promises.push(
+        fetch('/api/terminal-messages/unread/' + encodeURIComponent(id))
+          .then(function(r) { return r.json(); })
+          .then(function(data) { totalUnread += data.unread || 0; })
+          .catch(function() { /* ignore */ })
+      );
+    }
+  });
+
+  Promise.all(promises).then(function() {
+    if (totalUnread > 0) {
+      badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  });
+}
+
+function relativeTime(isoString) {
+  var diff = Date.now() - new Date(isoString).getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') str = String(str);
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── Expose to window for onclick handlers ────────────────────
 window.toggleTerminalView = toggleTerminalView;
 window.setLayout = setLayout;
@@ -2852,6 +3340,19 @@ window.toggleAutoHandoff = toggleAutoHandoff;
 window.toggleSidebar = toggleSidebar;
 window.refreshSidebarTree = refreshSidebarTree;
 window.filterSidebarTree = filterSidebarTree;
+window.toggleMemoryPanel = toggleMemoryPanel;
+window.refreshMemoryPanel = refreshMemoryPanel;
+window.addMemoryKey = addMemoryKey;
+window.deleteMemoryKey = deleteMemoryKey;
+window.clearAllMemory = clearAllMemory;
+window.toggleMessagePanel = toggleMessagePanel;
+window.refreshMessagePanel = refreshMessagePanel;
+window.sendTerminalMessage = sendTerminalMessage;
+window.openThread = openThread;
+window.closeThreadView = closeThreadView;
+window.sendThreadReply = sendThreadReply;
+window.deleteMessage = deleteMessage;
+window.clearAllMessages = clearAllMessages;
 
 function toggleShortcutsHelp() {
   var dialog = document.getElementById('shortcuts-dialog');

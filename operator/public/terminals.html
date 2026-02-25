@@ -75,6 +75,8 @@
         <button class="btn btn--sm btn--ghost" id="view-toggle" onclick="toggleTerminalView()" title="Toggle grid/tab view (Ctrl+Shift+G)" aria-label="Toggle grid/tab view">
           <span id="view-toggle-icon">&#9638;&#9638;</span>
         </button>
+        <button class="btn btn--sm btn--ghost" id="messages-toggle" onclick="toggleMessagePanel()" title="Terminal Messages (Ctrl+Shift+I)" aria-label="Toggle terminal messages panel" style="position:relative">&#9993;<span class="msg-unread-badge" id="msg-unread-badge" style="display:none"></span></button>
+        <button class="btn btn--sm btn--ghost" id="memory-toggle" onclick="toggleMemoryPanel()" title="Shared Memory (Ctrl+M)" aria-label="Toggle shared memory panel">&#128200;</button>
         <button class="btn btn--sm btn--ghost" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle file sidebar (Ctrl+B)" aria-label="Toggle file sidebar">&#128193;</button>
         <button class="btn btn--sm btn--primary" id="add-terminal-btn" onclick="openNewTerminal()" title="New terminal" aria-label="New terminal">+ New</button>
       </div>
@@ -238,6 +240,104 @@
     </article>
   </dialog>
 
+  <!-- Terminal Messages Panel (Phase 18) -->
+  <dialog class="term-dialog messages-dialog" id="messages-dialog" style="max-width:780px;max-height:80vh">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('messages-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Terminal Messages</h3>
+      </header>
+      <div class="messages-panel">
+        <!-- Compose Form -->
+        <details open>
+          <summary style="cursor:pointer;font-weight:600;margin-bottom:var(--sp-2)">Compose</summary>
+          <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-2);flex-wrap:wrap">
+            <select id="msg-from" style="flex:1;min-width:120px" aria-label="From terminal">
+              <option value="">From...</option>
+            </select>
+            <select id="msg-to" style="flex:1;min-width:120px" aria-label="To terminal">
+              <option value="">Broadcast (all)</option>
+            </select>
+            <select id="msg-category" style="flex:0 0 120px" aria-label="Category">
+              <option value="general">general</option>
+              <option value="status">status</option>
+              <option value="question">question</option>
+              <option value="finding">finding</option>
+              <option value="request">request</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:var(--sp-2)">
+            <textarea id="msg-content" placeholder="Message content..." rows="2" style="flex:1;resize:vertical" aria-label="Message content"></textarea>
+            <button class="btn btn--sm btn--primary" onclick="sendTerminalMessage()" style="align-self:flex-end">Send</button>
+          </div>
+        </details>
+        <!-- Message List -->
+        <div style="margin-top:var(--sp-3)">
+          <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)">
+            <strong>Messages</strong>
+            <span class="badge badge--neutral" id="msg-count">0</span>
+          </div>
+          <div id="msg-list" class="msg-list" style="max-height:320px;overflow-y:auto">
+            <p class="text-muted">No messages yet.</p>
+          </div>
+        </div>
+        <!-- Thread View (hidden by default) -->
+        <div id="msg-thread-view" style="display:none;margin-top:var(--sp-3)">
+          <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)">
+            <button class="btn btn--xs btn--ghost" onclick="closeThreadView()" aria-label="Back to messages">&larr; Back</button>
+            <strong>Thread</strong>
+          </div>
+          <div id="msg-thread-list" style="max-height:240px;overflow-y:auto"></div>
+          <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-2)">
+            <input type="hidden" id="msg-thread-root">
+            <input type="text" id="msg-thread-reply" placeholder="Reply..." style="flex:1" autocomplete="off" aria-label="Thread reply">
+            <button class="btn btn--sm btn--primary" onclick="sendThreadReply()">Reply</button>
+          </div>
+        </div>
+      </div>
+      <footer style="display:flex;justify-content:space-between;margin-top:var(--sp-3)">
+        <button class="btn btn--sm btn--ghost" onclick="refreshMessagePanel()">Refresh</button>
+        <button class="btn btn--sm btn--ghost" style="color:var(--clr-error)" onclick="clearAllMessages()">Clear All</button>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- Shared Memory Panel -->
+  <dialog class="term-dialog memory-dialog" id="memory-dialog" style="max-width:720px;max-height:80vh">
+    <article>
+      <header>
+        <button class="btn btn--sm btn--ghost" onclick="document.getElementById('memory-dialog').close()" aria-label="Close" style="float:right">&times;</button>
+        <h3>Shared Memory</h3>
+      </header>
+      <div class="memory-panel">
+        <!-- Add Key Form -->
+        <div class="memory-add" style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3)">
+          <input type="text" id="memory-new-key" placeholder="key (e.g. project:plan)" style="flex:1" autocomplete="off">
+          <input type="text" id="memory-new-value" placeholder="value" style="flex:2" autocomplete="off">
+          <button class="btn btn--sm btn--primary" onclick="addMemoryKey()">Add</button>
+        </div>
+        <!-- Key-Value Store -->
+        <details open>
+          <summary style="cursor:pointer;font-weight:600;margin-bottom:var(--sp-2)">Shared Keys <span class="badge badge--neutral" id="memory-key-count">0</span></summary>
+          <div id="memory-entries" class="memory-entries" style="max-height:240px;overflow-y:auto">
+            <p class="text-muted">No keys stored yet.</p>
+          </div>
+        </details>
+        <!-- Terminal Snapshots -->
+        <details style="margin-top:var(--sp-3)">
+          <summary style="cursor:pointer;font-weight:600;margin-bottom:var(--sp-2)">Terminal Snapshots <span class="badge badge--neutral" id="memory-snapshot-count">0</span></summary>
+          <div id="memory-snapshots" class="memory-snapshots" style="max-height:240px;overflow-y:auto">
+            <p class="text-muted">No snapshots yet.</p>
+          </div>
+        </details>
+      </div>
+      <footer style="display:flex;justify-content:space-between;margin-top:var(--sp-3)">
+        <button class="btn btn--sm btn--ghost" onclick="refreshMemoryPanel()">Refresh</button>
+        <button class="btn btn--sm btn--ghost" style="color:var(--clr-error)" onclick="clearAllMemory()">Clear All</button>
+      </footer>
+    </article>
+  </dialog>
+
   <!-- Keyboard Shortcuts Help -->
   <dialog class="term-dialog shortcuts-dialog" id="shortcuts-dialog">
     <article>
@@ -257,6 +357,8 @@
         <kbd>Ctrl+Shift+M</kbd><span>Maximize / restore panel</span>
         <kbd>Ctrl+B</kbd><span>Toggle file sidebar</span>
         <kbd>Ctrl+Shift+A</kbd><span>Toggle auto-handoff</span>
+        <kbd>Ctrl+M</kbd><span>Shared memory panel</span>
+        <kbd>Ctrl+Shift+I</kbd><span>Terminal messages panel</span>
         <kbd>1-5</kbd><span>Layout: single / split-h / split-v / triple / quad</span>
         <kbd>Escape</kbd><span>Close dialog / search</span>
       </div>

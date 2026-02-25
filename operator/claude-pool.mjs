@@ -29,12 +29,14 @@ const FORCE_KILL_TIMEOUT_MS = 5000;
  * @param {string}   ctx.projectDir - Default project directory
  * @param {Function} [ctx.log] - Logger function
  * @param {number}   [ctx.maxTerminals] - Max concurrent terminals (default 8)
+ * @param {object}   [ctx.sharedMemory] - Shared memory instance for cross-terminal state
  * @returns {object} Pool methods
  */
 export function createClaudePool(ctx) {
   const { events, projectDir } = ctx;
   const log = ctx.log || console.log;
   const maxTerminals = ctx.maxTerminals ?? MAX_TERMINALS;
+  const sharedMemory = ctx.sharedMemory || null;
 
   /** @type {Map<string, TerminalEntry>} */
   const terminals = new Map();
@@ -138,6 +140,22 @@ export function createClaudePool(ctx) {
 
     // Context pressure warning from terminal output scanning
     terminal.on('context-warning', (info) => {
+      // Write snapshot to shared memory before potential handoff
+      if (sharedMemory) {
+        try {
+          sharedMemory.writeSnapshot(terminalId, {
+            lastOutput: terminal.getOutputBuffer(),
+            model: opts.model || null,
+            handoffCount: entry.handoffCount,
+            reason: 'context-warning',
+            pattern: info.pattern,
+            metadata: entry.config.snapshotMetadata || null,
+          });
+        } catch (err) {
+          log(`[claude-pool] ${terminalId} snapshot write failed: ${err.message}`);
+        }
+      }
+
       events.emit('claude-terminal:context-warning', {
         terminalId,
         pattern: info.pattern,
@@ -174,6 +192,21 @@ export function createClaudePool(ctx) {
 
     const newCount = entry.handoffCount + 1;
     log(`[claude-pool] ${entry.id} auto-handoff #${newCount} — respawning with -c`);
+
+    // Write snapshot before handoff (capture final state)
+    if (sharedMemory) {
+      try {
+        sharedMemory.writeSnapshot(entry.id, {
+          lastOutput: entry.terminal.getOutputBuffer(),
+          model: entry.config.model || null,
+          handoffCount: newCount,
+          reason: 'handoff',
+          metadata: entry.config.snapshotMetadata || null,
+        });
+      } catch (err) {
+        log(`[claude-pool] ${entry.id} handoff snapshot write failed: ${err.message}`);
+      }
+    }
 
     // Respawn with continueSession=true, carrying forward config
     const config = {

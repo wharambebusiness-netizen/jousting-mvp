@@ -309,6 +309,15 @@ export async function createClaudeTerminal(opts) {
     }
   }
 
+  /**
+   * Get the current output ring buffer (ANSI-stripped).
+   * Useful for shared memory snapshots before handoff.
+   * @returns {string}
+   */
+  function getOutputBuffer() {
+    return stripAnsi(outputBuffer);
+  }
+
   return {
     id,
     pid: ptyProcess.pid,
@@ -316,6 +325,7 @@ export async function createClaudeTerminal(opts) {
     resize,
     kill,
     getStatus,
+    getOutputBuffer,
     on,
     off,
   };

@@ -250,6 +250,10 @@ export function createWebSocketHandler({ server, events, claudePool }) {
     'claude-terminal:respawned', 'claude-terminal:permission-changed',
     'claude-terminal:handoff', 'claude-terminal:context-warning',
     'claude-terminal:auto-handoff-changed',
+    'shared-memory:updated', 'shared-memory:deleted',
+    'shared-memory:cleared', 'shared-memory:snapshot-written',
+    'terminal-message:sent', 'terminal-message:broadcast',
+    'terminal-message:deleted', 'terminal-message:cleared',
   ];
 
   const bridgeHandlers = [];
@@ -265,7 +269,7 @@ export function createWebSocketHandler({ server, events, claudePool }) {
         if (!matchesAnyPattern(eventName, subs)) continue;
 
         // Throttle session:output to 1/sec per client
-        if (isOutput && !outputThrottle.shouldSend(client)) continue;
+        if (isOutput && !outputThrottle(client)) continue;
 
         safeSend(client, {
           event: eventName,

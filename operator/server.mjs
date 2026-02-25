@@ -34,6 +34,10 @@ import { createProcessPool } from './process-pool.mjs';
 import { createCoordinator } from './coordination/coordinator.mjs';
 import { createClaudePool } from './claude-pool.mjs';
 import { createClaudeTerminalRoutes } from './routes/claude-terminals.mjs';
+import { createSharedMemory } from './shared-memory.mjs';
+import { createSharedMemoryRoutes } from './routes/shared-memory.mjs';
+import { createTerminalMessageBus } from './terminal-messages.mjs';
+import { createTerminalMessageRoutes } from './routes/terminal-messages.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -163,10 +167,39 @@ export function createApp(options = {}) {
   // Coordination routes (task queue, rate limiter, costs)
   app.use('/api', createCoordinationRoutes({ coordinator }));
 
-  // Claude terminal pool (Phase 15)
+  // Shared memory (Phase 17) — cross-terminal persistent state
+  // Created before Claude pool so it can be passed to terminals
+  let sharedMemory = null;
+  if (options.sharedMemory && typeof options.sharedMemory === 'object') {
+    sharedMemory = options.sharedMemory;
+  } else if (options.sharedMemory !== false) {
+    const memoryPersistPath = join(operatorDir, '.data', 'shared-memory.json');
+    sharedMemory = createSharedMemory({
+      events,
+      persistPath: memoryPersistPath,
+      log: () => {},
+    });
+    sharedMemory.load();
+  }
+
+  // Shared memory routes
+  app.use('/api', createSharedMemoryRoutes({ sharedMemory }));
+
+  // Terminal message bus (Phase 18) — inter-terminal communication
+  let messageBus = null;
+  if (options.messageBus && typeof options.messageBus === 'object') {
+    messageBus = options.messageBus;
+  } else if (options.messageBus !== false) {
+    const msgPersistPath = join(operatorDir, '.data', 'terminal-messages.json');
+    messageBus = createTerminalMessageBus({ events, persistPath: msgPersistPath });
+    messageBus.load();
+  }
+  app.use('/api', createTerminalMessageRoutes({ messageBus }));
+
+  // Claude terminal pool (Phase 15) — with shared memory for snapshots
   let claudePool = null;
   if (options.claudePool === true) {
-    claudePool = createClaudePool({ events, projectDir, log: () => {} });
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
   }
@@ -308,7 +341,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, claudePool, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
