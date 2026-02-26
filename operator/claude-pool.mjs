@@ -31,6 +31,7 @@ const MAX_TASK_HISTORY = 5;              // max categories tracked per terminal
 const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history category
 const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
 const ACTIVITY_CHECK_INTERVAL_MS = 2000; // check activity state transitions every 2s
+const STALE_TERMINAL_TTL_MS = 5 * 60 * 1000; // remove non-persistent stopped terminals after 5 minutes
 
 // ── Context Refresh Constants ────────────────────────────
 const CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS = 60000;  // 60s to wait for handoff
@@ -128,6 +129,31 @@ export function createClaudePool(ctx) {
       } else if (!previousState) {
         entry._lastActivityState = currentState;
       }
+    }
+
+    // ── Stale stopped-terminal cleanup ───────────────────
+    // Remove non-swarm, non-persistent stopped terminals older than TTL
+    const nowMs = Date.now();
+    for (const entry of [...terminals.values()]) {
+      if (entry.status !== 'stopped') continue;
+      if (entry.swarmManaged) continue;  // swarm manages its own lifecycle
+      if (entry.persistent) continue;   // persistent terminals are intentionally kept
+      if (!entry.stoppedAt) continue;
+      const age = nowMs - new Date(entry.stoppedAt).getTime();
+      if (age < STALE_TERMINAL_TTL_MS) continue;
+
+      terminals.delete(entry.id);
+
+      // Clean up stale context-refresh shared-memory key for this terminal
+      if (sharedMemory) {
+        try { sharedMemory.del(`context-refresh:${entry.id}:handoff`); } catch { /* key may not exist */ }
+      }
+
+      events.emit('claude-terminal:stale-removed', {
+        terminalId: entry.id,
+        stoppedAt: entry.stoppedAt,
+        age,
+      });
     }
   }, ACTIVITY_CHECK_INTERVAL_MS);
 
@@ -1168,6 +1194,19 @@ export function createClaudePool(ctx) {
     return true;
   }
 
+  /**
+   * Update the stored system prompt for a terminal (takes effect on next respawn).
+   * @param {string} terminalId
+   * @param {string|null} systemPrompt
+   * @returns {boolean} true if updated
+   */
+  function setSystemPrompt(terminalId, systemPrompt) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return false;
+    entry.config.systemPrompt = systemPrompt ?? null;
+    return true;
+  }
+
   // Track PTY activity for completion detection
   const _onData = (data) => {
     const entry = terminals.get(data.terminalId);
@@ -1829,6 +1868,7 @@ export function createClaudePool(ctx) {
     setAutoDispatch,
     setAutoComplete,
     setCapabilities,
+    setSystemPrompt,
     assignTask,
     releaseTask,
     getAssignedTask,
@@ -1849,4 +1889,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS, STALE_TERMINAL_TTL_MS };

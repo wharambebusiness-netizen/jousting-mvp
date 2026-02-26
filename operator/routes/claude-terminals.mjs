@@ -8,6 +8,8 @@
 //   GET    /claude-terminals              List all terminals
 //   GET    /claude-terminals/:id          Get terminal status
 //   POST   /claude-terminals              Spawn a new terminal
+//   PATCH  /claude-terminals/:id          Update terminal properties (autoHandoff, autoDispatch, autoComplete, capabilities, systemPrompt)
+//   POST   /claude-terminals/:id/input    Write input to terminal PTY
 //   POST   /claude-terminals/:id/resize   Resize terminal
 //   POST   /claude-terminals/:id/toggle-permissions  Toggle --dangerously-skip-permissions
 //   POST   /claude-terminals/:id/toggle-auto-handoff Toggle auto-handoff (Phase 15E)
@@ -143,8 +145,83 @@ export function createClaudeTerminalRoutes(ctx) {
 
       res.status(201).json(result);
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      const status = /node-pty is not available/i.test(err.message) ? 503 : 400;
+      res.status(status).json({ error: err.message });
     }
+  });
+
+  // ── PATCH /claude-terminals/:id ───────────────────────────
+  // Update multiple terminal properties in a single request.
+  // Accepted fields: autoHandoff, autoDispatch, autoComplete, capabilities, systemPrompt
+
+  router.patch('/claude-terminals/:id', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+
+    const { autoHandoff, autoDispatch, autoComplete, capabilities, systemPrompt } = req.body || {};
+    const updated = {};
+
+    if (autoHandoff !== undefined) {
+      claudePool.setAutoHandoff(req.params.id, !!autoHandoff);
+      updated.autoHandoff = !!autoHandoff;
+      events.emit('claude-terminal:auto-handoff-changed', {
+        terminalId: req.params.id,
+        autoHandoff: !!autoHandoff,
+      });
+    }
+
+    if (autoDispatch !== undefined) {
+      claudePool.setAutoDispatch(req.params.id, !!autoDispatch);
+      updated.autoDispatch = !!autoDispatch;
+      events.emit('claude-terminal:auto-dispatch-changed', {
+        terminalId: req.params.id,
+        autoDispatch: !!autoDispatch,
+      });
+    }
+
+    if (autoComplete !== undefined) {
+      claudePool.setAutoComplete(req.params.id, !!autoComplete);
+      updated.autoComplete = !!autoComplete;
+      events.emit('claude-terminal:auto-complete-changed', {
+        terminalId: req.params.id,
+        autoComplete: !!autoComplete,
+      });
+    }
+
+    if (capabilities !== undefined) {
+      if (capabilities !== null && !Array.isArray(capabilities)) {
+        return res.status(400).json({ error: 'capabilities must be an array of strings or null' });
+      }
+      claudePool.setCapabilities(req.params.id, capabilities);
+      updated.capabilities = capabilities || null;
+      events.emit('claude-terminal:capabilities-changed', {
+        terminalId: req.params.id,
+        capabilities: capabilities || null,
+      });
+    }
+
+    if (systemPrompt !== undefined) {
+      claudePool.setSystemPrompt(req.params.id, systemPrompt);
+      updated.systemPrompt = systemPrompt;
+    }
+
+    res.json({ ok: true, terminalId: req.params.id, updated });
+  });
+
+  // ── POST /claude-terminals/:id/input ──────────────────
+
+  router.post('/claude-terminals/:id/input', validateBody({
+    data: { type: 'string', required: true },
+  }), (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+
+    const { data } = req.body;
+    const ok = claudePool.write(req.params.id, data);
+    if (!ok) return res.status(404).json({ error: 'Terminal not found or not running' });
+
+    res.json({ ok: true });
   });
 
   // ── POST /claude-terminals/:id/resize ─────────────────

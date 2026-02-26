@@ -2995,4 +2995,24 @@ describe('Phase 15E: Auto-Handoff', () => {
     expect(routeSource).toContain('toggle-auto-handoff');
     expect(routeSource).toContain('setAutoHandoff');
   });
+
+  it('claude-terminal routes include PATCH /:id endpoint', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'claude-terminals.mjs'), 'utf-8'
+    );
+    expect(routeSource).toContain("router.patch('/claude-terminals/:id'");
+    expect(routeSource).toContain('setAutoHandoff');
+    expect(routeSource).toContain('setAutoDispatch');
+    expect(routeSource).toContain('setAutoComplete');
+    expect(routeSource).toContain('setCapabilities');
+    expect(routeSource).toContain('setSystemPrompt');
+  });
+
+  it('claude-terminal PATCH spawn error returns 503 for node-pty unavailable', async () => {
+    const routeSource = (await import('fs')).readFileSync(
+      join(import.meta.dirname, '..', 'routes', 'claude-terminals.mjs'), 'utf-8'
+    );
+    expect(routeSource).toContain('node-pty is not available');
+    expect(routeSource).toContain('503');
+  });
 });
