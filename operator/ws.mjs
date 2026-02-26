@@ -488,6 +488,7 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     'claude-terminal:swarm-scaled-up', 'claude-terminal:swarm-scaled-down',
     'claude-terminal:task-recovered',
     'claude-terminal:capabilities-changed',
+    'claude-terminal:activity-changed',
     'claude-terminal:context-refresh-started',
     'claude-terminal:context-refresh-completed',
     'claude-terminal:context-refresh-failed',

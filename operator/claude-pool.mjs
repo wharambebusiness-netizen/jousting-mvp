@@ -30,6 +30,7 @@ const SWARM_MAX_CRASH_RETRIES = 3;       // max respawn attempts per crashed ter
 const MAX_TASK_HISTORY = 5;              // max categories tracked per terminal
 const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history category
 const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
+const ACTIVITY_CHECK_INTERVAL_MS = 2000; // check activity state transitions every 2s
 
 // ── Context Refresh Constants ────────────────────────────
 const CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS = 60000;  // 60s to wait for handoff
@@ -100,6 +101,35 @@ export function createClaudePool(ctx) {
       scaleDowns: 0,
     },
   };
+
+  // ── Activity State Tracking ─────────────────────────────
+  // Periodically check for activity state transitions and emit events
+  const _activityCheckTimer = setInterval(() => {
+    for (const entry of terminals.values()) {
+      const currentState = getActivityState(entry);
+      const previousState = entry._lastActivityState || null;
+      if (previousState && currentState !== previousState) {
+        entry._lastActivityState = currentState;
+        // Track utilization time transitions
+        const now = Date.now();
+        if (previousState === 'active') {
+          entry._utilization.activeMs += now - (entry._utilization._lastStateAt || now);
+        } else if (previousState === 'idle' || previousState === 'waiting') {
+          entry._utilization.idleMs += now - (entry._utilization._lastStateAt || now);
+        }
+        entry._utilization._lastStateAt = now;
+
+        events.emit('claude-terminal:activity-changed', {
+          terminalId: entry.id,
+          state: currentState,
+          previousState,
+          assignedTask: entry.assignedTask ? (entry.assignedTask.task || entry.assignedTask.taskId) : null,
+        });
+      } else if (!previousState) {
+        entry._lastActivityState = currentState;
+      }
+    }
+  }, ACTIVITY_CHECK_INTERVAL_MS);
 
   // ── Spawn ─────────────────────────────────────────────
 
@@ -201,13 +231,40 @@ export function createClaudePool(ctx) {
       _taskHistory: [],
       _completionTimer: null,
       _taskActivityBytes: 0,
+      _lastActivityState: 'active',
+      _utilization: {
+        tasksCompleted: 0,
+        tasksFailed: 0,
+        activeMs: 0,
+        idleMs: 0,
+        _lastStateAt: Date.now(),
+        lastTaskCompletedAt: null,
+      },
     };
 
     terminals.set(terminalId, entry);
 
     // Wire terminal events to EventBus
     terminal.on('data', (data) => {
+      const previousState = entry._lastActivityState;
       entry.lastActivityAt = new Date().toISOString();
+
+      // Immediate transition detection: idle/waiting→active on data arrival
+      if (previousState && previousState !== 'active') {
+        const now = Date.now();
+        if (previousState === 'idle' || previousState === 'waiting') {
+          entry._utilization.idleMs += now - (entry._utilization._lastStateAt || now);
+        }
+        entry._utilization._lastStateAt = now;
+        entry._lastActivityState = 'active';
+        events.emit('claude-terminal:activity-changed', {
+          terminalId,
+          state: 'active',
+          previousState,
+          assignedTask: entry.assignedTask ? (entry.assignedTask.task || entry.assignedTask.taskId) : null,
+        });
+      }
+
       events.emit('claude-terminal:data', {
         terminalId,
         data,
@@ -215,8 +272,27 @@ export function createClaudePool(ctx) {
     });
 
     terminal.on('exit', (exitCode, signal) => {
+      // Emit activity-changed to stopped
+      const previousState = entry._lastActivityState;
       entry.status = 'stopped';
       entry.stoppedAt = new Date().toISOString();
+
+      if (previousState && previousState !== 'stopped') {
+        const now = Date.now();
+        if (previousState === 'active') {
+          entry._utilization.activeMs += now - (entry._utilization._lastStateAt || now);
+        } else {
+          entry._utilization.idleMs += now - (entry._utilization._lastStateAt || now);
+        }
+        entry._utilization._lastStateAt = now;
+        entry._lastActivityState = 'stopped';
+        events.emit('claude-terminal:activity-changed', {
+          terminalId,
+          state: 'stopped',
+          previousState,
+          assignedTask: entry.assignedTask ? (entry.assignedTask.task || entry.assignedTask.taskId) : null,
+        });
+      }
 
       events.emit('claude-terminal:exit', {
         terminalId,
@@ -945,6 +1021,10 @@ export function createClaudePool(ctx) {
       swarmState._metrics.tasksCompleted++;
       // Track completed task category in terminal's history
       const entry = terminals.get(data.terminalId);
+      if (entry) {
+        entry._utilization.tasksCompleted++;
+        entry._utilization.lastTaskCompletedAt = new Date().toISOString();
+      }
       if (entry && data.category) {
         entry._taskHistory.push(data.category);
         if (entry._taskHistory.length > MAX_TASK_HISTORY) {
@@ -956,6 +1036,10 @@ export function createClaudePool(ctx) {
       }
     } else if (data.status === 'failed') {
       swarmState._metrics.tasksFailed++;
+      const failEntry = terminals.get(data.terminalId);
+      if (failEntry) {
+        failEntry._utilization.tasksFailed++;
+      }
     }
   };
   events.on('claude-terminal:task-completed', _onTaskCompleted);
@@ -1270,6 +1354,11 @@ export function createClaudePool(ctx) {
   }
 
   async function shutdownAll() {
+    // Stop activity state tracking
+    if (_activityCheckTimer) {
+      clearInterval(_activityCheckTimer);
+    }
+
     // Stop swarm mode if active
     if (swarmState._scaleTimer) {
       clearInterval(swarmState._scaleTimer);
@@ -1463,6 +1552,13 @@ export function createClaudePool(ctx) {
       contextRefreshCount: entry.contextRefreshCount || 0,
       contextRefreshState: entry._contextRefreshState || null,
       taskHistory: [...(entry._taskHistory || [])],
+      utilization: {
+        tasksCompleted: entry._utilization?.tasksCompleted || 0,
+        tasksFailed: entry._utilization?.tasksFailed || 0,
+        activeMs: entry._utilization?.activeMs || 0,
+        idleMs: entry._utilization?.idleMs || 0,
+        lastTaskCompletedAt: entry._utilization?.lastTaskCompletedAt || null,
+      },
     };
   }
 
@@ -1472,6 +1568,7 @@ export function createClaudePool(ctx) {
    */
   function getPoolStatus() {
     let running = 0, stopped = 0, active = 0, idle = 0, waiting = 0, withTask = 0, withAutoDispatch = 0, withAutoComplete = 0;
+    let totalTasksCompleted = 0, totalTasksFailed = 0;
     for (const entry of terminals.values()) {
       if (entry.status === 'running') running++;
       else stopped++;
@@ -1482,6 +1579,8 @@ export function createClaudePool(ctx) {
       if (entry.assignedTask) withTask++;
       if (entry.autoDispatch) withAutoDispatch++;
       if (entry.autoComplete) withAutoComplete++;
+      totalTasksCompleted += entry._utilization?.tasksCompleted || 0;
+      totalTasksFailed += entry._utilization?.tasksFailed || 0;
     }
     return {
       total: terminals.size,
@@ -1494,6 +1593,8 @@ export function createClaudePool(ctx) {
       withAutoDispatch,
       withAutoComplete,
       maxTerminals: _effectiveMaxTerminals,
+      totalTasksCompleted,
+      totalTasksFailed,
     };
   }
 
@@ -1748,4 +1849,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS };

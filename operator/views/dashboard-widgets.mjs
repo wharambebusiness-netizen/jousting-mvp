@@ -108,6 +108,13 @@ export function renderActiveTerminals(poolStatus) {
 
   const tasked = withTask ?? 0;
   const max = maxTerminals ?? 0;
+  const completed = poolStatus.totalTasksCompleted ?? 0;
+  const failed = poolStatus.totalTasksFailed ?? 0;
+
+  let footerParts = [`${tasked} terminal${tasked !== 1 ? 's' : ''} with assigned tasks`];
+  if (completed > 0 || failed > 0) {
+    footerParts.push(`${completed} tasks done${failed > 0 ? `, ${failed} failed` : ''}`);
+  }
 
   return `<div class="dw-card dw-card--terminals">
     <div class="dw-card__header">
@@ -115,7 +122,7 @@ export function renderActiveTerminals(poolStatus) {
       <span class="dw-card__count">${total ?? 0}/${max}</span>
     </div>
     <div class="dw-term-badges">${badgeHtml}</div>
-    <div class="dw-card__footer">${tasked} terminal${tasked !== 1 ? 's' : ''} with assigned tasks</div>
+    <div class="dw-card__footer">${footerParts.join(' · ')}</div>
   </div>`;
 }
 

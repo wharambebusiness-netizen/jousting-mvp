@@ -866,6 +866,14 @@
     ctxSpan.textContent = 'ctx: ' + ctxLabel;
     info.appendChild(ctxSpan);
 
+    // Utilization: tasks completed
+    if (w.utilization && w.utilization.tasksCompleted > 0) {
+      var utilSpan = document.createElement('span');
+      utilSpan.className = 'worker-card__util';
+      utilSpan.textContent = w.utilization.tasksCompleted + ' done';
+      info.appendChild(utilSpan);
+    }
+
     if (info.children.length > 0) {
       card.appendChild(info);
     }
@@ -1077,6 +1085,18 @@
       capsDiv.remove();
     }
 
+    // Update utilization
+    var utilEl = card.querySelector('.worker-card__util');
+    if (w.utilization && w.utilization.tasksCompleted > 0) {
+      if (!utilEl) {
+        utilEl = document.createElement('span');
+        utilEl.className = 'worker-card__util';
+        var infoR = card.querySelector('.worker-card__info');
+        if (infoR) infoR.appendChild(utilEl);
+      }
+      if (utilEl) utilEl.textContent = w.utilization.tasksCompleted + ' done';
+    }
+
     // Update meta
     var meta = card.querySelector('.worker-card__meta');
     if (meta) {
@@ -1170,9 +1190,12 @@
       }
     } catch(e) { /* non-critical */ }
 
-    // Worker count
+    // Worker count with active indicator
     var runningWorkers = workerList ? workerList.filter(function(w) { return w.status === 'running'; }).length : 0;
-    document.getElementById('worker-count-display').textContent = 'Workers: ' + runningWorkers;
+    var activeWorkers = workerList ? workerList.filter(function(w) { return w.activityState === 'active'; }).length : 0;
+    var workerText = 'Workers: ' + runningWorkers;
+    if (activeWorkers > 0) workerText += ' (' + activeWorkers + ' active)';
+    document.getElementById('worker-count-display').textContent = workerText;
   }
 
   // ── Utilities ──────────────────────────────────────────────
@@ -1210,15 +1233,36 @@
     createWS(['claude-terminal:*', 'coord:task-*'], function(msg) {
       try {
         var type = msg.type || msg.event || '';
+        var data = msg.data || {};
+
+        // Real-time activity state change — update worker card dot immediately
+        if (type === 'claude-terminal:activity-changed') {
+          var termId = data.terminalId || data.id;
+          if (termId && termId !== 'master') {
+            updateWorkerActivityDot(termId, data.state, data.previousState, data.assignedTask);
+            appendLiveFeedEntry(termId, data.state, data.previousState, data.assignedTask);
+          }
+          return; // skip full refresh for activity changes (handled inline)
+        }
 
         // Refresh workers on terminal or task events
         if (type.startsWith('claude-terminal:') || type.startsWith('coord:task-')) {
           refreshWorkers();
         }
 
+        // Append to live feed for significant terminal events
+        if (type === 'claude-terminal:spawned') {
+          appendLiveFeedEntry(data.terminalId || data.id, 'spawned', null, null);
+        } else if (type === 'claude-terminal:exit') {
+          appendLiveFeedEntry(data.terminalId || data.id, 'stopped', null, null);
+        } else if (type === 'claude-terminal:task-assigned') {
+          appendLiveFeedEntry(data.terminalId || data.id, 'task-assigned', null, data.task || data.taskId);
+        } else if (type === 'claude-terminal:task-completed') {
+          appendLiveFeedEntry(data.terminalId || data.id, 'task-completed', null, data.task || data.taskId);
+        }
+
         // Handle master terminal exit
         if (type === 'claude-terminal:exit') {
-          var data = msg.data || {};
           if (data.id === 'master' || data.id === masterTerminalId) {
             document.getElementById('master-status').textContent = 'Master exited';
             document.getElementById('master-status').classList.remove('console-header__status--running');
@@ -1230,6 +1274,99 @@
         }
       } catch(e) { /* ignore parse errors */ }
     }, { trackStatus: true });
+  }
+
+  /**
+   * Update a specific worker card's activity dot without a full refresh.
+   */
+  function updateWorkerActivityDot(terminalId, state, previousState, taskLabel) {
+    var card = document.querySelector('.worker-card[data-id="' + terminalId + '"]');
+    if (!card) return;
+
+    var dot = card.querySelector('.worker-card__dot');
+    if (dot) {
+      var dotClass = 'worker-card__dot ';
+      switch (state) {
+        case 'active':  dotClass += 'worker-card__dot--active'; break;
+        case 'idle':    dotClass += 'worker-card__dot--idle'; break;
+        case 'waiting': dotClass += 'worker-card__dot--waiting'; break;
+        case 'stopped': dotClass += 'worker-card__dot--stopped'; break;
+        default:        dotClass += 'worker-card__dot--running'; break;
+      }
+      dot.className = dotClass;
+    }
+
+    // Update task line if transitioning to waiting
+    var taskDiv = card.querySelector('.worker-card__task');
+    if (taskDiv) {
+      if (state === 'idle' && !taskLabel) {
+        taskDiv.className = 'worker-card__task worker-card__task--idle';
+        taskDiv.textContent = 'Idle';
+      }
+    }
+
+    // Update local workers cache
+    if (workers[terminalId]) {
+      workers[terminalId].activityState = state;
+    }
+    if (seenWorkers[terminalId]) {
+      seenWorkers[terminalId].activityState = state;
+    }
+  }
+
+  // ── Live Feed ──────────────────────────────────────────────
+
+  var liveFeedCount = 0;
+  var MAX_LIVE_FEED_ENTRIES = 50;
+
+  var FEED_LABELS = {
+    'active':         { icon: '\u25cf', color: '#10b981', text: 'active' },
+    'idle':           { icon: '\u25cb', color: '#f59e0b', text: 'idle' },
+    'waiting':        { icon: '\u25d4', color: '#6366f1', text: 'waiting' },
+    'stopped':        { icon: '\u25a0', color: '#ef4444', text: 'stopped' },
+    'spawned':        { icon: '+',     color: '#10b981', text: 'spawned' },
+    'task-assigned':  { icon: '\u2192', color: '#22d3ee', text: 'task assigned' },
+    'task-completed': { icon: '\u2713', color: '#4ade80', text: 'task completed' },
+  };
+
+  function appendLiveFeedEntry(terminalId, state, previousState, taskLabel) {
+    var list = document.getElementById('live-feed-list');
+    var countEl = document.getElementById('live-feed-count');
+    if (!list) return;
+
+    var entry = document.createElement('div');
+    entry.className = 'console-livefeed__entry';
+
+    var info = FEED_LABELS[state] || { icon: '\u00b7', color: '#999', text: state };
+
+    var timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+    var transitionText = previousState ? (previousState + ' \u2192 ' + state) : info.text;
+    var taskText = taskLabel ? ' \u2014 ' + taskLabel : '';
+
+    entry.innerHTML = '<span class="console-livefeed__time">' + escapeHtml(timestamp) + '</span>' +
+      '<span class="console-livefeed__icon" style="color:' + info.color + '">' + info.icon + '</span>' +
+      '<span class="console-livefeed__id">' + escapeHtml(terminalId) + '</span>' +
+      '<span class="console-livefeed__text">' + escapeHtml(transitionText) + escapeHtml(taskText) + '</span>';
+
+    list.insertBefore(entry, list.firstChild);
+
+    // Trim old entries
+    while (list.children.length > MAX_LIVE_FEED_ENTRIES) {
+      list.removeChild(list.lastChild);
+    }
+
+    liveFeedCount++;
+    if (countEl) countEl.textContent = liveFeedCount;
+  }
+
+  function initLiveFeed() {
+    var toggle = document.getElementById('live-feed-toggle');
+    var list = document.getElementById('live-feed-list');
+    if (toggle && list) {
+      toggle.addEventListener('click', function() {
+        list.classList.toggle('console-livefeed__list--collapsed');
+      });
+    }
   }
 
   // ── Init ───────────────────────────────────────────────────
@@ -1315,8 +1452,9 @@
     refreshWorkers();
     workerRefreshTimer = setInterval(refreshWorkers, 5000);
 
-    // Real-time WS events
+    // Real-time WS events + live feed
     setupWsEvents();
+    initLiveFeed();
 
     // Refit terminals when page is restored from cache
     document.addEventListener('terminal-page-restored', function(e) {
