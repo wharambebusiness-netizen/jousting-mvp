@@ -5418,3 +5418,220 @@ details[open] > .tree-summary .tree-icon--dir {
 .btn--danger-text:hover {
   background: var(--status-error-bg, rgba(239,68,68,0.08));
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Console Enhancements — Prompt Input, Quick Actions, Task Panel
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Header separator ──────────────────────────────────────── */
+
+.console-header__separator {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  margin: 0 var(--sp-2);
+  vertical-align: middle;
+}
+
+/* ── Prompt input ──────────────────────────────────────────── */
+
+.console-prompt {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.console-prompt textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 48px;
+  max-height: 120px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: var(--sp-2);
+}
+
+.console-prompt textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.console-prompt__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.console-prompt__hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Inline task panel ─────────────────────────────────────── */
+
+.console-taskpanel {
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-raised);
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-taskpanel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.console-taskpanel__header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.console-taskpanel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-2) var(--sp-4);
+}
+
+.console-taskpanel__empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: var(--sp-4) 0;
+}
+
+/* ── Individual task items ─────────────────────────────────── */
+
+.console-task {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.console-task:hover {
+  background: var(--bg-overlay);
+}
+
+.console-task__status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 60px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.console-task--pending .console-task__status {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+}
+
+.console-task--assigned .console-task__status {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent);
+}
+
+.console-task--running .console-task__status {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-success);
+}
+
+.console-task--complete .console-task__status {
+  background: rgba(16, 185, 129, 0.1);
+  color: #3fb950;
+}
+
+.console-task--failed .console-task__status {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.console-task--cancelled .console-task__status {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.console-task__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.console-task__assignee {
+  font-size: 0.7rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Create task dialog ────────────────────────────────────── */
+
+.console-dialog {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg, 12px);
+  padding: 0;
+  color: var(--text-primary);
+  max-width: 420px;
+  width: 90vw;
+}
+
+.console-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.console-dialog__form {
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.console-dialog__form h4 {
+  margin: 0;
+}
+
+.console-dialog__form input,
+.console-dialog__form textarea {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.console-dialog__form input:focus,
+.console-dialog__form textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.console-dialog__actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}

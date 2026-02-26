@@ -18,7 +18,7 @@
   <aside class="sidebar-nav" id="sidebar-nav">
     <a href="/" class="sidebar-nav__brand"><span class="sidebar-nav__brand-icon"><svg viewBox="0 0 32 32" fill="none"><path d="M16 5L4 12l12 6 12-6L16 5z" stroke="#6366f1" stroke-width="2" stroke-linejoin="round"/><path d="M4 16l12 6 12-6" stroke="#818cf8" stroke-width="2" stroke-linejoin="round"/><path d="M4 21l12 6 12-6" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round"/></svg></span><span class="sidebar-nav__brand-text">Operator</span></a>
     <ul class="sidebar-nav__links">
-      <li><a href="/" class="sidebar-nav__link" data-page="/"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg></span><span class="sidebar-nav__label">Dashboard</span></a></li>
+      <li><a href="/dashboard" class="sidebar-nav__link" data-page="/dashboard"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg></span><span class="sidebar-nav__label">Dashboard</span></a></li>
       <li><a href="/console" class="sidebar-nav__link" data-page="/console"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M5 8l3 2.5L5 13"/><line x1="10" y1="13" x2="15" y2="13"/><circle cx="15" cy="8" r="1.5"/></svg></span><span class="sidebar-nav__label">Console</span></a></li>
       <li><a href="/terminals" class="sidebar-nav__link" data-page="/terminals"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 8l3 2.5L6 13"/><line x1="11" y1="13" x2="14" y2="13"/></svg></span><span class="sidebar-nav__label">Terminals</span></a></li>
       <li><a href="/taskboard" class="sidebar-nav__link" data-page="/taskboard"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M7 8h6M7 11h4"/></svg></span><span class="sidebar-nav__label">Tasks</span></a></li>
@@ -37,6 +37,11 @@
         <span class="console-header__status" id="master-status">No master terminal</span>
         <button class="btn btn--sm btn--primary" id="start-master-btn">Start Master</button>
         <button class="btn btn--sm btn--ghost" id="stop-master-btn" style="display:none">Stop Master</button>
+        <span class="console-header__separator"></span>
+        <button class="btn btn--xs btn--ghost" id="swarm-btn" title="Start/Stop Swarm">Swarm</button>
+        <button class="btn btn--xs btn--ghost" id="create-task-btn" title="Create Task">+ Task</button>
+        <button class="btn btn--xs btn--ghost" id="toggle-tasks-btn" title="Toggle task panel">Tasks</button>
+        <button class="btn btn--xs btn--ghost" id="health-btn" title="System Health">Health</button>
       </div>
     </header>
 
@@ -51,6 +56,14 @@
           </div>
         </div>
         <div class="console-master__terminal" id="master-terminal-container" style="display:none"></div>
+        <div class="console-prompt" id="master-prompt" style="display:none">
+          <textarea id="master-prompt-input" rows="2" placeholder="What would you like to build? Describe your goal and the master will plan the work..."></textarea>
+          <div class="console-prompt__actions">
+            <button class="btn btn--sm btn--primary" id="send-prompt-btn">Send to Master</button>
+            <button class="btn btn--sm btn--ghost" id="skip-prompt-btn">Skip</button>
+            <span class="console-prompt__hint">Ctrl+Enter to send</span>
+          </div>
+        </div>
       </div>
 
       <!-- Worker Panel -->
@@ -67,6 +80,30 @@
         </div>
       </div>
     </div>
+
+    <!-- Inline Task Panel -->
+    <div class="console-taskpanel" id="task-panel" style="display:none">
+      <div class="console-taskpanel__header">
+        <h4>Tasks</h4>
+        <button class="btn btn--xs btn--ghost" id="close-task-panel-btn" title="Close task panel">&times;</button>
+      </div>
+      <div class="console-taskpanel__list" id="task-list">
+        <p class="console-taskpanel__empty">No tasks yet.</p>
+      </div>
+    </div>
+
+    <!-- Create Task Dialog -->
+    <dialog class="console-dialog" id="create-task-dialog">
+      <form class="console-dialog__form" id="create-task-form">
+        <h4>Create Task</h4>
+        <input type="text" id="task-title-input" placeholder="Task title" required>
+        <textarea id="task-desc-input" rows="3" placeholder="Task description (optional)"></textarea>
+        <div class="console-dialog__actions">
+          <button type="submit" class="btn btn--sm btn--primary">Create</button>
+          <button type="button" class="btn btn--sm btn--ghost" id="cancel-task-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
 
     <!-- Status Bar -->
     <div class="console-statusbar" id="status-bar">

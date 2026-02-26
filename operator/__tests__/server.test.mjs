@@ -1218,7 +1218,7 @@ describe('Analytics (merged into Dashboard)', () => {
   });
 
   it('dashboard contains analytics panel', async () => {
-    const res = await fetch(`${baseUrl}/`);
+    const res = await fetch(`${baseUrl}/dashboard`);
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain('analytics-panel');

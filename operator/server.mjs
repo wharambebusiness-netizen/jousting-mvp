@@ -615,7 +615,17 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'console.html'));
   });
 
-  // Static files (CSS, index.html for /)
+  // Dashboard page (explicit route for sidebar nav)
+  app.get('/dashboard', (_req, res) => {
+    res.sendFile(join(publicDir, 'index.html'));
+  });
+
+  // Root redirect to console (daily-driver interface)
+  app.get('/', (_req, res) => {
+    res.redirect('/console');
+  });
+
+  // Static files (CSS, JS, images)
   app.use(express.static(publicDir));
 
   // OpenAPI spec generator & docs routes (Phase 44) — mounted after all

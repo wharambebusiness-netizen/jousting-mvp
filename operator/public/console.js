@@ -193,6 +193,9 @@
       initMasterTerminal();
       connectMasterBinaryWs(masterTerminalId);
 
+      // Show prompt input for first instruction
+      showPromptInput();
+
       if (window.showToast) window.showToast('Master terminal started', 'success');
     } catch (err) {
       btn.disabled = false;
@@ -228,6 +231,184 @@
     } catch (err) {
       if (window.showToast) window.showToast('Failed to stop master: ' + err.message, 'error');
     }
+  }
+
+  // ── Prompt Input ──────────────────────────────────────────
+
+  function showPromptInput() {
+    var el = document.getElementById('master-prompt');
+    if (el) {
+      el.style.display = '';
+      var ta = document.getElementById('master-prompt-input');
+      if (ta) ta.focus();
+    }
+  }
+
+  function hidePromptInput() {
+    var el = document.getElementById('master-prompt');
+    if (el) el.style.display = 'none';
+  }
+
+  function sendInitialPrompt() {
+    var ta = document.getElementById('master-prompt-input');
+    if (!ta) return;
+    var text = ta.value.trim();
+    if (!text) return;
+
+    // Send to master terminal via binary WS
+    if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
+      masterBinaryWs.send(text + '\n');
+    }
+
+    hidePromptInput();
+    if (window.showToast) window.showToast('Prompt sent to master', 'success');
+  }
+
+  function skipPrompt() {
+    hidePromptInput();
+  }
+
+  // ── Quick Actions ────────────────────────────────────────
+
+  var swarmRunning = false;
+
+  async function toggleSwarm() {
+    var btn = document.getElementById('swarm-btn');
+    try {
+      if (swarmRunning) {
+        await fetch('/api/claude-terminals/swarm/stop', { method: 'POST' });
+        swarmRunning = false;
+        if (btn) btn.textContent = 'Swarm';
+        if (window.showToast) window.showToast('Swarm stopped', 'info');
+      } else {
+        var resp = await fetch('/api/claude-terminals/swarm/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workerCount: 3 })
+        });
+        if (resp.ok) {
+          swarmRunning = true;
+          if (btn) btn.textContent = 'Stop Swarm';
+          if (window.showToast) window.showToast('Swarm started with 3 workers', 'success');
+        } else {
+          var err = await resp.json().catch(function() { return {}; });
+          if (window.showToast) window.showToast(err.error || 'Failed to start swarm', 'error');
+        }
+      }
+    } catch(e) {
+      if (window.showToast) window.showToast('Swarm action failed', 'error');
+    }
+    refreshWorkers();
+  }
+
+  function showCreateTask() {
+    var dialog = document.getElementById('create-task-dialog');
+    if (dialog && dialog.showModal) dialog.showModal();
+  }
+
+  async function submitCreateTask(e) {
+    e.preventDefault();
+    var title = document.getElementById('task-title-input');
+    var desc = document.getElementById('task-desc-input');
+    if (!title || !title.value.trim()) return;
+
+    try {
+      var resp = await fetch('/api/coordination/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: title.value.trim(),
+          description: desc ? desc.value.trim() : ''
+        })
+      });
+      if (resp.ok) {
+        if (window.showToast) window.showToast('Task created', 'success');
+        title.value = '';
+        if (desc) desc.value = '';
+        var dialog = document.getElementById('create-task-dialog');
+        if (dialog) dialog.close();
+        refreshTaskPanel();
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        if (window.showToast) window.showToast(err.error || 'Failed to create task', 'error');
+      }
+    } catch(e2) {
+      if (window.showToast) window.showToast('Failed to create task', 'error');
+    }
+  }
+
+  function toggleTaskPanel() {
+    var panel = document.getElementById('task-panel');
+    if (!panel) return;
+    var visible = panel.style.display !== 'none';
+    panel.style.display = visible ? 'none' : '';
+    if (!visible) refreshTaskPanel();
+  }
+
+  async function refreshTaskPanel() {
+    try {
+      var resp = await fetch('/api/coordination/tasks');
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var tasks = data.tasks || data || [];
+      renderTaskList(tasks);
+    } catch(e) { /* non-critical */ }
+  }
+
+  function renderTaskList(tasks) {
+    var list = document.getElementById('task-list');
+    if (!list) return;
+
+    if (!tasks || tasks.length === 0) {
+      list.innerHTML = '<p class="console-taskpanel__empty">No tasks yet.</p>';
+      return;
+    }
+
+    var html = '';
+    tasks.forEach(function(t) {
+      var status = t.status || 'pending';
+      var title = t.task || t.title || t.id || '(untitled)';
+      var assignee = t.assignedTo ? '<span class="console-task__assignee">' + escapeHtml(t.assignedTo) + '</span>' : '';
+
+      html += '<div class="console-task console-task--' + escapeHtml(status) + '">' +
+        '<span class="console-task__status">' + escapeHtml(status) + '</span>' +
+        '<span class="console-task__title">' + escapeHtml(title) + '</span>' +
+        assignee +
+      '</div>';
+    });
+
+    list.innerHTML = html;
+  }
+
+  async function checkHealth() {
+    try {
+      var resp = await fetch('/api/health');
+      if (!resp.ok) throw new Error('Health check failed');
+      var data = await resp.json();
+      var status = data.status || 'unknown';
+      var msg = 'System: ' + status;
+      if (data.components) {
+        var degraded = Object.entries(data.components).filter(function(e) { return e[1].status !== 'healthy'; });
+        if (degraded.length > 0) {
+          msg += ' (' + degraded.map(function(e) { return e[0] + ': ' + e[1].status; }).join(', ') + ')';
+        }
+      }
+      if (window.showToast) window.showToast(msg, status === 'healthy' ? 'success' : 'warning');
+    } catch(e) {
+      if (window.showToast) window.showToast('Health check failed', 'error');
+    }
+  }
+
+  async function checkSwarmStatus() {
+    try {
+      var resp = await fetch('/api/claude-terminals/swarm/status');
+      if (resp.ok) {
+        var data = await resp.json();
+        swarmRunning = data.enabled || false;
+        var btn = document.getElementById('swarm-btn');
+        if (btn) btn.textContent = swarmRunning ? 'Stop Swarm' : 'Swarm';
+      }
+    } catch(e) { /* non-critical */ }
   }
 
   // ── Worker Panel ───────────────────────────────────────────
@@ -487,6 +668,19 @@
         }
 
         initMasterTerminal();
+
+        // Restore scrollback from output buffer
+        try {
+          var outputResp = await fetch('/api/claude-terminals/master/output?lines=500');
+          if (outputResp.ok) {
+            var outputData = await outputResp.json();
+            if (outputData.lines && outputData.lines.length > 0) {
+              masterTerminal.write(outputData.lines.join('\r\n'));
+              masterTerminal.scrollToBottom();
+            }
+          }
+        } catch(e2) { /* non-critical */ }
+
         if (master.status === 'running') {
           connectMasterBinaryWs(masterTerminalId);
         }
@@ -497,6 +691,34 @@
     document.getElementById('start-master-btn').addEventListener('click', startMaster);
     document.getElementById('stop-master-btn').addEventListener('click', stopMaster);
     document.getElementById('spawn-worker-btn').addEventListener('click', spawnWorker);
+
+    // Prompt input handlers
+    document.getElementById('send-prompt-btn').addEventListener('click', sendInitialPrompt);
+    document.getElementById('skip-prompt-btn').addEventListener('click', skipPrompt);
+    document.getElementById('master-prompt-input').addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        sendInitialPrompt();
+      }
+    });
+
+    // Quick action handlers
+    document.getElementById('swarm-btn').addEventListener('click', toggleSwarm);
+    document.getElementById('create-task-btn').addEventListener('click', showCreateTask);
+    document.getElementById('toggle-tasks-btn').addEventListener('click', toggleTaskPanel);
+    document.getElementById('health-btn').addEventListener('click', checkHealth);
+
+    // Task panel handlers
+    document.getElementById('close-task-panel-btn').addEventListener('click', function() {
+      document.getElementById('task-panel').style.display = 'none';
+    });
+    document.getElementById('create-task-form').addEventListener('submit', submitCreateTask);
+    document.getElementById('cancel-task-btn').addEventListener('click', function() {
+      document.getElementById('create-task-dialog').close();
+    });
+
+    // Check swarm status on load
+    checkSwarmStatus();
 
     // Initial worker refresh + periodic polling
     refreshWorkers();

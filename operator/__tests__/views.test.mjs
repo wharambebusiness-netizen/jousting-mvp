@@ -422,8 +422,14 @@ describe('View Routes — Page Routes', () => {
   beforeEach(setupApp);
   afterEach(teardownApp);
 
-  it('GET / serves dashboard HTML', async () => {
+  it('GET / redirects to console', async () => {
     const res = await get('/');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Master Console');
+  });
+
+  it('GET /dashboard serves dashboard HTML', async () => {
+    const res = await get('/dashboard');
     expect(res.status).toBe(200);
     expect(res.text).toContain('Dashboard');
     expect(res.text).toContain('htmx');
@@ -435,14 +441,14 @@ describe('View Routes — Page Routes', () => {
   });
 
   it('dashboard contains analytics panel (merged from analytics page)', async () => {
-    const res = await get('/');
+    const res = await get('/dashboard');
     expect(res.status).toBe(200);
     expect(res.text).toContain('analytics-panel');
     expect(res.text).toContain('/views/analytics');
   });
 
   it('dashboard contains report viewer (merged from orchestrator page)', async () => {
-    const res = await get('/');
+    const res = await get('/dashboard');
     expect(res.status).toBe(200);
     expect(res.text).toContain('report-viewer');
     expect(res.text).toContain('/views/report-viewer');
