@@ -768,15 +768,25 @@ function connectClaudeBinaryWs(inst) {
 
   connect();
 
+  // Dispose previous input/resize listeners to prevent duplicate handlers
+  // (connectClaudeBinaryWs may be called multiple times for the same terminal
+  //  on handoff, permission toggle, etc.)
+  if (inst._binaryInputDisposable) {
+    inst._binaryInputDisposable.dispose();
+  }
+  if (inst._binaryResizeDisposable) {
+    inst._binaryResizeDisposable.dispose();
+  }
+
   // User input → WS → PTY
-  inst.terminal.onData(function(data) {
+  inst._binaryInputDisposable = inst.terminal.onData(function(data) {
     if (inst.binaryWs && inst.binaryWs.readyState === 1) {
       inst.binaryWs.send(data);
     }
   });
 
   // Resize → WS control message
-  inst.terminal.onResize(function(size) {
+  inst._binaryResizeDisposable = inst.terminal.onResize(function(size) {
     if (inst.binaryWs && inst.binaryWs.readyState === 1) {
       inst.binaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
     }
@@ -787,6 +797,8 @@ function connectClaudeBinaryWs(inst) {
     inst._binaryWsClosed = true;
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (inst.binaryWs) { try { inst.binaryWs.close(); } catch(e) { /* noop */ } inst.binaryWs = null; }
+    if (inst._binaryInputDisposable) { inst._binaryInputDisposable.dispose(); inst._binaryInputDisposable = null; }
+    if (inst._binaryResizeDisposable) { inst._binaryResizeDisposable.dispose(); inst._binaryResizeDisposable = null; }
   };
 }
 
