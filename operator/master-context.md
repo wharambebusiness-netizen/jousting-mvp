@@ -48,85 +48,95 @@ You are the **Master Terminal** — the primary Claude Code instance running ins
 - `operator/auth.mjs` — `_auth` cookie extraction in auth middleware
 - `operator/server.mjs` — Browser session token auto-generation + cookie setting
 
+## Authentication
+
+**IMPORTANT**: All API calls require authentication. Use the `$OPERATOR_API_TOKEN` environment variable which is automatically set in your environment:
+```bash
+# Always include this header in API calls:
+-H "Authorization: Bearer $OPERATOR_API_TOKEN"
+```
+
 ## Operator API (localhost:3100)
 
 ### Task Management
 ```bash
 # List all tasks
-curl -s http://localhost:3100/api/coordination/tasks | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/coordination/tasks | jq
 
 # Add a task (workers auto-pick these up)
 curl -s -X POST http://localhost:3100/api/coordination/tasks \
+  -H "Authorization: Bearer $OPERATOR_API_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"id":"task-id","task":"Description of what to do","priority":5,"deps":["other-task"]}'
 
 # Cancel a task
-curl -s -X POST http://localhost:3100/api/coordination/tasks/TASK_ID/cancel
+curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/coordination/tasks/TASK_ID/cancel
 
 # Get task dependency graph
-curl -s http://localhost:3100/api/coordination/graph | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/coordination/graph | jq
 ```
 
 ### Worker Terminals
 ```bash
 # List active terminals
-curl -s http://localhost:3100/api/claude-terminals | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals | jq
 
 # Spawn a worker (auto-dispatch picks up tasks, auto-complete marks done on idle)
 curl -s -X POST http://localhost:3100/api/claude-terminals \
+  -H "Authorization: Bearer $OPERATOR_API_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"id":"worker-1","role":"worker","autoDispatch":true,"autoComplete":true,"dangerouslySkipPermissions":true}'
 
 # Kill a worker
-curl -s -X DELETE http://localhost:3100/api/claude-terminals/worker-1
+curl -s -X DELETE -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals/worker-1
 
 # Pool status
-curl -s http://localhost:3100/api/claude-terminals/pool-status | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals/pool-status | jq
 
 # Get worker output (raw ANSI preserved)
-curl -s http://localhost:3100/api/claude-terminals/TERMINAL_ID/output?lines=50&raw=1 | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals/TERMINAL_ID/output?lines=50&raw=1 | jq
 
 # Enable swarm mode (auto-scales workers based on queue depth)
-curl -s -X POST http://localhost:3100/api/claude-terminals/swarm/start
+curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals/swarm/start
 
 # Disable swarm mode
-curl -s -X POST http://localhost:3100/api/claude-terminals/swarm/stop
+curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/claude-terminals/swarm/stop
 ```
 
 ### Monitoring
 ```bash
-# System health
+# System health (no auth needed)
 curl -s http://localhost:3100/api/health | jq
 
 # Search across all subsystems
-curl -s "http://localhost:3100/api/search?q=keyword" | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" "http://localhost:3100/api/search?q=keyword" | jq
 
 # Cost forecast
-curl -s http://localhost:3100/api/coordination/forecast | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/coordination/forecast | jq
 
 # Performance stats
-curl -s http://localhost:3100/api/performance/summary | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/performance/summary | jq
 ```
 
 ### Shared Memory (cross-terminal state)
 ```bash
 # Set a value visible to all terminals
-curl -s -X PUT http://localhost:3100/api/shared-memory/KEY \
+curl -s -X PUT -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/shared-memory/KEY \
   -H 'Content-Type: application/json' -d '{"value":"data"}'
 
 # Get a value
-curl -s http://localhost:3100/api/shared-memory/KEY | jq
+curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/shared-memory/KEY | jq
 ```
 
 ### Inter-Terminal Messaging
 ```bash
 # Send message to all terminals
-curl -s -X POST http://localhost:3100/api/terminal-messages \
+curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/terminal-messages \
   -H 'Content-Type: application/json' \
   -d '{"from":"master","content":"Status update please","broadcast":true}'
 
 # Send to specific terminal
-curl -s -X POST http://localhost:3100/api/terminal-messages \
+curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:3100/api/terminal-messages \
   -H 'Content-Type: application/json' \
   -d '{"from":"master","to":"worker-1","content":"Focus on tests"}'
 ```

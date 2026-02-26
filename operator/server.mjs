@@ -473,7 +473,7 @@ export function createApp(options = {}) {
   // Claude terminal pool (Phase 15) — with shared memory for snapshots + coordinator for auto-dispatch
   let claudePool = null;
   if (options.claudePool === true) {
-    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, log: () => {} });
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
   }

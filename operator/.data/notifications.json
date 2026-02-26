@@ -63,5 +63,31 @@
       "terminalId": "master",
       "exitCode": -1073741510
     }
+  },
+  {
+    "id": "f191f98b",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T04:58:53.047Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "7ee6d985",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T05:04:25.980Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
   }
 ]

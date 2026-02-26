@@ -142,6 +142,8 @@ export async function createClaudeTerminal(opts) {
         CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE: '50',
         // Force color output
         FORCE_COLOR: '1',
+        // Merge any extra env vars (e.g. OPERATOR_API_TOKEN for API auth)
+        ...(opts.env || {}),
       },
     });
   } catch (err) {

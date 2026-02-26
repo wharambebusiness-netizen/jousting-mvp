@@ -9,9 +9,14 @@
     "label": "cli-handoff",
     "createdAt": "2026-02-26T02:50:02.749Z"
   },
-  "d1c5b462": {
-    "hash": "bfd41ae09b80e51e9d92c4611ce2ffabd7d527102c4f79b70e15127c7f86e40b",
+  "7dad62bf": {
+    "hash": "85fbc9a770d9060d8a55bb022bfb81741950e252a5dc959dfea6385e3f18b14a",
     "label": "browser-session",
-    "createdAt": "2026-02-26T04:49:32.404Z"
+    "createdAt": "2026-02-26T05:02:15.872Z"
+  },
+  "0fb6fb44": {
+    "hash": "ff5d6617a3bc5ad540793119c08e95107f7e5a934e08e9b3d002e97efb059105",
+    "label": "terminal-pool",
+    "createdAt": "2026-02-26T05:02:15.884Z"
   }
 }

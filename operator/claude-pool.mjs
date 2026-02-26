@@ -49,6 +49,7 @@ const MAX_CONTEXT_REFRESHES = 10;                   // prevent infinite loops
  * @param {number}   [ctx.maxTerminals] - Max concurrent terminals (default 8)
  * @param {object}   [ctx.sharedMemory] - Shared memory instance for cross-terminal state
  * @param {object}   [ctx.coordinator] - Coordinator instance for auto-dispatch task claiming
+ * @param {object}   [ctx.auth] - Auth instance for generating terminal API tokens
  * @returns {object} Pool methods
  */
 export function createClaudePool(ctx) {
@@ -57,6 +58,16 @@ export function createClaudePool(ctx) {
   const maxTerminals = ctx.maxTerminals ?? MAX_TERMINALS;
   const sharedMemory = ctx.sharedMemory || null;
   const coordinator = ctx.coordinator || null;
+  const auth = ctx.auth || null;
+
+  // Generate a long-lived token for spawned terminals to call the operator API
+  let terminalApiToken = null;
+  if (auth) {
+    // Reuse existing terminal-pool token or generate a new one
+    const existing = auth.listTokens().find(t => t.label === 'terminal-pool');
+    if (existing) auth.revokeToken(existing.id);
+    terminalApiToken = auth.generateToken('terminal-pool').token;
+  }
 
   /** @type {Map<string, TerminalEntry>} */
   const terminals = new Map();
@@ -130,6 +141,12 @@ export function createClaudePool(ctx) {
       );
     }
 
+    // Build extra env vars for spawned terminals
+    const termEnv = {};
+    if (terminalApiToken) {
+      termEnv.OPERATOR_API_TOKEN = terminalApiToken;
+    }
+
     // Create the terminal
     const terminal = await createClaudeTerminal({
       id: terminalId,
@@ -141,6 +158,7 @@ export function createClaudePool(ctx) {
       continueSession: opts.continueSession,
       cols: opts.cols,
       rows: opts.rows,
+      env: termEnv,
       log,
     });
 
