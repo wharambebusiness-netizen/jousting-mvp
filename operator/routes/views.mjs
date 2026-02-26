@@ -782,6 +782,51 @@ export function createViewRoutes(ctx) {
     }
   });
 
+  // ── API Keys Fragment (Phase 59) ────────────────────────────
+  router.get('/settings-api-keys', (_req, res) => {
+    try {
+      if (!ctx.auth) {
+        res.type('text/html').send(`<p class="settings-notice">Authentication is disabled. Enable auth to manage API keys.</p>`);
+        return;
+      }
+      const tokens = ctx.auth.listTokens();
+      const rows = tokens.map(t => {
+        const created = new Date(t.createdAt);
+        const dateStr = created.toLocaleDateString() + ' ' + created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `<tr>
+          <td><code class="api-key-id">${escapeHtml(t.id)}</code></td>
+          <td>${escapeHtml(t.label || '(no label)')}</td>
+          <td>${dateStr}</td>
+          <td><button class="btn btn--sm btn--ghost btn--danger-text" onclick="revokeApiKey('${escapeHtml(t.id)}')">Revoke</button></td>
+        </tr>`;
+      }).join('');
+
+      const emptyRow = `<tr><td colspan="4" style="text-align:center;opacity:.6">No API keys created yet</td></tr>`;
+
+      res.type('text/html').send(`
+        <div class="api-keys-section">
+          <table class="api-keys-table">
+            <thead><tr><th>ID</th><th>Label</th><th>Created</th><th></th></tr></thead>
+            <tbody>${rows || emptyRow}</tbody>
+          </table>
+          <form onsubmit="return createApiKey(this)" class="api-keys-create">
+            <input type="text" name="label" placeholder="Label (optional, e.g. CI/CD)" class="api-keys-create__input">
+            <button type="submit" class="btn btn--sm btn--primary">Generate Token</button>
+          </form>
+          <div id="api-key-result" style="display:none" class="api-key-result">
+            <p><strong>New token created!</strong> Copy it now — it won't be shown again.</p>
+            <div class="api-key-result__token">
+              <code id="api-key-value"></code>
+              <button class="btn btn--sm btn--ghost" onclick="copyApiKey()">Copy</button>
+            </div>
+          </div>
+        </div>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
   // ── Orchestrator Run History Fragment ────────────────────────
   router.get('/orch-history', (_req, res) => {
     try {

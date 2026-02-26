@@ -16,6 +16,7 @@
     <a href="/" class="sidebar-nav__brand"><span class="sidebar-nav__brand-icon"><svg viewBox="0 0 32 32" fill="none"><path d="M16 5L4 12l12 6 12-6L16 5z" stroke="#6366f1" stroke-width="2" stroke-linejoin="round"/><path d="M4 16l12 6 12-6" stroke="#818cf8" stroke-width="2" stroke-linejoin="round"/><path d="M4 21l12 6 12-6" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round"/></svg></span><span class="sidebar-nav__brand-text">Operator</span></a>
     <ul class="sidebar-nav__links">
       <li><a href="/" class="sidebar-nav__link" data-page="/"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg></span><span class="sidebar-nav__label">Dashboard</span></a></li>
+      <li><a href="/console" class="sidebar-nav__link" data-page="/console"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M5 8l3 2.5L5 13"/><line x1="10" y1="13" x2="15" y2="13"/><circle cx="15" cy="8" r="1.5"/></svg></span><span class="sidebar-nav__label">Console</span></a></li>
       <li><a href="/terminals" class="sidebar-nav__link" data-page="/terminals"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M6 8l3 2.5L6 13"/><line x1="11" y1="13" x2="14" y2="13"/></svg></span><span class="sidebar-nav__label">Terminals</span></a></li>
       <li><a href="/taskboard" class="sidebar-nav__link" data-page="/taskboard"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M7 8h6M7 11h4"/></svg></span><span class="sidebar-nav__label">Tasks</span></a></li>
       <li><a href="/timeline" class="sidebar-nav__link" data-page="/timeline"><span class="sidebar-nav__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v14"/><circle cx="10" cy="6" r="2"/><circle cx="10" cy="11" r="2"/><circle cx="10" cy="16" r="1.5"/></svg></span><span class="sidebar-nav__label">Timeline</span></a></li>
@@ -132,6 +133,27 @@
                hx-trigger="load, every 30s"
                hx-swap="innerHTML">
             <div class="skeleton" style="height:80px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- API Keys (Phase 59) -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7a3 3 0 01-3 3h-1v4H9v-4H8a3 3 0 110-6h4a3 3 0 013 3z"/><circle cx="8" cy="7" r="1"/></svg></span>
+          <div>
+            <p class="settings-section__title">API Keys</p>
+            <p class="settings-section__desc">Manage authentication tokens for programmatic API access</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="api-keys-form"
+               hx-get="/views/settings-api-keys"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:160px"></div>
           </div>
         </article>
       </div>
@@ -266,6 +288,64 @@
         })
       }).catch(function() {});
       return false;
+    }
+    // ── API Key Management (Phase 59) ─────────────────────────
+
+    function createApiKey(form) {
+      var fd = new FormData(form);
+      var label = fd.get('label') || '';
+      fetch('/api/auth/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label })
+      }).then(function(r) {
+        if (!r.ok) throw new Error('Failed to generate token');
+        return r.json();
+      }).then(function(result) {
+        // Show the token once
+        var resultDiv = document.getElementById('api-key-result');
+        var valueEl = document.getElementById('api-key-value');
+        if (resultDiv && valueEl) {
+          valueEl.textContent = result.token;
+          resultDiv.style.display = '';
+        }
+        // Reload the token list
+        var el = document.getElementById('api-keys-form');
+        if (el) htmx.trigger(el, 'load');
+        form.reset();
+        showToast('API key generated — copy it now!', 'success');
+      }).catch(function(err) {
+        showToast(err.message, 'error');
+      });
+      return false;
+    }
+
+    function revokeApiKey(id) {
+      if (!confirm('Revoke API key ' + id + '? This cannot be undone.')) return;
+      fetch('/api/auth/tokens/' + id, { method: 'DELETE' })
+        .then(function(r) {
+          if (!r.ok) throw new Error('Failed to revoke token');
+          showToast('API key revoked', 'success');
+          var el = document.getElementById('api-keys-form');
+          if (el) htmx.trigger(el, 'load');
+        }).catch(function(err) {
+          showToast(err.message, 'error');
+        });
+    }
+
+    function copyApiKey() {
+      var el = document.getElementById('api-key-value');
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent).then(function() {
+        showToast('Token copied to clipboard', 'success');
+      }).catch(function() {
+        // Fallback: select text
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        showToast('Select and copy the token manually', 'info');
+      });
     }
   </script>
 </body>

@@ -6,6 +6,37 @@
 // Loaded by all HTML pages.
 // ============================================================
 
+// ── CSRF Token Helper (Phase 58) ────────────────────────────────
+
+function getCsrfToken() {
+  var match = document.cookie.match(/(^|;\s*)_csrf=([^;]+)/);
+  return match ? match[2] : '';
+}
+
+// Inject CSRF token into HTMX requests
+document.body.addEventListener('htmx:configRequest', function(e) {
+  var method = (e.detail.verb || '').toUpperCase();
+  if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
+    e.detail.headers['X-CSRF-Token'] = getCsrfToken();
+  }
+});
+
+// Wrap native fetch to auto-inject CSRF token on state-changing requests
+(function() {
+  var _origFetch = window.fetch;
+  window.fetch = function(url, opts) {
+    opts = opts || {};
+    var method = (opts.method || 'GET').toUpperCase();
+    if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
+      opts.headers = opts.headers || {};
+      if (!opts.headers['X-CSRF-Token'] && !opts.headers['Authorization']) {
+        opts.headers['X-CSRF-Token'] = getCsrfToken();
+      }
+    }
+    return _origFetch.call(this, url, opts);
+  };
+})();
+
 // ── Progress Bar ──────────────────────────────────────────────
 
 document.body.addEventListener('htmx:beforeRequest', function () {

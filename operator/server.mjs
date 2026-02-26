@@ -74,6 +74,8 @@ import { createRetentionPolicy } from './retention.mjs';
 import { createHealthChecker } from './health.mjs';
 import { createMetricsCollector } from './metrics.mjs';
 import { createRequestTimer } from './middleware/request-timer.mjs';
+import { createSecurityHeaders } from './middleware/security-headers.mjs';
+import { createCsrfProtection } from './middleware/csrf.mjs';
 import { createPerformanceRoutes } from './routes/performance.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
@@ -91,8 +93,8 @@ function corsMiddleware(req, res, next) {
       /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
 
   if (req.method === 'OPTIONS') {
     res.sendStatus(204);
@@ -150,8 +152,18 @@ export function createApp(options = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
   app.use(corsMiddleware);
+  app.use(createSecurityHeaders(options.securityHeaders || {}));
   app.use(createRequestIdMiddleware(logger));
   app.use(requestTimer.middleware);
+
+  // CSRF protection (Phase 58) — double-submit cookie pattern
+  // Auto-disabled when auth: false (testing mode) unless explicitly enabled
+  let csrf = null;
+  const csrfEnabled = options.csrf !== false && (options.csrf === true || options.auth !== false);
+  if (csrfEnabled) {
+    csrf = createCsrfProtection(options.csrfOptions || {});
+    app.use(csrf.middleware);
+  }
 
   // Rate limit headers (Phase 42) — deferred reference since coordinator is created later.
   // The middleware reads rateHeaderCtx.rateLimiter lazily on each request.
@@ -555,6 +567,7 @@ export function createApp(options = {}) {
     claudePool,
     notifications,
     costForecaster,
+    auth,
     get wss() { return wss; },
   };
   app.use('/views', createViewRoutes(viewCtx));
@@ -716,7 +729,7 @@ export function createApp(options = {}) {
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, csrf, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, close };
 }
 
 // ── CLI Entry Point ─────────────────────────────────────────
