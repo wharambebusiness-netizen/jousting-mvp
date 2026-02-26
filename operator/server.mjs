@@ -177,6 +177,29 @@ export function createApp(options = {}) {
     log: logger.debug?.bind(logger) || (() => {}),
   });
 
+  // Browser session: auto-set _auth cookie so web UI can call /api/ routes
+  let browserSessionToken = null;
+  if (auth) {
+    // Revoke any stale browser-session tokens from previous runs
+    for (const t of auth.listTokens()) {
+      if (t.label === 'browser-session') auth.revokeToken(t.id);
+    }
+    const { token: rawToken } = auth.generateToken('browser-session');
+    browserSessionToken = rawToken;
+
+    app.use((req, res, next) => {
+      // Set cookie on page loads (non-API GET requests)
+      if (req.method === 'GET' && !req.path.startsWith('/api/')) {
+        res.cookie('_auth', browserSessionToken, {
+          httpOnly: true,
+          sameSite: 'strict',
+          path: '/',
+        });
+      }
+      next();
+    });
+  }
+
   // Auth middleware (after JSON parsing, before API routes)
   if (auth) {
     app.use(auth.authMiddleware);

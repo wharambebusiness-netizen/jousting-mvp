@@ -156,13 +156,18 @@ export function createAuth(ctx) {
       return next();
     }
 
-    // Extract token from Authorization header or query param
+    // Extract token from Authorization header, query param, or _auth cookie
     let token = null;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.slice(7);
     } else if (req.query.token) {
       token = req.query.token;
+    } else {
+      // Browser session cookie (set on page loads)
+      const cookieHeader = req.headers.cookie || '';
+      const match = cookieHeader.match(/(^|;\s*)_auth=([^;]+)/);
+      if (match) token = match[2];
     }
 
     const result = validateToken(token);
