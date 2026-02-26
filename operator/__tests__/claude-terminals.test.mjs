@@ -32,6 +32,7 @@ const {
   isNodePtyAvailable,
   stripAnsi,
   CONTEXT_PATTERNS,
+  CONTEXT_WARNING_COOLDOWN_MS,
   DEFAULT_COLS,
   DEFAULT_ROWS,
 } = await import('../claude-terminal.mjs');
@@ -323,6 +324,53 @@ describe('createClaudeTerminal', () => {
     term.on('context-warning', (info) => warnings.push(info));
     mockPty._emitData('\x1b[1;33mAuto-compact\x1b[0m running...');
     expect(warnings.length).toBe(1);
+  });
+
+  // Multi-compaction scenario: after a terminal auto-compacts and continues into a second
+  // context window, the cooldown should expire and allow a second context-warning to fire.
+  describe('multi-compaction cooldown', () => {
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('re-emits context-warning after CONTEXT_WARNING_COOLDOWN_MS (multi-compaction scenario)', async () => {
+      expect(CONTEXT_WARNING_COOLDOWN_MS).toBe(60000);
+
+      const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+      const warnings = [];
+      term.on('context-warning', (info) => warnings.push(info));
+
+      // First compaction — should emit
+      mockPty._emitData('Auto-compact triggered');
+      expect(warnings.length).toBe(1);
+      expect(warnings[0].pattern).toBeTruthy();
+
+      // Immediate second match — deduped within cooldown
+      mockPty._emitData('Auto-compact triggered');
+      expect(warnings.length).toBe(1);
+
+      // Advance time past the cooldown
+      vi.advanceTimersByTime(CONTEXT_WARNING_COOLDOWN_MS + 1000);
+
+      // Second compaction cycle — should re-emit now
+      mockPty._emitData('Auto-compact triggered');
+      expect(warnings.length).toBe(2);
+      expect(warnings[1].pattern).toBeTruthy();
+    });
+
+    it('does not re-emit before cooldown expires', async () => {
+      const term = await createClaudeTerminal({ projectDir: '/tmp/test' });
+      const warnings = [];
+      term.on('context-warning', (info) => warnings.push(info));
+
+      mockPty._emitData('Auto-compact triggered');
+      expect(warnings.length).toBe(1);
+
+      // Advance time to just before the cooldown
+      vi.advanceTimersByTime(CONTEXT_WARNING_COOLDOWN_MS - 1);
+
+      mockPty._emitData('Auto-compact triggered');
+      expect(warnings.length).toBe(1);
+    });
   });
 });
 

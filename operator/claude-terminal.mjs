@@ -79,6 +79,9 @@ const OUTPUT_BUFFER_SIZE = 32768;
 // Minimum uptime before auto-handoff triggers (ms) — prevents rapid restart loops
 const MIN_UPTIME_FOR_HANDOFF_MS = 10000;
 
+// Cooldown between context-warning re-emissions (ms) — allows second warning after auto-compact + continue
+const CONTEXT_WARNING_COOLDOWN_MS = 60000;
+
 // ── Factory ─────────────────────────────────────────────────
 
 /**
@@ -187,7 +190,7 @@ export async function createClaudeTerminal(opts) {
   // ── Context Detection ─────────────────────────────────
 
   let outputBuffer = '';
-  let contextWarningEmitted = false;
+  let lastContextWarningAt = 0;
 
   function checkContextPressure(chunk) {
     // Append to ring buffer, keep last OUTPUT_BUFFER_SIZE chars
@@ -200,8 +203,9 @@ export async function createClaudeTerminal(opts) {
     const stripped = stripAnsi(chunk);
     for (const pattern of CONTEXT_PATTERNS) {
       if (pattern.test(stripped)) {
-        if (!contextWarningEmitted) {
-          contextWarningEmitted = true;
+        const now = Date.now();
+        if (now - lastContextWarningAt >= CONTEXT_WARNING_COOLDOWN_MS) {
+          lastContextWarningAt = now;
           emit('context-warning', { pattern: pattern.source });
           log(`[claude-terminal] ${id} context pressure detected: ${pattern.source}`);
         }
@@ -391,6 +395,7 @@ export {
   DEFAULT_ROWS,
   FORCE_KILL_TIMEOUT_MS,
   CONTEXT_PATTERNS,
+  CONTEXT_WARNING_COOLDOWN_MS,
   OUTPUT_BUFFER_SIZE,
   MIN_UPTIME_FOR_HANDOFF_MS,
   loadNodePty,
