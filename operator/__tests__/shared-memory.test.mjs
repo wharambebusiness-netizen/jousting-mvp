@@ -55,6 +55,8 @@ describe('createSharedMemory', () => {
     expect(typeof mem.size).toBe('function');
     expect(typeof mem.clear).toBe('function');
     expect(typeof mem.watch).toBe('function');
+    expect(typeof mem.watchPrefix).toBe('function');
+    expect(typeof mem.deletePrefix).toBe('function');
     expect(typeof mem.writeSnapshot).toBe('function');
     expect(typeof mem.readSnapshot).toBe('function');
     expect(typeof mem.deleteSnapshot).toBe('function');
@@ -736,6 +738,199 @@ describe('REST routes integration (via server)', () => {
     const res = await request('GET', '/api/shared-memory-snapshots');
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(2);
+  });
+});
+
+// ── watchPrefix ─────────────────────────────────────────────
+
+describe('watchPrefix', () => {
+  it('notifies handler on set for a matching key', () => {
+    const mem = createSharedMemory();
+    const calls = [];
+    mem.watchPrefix('context-refresh:', (data) => calls.push(data));
+    mem.set('context-refresh:worker-1:status', 'running');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].key).toBe('context-refresh:worker-1:status');
+    expect(calls[0].value).toBe('running');
+    expect(calls[0].source).toBe('api');
+  });
+
+  it('notifies handler on delete for a matching key', () => {
+    const mem = createSharedMemory();
+    mem.set('context-refresh:worker-1:status', 'running');
+    const calls = [];
+    mem.watchPrefix('context-refresh:', (data) => calls.push(data));
+    mem.delete('context-refresh:worker-1:status');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].key).toBe('context-refresh:worker-1:status');
+    expect(calls[0].value).toBeUndefined();
+    expect(calls[0].oldValue).toBe('running');
+    expect(calls[0].source).toBe('delete');
+  });
+
+  it('does NOT notify for non-matching keys', () => {
+    const mem = createSharedMemory();
+    const calls = [];
+    mem.watchPrefix('context-refresh:', (data) => calls.push(data));
+    mem.set('other:key', 'value');
+    mem.delete('other:key');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('notifies for all matching keys with the same prefix', () => {
+    const mem = createSharedMemory();
+    const calls = [];
+    mem.watchPrefix('ns:', (data) => calls.push(data.key));
+    mem.set('ns:a', 1);
+    mem.set('ns:b', 2);
+    mem.set('other', 3);
+    expect(calls).toEqual(['ns:a', 'ns:b']);
+  });
+
+  it('includes oldValue on update', () => {
+    const mem = createSharedMemory();
+    mem.set('ns:key', 'first');
+    const calls = [];
+    mem.watchPrefix('ns:', (data) => calls.push(data));
+    mem.set('ns:key', 'second');
+    expect(calls[0].oldValue).toBe('first');
+    expect(calls[0].value).toBe('second');
+  });
+
+  it('unwatch stops prefix notifications', () => {
+    const mem = createSharedMemory();
+    const calls = [];
+    const unwatch = mem.watchPrefix('ns:', (data) => calls.push(data));
+    mem.set('ns:a', 1);
+    unwatch();
+    mem.set('ns:b', 2);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].key).toBe('ns:a');
+  });
+
+  it('multiple prefix watchers on same prefix both fire', () => {
+    const mem = createSharedMemory();
+    const calls1 = [];
+    const calls2 = [];
+    mem.watchPrefix('ns:', (d) => calls1.push(d));
+    mem.watchPrefix('ns:', (d) => calls2.push(d));
+    mem.set('ns:x', 42);
+    expect(calls1).toHaveLength(1);
+    expect(calls2).toHaveLength(1);
+  });
+
+  it('overlapping prefixes both fire when key matches both', () => {
+    const mem = createSharedMemory();
+    const short = [];
+    const long = [];
+    mem.watchPrefix('ctx:', (d) => short.push(d));
+    mem.watchPrefix('ctx:w1:', (d) => long.push(d));
+    mem.set('ctx:w1:status', 'idle');
+    expect(short).toHaveLength(1);
+    expect(long).toHaveLength(1);
+  });
+
+  it('handler errors do not propagate', () => {
+    const mem = createSharedMemory();
+    mem.watchPrefix('ns:', () => { throw new Error('boom'); });
+    // Should not throw
+    mem.set('ns:key', 'val');
+    expect(mem.get('ns:key')).toBe('val');
+  });
+
+  it('rejects empty prefix', () => {
+    const mem = createSharedMemory();
+    expect(() => mem.watchPrefix('', () => {})).toThrow('non-empty string');
+  });
+
+  it('rejects non-string prefix', () => {
+    const mem = createSharedMemory();
+    expect(() => mem.watchPrefix(null, () => {})).toThrow('non-empty string');
+  });
+
+  it('rejects non-function handler', () => {
+    const mem = createSharedMemory();
+    expect(() => mem.watchPrefix('ns:', 'not-a-function')).toThrow('must be a function');
+  });
+});
+
+// ── deletePrefix ─────────────────────────────────────────────
+
+describe('deletePrefix', () => {
+  it('deletes all keys matching the prefix', () => {
+    const mem = createSharedMemory();
+    mem.set('context-refresh:worker-1:status', 'running');
+    mem.set('context-refresh:worker-1:task', 'build');
+    mem.set('context-refresh:worker-2:status', 'idle');
+    mem.set('other:key', 'keep');
+    const count = mem.deletePrefix('context-refresh:worker-1:');
+    expect(count).toBe(2);
+    expect(mem.has('context-refresh:worker-1:status')).toBe(false);
+    expect(mem.has('context-refresh:worker-1:task')).toBe(false);
+    expect(mem.has('context-refresh:worker-2:status')).toBe(true);
+    expect(mem.has('other:key')).toBe(true);
+  });
+
+  it('returns 0 when no keys match', () => {
+    const mem = createSharedMemory();
+    mem.set('other:key', 'val');
+    expect(mem.deletePrefix('missing:')).toBe(0);
+    expect(mem.size()).toBe(1);
+  });
+
+  it('returns 0 on empty store', () => {
+    const mem = createSharedMemory();
+    expect(mem.deletePrefix('ns:')).toBe(0);
+  });
+
+  it('deletes all keys when prefix matches all', () => {
+    const mem = createSharedMemory();
+    mem.set('ns:a', 1);
+    mem.set('ns:b', 2);
+    mem.set('ns:c', 3);
+    expect(mem.deletePrefix('ns:')).toBe(3);
+    expect(mem.size()).toBe(0);
+  });
+
+  it('triggers key watchers for each deleted key', () => {
+    const mem = createSharedMemory();
+    mem.set('ns:a', 'val-a');
+    mem.set('ns:b', 'val-b');
+    const watchedKeys = [];
+    mem.watch('ns:a', (d) => watchedKeys.push(d.key));
+    mem.watch('ns:b', (d) => watchedKeys.push(d.key));
+    mem.deletePrefix('ns:');
+    expect(watchedKeys.sort()).toEqual(['ns:a', 'ns:b']);
+  });
+
+  it('triggers prefix watchers for each deleted key', () => {
+    const mem = createSharedMemory();
+    mem.set('ns:a', 'val-a');
+    mem.set('ns:b', 'val-b');
+    const calls = [];
+    mem.watchPrefix('ns:', (d) => calls.push(d.key));
+    mem.deletePrefix('ns:');
+    expect(calls.sort()).toEqual(['ns:a', 'ns:b']);
+  });
+
+  it('auto-saves to disk after batch delete', () => {
+    const mem = createSharedMemory({ persistPath: PERSIST_PATH });
+    mem.set('ns:a', 1);
+    mem.set('ns:b', 2);
+    mem.deletePrefix('ns:');
+
+    const raw = JSON.parse(readFileSync(PERSIST_PATH, 'utf-8'));
+    expect(Object.keys(raw.store)).toHaveLength(0);
+  });
+
+  it('rejects empty prefix', () => {
+    const mem = createSharedMemory();
+    expect(() => mem.deletePrefix('')).toThrow('non-empty string');
+  });
+
+  it('rejects non-string prefix', () => {
+    const mem = createSharedMemory();
+    expect(() => mem.deletePrefix(42)).toThrow('non-empty string');
   });
 });
 

@@ -54,6 +54,9 @@ export function createSharedMemory(ctx = {}) {
   /** @type {Map<string, Set<Function>>} */
   const watchers = new Map();
 
+  /** @type {Map<string, Set<Function>>} - prefix → handler sets */
+  const prefixWatchers = new Map();
+
   let dirty = false;
 
   // ── Validation ────────────────────────────────────────────
@@ -135,6 +138,9 @@ export function createSharedMemory(ctx = {}) {
       }
     }
 
+    // Notify prefix watchers
+    notifyPrefixWatchers(key, { key, value, oldValue, source });
+
     // Emit event
     if (events) {
       events.emit('shared-memory:updated', { key, value, oldValue, source });
@@ -167,6 +173,9 @@ export function createSharedMemory(ctx = {}) {
         try { handler({ key, value: undefined, oldValue: oldEntry.value, source: 'delete' }); } catch { /* noop */ }
       }
     }
+
+    // Notify prefix watchers
+    notifyPrefixWatchers(key, { key, value: undefined, oldValue: oldEntry.value, source: 'delete' });
 
     if (events) {
       events.emit('shared-memory:deleted', { key, oldValue: oldEntry.value });
@@ -261,6 +270,63 @@ export function createSharedMemory(ctx = {}) {
         if (set.size === 0) watchers.delete(key);
       }
     };
+  }
+
+  /**
+   * Internal: fire all prefix watchers whose prefix matches key.
+   */
+  function notifyPrefixWatchers(key, payload) {
+    for (const [prefix, handlers] of prefixWatchers) {
+      if (key.startsWith(prefix)) {
+        for (const handler of handlers) {
+          try { handler(payload); } catch { /* noop */ }
+        }
+      }
+    }
+  }
+
+  /**
+   * Watch all keys whose name starts with prefix for changes.
+   * @param {string} prefix
+   * @param {Function} handler - Called with { key, value, oldValue, source }
+   * @returns {Function} Unwatch function
+   */
+  function watchPrefix(prefix, handler) {
+    if (typeof prefix !== 'string' || prefix.length === 0) {
+      throw new Error('Prefix must be a non-empty string');
+    }
+    if (typeof handler !== 'function') {
+      throw new Error('Watch handler must be a function');
+    }
+
+    if (!prefixWatchers.has(prefix)) prefixWatchers.set(prefix, new Set());
+    prefixWatchers.get(prefix).add(handler);
+
+    return () => {
+      const set = prefixWatchers.get(prefix);
+      if (set) {
+        set.delete(handler);
+        if (set.size === 0) prefixWatchers.delete(prefix);
+      }
+    };
+  }
+
+  /**
+   * Delete all keys whose name starts with prefix.
+   * Triggers per-key and prefix watchers for each deleted key.
+   * @param {string} prefix
+   * @returns {number} Count of deleted keys
+   */
+  function deletePrefix(prefix) {
+    if (typeof prefix !== 'string' || prefix.length === 0) {
+      throw new Error('Prefix must be a non-empty string');
+    }
+
+    const matchingKeys = [...store.keys()].filter(k => k.startsWith(prefix));
+    for (const key of matchingKeys) {
+      del(key);
+    }
+    return matchingKeys.length;
   }
 
   // ── Terminal Snapshots ────────────────────────────────────
@@ -492,6 +558,8 @@ export function createSharedMemory(ctx = {}) {
 
     // Watch
     watch,
+    watchPrefix,
+    deletePrefix,
 
     // Terminal snapshots
     writeSnapshot,
