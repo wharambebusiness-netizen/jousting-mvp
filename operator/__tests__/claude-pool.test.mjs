@@ -80,7 +80,7 @@ vi.mock('../claude-terminal.mjs', async (importOriginal) => {
   };
 });
 
-const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES } = await import('../claude-pool.mjs');
+const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, STALE_TERMINAL_TTL_MS, ACTIVITY_CHECK_INTERVAL_MS } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
 
 // ============================================================
@@ -259,6 +259,109 @@ describe('createClaudePool', () => {
     it('throws when removing a running terminal', async () => {
       await pool.spawn('t1');
       expect(() => pool.remove('t1')).toThrow('while running');
+    });
+  });
+
+  // ── stale cleanup ──────────────────────────────────
+
+  describe('stale stopped-terminal cleanup', () => {
+    // Each test creates its own pool AFTER fake timers so the interval fires
+    // under the fake clock. The outer pool (created in beforeEach with real
+    // timers) is not used here.
+    let stalePool;
+    let staleEvents;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      staleEvents = new EventBus();
+      stalePool = createClaudePool({ events: staleEvents, projectDir: '/tmp/pool-test', log: () => {} });
+    });
+
+    afterEach(async () => {
+      if (stalePool) await stalePool.shutdownAll();
+      stalePool = null;
+      vi.useRealTimers();
+    });
+
+    it('removes a non-persistent stopped terminal older than TTL', async () => {
+      await stalePool.spawn('t1');
+      stalePool.getTerminalHandle('t1')._triggerExit(0);
+
+      // Advance past TTL + one activity-check interval
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(stalePool.getTerminal('t1')).toBeNull();
+    });
+
+    it('emits claude-terminal:stale-removed event with correct fields', async () => {
+      const removed = [];
+      staleEvents.on('claude-terminal:stale-removed', (d) => removed.push(d));
+
+      await stalePool.spawn('t1');
+      stalePool.getTerminalHandle('t1')._triggerExit(0);
+
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(removed.length).toBe(1);
+      expect(removed[0].terminalId).toBe('t1');
+      expect(typeof removed[0].stoppedAt).toBe('string');
+      expect(removed[0].age).toBeGreaterThanOrEqual(STALE_TERMINAL_TTL_MS);
+    });
+
+    it('does NOT remove a terminal that stopped less than TTL ago', async () => {
+      await stalePool.spawn('t1');
+      stalePool.getTerminalHandle('t1')._triggerExit(0);
+
+      // Advance to just under TTL
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS - 1000);
+
+      expect(stalePool.getTerminal('t1')).not.toBeNull();
+    });
+
+    it('does NOT remove a persistent stopped terminal', async () => {
+      await stalePool.spawn('t1', { persistent: true });
+      stalePool.getTerminalHandle('t1')._triggerExit(0);
+
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(stalePool.getTerminal('t1')).not.toBeNull();
+    });
+
+    it('does NOT remove a swarm-managed stopped terminal', async () => {
+      await stalePool.spawn('t1', { _swarmManaged: true });
+      stalePool.getTerminalHandle('t1')._triggerExit(0);
+
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(stalePool.getTerminal('t1')).not.toBeNull();
+    });
+
+    it('cleans up context-refresh shared-memory key when removing stale terminal', async () => {
+      const mockSharedMemory = { del: vi.fn(), set: vi.fn(), writeSnapshot: vi.fn() };
+      const localEvents = new EventBus();
+      const localPool = createClaudePool({
+        events: localEvents,
+        projectDir: '/tmp/pool-test',
+        log: () => {},
+        sharedMemory: mockSharedMemory,
+      });
+
+      await localPool.spawn('t1');
+      localPool.getTerminalHandle('t1')._triggerExit(0);
+
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(mockSharedMemory.del).toHaveBeenCalledWith('context-refresh:t1:handoff');
+
+      await localPool.shutdownAll();
+    });
+
+    it('does NOT remove a running terminal', async () => {
+      await stalePool.spawn('t1');
+
+      vi.advanceTimersByTime(STALE_TERMINAL_TTL_MS + ACTIVITY_CHECK_INTERVAL_MS + 100);
+
+      expect(stalePool.getTerminal('t1')).not.toBeNull();
     });
   });
 
