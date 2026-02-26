@@ -1915,6 +1915,30 @@ function connectWS() {
             model: msg.data.config ? msg.data.config.model : null,
             dangerouslySkipPermissions: msg.data.config ? msg.data.config.dangerouslySkipPermissions : false,
           });
+        } else if (cId) {
+          // Instance already tracked — server respawned the PTY (e.g. context-refresh or respawn API).
+          // Reconnect binary WS so typed input is not silently dropped.
+          var spawnedInst = instances.get(cId);
+          if (spawnedInst && spawnedInst.type === 'claude') {
+            spawnedInst.running = true;
+            updateStatusBar(cId);
+            updateTabDot(cId);
+            connectClaudeBinaryWs(spawnedInst);
+          }
+        }
+        break;
+      }
+
+      case 'claude-terminal:respawned': {
+        var rspId = msg.data.terminalId;
+        var rspInst = instances.get(rspId);
+        if (rspInst && rspInst.type === 'claude') {
+          rspInst.running = true;
+          updateStatusBar(rspId);
+          updateTabDot(rspId);
+          // Reconnect binary WS for the new PTY process after manual respawn
+          connectClaudeBinaryWs(rspInst);
+          showToast(rspId + ' respawned — PTY reconnected', 'info');
         }
         break;
       }
@@ -1984,6 +2008,20 @@ function connectWS() {
         if (cwInst && cwInst.type === 'claude') {
           cwInst.terminal.writeln('\r\n\x1b[1;33m[CONTEXT] Approaching context limit — ' + (cwInst.autoHandoff ? 'auto-handoff will continue session' : 'consider saving work') + '\x1b[0m');
           showToast(cwId + ': context pressure detected', 'warning');
+        }
+        break;
+      }
+
+      case 'claude-terminal:context-refresh-completed': {
+        var crId = msg.data.terminalId;
+        var crInst = instances.get(crId);
+        if (crInst && crInst.type === 'claude') {
+          crInst.running = true;
+          updateStatusBar(crId);
+          updateTabDot(crId);
+          crInst.terminal.writeln('\r\n\x1b[1;32m[CONTEXT-REFRESH] Fresh session started (refresh #' + (msg.data.refreshCount || '?') + ')\x1b[0m');
+          // Reconnect binary WS — context-refresh spawns a new PTY process
+          connectClaudeBinaryWs(crInst);
         }
         break;
       }
