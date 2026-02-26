@@ -5254,6 +5254,33 @@ details[open] > .tree-summary .tree-icon--dir {
   margin-top: var(--sp-1);
 }
 
+.worker-card--stopped {
+  opacity: 0.55;
+}
+
+.worker-card__dismiss {
+  opacity: 0;
+  padding: 0 var(--sp-1) !important;
+  font-size: 0.75rem;
+  min-height: 0 !important;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+.worker-card--stopped:hover .worker-card__dismiss {
+  opacity: 1;
+}
+
+.worker-card__terminal {
+  margin-top: var(--sp-1);
+  height: 80px;
+  background: #0d1117;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.worker-card__terminal .xterm {
+  height: 100% !important;
+}
+
 .worker-card__output {
   margin-top: var(--sp-1);
   padding: var(--sp-1);

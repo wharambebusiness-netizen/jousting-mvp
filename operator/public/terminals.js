@@ -197,6 +197,17 @@ var sidebarFilterTimer = null;
   }
   checkPendingProject();
 
+  // Refit all terminals when page is restored from cache
+  document.addEventListener('terminal-page-restored', function(e) {
+    if (e.detail && e.detail.page === '/terminals') {
+      instances.forEach(function(inst) {
+        if (inst.fitAddon) {
+          try { inst.fitAddon.fit(); } catch (_) { /* ignore */ }
+        }
+      });
+    }
+  });
+
   // ── Keyboard Shortcuts ──────────────────────────────────
   document.addEventListener('keydown', function(e) {
     var tag = (e.target.tagName || '').toLowerCase();

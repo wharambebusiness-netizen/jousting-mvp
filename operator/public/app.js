@@ -261,11 +261,98 @@ function createWS(subscriptions, onMessage, opts) {
 // to clean up previous page state before the new page initializes.
 var _pageCleanups = [];
 function onPageCleanup(fn) { _pageCleanups.push(fn); }
+
+// ── Page Cache (Terminal Persistence) ────────────────────────
+// Cache terminal pages so xterm.js instances survive navigation.
+var _pageCache = {};
+var CACHEABLE_PAGES = ['/console', '/terminals'];
+
 document.body.addEventListener('htmx:beforeSwap', function () {
+  // Check if current page is cacheable — detach <main> instead of destroying
+  var currentMain = document.querySelector('main[data-page-id]');
+  if (currentMain) {
+    var pageId = currentMain.getAttribute('data-page-id');
+    var pagePath = '/' + pageId;
+    if (CACHEABLE_PAGES.indexOf(pagePath) !== -1) {
+      // Detach to JS variable (preserves xterm instances)
+      currentMain.remove();
+      _pageCache[pagePath] = {
+        main: currentMain,
+        cleanups: _pageCleanups.slice()  // save cleanups for later disposal
+      };
+      _pageCleanups = [];
+      return; // skip running cleanups for cached pages
+    }
+  }
+
   for (var i = 0; i < _pageCleanups.length; i++) {
     try { _pageCleanups[i](); } catch (_) {}
   }
   _pageCleanups = [];
+});
+
+/**
+ * Restore a cached page by re-attaching its <main> element.
+ * @param {string} pagePath - e.g. '/console'
+ * @returns {boolean} true if restored
+ */
+function restoreCachedPage(pagePath) {
+  var cached = _pageCache[pagePath];
+  if (!cached) return false;
+
+  // Remove current <main>
+  var currentMain = document.querySelector('main');
+  if (currentMain) currentMain.remove();
+
+  // Re-attach cached <main>
+  var sidebar = document.getElementById('sidebar-nav');
+  if (sidebar && sidebar.nextSibling) {
+    sidebar.parentNode.insertBefore(cached.main, sidebar.nextSibling);
+  } else {
+    document.body.insertBefore(cached.main, document.getElementById('toast-container'));
+  }
+
+  // Restore cleanups
+  _pageCleanups = cached.cleanups;
+  delete _pageCache[pagePath];
+
+  // Update browser state
+  history.pushState({}, '', pagePath);
+  updateSidebarActiveLink();
+
+  // Notify page scripts to refit terminals
+  document.dispatchEvent(new CustomEvent('terminal-page-restored', { detail: { page: pagePath } }));
+
+  return true;
+}
+
+/**
+ * Dispose a cached page (run its cleanups and discard).
+ * Called when the cache entry is no longer needed.
+ * @param {string} pagePath
+ */
+function disposeCachedPage(pagePath) {
+  var cached = _pageCache[pagePath];
+  if (!cached) return;
+  for (var i = 0; i < cached.cleanups.length; i++) {
+    try { cached.cleanups[i](); } catch (_) {}
+  }
+  delete _pageCache[pagePath];
+}
+
+// Intercept sidebar link clicks for cached pages
+document.addEventListener('click', function(e) {
+  var link = e.target.closest('.sidebar-nav__link');
+  if (!link) return;
+
+  var pagePath = link.getAttribute('data-page');
+  if (!pagePath || CACHEABLE_PAGES.indexOf(pagePath) === -1) return;
+  if (!_pageCache[pagePath]) return;
+
+  // We have a cached version — restore instead of navigating
+  e.preventDefault();
+  e.stopPropagation();
+  restoreCachedPage(pagePath);
 });
 
 // ── Notification Bell (Phase 41) ─────────────────────────────

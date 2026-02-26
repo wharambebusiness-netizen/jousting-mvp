@@ -1317,6 +1317,21 @@ export function createClaudePool(ctx) {
     return lines.slice(-maxLines);
   }
 
+  /**
+   * Get the last N lines of raw terminal output (ANSI codes preserved).
+   * @param {string} terminalId
+   * @param {number} [maxLines=20]
+   * @returns {string[]|null} null if terminal not found
+   */
+  function getRawOutputPreview(terminalId, maxLines = 20) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return null;
+    const buf = entry.terminal.getRawOutputBuffer();
+    if (!buf) return [];
+    const lines = buf.split('\n');
+    return lines.slice(-maxLines);
+  }
+
   // ── Helpers ───────────────────────────────────────────
 
   // ── Task Assignment (Phase 19) ───────────────────────
@@ -1692,6 +1707,7 @@ export function createClaudePool(ctx) {
     getPoolStatus,
     getMasterTerminal,
     getOutputPreview,
+    getRawOutputPreview,
     findNextClaimableTask,
     setSwarmMode,
     getSwarmState,

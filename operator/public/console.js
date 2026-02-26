@@ -14,6 +14,8 @@
   var masterBinaryWs = null;    // Binary WS to master PTY
   var masterTerminalId = null;  // ID of the master terminal
   var workers = {};             // { id: { ...terminalData } }
+  var seenWorkers = {};         // { id: { ...terminalData, _stopped: bool } } — persists across refreshes
+  var workerTerminals = {};     // { id: { term, fitAddon, binaryWs } } — xterm.js instances
   var workerRefreshTimer = null;
 
   // ── xterm.js Theme ────────────────────────────────────────
@@ -119,6 +121,7 @@
       if (masterTerminal) {
         masterTerminal.write('\r\n\x1b[33m[Master terminal disconnected]\x1b[0m\r\n');
       }
+      showMasterDisconnected();
     };
 
     masterBinaryWs.onerror = function() {
@@ -142,6 +145,95 @@
     });
   }
 
+  // ── Worker Mini-Terminals ─────────────────────────────────
+
+  /**
+   * Create a tiny xterm.js instance for a worker card.
+   * @param {string} workerId
+   * @param {HTMLElement} container - DOM element to mount into
+   */
+  function initWorkerTerminal(workerId, container) {
+    if (workerTerminals[workerId]) return; // already exists
+
+    var term = new Terminal({
+      theme: MASTER_THEME,
+      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+      fontSize: 9,
+      lineHeight: 1.2,
+      cursorBlink: false,
+      scrollback: 1000,
+      convertEol: true,
+      disableStdin: true
+    });
+
+    var fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(container);
+
+    setTimeout(function() {
+      try { fitAddon.fit(); } catch (_) {}
+    }, 50);
+
+    workerTerminals[workerId] = { term: term, fitAddon: fitAddon, binaryWs: null };
+
+    // Load raw ANSI output for restoration
+    fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/output?lines=200&raw=1')
+      .then(function(resp) { return resp.ok ? resp.json() : null; })
+      .then(function(data) {
+        if (data && data.lines && data.lines.length > 0 && workerTerminals[workerId]) {
+          workerTerminals[workerId].term.write(data.lines.join('\n'));
+        }
+      })
+      .catch(function() { /* non-critical */ });
+  }
+
+  /**
+   * Connect a read-only binary WS for live streaming to a worker terminal.
+   * @param {string} workerId
+   */
+  function connectWorkerBinaryWs(workerId) {
+    var entry = workerTerminals[workerId];
+    if (!entry || entry.binaryWs) return;
+
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(workerId);
+
+    var ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    entry.binaryWs = ws;
+
+    ws.onmessage = function(evt) {
+      var data = typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data);
+      // Skip control messages (0x01 prefix)
+      if (data.length > 0 && data.charCodeAt(0) === 1) {
+        try {
+          var ctrl = JSON.parse(data.slice(1));
+          if (ctrl.type === 'ping') {
+            ws.send('\x01' + JSON.stringify({ type: 'pong' }));
+          }
+        } catch(_) {}
+        return;
+      }
+      if (entry.term) entry.term.write(data);
+    };
+
+    ws.onclose = function() {
+      if (entry) entry.binaryWs = null;
+    };
+  }
+
+  /**
+   * Dispose a worker terminal and its WS.
+   * @param {string} workerId
+   */
+  function disposeWorkerTerminal(workerId) {
+    var entry = workerTerminals[workerId];
+    if (!entry) return;
+    if (entry.binaryWs) { try { entry.binaryWs.close(); } catch(_) {} }
+    if (entry.term) { try { entry.term.dispose(); } catch(_) {} }
+    delete workerTerminals[workerId];
+  }
+
   // ── Start / Stop Master ────────────────────────────────────
 
   async function startMaster() {
@@ -150,6 +242,18 @@
     btn.textContent = 'Starting...';
 
     try {
+      // Clean up any stale master terminal from previous session
+      try {
+        await fetch('/api/claude-terminals/master', { method: 'DELETE' });
+      } catch(e) { /* ignore — may not exist */ }
+
+      // Clean up local xterm if restarting
+      if (masterBinaryWs) { masterBinaryWs.close(); masterBinaryWs = null; }
+      if (masterTerminal) { masterTerminal.dispose(); masterTerminal = null; }
+      masterFitAddon = null;
+      var container = document.getElementById('master-terminal-container');
+      if (container) container.innerHTML = '';
+
       // Read master context for system prompt
       var systemPrompt = '';
       try {
@@ -231,6 +335,33 @@
     } catch (err) {
       if (window.showToast) window.showToast('Failed to stop master: ' + err.message, 'error');
     }
+  }
+
+  // ── Master Disconnect / Restart ──────────────────────────
+
+  function showMasterDisconnected() {
+    // Clean up WS (terminal stays visible with scrollback)
+    if (masterBinaryWs) { masterBinaryWs = null; }
+
+    // Update header status
+    var statusEl = document.getElementById('master-status');
+    if (statusEl) {
+      statusEl.textContent = 'Master disconnected';
+      statusEl.classList.remove('console-header__status--running');
+    }
+
+    // Show restart button, hide stop
+    var startBtn = document.getElementById('start-master-btn');
+    var stopBtn = document.getElementById('stop-master-btn');
+    if (startBtn) {
+      startBtn.style.display = '';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Restart Master';
+    }
+    if (stopBtn) stopBtn.style.display = 'none';
+
+    // Hide prompt input if open
+    hidePromptInput();
   }
 
   // ── Prompt Input ──────────────────────────────────────────
@@ -425,10 +556,32 @@
         return t.id !== 'master' && t.role !== 'master';
       });
 
+      // Build live lookup
       workers = {};
-      workerList.forEach(function(w) { workers[w.id] = w; });
+      var liveIds = {};
+      workerList.forEach(function(w) {
+        workers[w.id] = w;
+        liveIds[w.id] = true;
+        seenWorkers[w.id] = w;
+      });
 
-      renderWorkerPanel(workerList);
+      // Mark disappeared workers as stopped
+      Object.keys(seenWorkers).forEach(function(id) {
+        if (!liveIds[id]) {
+          seenWorkers[id]._stopped = true;
+          seenWorkers[id].status = 'stopped';
+        }
+      });
+
+      // Merged list: live workers first, then stopped (seen) workers
+      var mergedList = workerList.slice();
+      Object.keys(seenWorkers).forEach(function(id) {
+        if (!liveIds[id]) {
+          mergedList.push(seenWorkers[id]);
+        }
+      });
+
+      renderWorkerPanel(mergedList);
       updateStatusBar(workerList);
     } catch (err) {
       // Silently retry on next interval
@@ -441,80 +594,199 @@
     if (!list) return;
 
     if (workerList.length === 0) {
-      // Show empty state, remove any cards
       if (empty) empty.style.display = '';
+      // Remove stale cards but preserve empty message
       var cards = list.querySelectorAll('.worker-card');
       cards.forEach(function(c) { c.remove(); });
       return;
     }
 
-    // Build HTML
-    var html = '<div class="console-workers__empty" id="worker-empty" style="display:none"><p>No workers active.</p></div>';
+    if (empty) empty.style.display = 'none';
 
-    workerList.forEach(function(w) {
-      var isRunning = w.status === 'running';
-      var dotClass = isRunning ? 'worker-card__dot--running' : 'worker-card__dot--stopped';
-      var taskInfo = '';
-      if (w.assignedTask) {
-        var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
-        taskInfo = '<div class="worker-card__task">' + escapeHtml(taskLabel) + '</div>';
-      } else if (isRunning) {
-        taskInfo = '<div class="worker-card__task worker-card__task--idle">Idle</div>';
-      }
-
-      var age = w.spawnedAt ? timeSince(new Date(w.spawnedAt)) : '';
-
-      html += '<div class="worker-card" data-id="' + escapeHtml(w.id) + '">' +
-        '<div class="worker-card__header">' +
-          '<span class="worker-card__dot ' + dotClass + '"></span>' +
-          '<span class="worker-card__id">' + escapeHtml(w.id) + '</span>' +
-          '<button class="worker-card__kill btn btn--xs btn--ghost" data-kill-id="' + escapeHtml(w.id) + '" title="Kill worker">&times;</button>' +
-        '</div>' +
-        taskInfo +
-        '<div class="worker-card__meta">' +
-          '<span>' + escapeHtml(w.status || 'unknown') + '</span>' +
-          (age ? '<span>' + age + '</span>' : '') +
-        '</div>' +
-        '<div class="worker-card__output" id="worker-output-' + escapeHtml(w.id) + '"></div>' +
-      '</div>';
-    });
-
-    list.innerHTML = html;
-
-    // Load output previews for running workers
-    workerList.forEach(function(w) {
-      if (w.status === 'running') {
-        loadWorkerOutput(w.id);
-      }
-    });
-
-    // Kill button handlers
-    list.querySelectorAll('[data-kill-id]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        killWorker(btn.getAttribute('data-kill-id'));
-      });
-    });
-
-    // Click card to open in terminals page
+    // DOM-diff: track which cards exist, add/update/remove as needed
+    var existingCards = {};
     list.querySelectorAll('.worker-card').forEach(function(card) {
-      card.addEventListener('click', function() {
-        var id = card.getAttribute('data-id');
-        window.open('/terminals#' + encodeURIComponent(id), '_blank');
-      });
+      existingCards[card.getAttribute('data-id')] = card;
+    });
+
+    var desiredIds = {};
+    workerList.forEach(function(w) {
+      desiredIds[w.id] = true;
+
+      if (existingCards[w.id]) {
+        // Update existing card metadata (don't recreate — preserves xterm)
+        updateWorkerCardMeta(existingCards[w.id], w);
+      } else {
+        // Create new card
+        var card = createWorkerCard(w);
+        list.appendChild(card);
+      }
+    });
+
+    // Remove cards no longer in list
+    Object.keys(existingCards).forEach(function(id) {
+      if (!desiredIds[id]) {
+        existingCards[id].remove();
+        disposeWorkerTerminal(id);
+      }
     });
   }
 
-  async function loadWorkerOutput(workerId) {
-    try {
-      var resp = await fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/output?lines=8');
-      if (!resp.ok) return;
-      var data = await resp.json();
-      var el = document.getElementById('worker-output-' + workerId);
-      if (el && data.lines) {
-        el.textContent = data.lines.join('\n');
+  /**
+   * Create a worker card DOM element with embedded xterm mini-terminal.
+   */
+  function createWorkerCard(w) {
+    var isRunning = w.status === 'running';
+    var isStopped = w._stopped || w.status === 'stopped';
+    var card = document.createElement('div');
+    card.className = 'worker-card' + (isStopped ? ' worker-card--stopped' : '');
+    card.setAttribute('data-id', w.id);
+
+    // Header
+    var header = document.createElement('div');
+    header.className = 'worker-card__header';
+
+    var dot = document.createElement('span');
+    dot.className = 'worker-card__dot ' + (isRunning ? 'worker-card__dot--running' : 'worker-card__dot--stopped');
+    header.appendChild(dot);
+
+    var idSpan = document.createElement('span');
+    idSpan.className = 'worker-card__id';
+    idSpan.textContent = w.id;
+    header.appendChild(idSpan);
+
+    if (isStopped) {
+      var dismissBtn = document.createElement('button');
+      dismissBtn.className = 'worker-card__dismiss btn btn--xs btn--ghost';
+      dismissBtn.title = 'Dismiss';
+      dismissBtn.textContent = '\u00d7';
+      dismissBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        dismissWorker(w.id);
+      });
+      header.appendChild(dismissBtn);
+    } else {
+      var killBtn = document.createElement('button');
+      killBtn.className = 'worker-card__kill btn btn--xs btn--ghost';
+      killBtn.title = 'Kill worker';
+      killBtn.textContent = '\u00d7';
+      killBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        killWorker(w.id);
+      });
+      header.appendChild(killBtn);
+    }
+
+    card.appendChild(header);
+
+    // Task info
+    var taskDiv = document.createElement('div');
+    if (w.assignedTask) {
+      var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
+      taskDiv.className = 'worker-card__task';
+      taskDiv.textContent = taskLabel;
+    } else if (isRunning) {
+      taskDiv.className = 'worker-card__task worker-card__task--idle';
+      taskDiv.textContent = 'Idle';
+    }
+    card.appendChild(taskDiv);
+
+    // Meta
+    var meta = document.createElement('div');
+    meta.className = 'worker-card__meta';
+    var statusSpan = document.createElement('span');
+    statusSpan.textContent = w.status || 'unknown';
+    meta.appendChild(statusSpan);
+    if (w.spawnedAt) {
+      var ageSpan = document.createElement('span');
+      ageSpan.textContent = timeSince(new Date(w.spawnedAt));
+      meta.appendChild(ageSpan);
+    }
+    card.appendChild(meta);
+
+    // Mini-terminal container
+    var termContainer = document.createElement('div');
+    termContainer.className = 'worker-card__terminal';
+    termContainer.id = 'worker-term-' + w.id;
+    card.appendChild(termContainer);
+
+    // Click card to open in terminals page
+    card.addEventListener('click', function() {
+      window.open('/terminals#' + encodeURIComponent(w.id), '_blank');
+    });
+
+    // Init xterm.js mini-terminal after DOM insertion
+    setTimeout(function() {
+      initWorkerTerminal(w.id, termContainer);
+      if (isRunning) {
+        connectWorkerBinaryWs(w.id);
       }
-    } catch(e) { /* non-critical */ }
+    }, 50);
+
+    return card;
+  }
+
+  /**
+   * Update an existing worker card's metadata without recreating the xterm instance.
+   */
+  function updateWorkerCardMeta(card, w) {
+    var isRunning = w.status === 'running';
+    var isStopped = w._stopped || w.status === 'stopped';
+
+    // Update stopped class
+    card.classList.toggle('worker-card--stopped', isStopped);
+
+    // Update dot
+    var dot = card.querySelector('.worker-card__dot');
+    if (dot) {
+      dot.className = 'worker-card__dot ' + (isRunning ? 'worker-card__dot--running' : 'worker-card__dot--stopped');
+    }
+
+    // Update task info
+    var taskDiv = card.querySelector('.worker-card__task');
+    if (taskDiv) {
+      if (w.assignedTask) {
+        var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
+        taskDiv.className = 'worker-card__task';
+        taskDiv.textContent = taskLabel;
+      } else if (isRunning) {
+        taskDiv.className = 'worker-card__task worker-card__task--idle';
+        taskDiv.textContent = 'Idle';
+      } else {
+        taskDiv.className = 'worker-card__task';
+        taskDiv.textContent = '';
+      }
+    }
+
+    // Update meta
+    var meta = card.querySelector('.worker-card__meta');
+    if (meta) {
+      var spans = meta.querySelectorAll('span');
+      if (spans[0]) spans[0].textContent = w.status || 'unknown';
+      if (spans[1] && w.spawnedAt) spans[1].textContent = timeSince(new Date(w.spawnedAt));
+    }
+
+    // Connect binary WS if running and not yet connected
+    if (isRunning && workerTerminals[w.id] && !workerTerminals[w.id].binaryWs) {
+      connectWorkerBinaryWs(w.id);
+    }
+  }
+
+  /**
+   * Dismiss a stopped worker from the panel.
+   */
+  function dismissWorker(workerId) {
+    delete seenWorkers[workerId];
+    disposeWorkerTerminal(workerId);
+    var card = document.querySelector('.worker-card[data-id="' + workerId + '"]');
+    if (card) card.remove();
+
+    // Check if list is now empty
+    var list = document.getElementById('worker-list');
+    var empty = document.getElementById('worker-empty');
+    if (list && empty && !list.querySelector('.worker-card')) {
+      empty.style.display = '';
+    }
   }
 
   async function spawnWorker() {
@@ -669,13 +941,13 @@
 
         initMasterTerminal();
 
-        // Restore scrollback from output buffer
+        // Restore scrollback from raw ANSI output buffer (preserves colors)
         try {
-          var outputResp = await fetch('/api/claude-terminals/master/output?lines=500');
+          var outputResp = await fetch('/api/claude-terminals/master/output?lines=500&raw=1');
           if (outputResp.ok) {
             var outputData = await outputResp.json();
             if (outputData.lines && outputData.lines.length > 0) {
-              masterTerminal.write(outputData.lines.join('\r\n'));
+              masterTerminal.write(outputData.lines.join('\n'));
               masterTerminal.scrollToBottom();
             }
           }
@@ -726,6 +998,21 @@
 
     // Real-time WS events
     setupWsEvents();
+
+    // Refit terminals when page is restored from cache
+    document.addEventListener('terminal-page-restored', function(e) {
+      if (e.detail && e.detail.page === '/console') {
+        if (masterFitAddon) {
+          try { masterFitAddon.fit(); } catch (_) {}
+        }
+        Object.keys(workerTerminals).forEach(function(id) {
+          var entry = workerTerminals[id];
+          if (entry && entry.fitAddon) {
+            try { entry.fitAddon.fit(); } catch (_) {}
+          }
+        });
+      }
+    });
   }
 
   // Wait for DOM

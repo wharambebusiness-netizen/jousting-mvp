@@ -87,7 +87,10 @@ export function createClaudeTerminalRoutes(ctx) {
   router.get('/claude-terminals/:id/output', (req, res) => {
     if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
     const lines = parseInt(req.query.lines) || 20;
-    const preview = claudePool.getOutputPreview(req.params.id, Math.min(lines, 200));
+    const raw = req.query.raw === '1';
+    const preview = raw
+      ? claudePool.getRawOutputPreview(req.params.id, Math.min(lines, 200))
+      : claudePool.getOutputPreview(req.params.id, Math.min(lines, 200));
     if (preview === null) return res.status(404).json({ error: 'Terminal not found' });
     res.json({ id: req.params.id, lines: preview });
   });

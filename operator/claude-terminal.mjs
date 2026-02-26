@@ -318,6 +318,15 @@ export async function createClaudeTerminal(opts) {
     return stripAnsi(outputBuffer);
   }
 
+  /**
+   * Get the current output ring buffer with raw ANSI codes preserved.
+   * Useful for restoring xterm.js terminals with faithful colors.
+   * @returns {string}
+   */
+  function getRawOutputBuffer() {
+    return outputBuffer;
+  }
+
   return {
     id,
     pid: ptyProcess.pid,
@@ -326,6 +335,7 @@ export async function createClaudeTerminal(opts) {
     kill,
     getStatus,
     getOutputBuffer,
+    getRawOutputBuffer,
     on,
     off,
   };
