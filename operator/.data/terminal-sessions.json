@@ -2,19 +2,19 @@
   "sessions": {
     "master": {
       "id": "master",
-      "startedAt": "2026-02-26T06:23:31.996Z",
+      "startedAt": "2026-02-26T07:10:16.405Z",
       "endedAt": null,
       "exitCode": null,
       "config": {
         "model": null,
         "projectDir": null,
         "dangerouslySkipPermissions": true,
-        "systemPrompt": "[CONTEXT-REFRESH] This terminal was restarted with a fresh context window.\nThis is context refresh #2 for terminal master.\n\nThe previous session generated the following handoff:\n\n## HANDOFF (auto-generated)\n\nTerminal: master\nNo specific task assigned\nContext refresh #2\n\n### Recent Output (tail)\n```\nycle)\r\n* Germinating…\b…\r✢\r·\r✢ Germinating… (2m 49\r*\r✶\r✻\r✽ GerGerm\r✻ Germirmin\r✶ Germinatnati\r* Germinatinting… (2m 50\r✢ Germinating…g\r· Germinating…\r✢\r*\r✶\r✻\r✽1G\r✻ GeGerminating… (2m 51s · ↓\r✶ Germinrmi\r* Germinating… \r* Germinating… ermi\r✢erminating… (2m 51s · ↑\r· Fixing duplicate terminal input handlers… (2m 51s · ↑ 9.6k tokens)\r\n  ⎿  ◼ Fix duplicate terminal input handlers in terminals.js        ✢ Fixing duplicate terminal input handledlers\r* Fixing duplicate terminal input handlers… (2m 52rs\r✶ Fixing duplicate terminal input handlers…\r✻\r✽\r✻\r✶\r*\r✢3\r· FixFixiixin\r✢ Fixing ng d\r* Fixing du dup\r✶ Fixing dupliplic\r✻ Fixing duplicaicat\r✽ Fixing duplicate te te te terminal input handlers… (2m 54\r✻ Fixing duplicate termi\r✶ Fixing duplicate terminminal input handlers… (2m 54s · ↓\r*\r✢\r·\r● Fix 1: Duplicate terminal input handlers\r\n\r\n· Fixing duplicate terminal input handlers… (2m 54s · ↓ 9.6k tokens)\r\n  ⎿  ◼ Fix duplicate terminal input handlers in terminals.js\r\n     ◻ Fix handoff loop: suppress context scanning during refresh + sanitize output\r\n     ◻ Run tests to verify both fixes\r\n\r\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n❯ \r\n  /clear\r\n\r\n  IMPORTANT: Your context window is nearly full. Generate a handoff document NOW.\r\n  Write a section starting with exactly \"## HANDOFF\" on its own line.\r\n  Include: (1) what was accomplished, (2) what is in progress, (3) what to do next,\r\n  (4) any important file paths or decisions, (5) current errors or blockers.\r\n  Be thorough but concise. This handoff will be injected into a fresh session.\r\n   \r\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n  ⏵⏵ bypass permissions on (shift+tab to cycle)\r\n✢\r*\r✶ Fixing duplicate terminal input handlers… (2m 55\r✻\r✽\r✻\r✶\r*\r✢\r·6\r✢\r*\r✶\r✻\r✽\r✻7\r✶\r*\r✢\r·\r✢ Fixing duplicate terminal input handlers…\r*s\r✶\r✻ Fixing duplicate terminal input handlers… (2m 58r\r✽7ers…\r✻lers\r✶\n```\n\nContinue working from where the previous session left off.\nDo NOT repeat work that was already completed.",
+        "systemPrompt": null,
         "capabilities": null
       },
       "taskHistory": [],
       "lastTaskId": null,
-      "handoffCount": 2,
+      "handoffCount": 0,
       "outputSummary": "",
       "duration": 0
     },
@@ -233,8 +233,134 @@
       "handoffCount": 0,
       "outputSummary": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n ▐▛███▜▌   Claude Code v2.1.59\r\n▝▜█████▛▘  Sonnet 4.6 · Claude Max\r\n  ▘▘ ▝▝    ~\\Documents\\Jousting\\Jousting\\jousting-mvp\r\n\r\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n❯ Try \"create a util logging.py that...\"\r\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n  ⏵⏵ bypass permissions on (shift+tab to cycle)",
       "duration": 85066
+    },
+    "worker-1": {
+      "id": "worker-1",
+      "startedAt": "2026-02-26T07:17:35.649Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 1 in an 8-worker pool managed by the Master Console. Your task: Fix stale stopped-terminal accumulation in claude-pool.mjs. Non-swarm, non-persistent stopped terminals accumulate indefinitely. Add a cleanup pass inside the activity-check interval that removes non-persistent stopped terminals older than a configurable TTL (default 5 minutes). Emit claude-terminal:stale-removed event. Also clean up stale context-refresh shared-memory keys. Run tests after changes. Work in: operator/claude-pool.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-2": {
+      "id": "worker-2",
+      "startedAt": "2026-02-26T07:17:40.517Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 2 in an 8-worker pool managed by the Master Console. Your task: Fix context-warning dedup flag in claude-terminal.mjs. The contextWarningEmitted flag (line ~190) is set once and never reset, so if a terminal auto-compacts and continues for a second context window, no second context-warning fires. Fix: reset contextWarningEmitted after a 60-second cooldown so each compaction cycle can re-trigger. Add a test for the multi-compaction scenario. Run tests after changes. Work in: operator/claude-terminal.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-3": {
+      "id": "worker-3",
+      "startedAt": "2026-02-26T07:17:45.020Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 3 in an 8-worker pool managed by the Master Console. Your task: Fix binary WS reconnect after terminal respawn in terminals.js. When a terminal is respawned server-side (context-refresh), the client gets claude-terminal:spawned/respawned events but does NOT reconnect the binary PTY WebSocket, so typed input is silently dropped. Fix: In the WS event handler for claude-terminal:spawned and claude-terminal:context-refresh-completed, check if inst.type===claude and terminal is running, then call connectClaudeBinaryWs(inst). Run tests after changes. Work in: operator/public/terminals.js",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-4": {
+      "id": "worker-4",
+      "startedAt": "2026-02-26T07:17:49.157Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 4 in an 8-worker pool managed by the Master Console. Your task: Fix binary WS heartbeat timer leak in ws.mjs. The binaryPingTimer (line ~265) setInterval is never .unref()d unlike the JSON WS heartbeat at line ~349. This prevents clean Node.js exit. Fix: Add binaryPingTimer.unref() after the setInterval call. Also in wss.cleanup(), ensure binary WS connections are terminated AND their individual binaryPingTimer intervals are cleared. Run tests after changes. Work in: operator/ws.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-5": {
+      "id": "worker-5",
+      "startedAt": "2026-02-26T07:17:55.624Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 5 in an 8-worker pool managed by the Master Console. Your task: Add deletePrefix() and watchPrefix() to shared-memory.mjs. Currently watch() only works for single keys and there is no way to watch or batch-delete a namespace like context-refresh:worker-1:*. Add watchPrefix(prefix, handler) that calls handlers for all keys matching a given prefix on set/delete. Add deletePrefix(prefix) to batch-delete stale keys. Export both in the public API. Add tests for both methods. Run tests after changes. Work in: operator/shared-memory.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-7": {
+      "id": "worker-7",
+      "startedAt": "2026-02-26T07:18:01.521Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 7 in an 8-worker pool managed by the Master Console. Your task: Add PATCH /claude-terminals/:id endpoint to routes/claude-terminals.mjs. Currently each terminal property (autoHandoff, autoDispatch, autoComplete, capabilities) requires a separate POST toggle. Add a single PATCH endpoint accepting {autoHandoff, autoDispatch, autoComplete, capabilities, systemPrompt} to update multiple properties at once. Also fix the spawn error to return 503 (not 400) when node-pty is unavailable. Add tests for the PATCH endpoint. Run tests after changes. Work in: operator/routes/claude-terminals.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "worker-6": {
+      "id": "worker-6",
+      "startedAt": "2026-02-26T07:18:12.729Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": "sonnet",
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": "You are Worker 6 in an 8-worker pool managed by the Master Console. Your task: Fix unread count inflation in terminal-messages.mjs. When the ring buffer evicts the oldest message (line ~128), unreadCounts are not decremented. Over time with slow readers, unread counts become permanently inflated. Fix: At ring-buffer eviction, check if the evicted message was targeted (msg.to !== null) and unread, decrement the unread count. Also filter out deleted messages during toJSON() so they do not consume ring buffer capacity after load(). Add tests. Run tests after changes. Work in: operator/terminal-messages.mjs",
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
     }
   },
-  "savedAt": "2026-02-26T06:23:31.996Z",
+  "savedAt": "2026-02-26T07:18:12.729Z",
   "version": 1
 }

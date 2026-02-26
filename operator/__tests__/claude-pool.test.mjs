@@ -1536,12 +1536,15 @@ describe('createClaudePool', () => {
       // Wait for spawn
       await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
 
-      // The new terminal's config should have sanitized system prompt
+      // The new terminal's config should have sanitized system prompt.
+      // parseHandoffFromOutput strips the heading, so the body is passed directly.
+      // buildContextRefreshPrompt sanitizes any residual ## HANDOFF headings as a safety net.
       const newTerm = pool.getTerminal('cr-san');
       if (newTerm && newTerm.config && newTerm.config.systemPrompt) {
-        // Should NOT contain raw "## HANDOFF" — should be sanitized
+        // Should NOT contain raw "## HANDOFF" — either stripped by parser or sanitized
         expect(newTerm.config.systemPrompt).not.toMatch(/^## HANDOFF\b/m);
-        expect(newTerm.config.systemPrompt).toContain('Previous Handoff');
+        // Should contain the handoff body text
+        expect(newTerm.config.systemPrompt).toContain('Real handoff content');
       }
     });
 
