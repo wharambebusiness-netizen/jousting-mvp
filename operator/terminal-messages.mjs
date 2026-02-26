@@ -126,8 +126,17 @@ export function createTerminalMessageBus(ctx = {}) {
 
     // Ring buffer eviction
     while (messages.size >= maxMessages) {
-      const oldest = messages.keys().next().value;
-      messages.delete(oldest);
+      const oldestId = messages.keys().next().value;
+      const evicted = messages.get(oldestId);
+      messages.delete(oldestId);
+      // Decrement unread count when evicting an unread targeted message so slow
+      // readers don't accumulate a permanently inflated unread count.
+      if (evicted && evicted.to !== null && !evicted.deleted) {
+        const cur = unreadCounts.get(evicted.to) || 0;
+        if (cur > 0) {
+          unreadCounts.set(evicted.to, cur - 1);
+        }
+      }
     }
 
     messages.set(msg.id, msg);
@@ -471,7 +480,7 @@ export function createTerminalMessageBus(ctx = {}) {
   function toJSON() {
     const msgArray = [];
     for (const msg of messages.values()) {
-      msgArray.push({ ...msg });
+      if (!msg.deleted) msgArray.push({ ...msg });
     }
     const unread = {};
     for (const [tid, cnt] of unreadCounts) {

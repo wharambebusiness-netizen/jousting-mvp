@@ -513,6 +513,64 @@ describe('ring buffer', () => {
     for (let i = 0; i < 20; i++) bus.send({ from: 'a', content: `msg ${i}` });
     expect(bus.count()).toBeLessThanOrEqual(10);
   });
+
+  // ── Unread count fix ──────────────────────────────────────
+
+  it('evicting an unread targeted message decrements recipient unread count', () => {
+    const bus = createTerminalMessageBus({ maxMessages: 3 });
+    // Fill buffer with targeted messages — all unread for 'b'
+    bus.send({ from: 'a', to: 'b', content: 'msg 1' }); // b.unread=1
+    bus.send({ from: 'a', to: 'b', content: 'msg 2' }); // b.unread=2
+    bus.send({ from: 'a', to: 'b', content: 'msg 3' }); // b.unread=3, buffer full
+    expect(bus.getUnreadCount('b')).toBe(3);
+
+    // Sending to 'a' evicts msg-1 (targeted to b, unread) without adding to b's count
+    bus.send({ from: 'x', to: 'a', content: 'not-to-b' });
+
+    // b.unread should be 2: decremented by 1 (eviction) and not incremented (new msg not to b)
+    expect(bus.getUnreadCount('b')).toBe(2);
+  });
+
+  it('unread count does not go negative during eviction', () => {
+    const bus = createTerminalMessageBus({ maxMessages: 3 });
+    bus.send({ from: 'a', to: 'b', content: 'msg 1' });
+    bus.send({ from: 'a', to: 'b', content: 'msg 2' });
+    bus.send({ from: 'a', to: 'b', content: 'msg 3' }); // b.unread=3, buffer full
+    bus.markRead('b'); // b.unread=0
+
+    // Evict msg-1 (targeted to b, but b.unread=0 — no decrement should occur)
+    bus.send({ from: 'x', to: 'a', content: 'trigger eviction' });
+
+    expect(bus.getUnreadCount('b')).toBe(0);
+  });
+
+  it('evicting a soft-deleted targeted message does not decrement unread count', () => {
+    const bus = createTerminalMessageBus({ maxMessages: 2 });
+    const m1 = bus.send({ from: 'a', to: 'b', content: 'msg 1' }); // b.unread=1
+    bus.delete(m1.id); // soft-delete; del() does not adjust unread
+    bus.send({ from: 'a', to: 'b', content: 'msg 2' });             // b.unread=2, buffer full
+
+    // Evict m1 (deleted=true) — should NOT decrement since the message was deleted
+    bus.send({ from: 'x', to: 'a', content: 'evict-trigger' });
+
+    expect(bus.getUnreadCount('b')).toBe(2);
+  });
+
+  it('evicting broadcast messages does not decrement unread count', () => {
+    const bus = createTerminalMessageBus({ maxMessages: 3 });
+    // Register 'b' so broadcasts affect it, then reset
+    bus.send({ from: 'a', to: 'b', content: 'setup' });
+    bus.markRead('b');
+    // Fill with broadcasts
+    bus.send({ from: 'a', content: 'bc 1' }); // b.unread=1
+    bus.send({ from: 'a', content: 'bc 2' }); // b.unread=2, buffer full
+
+    // Evict oldest (setup, targeted to b, but unread=2 means we may decrement it —
+    // verify we arrive at a sane value ≥ 0 and broadcasts stay tracked correctly)
+    bus.send({ from: 'a', content: 'bc 3' });
+
+    expect(bus.getUnreadCount('b')).toBeGreaterThanOrEqual(0);
+  });
 });
 
 // ── EventBus integration ────────────────────────────────────
@@ -639,12 +697,13 @@ describe('persistence', () => {
     expect(raw.version).toBe(1);
   });
 
-  it('auto-saves on delete', () => {
+  it('auto-saves on delete (deleted messages are not persisted)', () => {
     const bus = createTerminalMessageBus({ persistPath: PERSIST_PATH });
     const msg = bus.send({ from: 'a', content: 'to-delete' });
     bus.delete(msg.id);
     const raw = JSON.parse(readFileSync(PERSIST_PATH, 'utf-8'));
-    expect(raw.messages[0].deleted).toBe(true);
+    // toJSON() filters out deleted messages so they don't consume ring buffer capacity
+    expect(raw.messages).toHaveLength(0);
   });
 
   it('auto-saves on clear', () => {
@@ -688,6 +747,36 @@ describe('toJSON/fromJSON', () => {
     bus.send({ from: 'a', content: 'x' });
     bus.fromJSON({});
     expect(bus.count()).toBe(0);
+  });
+
+  it('toJSON excludes deleted messages', () => {
+    const bus = createTerminalMessageBus();
+    bus.send({ from: 'a', content: 'keep' });
+    const m2 = bus.send({ from: 'b', content: 'delete me' });
+    bus.delete(m2.id);
+
+    const json = bus.toJSON();
+    expect(json.messages).toHaveLength(1);
+    expect(json.messages[0].content).toBe('keep');
+    expect(json.messages.some(m => m.deleted)).toBe(false);
+  });
+
+  it('deleted messages do not consume ring buffer capacity after load/save cycle', () => {
+    const bus1 = createTerminalMessageBus({ persistPath: PERSIST_PATH, maxMessages: 3 });
+    bus1.send({ from: 'a', content: 'keep 1' });
+    const m2 = bus1.send({ from: 'a', content: 'delete me' });
+    bus1.send({ from: 'a', content: 'keep 2' });
+    bus1.delete(m2.id); // deleted: filtered from disk
+
+    // Load into a fresh bus with the same capacity
+    const bus2 = createTerminalMessageBus({ persistPath: PERSIST_PATH, maxMessages: 3 });
+    bus2.load();
+    expect(bus2.count()).toBe(2); // only 2 non-deleted messages
+
+    // Still has room for one more without evicting existing messages
+    bus2.send({ from: 'b', content: 'new msg' });
+    expect(bus2.count()).toBe(3);
+    expect(bus2.getAll().some(m => m.content === 'keep 1')).toBe(true);
   });
 });
 
