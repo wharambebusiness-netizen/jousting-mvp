@@ -234,5 +234,18 @@
       "terminalId": "master",
       "exitCode": -1073741510
     }
+  },
+  {
+    "id": "6674aa6a",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:23:21.966Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
   }
 ]

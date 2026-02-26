@@ -1261,6 +1261,9 @@ describe('createClaudePool', () => {
       // Start context refresh
       handle._triggerContextWarning({ pattern: 'auto-compact' });
 
+      // Wait past capture grace period (system prompt echo suppression)
+      await new Promise(r => setTimeout(r, 600));
+
       // Simulate Claude producing a handoff
       const handoffText = '## HANDOFF\n\nThis is a detailed handoff with enough content to pass the 50 char minimum threshold for parsing.';
       events.emit('claude-terminal:data', {
@@ -1334,6 +1337,9 @@ describe('createClaudePool', () => {
       // Start context refresh
       handle._triggerContextWarning({ pattern: 'auto-compact' });
 
+      // Wait past capture grace period (system prompt echo suppression)
+      await new Promise(r => setTimeout(r, 600));
+
       // Emit handoff
       localEvents.emit('claude-terminal:data', {
         terminalId: 'cr7',
@@ -1387,6 +1393,53 @@ describe('createClaudePool', () => {
       await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
 
       // The key assertion is no uncaught errors — terminal was cleaned up
+    });
+
+    it('ignores system prompt echo during grace period (prevents handoff loop)', async () => {
+      const completed = [];
+      events.on('claude-terminal:context-refresh-completed', (d) => completed.push(d));
+
+      await pool.spawn('cr-loop', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr-loop');
+
+      // Start context refresh
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // Immediately emit data that looks like a handoff (system prompt echo)
+      // This should be IGNORED because it arrives within the grace period
+      events.emit('claude-terminal:data', {
+        terminalId: 'cr-loop',
+        data: '## HANDOFF\n\nEchoed handoff from system prompt that should NOT trigger a false positive detection loop.',
+      });
+
+      // Should NOT have completed yet — grace period suppresses early output
+      expect(completed.length).toBe(0);
+    });
+
+    it('buildContextRefreshPrompt sanitizes HANDOFF headings', async () => {
+      await pool.spawn('cr-san', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr-san');
+
+      // Start context refresh to set up state
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // Wait past grace + emit real handoff containing ## HANDOFF heading
+      await new Promise(r => setTimeout(r, 600));
+      events.emit('claude-terminal:data', {
+        terminalId: 'cr-san',
+        data: '## HANDOFF\n\nReal handoff content that is long enough to pass the minimum fifty character threshold.',
+      });
+
+      // Wait for spawn
+      await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
+
+      // The new terminal's config should have sanitized system prompt
+      const newTerm = pool.getTerminal('cr-san');
+      if (newTerm && newTerm.config && newTerm.config.systemPrompt) {
+        // Should NOT contain raw "## HANDOFF" — should be sanitized
+        expect(newTerm.config.systemPrompt).not.toMatch(/^## HANDOFF\b/m);
+        expect(newTerm.config.systemPrompt).toContain('Previous Handoff');
+      }
     });
 
     it('formatEntry includes contextRefreshCount and contextRefreshState', async () => {

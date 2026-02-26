@@ -476,13 +476,17 @@ export function createClaudePool(ctx) {
    * @returns {string} System prompt text
    */
   function buildContextRefreshPrompt(handoff, entry) {
+    // Sanitize handoff: replace "## HANDOFF" headings so the system prompt echo
+    // doesn't get re-detected as a fresh handoff by parseHandoffFromOutput().
+    // Use "Previous Handoff" which won't match the /^##\s+HANDOFF\b/ pattern.
+    const sanitizedHandoff = handoff.replace(/^##\s+HANDOFF\b/gmi, '### Previous Handoff');
     const parts = [
       '[CONTEXT-REFRESH] This terminal was restarted with a fresh context window.',
       `This is context refresh #${entry.contextRefreshCount + 1} for terminal ${entry.id}.`,
       '',
       'The previous session generated the following handoff:',
       '',
-      handoff,
+      sanitizedHandoff,
       '',
       'Continue working from where the previous session left off.',
       'Do NOT repeat work that was already completed.',
@@ -563,6 +567,7 @@ export function createClaudePool(ctx) {
 
     entry._contextRefreshState = 'requesting-handoff';
     entry._contextRefreshOutputCapture = '';
+    entry._contextRefreshCaptureStart = Date.now();
     log(`[claude-pool] ${entry.id} context-refresh started (refresh #${entry.contextRefreshCount + 1})`);
 
     events.emit('claude-terminal:context-refresh-started', {
@@ -588,9 +593,12 @@ export function createClaudePool(ctx) {
     }
 
     // Listen for output to capture handoff
+    const CAPTURE_GRACE_MS = 500; // skip system prompt echo phase (belt-and-suspenders)
     const dataHandler = (evtData) => {
       if (evtData.terminalId !== entry.id) return;
       if (entry._contextRefreshState !== 'requesting-handoff') return;
+      // Skip early output — system prompt echo can contain previous handoff headings
+      if (entry._contextRefreshCaptureStart && Date.now() - entry._contextRefreshCaptureStart < CAPTURE_GRACE_MS) return;
       const chunk = typeof evtData.data === 'string' ? evtData.data : '';
       entry._contextRefreshOutputCapture += stripAnsi(chunk);
 
@@ -644,6 +652,7 @@ export function createClaudePool(ctx) {
 
     const finalHandoff = handoff || generateSyntheticContextHandoff(entry);
     entry._contextRefreshState = 'committing';
+    entry._contextRefreshCaptureStart = null;
 
     // Git commit + push (fire-and-forget, don't block on failure)
     try {
