@@ -137,6 +137,15 @@ export function createClaudePool(ctx) {
       log,
     });
 
+    // Master terminal uniqueness guard (Phase 57)
+    if (opts.role === 'master') {
+      for (const [, existing] of terminals) {
+        if (existing.role === 'master' && existing.status === 'running') {
+          throw new Error('Master terminal already exists');
+        }
+      }
+    }
+
     // Create pool entry
     const now = new Date().toISOString();
     const entry = {
@@ -154,6 +163,8 @@ export function createClaudePool(ctx) {
       lastActivityAt: now,
       swarmManaged: !!opts._swarmManaged,
       capabilities: opts.capabilities || null,
+      role: opts.role || null,
+      persistent: !!opts.persistent,
       _taskHistory: [],
       _completionTimer: null,
       _taskActivityBytes: 0,
@@ -888,6 +899,34 @@ export function createClaudePool(ctx) {
     destroy();
   }
 
+  // ── Master Console (Phase 57) ────────────────────
+
+  /**
+   * Get the master terminal entry, or null if no master exists.
+   * @returns {object|null}
+   */
+  function getMasterTerminal() {
+    for (const [, entry] of terminals) {
+      if (entry.role === 'master') return formatEntry(entry);
+    }
+    return null;
+  }
+
+  /**
+   * Get the last N lines of terminal output as a string array.
+   * @param {string} terminalId
+   * @param {number} [maxLines=20]
+   * @returns {string[]|null} null if terminal not found
+   */
+  function getOutputPreview(terminalId, maxLines = 20) {
+    const entry = terminals.get(terminalId);
+    if (!entry) return null;
+    const buf = entry.terminal.getOutputBuffer();
+    if (!buf) return [];
+    const lines = buf.split('\n');
+    return lines.slice(-maxLines);
+  }
+
   // ── Helpers ───────────────────────────────────────────
 
   // ── Task Assignment (Phase 19) ───────────────────────
@@ -983,6 +1022,8 @@ export function createClaudePool(ctx) {
       activityState: getActivityState(entry),
       swarmManaged: entry.swarmManaged || false,
       capabilities: entry.capabilities || null,
+      role: entry.role || null,
+      persistent: entry.persistent || false,
       taskHistory: [...(entry._taskHistory || [])],
     };
   }
@@ -1133,6 +1174,7 @@ export function createClaudePool(ctx) {
       let oldestIdleTime = Infinity;
       for (const entry of terminals.values()) {
         if (!entry.swarmManaged) continue;
+        if (entry.persistent || entry.role === 'master') continue; // Skip persistent/master terminals (Phase 57)
         if (entry.status !== 'running') continue;
         if (entry.assignedTask) continue;
         const state = getActivityState(entry);
@@ -1255,6 +1297,8 @@ export function createClaudePool(ctx) {
     getTerminalHandle,
     activeCount,
     getPoolStatus,
+    getMasterTerminal,
+    getOutputPreview,
     findNextClaimableTask,
     setSwarmMode,
     getSwarmState,

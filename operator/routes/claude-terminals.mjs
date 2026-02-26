@@ -61,6 +61,16 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json({ available, hasPool: !!claudePool });
   });
 
+  // ── GET /claude-terminals/master (Phase 57) ────────
+  // Must be before /:id to avoid "master" being interpreted as a terminal ID
+
+  router.get('/claude-terminals/master', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
+    const master = claudePool.getMasterTerminal();
+    if (!master) return res.status(404).json({ error: 'No master terminal' });
+    res.json(master);
+  });
+
   // ── GET /claude-terminals/:id ─────────────────────────
 
   router.get('/claude-terminals/:id', (req, res) => {
@@ -70,6 +80,16 @@ export function createClaudeTerminalRoutes(ctx) {
     if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
 
     res.json(terminal);
+  });
+
+  // ── GET /claude-terminals/:id/output (Phase 57) ───────
+
+  router.get('/claude-terminals/:id/output', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
+    const lines = parseInt(req.query.lines) || 20;
+    const preview = claudePool.getOutputPreview(req.params.id, Math.min(lines, 200));
+    if (preview === null) return res.status(404).json({ error: 'Terminal not found' });
+    res.json({ id: req.params.id, lines: preview });
   });
 
   // ── POST /claude-terminals ────────────────────────────
@@ -96,6 +116,8 @@ export function createClaudeTerminalRoutes(ctx) {
       continueSession,
       cols,
       rows,
+      role,
+      persistent,
     } = req.body;
 
     try {
@@ -112,6 +134,8 @@ export function createClaudeTerminalRoutes(ctx) {
         continueSession: !!continueSession,
         cols: cols ? parseInt(cols, 10) : undefined,
         rows: rows ? parseInt(rows, 10) : undefined,
+        role: role || null,
+        persistent: !!persistent,
       });
 
       res.status(201).json(result);

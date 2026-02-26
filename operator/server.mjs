@@ -597,6 +597,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'timeline.html'));
   });
 
+  // Console page (Phase 57)
+  app.get('/console', (_req, res) => {
+    res.sendFile(join(publicDir, 'console.html'));
+  });
+
   // Static files (CSS, index.html for /)
   app.use(express.static(publicDir));
 
