@@ -5200,6 +5200,21 @@ details[open] > .tree-summary .tree-icon--dir {
   flex-shrink: 0;
 }
 
+.worker-card__dot--active {
+  background: var(--status-success);
+  box-shadow: var(--glow-sm) var(--glow-success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.worker-card__dot--idle {
+  background: var(--status-warning);
+  box-shadow: var(--glow-sm) var(--glow-warning);
+}
+
+.worker-card__dot--waiting {
+  background: #f97316;
+}
+
 .worker-card__dot--running {
   background: var(--status-success);
   box-shadow: var(--glow-sm) var(--glow-success);
@@ -5269,12 +5284,149 @@ details[open] > .tree-summary .tree-icon--dir {
   opacity: 1;
 }
 
+/* ── Rich worker card additions ─────────────────────────── */
+
+.worker-card__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-left: auto;
+  margin-right: var(--sp-1);
+}
+
+.worker-card__model {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.worker-card__model--opus {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+}
+
+.worker-card__model--sonnet {
+  background: rgba(99, 102, 241, 0.18);
+  color: #818cf8;
+}
+
+.worker-card__model--haiku {
+  background: rgba(34, 211, 238, 0.18);
+  color: #22d3ee;
+}
+
+.worker-card__info {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.worker-card__info span {
+  white-space: nowrap;
+}
+
+.worker-card__info .worker-card__ctx--refreshing {
+  color: var(--status-warning);
+}
+
+.worker-card__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: var(--sp-1);
+}
+
+.worker-card__cap {
+  font-size: 0.55rem;
+  font-weight: 500;
+  text-transform: lowercase;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+  line-height: 1.6;
+}
+
+.worker-card__priority {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--status-warning);
+  margin-left: var(--sp-1);
+}
+
+.worker-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+  margin-left: var(--sp-1);
+}
+
+.worker-card:hover .worker-card__actions {
+  opacity: 1;
+}
+
+.worker-card__actions button {
+  font-size: 0.6rem;
+  padding: 1px 6px !important;
+  min-height: 0 !important;
+  min-width: auto !important;
+}
+
+.worker-card__expand {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  background: rgba(13, 17, 23, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+  z-index: 1;
+}
+
+.worker-card:hover .worker-card__expand {
+  opacity: 1;
+}
+
+.worker-card__expand:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
 .worker-card__terminal {
+  position: relative;
   margin-top: var(--sp-1);
   height: 80px;
   background: #0d1117;
   border-radius: var(--radius-sm);
   overflow: hidden;
+  transition: height 200ms ease-out;
+}
+
+.worker-card__terminal--expanded {
+  height: 240px;
 }
 
 .worker-card__terminal .xterm {

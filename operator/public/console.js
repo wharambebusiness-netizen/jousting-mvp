@@ -337,7 +337,9 @@
     }
   }
 
-  // ── Master Disconnect / Restart ──────────────────────────
+  // ── Master Disconnect / Reconnect ────────────────────────
+
+  var masterReconnectTimer = null;
 
   function showMasterDisconnected() {
     // Clean up WS (terminal stays visible with scrollback)
@@ -346,22 +348,76 @@
     // Update header status
     var statusEl = document.getElementById('master-status');
     if (statusEl) {
-      statusEl.textContent = 'Master disconnected';
+      statusEl.textContent = 'Master disconnected — checking for respawn...';
       statusEl.classList.remove('console-header__status--running');
     }
 
-    // Show restart button, hide stop
-    var startBtn = document.getElementById('start-master-btn');
-    var stopBtn = document.getElementById('stop-master-btn');
-    if (startBtn) {
-      startBtn.style.display = '';
-      startBtn.disabled = false;
-      startBtn.textContent = 'Restart Master';
-    }
-    if (stopBtn) stopBtn.style.display = 'none';
-
     // Hide prompt input if open
     hidePromptInput();
+
+    // Poll for auto-handoff respawn — the pool may respawn the master under the same ID
+    var attempts = 0;
+    var maxAttempts = 15; // 15 attempts × 2s = 30s window
+    if (masterReconnectTimer) clearInterval(masterReconnectTimer);
+
+    masterReconnectTimer = setInterval(async function() {
+      attempts++;
+      try {
+        var resp = await fetch('/api/claude-terminals/master');
+        if (resp.ok) {
+          var master = await resp.json();
+          if (master.status === 'running') {
+            // Master is back (auto-handoff respawned it)
+            clearInterval(masterReconnectTimer);
+            masterReconnectTimer = null;
+            masterTerminalId = master.id;
+
+            if (masterTerminal) {
+              masterTerminal.write('\r\n\x1b[32m[Master respawned — reconnecting...]\x1b[0m\r\n');
+            }
+
+            // Reconnect binary WS to the new PTY
+            connectMasterBinaryWs(masterTerminalId);
+
+            // Update UI
+            if (statusEl) {
+              statusEl.textContent = 'Master running';
+              statusEl.classList.add('console-header__status--running');
+            }
+            document.getElementById('start-master-btn').style.display = 'none';
+            document.getElementById('stop-master-btn').style.display = '';
+
+            if (window.showToast) window.showToast('Master auto-reconnected', 'success');
+            return;
+          }
+        }
+      } catch(e) { /* non-critical */ }
+
+      // Update countdown
+      if (statusEl) {
+        var remaining = (maxAttempts - attempts) * 2;
+        statusEl.textContent = 'Master disconnected — checking for respawn... (' + remaining + 's)';
+      }
+
+      if (attempts >= maxAttempts) {
+        // Give up — show manual restart button
+        clearInterval(masterReconnectTimer);
+        masterReconnectTimer = null;
+
+        if (statusEl) statusEl.textContent = 'Master disconnected';
+
+        var startBtn = document.getElementById('start-master-btn');
+        var stopBtn = document.getElementById('stop-master-btn');
+        if (startBtn) {
+          startBtn.style.display = '';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Restart Master';
+        }
+        if (stopBtn) stopBtn.style.display = 'none';
+
+        if (window.showToast) window.showToast('Master disconnected — click Restart to start fresh', 'warning');
+      }
+    }, 2000);
   }
 
   // ── Prompt Input ──────────────────────────────────────────
@@ -546,14 +602,36 @@
 
   async function refreshWorkers() {
     try {
-      var resp = await fetch('/api/claude-terminals');
-      if (!resp.ok) return;
-      var data = await resp.json();
+      // Fetch terminals and cost data in parallel
+      var results = await Promise.all([
+        fetch('/api/claude-terminals').then(function(r) { return r.ok ? r.json() : null; }),
+        fetch('/api/coordination/costs').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+      ]);
+
+      var data = results[0];
+      var costData = results[1];
+      if (!data) return;
+
       var terminals = data.terminals || data || [];
+
+      // Build per-worker cost lookup
+      var workerCosts = {};
+      if (costData && costData.workers) {
+        Object.keys(costData.workers).forEach(function(wid) {
+          workerCosts[wid] = costData.workers[wid].totalUsd || 0;
+        });
+      }
 
       // Filter: keep only non-master terminals
       var workerList = terminals.filter(function(t) {
         return t.id !== 'master' && t.role !== 'master';
+      });
+
+      // Merge cost data into each worker
+      workerList.forEach(function(w) {
+        if (workerCosts[w.id] != null) {
+          w._costUsd = workerCosts[w.id];
+        }
       });
 
       // Build live lookup
@@ -633,6 +711,43 @@
   }
 
   /**
+   * Map activityState to CSS dot class suffix.
+   */
+  function activityDotClass(w) {
+    var isStopped = w._stopped || w.status === 'stopped';
+    if (isStopped) return 'worker-card__dot--stopped';
+    var state = w.activityState || (w.status === 'running' ? 'active' : 'stopped');
+    switch (state) {
+      case 'active':  return 'worker-card__dot--active';
+      case 'idle':    return 'worker-card__dot--idle';
+      case 'waiting': return 'worker-card__dot--waiting';
+      default:        return w.status === 'running' ? 'worker-card__dot--running' : 'worker-card__dot--stopped';
+    }
+  }
+
+  /**
+   * Detect model family from model string.
+   * @returns {'opus'|'sonnet'|'haiku'|null}
+   */
+  function detectModelFamily(model) {
+    if (!model) return null;
+    var m = model.toLowerCase();
+    if (m.indexOf('opus') !== -1) return 'opus';
+    if (m.indexOf('sonnet') !== -1) return 'sonnet';
+    if (m.indexOf('haiku') !== -1) return 'haiku';
+    return null;
+  }
+
+  /**
+   * Format cost value to short string.
+   */
+  function formatCost(usd) {
+    if (usd == null) return null;
+    if (usd < 0.01) return '<$0.01';
+    return '$' + usd.toFixed(2);
+  }
+
+  /**
    * Create a worker card DOM element with embedded xterm mini-terminal.
    */
   function createWorkerCard(w) {
@@ -642,18 +757,45 @@
     card.className = 'worker-card' + (isStopped ? ' worker-card--stopped' : '');
     card.setAttribute('data-id', w.id);
 
-    // Header
+    // ── Header row ──────────────────────────────────────────
     var header = document.createElement('div');
     header.className = 'worker-card__header';
 
     var dot = document.createElement('span');
-    dot.className = 'worker-card__dot ' + (isRunning ? 'worker-card__dot--running' : 'worker-card__dot--stopped');
+    dot.className = 'worker-card__dot ' + activityDotClass(w);
     header.appendChild(dot);
 
     var idSpan = document.createElement('span');
     idSpan.className = 'worker-card__id';
     idSpan.textContent = w.id;
     header.appendChild(idSpan);
+
+    // Model badge
+    var modelFamily = detectModelFamily(w.model);
+    if (modelFamily) {
+      var modelBadge = document.createElement('span');
+      modelBadge.className = 'worker-card__model worker-card__model--' + modelFamily;
+      modelBadge.textContent = modelFamily;
+      header.appendChild(modelBadge);
+    }
+
+    // Quick actions (shown on hover for running workers)
+    if (isRunning && !isStopped) {
+      var actions = document.createElement('span');
+      actions.className = 'worker-card__actions';
+
+      var handoffBtn = document.createElement('button');
+      handoffBtn.className = 'btn btn--xs btn--ghost';
+      handoffBtn.title = 'Trigger context refresh';
+      handoffBtn.textContent = 'Handoff';
+      handoffBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        triggerHandoff(w.id);
+      });
+      actions.appendChild(handoffBtn);
+
+      header.appendChild(actions);
+    }
 
     if (isStopped) {
       var dismissBtn = document.createElement('button');
@@ -679,19 +821,69 @@
 
     card.appendChild(header);
 
-    // Task info
+    // ── Task line with priority badge ───────────────────────
     var taskDiv = document.createElement('div');
     if (w.assignedTask) {
       var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
       taskDiv.className = 'worker-card__task';
       taskDiv.textContent = taskLabel;
+
+      var priority = w.assignedTask.priority;
+      if (priority != null && priority > 5) {
+        var priBadge = document.createElement('span');
+        priBadge.className = 'worker-card__priority';
+        priBadge.textContent = 'P' + priority;
+        taskDiv.appendChild(priBadge);
+      }
     } else if (isRunning) {
       taskDiv.className = 'worker-card__task worker-card__task--idle';
       taskDiv.textContent = 'Idle';
     }
     card.appendChild(taskDiv);
 
-    // Meta
+    // ── Info row: cost | handoffs | context ──────────────────
+    var info = document.createElement('div');
+    info.className = 'worker-card__info';
+
+    var costStr = formatCost(w._costUsd);
+    if (costStr) {
+      var costSpan = document.createElement('span');
+      costSpan.className = 'worker-card__cost';
+      costSpan.textContent = costStr;
+      info.appendChild(costSpan);
+    }
+
+    if (w.handoffCount != null && w.handoffCount > 0) {
+      var hoSpan = document.createElement('span');
+      hoSpan.className = 'worker-card__handoffs';
+      hoSpan.textContent = w.handoffCount + ' handoff' + (w.handoffCount !== 1 ? 's' : '');
+      info.appendChild(hoSpan);
+    }
+
+    var ctxLabel = w.contextRefreshState ? w.contextRefreshState : 'healthy';
+    var ctxSpan = document.createElement('span');
+    ctxSpan.className = 'worker-card__ctx' + (w.contextRefreshState ? ' worker-card__ctx--refreshing' : '');
+    ctxSpan.textContent = 'ctx: ' + ctxLabel;
+    info.appendChild(ctxSpan);
+
+    if (info.children.length > 0) {
+      card.appendChild(info);
+    }
+
+    // ── Capabilities pills ──────────────────────────────────
+    if (w.capabilities && w.capabilities.length > 0) {
+      var capsDiv = document.createElement('div');
+      capsDiv.className = 'worker-card__caps';
+      w.capabilities.forEach(function(cap) {
+        var pill = document.createElement('span');
+        pill.className = 'worker-card__cap';
+        pill.textContent = cap;
+        capsDiv.appendChild(pill);
+      });
+      card.appendChild(capsDiv);
+    }
+
+    // ── Meta row (status + age) ─────────────────────────────
     var meta = document.createElement('div');
     meta.className = 'worker-card__meta';
     var statusSpan = document.createElement('span');
@@ -704,10 +896,22 @@
     }
     card.appendChild(meta);
 
-    // Mini-terminal container
+    // ── Mini-terminal container (expandable) ────────────────
     var termContainer = document.createElement('div');
     termContainer.className = 'worker-card__terminal';
     termContainer.id = 'worker-term-' + w.id;
+
+    // Expand toggle icon
+    var expandBtn = document.createElement('button');
+    expandBtn.className = 'worker-card__expand';
+    expandBtn.title = 'Expand/collapse terminal';
+    expandBtn.innerHTML = '&#9650;';
+    expandBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toggleWorkerExpand(w.id, termContainer, expandBtn);
+    });
+    termContainer.appendChild(expandBtn);
+
     card.appendChild(termContainer);
 
     // Click card to open in terminals page
@@ -727,6 +931,40 @@
   }
 
   /**
+   * Toggle expand/collapse on a worker mini-terminal.
+   */
+  function toggleWorkerExpand(workerId, termContainer, expandBtn) {
+    var expanded = termContainer.classList.toggle('worker-card__terminal--expanded');
+    expandBtn.innerHTML = expanded ? '&#9660;' : '&#9650;';
+
+    // Refit xterm after expand transition
+    var entry = workerTerminals[workerId];
+    if (entry && entry.fitAddon) {
+      setTimeout(function() {
+        try { entry.fitAddon.fit(); } catch(_) {}
+      }, 220);
+    }
+  }
+
+  /**
+   * Trigger a context refresh / respawn for a worker.
+   */
+  async function triggerHandoff(workerId) {
+    try {
+      var resp = await fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/respawn', { method: 'POST' });
+      if (resp.ok) {
+        if (window.showToast) window.showToast('Respawn triggered for ' + workerId, 'success');
+        refreshWorkers();
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        if (window.showToast) window.showToast(err.error || 'Respawn failed', 'error');
+      }
+    } catch(e) {
+      if (window.showToast) window.showToast('Respawn failed', 'error');
+    }
+  }
+
+  /**
    * Update an existing worker card's metadata without recreating the xterm instance.
    */
   function updateWorkerCardMeta(card, w) {
@@ -736,10 +974,29 @@
     // Update stopped class
     card.classList.toggle('worker-card--stopped', isStopped);
 
-    // Update dot
+    // Update activity dot
     var dot = card.querySelector('.worker-card__dot');
     if (dot) {
-      dot.className = 'worker-card__dot ' + (isRunning ? 'worker-card__dot--running' : 'worker-card__dot--stopped');
+      dot.className = 'worker-card__dot ' + activityDotClass(w);
+    }
+
+    // Update model badge
+    var modelFamily = detectModelFamily(w.model);
+    var existingModel = card.querySelector('.worker-card__model');
+    if (modelFamily && !existingModel) {
+      var modelBadge = document.createElement('span');
+      modelBadge.className = 'worker-card__model worker-card__model--' + modelFamily;
+      modelBadge.textContent = modelFamily;
+      var header = card.querySelector('.worker-card__header');
+      var idEl = header && header.querySelector('.worker-card__id');
+      if (idEl && idEl.nextSibling) {
+        header.insertBefore(modelBadge, idEl.nextSibling);
+      } else if (header) {
+        header.appendChild(modelBadge);
+      }
+    } else if (modelFamily && existingModel) {
+      existingModel.className = 'worker-card__model worker-card__model--' + modelFamily;
+      existingModel.textContent = modelFamily;
     }
 
     // Update task info
@@ -749,6 +1006,14 @@
         var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
         taskDiv.className = 'worker-card__task';
         taskDiv.textContent = taskLabel;
+
+        var priority = w.assignedTask.priority;
+        if (priority != null && priority > 5) {
+          var priBadge = document.createElement('span');
+          priBadge.className = 'worker-card__priority';
+          priBadge.textContent = 'P' + priority;
+          taskDiv.appendChild(priBadge);
+        }
       } else if (isRunning) {
         taskDiv.className = 'worker-card__task worker-card__task--idle';
         taskDiv.textContent = 'Idle';
@@ -756,6 +1021,60 @@
         taskDiv.className = 'worker-card__task';
         taskDiv.textContent = '';
       }
+    }
+
+    // Update info row (cost, handoffs, context)
+    var infoRow = card.querySelector('.worker-card__info');
+    if (infoRow) {
+      // Update cost
+      var costEl = infoRow.querySelector('.worker-card__cost');
+      var costStr = formatCost(w._costUsd);
+      if (costEl && costStr) {
+        costEl.textContent = costStr;
+      } else if (!costEl && costStr) {
+        var cs = document.createElement('span');
+        cs.className = 'worker-card__cost';
+        cs.textContent = costStr;
+        infoRow.insertBefore(cs, infoRow.firstChild);
+      }
+
+      // Update handoffs
+      var hoEl = infoRow.querySelector('.worker-card__handoffs');
+      if (hoEl && w.handoffCount != null) {
+        hoEl.textContent = w.handoffCount + ' handoff' + (w.handoffCount !== 1 ? 's' : '');
+      }
+
+      // Update context state
+      var ctxEl = infoRow.querySelector('.worker-card__ctx');
+      if (ctxEl) {
+        var ctxLabel = w.contextRefreshState ? w.contextRefreshState : 'healthy';
+        ctxEl.textContent = 'ctx: ' + ctxLabel;
+        ctxEl.classList.toggle('worker-card__ctx--refreshing', !!w.contextRefreshState);
+      }
+    }
+
+    // Update capabilities
+    var capsDiv = card.querySelector('.worker-card__caps');
+    if (w.capabilities && w.capabilities.length > 0) {
+      if (!capsDiv) {
+        capsDiv = document.createElement('div');
+        capsDiv.className = 'worker-card__caps';
+        var metaDiv = card.querySelector('.worker-card__meta');
+        if (metaDiv) {
+          card.insertBefore(capsDiv, metaDiv);
+        } else {
+          card.appendChild(capsDiv);
+        }
+      }
+      capsDiv.innerHTML = '';
+      w.capabilities.forEach(function(cap) {
+        var pill = document.createElement('span');
+        pill.className = 'worker-card__cap';
+        pill.textContent = cap;
+        capsDiv.appendChild(pill);
+      });
+    } else if (capsDiv) {
+      capsDiv.remove();
     }
 
     // Update meta
