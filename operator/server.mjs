@@ -16,7 +16,7 @@
 import express from 'express';
 import http from 'http';
 import { resolve, join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { parseArgs } from 'util';
 
 import { createRegistry } from './registry.mjs';
@@ -198,6 +198,19 @@ export function createApp(options = {}) {
       }
       next();
     });
+
+    // CLI token: write a raw token to .data/cli-token.txt for curl/scripts
+    for (const t of auth.listTokens()) {
+      if (t.label === 'cli-session') auth.revokeToken(t.id);
+    }
+    const { token: cliToken } = auth.generateToken('cli-session');
+    const cliTokenPath = join(operatorDir, '.data', 'cli-token.txt');
+    try {
+      writeFileSync(cliTokenPath, cliToken, 'utf8');
+      logger.info?.('CLI token written to ' + cliTokenPath);
+    } catch (e) {
+      logger.warn?.('Failed to write CLI token: ' + e.message);
+    }
   }
 
   // Auth middleware (after JSON parsing, before API routes)
