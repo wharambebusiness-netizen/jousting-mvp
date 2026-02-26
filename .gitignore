@@ -40,3 +40,6 @@ operator/registry.json.tmp
 operator/registry-archive.json
 operator/handoffs/
 operator/.data/cli-token.txt
+
+# Test temp directories
+operator/__test_tmp_*/
