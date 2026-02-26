@@ -697,17 +697,26 @@ function updateBinaryReconnectOverlay(inst, attempt) {
 function connectClaudeBinaryWs(inst) {
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(inst.id);
-  var backoff = 1000;
-  var maxBackoff = 15000;
-  var reconnectTimer = null;
-  var reconnectAttempts = 0;
+
+  // ── Clean up ANY previous connection FIRST ──
+  // This prevents orphaned reconnect timers and duplicate WS connections
+  // when connectClaudeBinaryWs is called multiple times (handoff, permission toggle, etc.)
+  if (inst._closeBinaryWs) {
+    inst._closeBinaryWs();
+  }
+
+  // Per-invocation state stored on instance (not local vars) so cleanup works across calls
+  inst._binaryBackoff = 1000;
+  inst._binaryReconnectAttempts = 0;
+  inst._binaryReconnectTimer = null;
+  inst._binaryWsClosed = false;
 
   function connect() {
     var ws = new WebSocket(url);
 
     ws.onopen = function() {
-      reconnectAttempts = 0;
-      backoff = 1000; // reset on success
+      inst._binaryReconnectAttempts = 0;
+      inst._binaryBackoff = 1000; // reset on success
       // Remove any reconnect overlay
       if (inst.panel) {
         var overlay = inst.panel.querySelector('.term-panel__overlay');
@@ -723,6 +732,9 @@ function connectClaudeBinaryWs(inst) {
     };
 
     ws.onmessage = function(evt) {
+      // Ignore messages if this WS is no longer the active one
+      if (inst.binaryWs !== ws) return;
+
       var data = evt.data;
       // Phase 49: handle binary WS control messages (heartbeat ping/pong)
       if (typeof data === 'string' && data.charCodeAt(0) === 1) {
@@ -740,17 +752,20 @@ function connectClaudeBinaryWs(inst) {
     };
 
     ws.onclose = function() {
+      // Only handle close if this WS is still the active one
+      if (inst.binaryWs !== ws) return;
+
       inst.binaryWs = null;
       // Only reconnect if terminal is still running and not explicitly closed
       if (inst.running && !inst._binaryWsClosed) {
-        reconnectAttempts++;
-        inst.terminal.writeln('\r\n\x1b[33m--- Reconnecting... (attempt ' + reconnectAttempts + ') ---\x1b[0m');
-        updateBinaryReconnectOverlay(inst, reconnectAttempts);
-        reconnectTimer = setTimeout(function() {
-          reconnectTimer = null;
+        inst._binaryReconnectAttempts++;
+        inst.terminal.writeln('\r\n\x1b[33m--- Reconnecting... (attempt ' + inst._binaryReconnectAttempts + ') ---\x1b[0m');
+        updateBinaryReconnectOverlay(inst, inst._binaryReconnectAttempts);
+        inst._binaryReconnectTimer = setTimeout(function() {
+          inst._binaryReconnectTimer = null;
           if (inst.running && !inst._binaryWsClosed) connect();
-        }, backoff);
-        backoff = Math.min(backoff * 2, maxBackoff);
+        }, inst._binaryBackoff);
+        inst._binaryBackoff = Math.min(inst._binaryBackoff * 2, 15000);
       } else {
         inst.terminal.writeln('\r\n\x1b[31m--- Disconnected ---\x1b[0m');
       }
@@ -763,20 +778,7 @@ function connectClaudeBinaryWs(inst) {
     inst.binaryWs = ws;
   }
 
-  // Flag to distinguish explicit close from unexpected disconnect
-  inst._binaryWsClosed = false;
-
   connect();
-
-  // Dispose previous input/resize listeners to prevent duplicate handlers
-  // (connectClaudeBinaryWs may be called multiple times for the same terminal
-  //  on handoff, permission toggle, etc.)
-  if (inst._binaryInputDisposable) {
-    inst._binaryInputDisposable.dispose();
-  }
-  if (inst._binaryResizeDisposable) {
-    inst._binaryResizeDisposable.dispose();
-  }
 
   // User input → WS → PTY
   inst._binaryInputDisposable = inst.terminal.onData(function(data) {
@@ -792,10 +794,10 @@ function connectClaudeBinaryWs(inst) {
     }
   });
 
-  // Store cleanup function
+  // Store cleanup function — all state is on inst so it survives across invocations
   inst._closeBinaryWs = function() {
     inst._binaryWsClosed = true;
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (inst._binaryReconnectTimer) { clearTimeout(inst._binaryReconnectTimer); inst._binaryReconnectTimer = null; }
     if (inst.binaryWs) { try { inst.binaryWs.close(); } catch(e) { /* noop */ } inst.binaryWs = null; }
     if (inst._binaryInputDisposable) { inst._binaryInputDisposable.dispose(); inst._binaryInputDisposable = null; }
     if (inst._binaryResizeDisposable) { inst._binaryResizeDisposable.dispose(); inst._binaryResizeDisposable = null; }
@@ -1969,10 +1971,7 @@ function connectWS() {
           updateStatusBar(hId);
           updateTabDot(hId);
           // Reconnect binary WS for new PTY process
-          if (hInst.binaryWs) {
-            try { hInst.binaryWs.close(); } catch(e) { /* noop */ }
-            hInst.binaryWs = null;
-          }
+          // (connectClaudeBinaryWs handles cleanup of old WS internally)
           connectClaudeBinaryWs(hInst);
           showToast(hId + ' auto-handoff #' + hInst.handoffCount, 'success');
         }
