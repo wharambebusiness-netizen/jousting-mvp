@@ -74,7 +74,7 @@ const CONTEXT_PATTERNS = [
 ];
 
 // Ring buffer size for PTY output scanning (bytes)
-const OUTPUT_BUFFER_SIZE = 8192;
+const OUTPUT_BUFFER_SIZE = 32768;
 
 // Minimum uptime before auto-handoff triggers (ms) — prevents rapid restart loops
 const MIN_UPTIME_FOR_HANDOFF_MS = 10000;
@@ -138,8 +138,8 @@ export async function createClaudeTerminal(opts) {
         ...process.env,
         // Clear nested-session guard so spawned Claude doesn't refuse to start
         CLAUDECODE: '',
-        // Set autocompact threshold for handoff detection
-        CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE: '70',
+        // Set autocompact threshold — lower to detect context pressure early for fresh restart
+        CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE: '50',
         // Force color output
         FORCE_COLOR: '1',
       },

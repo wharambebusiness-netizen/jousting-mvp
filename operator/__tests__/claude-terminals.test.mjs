@@ -281,7 +281,7 @@ describe('createClaudeTerminal', () => {
   it('sets CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE env var', async () => {
     await createClaudeTerminal({ projectDir: '/tmp/test' });
     const call = mockPtySpawn.mock.calls[0];
-    expect(call[2].env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE).toBe('70');
+    expect(call[2].env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE).toBe('50');
   });
 
   it('sets FORCE_COLOR env var', async () => {

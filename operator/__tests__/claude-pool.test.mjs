@@ -80,7 +80,7 @@ vi.mock('../claude-terminal.mjs', async (importOriginal) => {
   };
 });
 
-const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES } = await import('../claude-pool.mjs');
+const { createClaudePool, MAX_TERMINALS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES } = await import('../claude-pool.mjs');
 const claudeTermMock = await import('../claude-terminal.mjs');
 
 // ============================================================
@@ -1185,6 +1185,258 @@ describe('createClaudePool', () => {
       const status = pool.getPoolStatus();
       expect(status.total).toBe(0);
       expect(status.running).toBe(0);
+    });
+  });
+
+  // ── Context Refresh ──────────────────────────────────────
+
+  describe('context refresh', () => {
+    it('exports context refresh constants', () => {
+      expect(CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS).toBe(60000);
+      expect(CONTEXT_REFRESH_SPAWN_DELAY_MS).toBe(3000);
+      expect(MAX_CONTEXT_REFRESHES).toBe(10);
+    });
+
+    it('triggers on context-warning when autoHandoff=true', async () => {
+      const started = [];
+      events.on('claude-terminal:context-refresh-started', (d) => started.push(d));
+
+      await pool.spawn('cr1', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr1');
+
+      // Simulate context warning
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      expect(started.length).toBe(1);
+      expect(started[0].terminalId).toBe('cr1');
+      expect(started[0].refreshCount).toBe(1);
+    });
+
+    it('does NOT trigger when autoHandoff=false', async () => {
+      const started = [];
+      events.on('claude-terminal:context-refresh-started', (d) => started.push(d));
+
+      await pool.spawn('cr2', { autoHandoff: false });
+      const handle = pool.getTerminalHandle('cr2');
+
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      expect(started.length).toBe(0);
+    });
+
+    it('guard prevents re-entry', async () => {
+      const started = [];
+      events.on('claude-terminal:context-refresh-started', (d) => started.push(d));
+
+      await pool.spawn('cr3', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr3');
+
+      // First trigger
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+      // Second trigger (should be blocked)
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      expect(started.length).toBe(1);
+    });
+
+    it('respects MAX_CONTEXT_REFRESHES limit', async () => {
+      const started = [];
+      events.on('claude-terminal:context-refresh-started', (d) => started.push(d));
+
+      await pool.spawn('cr4', { autoHandoff: true, _contextRefreshCount: MAX_CONTEXT_REFRESHES });
+      const handle = pool.getTerminalHandle('cr4');
+
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      expect(started.length).toBe(0);
+    });
+
+    it('parses handoff from output and completes refresh', async () => {
+      const completed = [];
+      events.on('claude-terminal:context-refresh-completed', (d) => completed.push(d));
+
+      await pool.spawn('cr5', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr5');
+
+      // Start context refresh
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // Simulate Claude producing a handoff
+      const handoffText = '## HANDOFF\n\nThis is a detailed handoff with enough content to pass the 50 char minimum threshold for parsing.';
+      events.emit('claude-terminal:data', {
+        terminalId: 'cr5',
+        data: handoffText,
+      });
+
+      // Wait for terminal kill auto-exit (10ms) + spawn delay
+      await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
+
+      // Terminal should have been killed
+      expect(handle.kill).toHaveBeenCalled();
+
+      expect(completed.length).toBe(1);
+      expect(completed[0].terminalId).toBe('cr5');
+      expect(completed[0].refreshCount).toBe(1);
+      expect(completed[0].handoffLength).toBeGreaterThan(50);
+    });
+
+    it('timeout uses synthetic handoff', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+
+      const localEvents = new EventBus();
+      const localPool = createClaudePool({ events: localEvents, projectDir: '/tmp/pool-test', log: () => {} });
+
+      await localPool.spawn('cr6', { autoHandoff: true });
+      const handle = localPool.getTerminalHandle('cr6');
+
+      // Start context refresh
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // No handoff produced — advance past timeout
+      vi.advanceTimersByTime(CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS + 100);
+
+      // Terminal should be killed after timeout triggers synthetic handoff
+      await vi.advanceTimersByTimeAsync(100);
+      expect(handle.kill).toHaveBeenCalled();
+
+      // Cleanup
+      vi.useRealTimers();
+      await localPool.shutdownAll();
+    });
+
+    it('carries task forward on context refresh', async () => {
+      const mockCoordinator = {
+        taskQueue: {
+          getAll: vi.fn().mockReturnValue([]),
+          assign: vi.fn(),
+          start: vi.fn(),
+          complete: vi.fn(),
+          fail: vi.fn(),
+          retry: vi.fn(),
+        },
+      };
+      const localEvents = new EventBus();
+      const localPool = createClaudePool({
+        events: localEvents,
+        projectDir: '/tmp/pool-test',
+        coordinator: mockCoordinator,
+        log: () => {},
+      });
+
+      const completed = [];
+      localEvents.on('claude-terminal:context-refresh-completed', (d) => completed.push(d));
+
+      await localPool.spawn('cr7', { autoHandoff: true });
+      localPool.assignTask('cr7', { id: 'task-99', task: 'Important work', category: 'code' });
+
+      const handle = localPool.getTerminalHandle('cr7');
+
+      // Start context refresh
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // Emit handoff
+      localEvents.emit('claude-terminal:data', {
+        terminalId: 'cr7',
+        data: '## HANDOFF\n\nDetailed handoff with enough chars to pass the minimum content validation threshold here.',
+      });
+
+      // Wait for kill auto-exit + spawn delay
+      await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
+
+      expect(completed.length).toBe(1);
+      expect(completed[0].hadTask).toBe(true);
+
+      // The new terminal should have the task assigned
+      const newTerm = localPool.getTerminal('cr7');
+      if (newTerm) {
+        expect(newTerm.assignedTask).toBeTruthy();
+        expect(newTerm.assignedTask.taskId).toBe('task-99');
+      }
+
+      await localPool.shutdownAll();
+    });
+
+    it('emits context-refresh-started event', async () => {
+      const started = [];
+      events.on('claude-terminal:context-refresh-started', (d) => started.push(d));
+
+      await pool.spawn('cr8', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr8');
+
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      expect(started.length).toBe(1);
+      expect(started[0]).toMatchObject({
+        terminalId: 'cr8',
+        refreshCount: 1,
+      });
+    });
+
+    it('handles terminal exit during handoff request', async () => {
+      await pool.spawn('cr9', { autoHandoff: true });
+      const handle = pool.getTerminalHandle('cr9');
+
+      // Start context refresh
+      handle._triggerContextWarning({ pattern: 'auto-compact' });
+
+      // Terminal dies before producing handoff (non-zero = crash)
+      // This fires the exit handler in maybeContextRefresh, which calls _finishContextRefresh with synthetic handoff
+      handle._triggerExit(1, null);
+
+      // Wait for spawn delay
+      await new Promise(r => setTimeout(r, CONTEXT_REFRESH_SPAWN_DELAY_MS + 500));
+
+      // The key assertion is no uncaught errors — terminal was cleaned up
+    });
+
+    it('formatEntry includes contextRefreshCount and contextRefreshState', async () => {
+      await pool.spawn('cr10', { autoHandoff: true, _contextRefreshCount: 3 });
+      const info = pool.getTerminal('cr10');
+      expect(info.contextRefreshCount).toBe(3);
+      expect(info.contextRefreshState).toBe(null);
+    });
+
+    it('normal auto-handoff uses fresh restart (no -c flag)', async () => {
+      const realDateNow = Date.now;
+      const startTime = Date.now();
+      await pool.spawn('cr11', { autoHandoff: true });
+
+      // Mock Date.now to bypass MIN_UPTIME_FOR_HANDOFF_MS check
+      Date.now = () => startTime + 15000;
+
+      const handle = pool.getTerminalHandle('cr11');
+      // Trigger clean exit (auto-handoff should fire)
+      handle._triggerExit(0);
+
+      // Wait for respawn
+      await new Promise(r => { Date.now = realDateNow; setTimeout(r, 100); });
+
+      // Check that the respawned terminal was created with continueSession=false
+      const lastCall = claudeTermMock.createClaudeTerminal.mock.calls.at(-1);
+      expect(lastCall).toBeTruthy();
+      expect(lastCall[0].continueSession).toBe(false);
+    });
+
+    it('auto-handoff emits freshRestart flag', async () => {
+      const realDateNow = Date.now;
+      const startTime = Date.now();
+      const handoffs = [];
+      events.on('claude-terminal:handoff', (d) => handoffs.push(d));
+
+      await pool.spawn('cr12', { autoHandoff: true });
+
+      // Mock Date.now to bypass MIN_UPTIME_FOR_HANDOFF_MS check
+      Date.now = () => startTime + 15000;
+
+      const handle = pool.getTerminalHandle('cr12');
+      // Trigger clean exit
+      handle._triggerExit(0);
+
+      // Wait for respawn
+      await new Promise(r => { Date.now = realDateNow; setTimeout(r, 100); });
+
+      expect(handoffs.length).toBe(1);
+      expect(handoffs[0].freshRestart).toBe(true);
     });
   });
 });

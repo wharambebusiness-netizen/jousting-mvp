@@ -134,15 +134,21 @@ function createReplayBuffer(maxSize) {
 
 /**
  * Create a WebSocket auth check function.
- * Validates ?token= query parameter on upgrade.
+ * Validates ?token= query parameter or _auth cookie on upgrade.
  * @param {object} auth - Auth instance from createAuth()
- * @returns {function} Check function: (url) => { valid, id?, label? }
+ * @returns {function} Check function: (url, request) => { valid, id?, label? }
  */
 export function createWsAuthCheck(auth) {
-  return function wsAuthCheck(url) {
+  return function wsAuthCheck(url, request) {
     if (!auth) return { valid: true };
-    const token = url.searchParams.get('token');
-    return auth.validateToken(token);
+    // Check ?token= query parameter first
+    const queryToken = url.searchParams.get('token');
+    if (queryToken) return auth.validateToken(queryToken);
+    // Fall back to _auth cookie (browser session)
+    const cookieHeader = request?.headers?.cookie || '';
+    const match = cookieHeader.match(/(^|;\s*)_auth=([^;]+)/);
+    if (match) return auth.validateToken(match[2]);
+    return { valid: false };
   };
 }
 
@@ -194,8 +200,8 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
 
-    // Validate auth token on WebSocket upgrade
-    const authResult = wsAuthCheck(url);
+    // Validate auth token on WebSocket upgrade (query param or cookie)
+    const authResult = wsAuthCheck(url, request);
     if (!authResult.valid) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
@@ -482,6 +488,9 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     'claude-terminal:swarm-scaled-up', 'claude-terminal:swarm-scaled-down',
     'claude-terminal:task-recovered',
     'claude-terminal:capabilities-changed',
+    'claude-terminal:context-refresh-started',
+    'claude-terminal:context-refresh-completed',
+    'claude-terminal:context-refresh-failed',
     'shared-memory:updated', 'shared-memory:deleted',
     'shared-memory:cleared', 'shared-memory:snapshot-written',
     'terminal-message:sent', 'terminal-message:broadcast',

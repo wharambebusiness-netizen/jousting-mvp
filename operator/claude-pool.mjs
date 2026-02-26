@@ -12,7 +12,8 @@
 // Phase 15E: Auto-handoff on context exhaustion.
 // ============================================================
 
-import { createClaudeTerminal, isNodePtyAvailable, MIN_UPTIME_FOR_HANDOFF_MS } from './claude-terminal.mjs';
+import { createClaudeTerminal, isNodePtyAvailable, MIN_UPTIME_FOR_HANDOFF_MS, stripAnsi } from './claude-terminal.mjs';
+import { execSync } from 'child_process';
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -29,6 +30,12 @@ const SWARM_MAX_CRASH_RETRIES = 3;       // max respawn attempts per crashed ter
 const MAX_TASK_HISTORY = 5;              // max categories tracked per terminal
 const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history category
 const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
+
+// ── Context Refresh Constants ────────────────────────────
+const CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS = 60000;  // 60s to wait for handoff
+const CONTEXT_REFRESH_GIT_TIMEOUT_MS = 15000;      // 15s for git operations
+const CONTEXT_REFRESH_SPAWN_DELAY_MS = 3000;       // delay before fresh spawn
+const MAX_CONTEXT_REFRESHES = 10;                   // prevent infinite loops
 
 // ── Factory ─────────────────────────────────────────────────
 
@@ -165,6 +172,10 @@ export function createClaudePool(ctx) {
       capabilities: opts.capabilities || null,
       role: opts.role || null,
       persistent: !!opts.persistent,
+      contextRefreshCount: opts._contextRefreshCount || 0,
+      _contextRefreshState: null,   // null | 'requesting-handoff' | 'committing' | 'restarting'
+      _contextRefreshOutputCapture: '',
+      _contextRefreshTimer: null,
       _taskHistory: [],
       _completionTimer: null,
       _taskActivityBytes: 0,
@@ -229,6 +240,11 @@ export function createClaudePool(ctx) {
         handoffCount: entry.handoffCount,
         autoHandoff: entry.autoHandoff,
       });
+
+      // Trigger context-refresh instead of waiting for compaction
+      if (entry.autoHandoff) {
+        maybeContextRefresh(entry);
+      }
     });
 
     events.emit('claude-terminal:spawned', {
@@ -276,11 +292,14 @@ export function createClaudePool(ctx) {
 
   /**
    * Attempt auto-handoff when a terminal exits cleanly.
-   * Respawns with -c (continue last session) if conditions are met.
+   * Respawns with fresh context (no -c flag), injecting handoff via --append-system-prompt.
    */
   function maybeAutoHandoff(entry, exitCode) {
     if (!entry.autoHandoff) return;
     if (exitCode !== 0) return;
+
+    // Skip if context-refresh is handling this terminal
+    if (entry._contextRefreshState) return;
 
     // Check minimum uptime to prevent rapid restart loops
     const uptime = Date.now() - new Date(entry.spawnedAt).getTime();
@@ -290,16 +309,22 @@ export function createClaudePool(ctx) {
     }
 
     const newCount = entry.handoffCount + 1;
-    log(`[claude-pool] ${entry.id} auto-handoff #${newCount} — respawning with -c`);
+    log(`[claude-pool] ${entry.id} auto-handoff #${newCount} — fresh restart`);
+
+    // Parse handoff from output buffer or use tail as context
+    const buf = entry.terminal.getOutputBuffer();
+    const stripped = stripAnsi(buf);
+    const handoff = parseHandoffFromOutput(stripped) || stripped.slice(-2000).trim() || '(no output captured)';
 
     // Write snapshot before handoff (capture final state)
     if (sharedMemory) {
       try {
         sharedMemory.writeSnapshot(entry.id, {
-          lastOutput: entry.terminal.getOutputBuffer(),
+          lastOutput: buf,
           model: entry.config.model || null,
           handoffCount: newCount,
           reason: 'handoff',
+          handoff,
           metadata: entry.config.snapshotMetadata || null,
         });
       } catch (err) {
@@ -307,18 +332,20 @@ export function createClaudePool(ctx) {
       }
     }
 
-    // Respawn with continueSession=true, carrying forward config
+    // Respawn with fresh context — NO continueSession
     const hadAutoDispatch = entry.autoDispatch;
     const hadAutoComplete = entry.autoComplete;
     const savedTask = entry.assignedTask;
     const config = {
       ...entry.config,
-      continueSession: true,
-      resumeSessionId: undefined, // -c takes precedence
+      continueSession: false,
+      resumeSessionId: undefined,
+      systemPrompt: buildContextRefreshPrompt(handoff, entry),
       autoHandoff: true,
       autoDispatch: hadAutoDispatch,
       autoComplete: hadAutoComplete,
       _handoffCount: newCount,
+      _contextRefreshCount: entry.contextRefreshCount,
     };
 
     // Remove old entry and spawn new (async, fire-and-forget)
@@ -343,6 +370,7 @@ export function createClaudePool(ctx) {
         events.emit('claude-terminal:handoff', {
           terminalId: entry.id,
           handoffCount: newCount,
+          freshRestart: true,
         });
         // Auto-dispatch after handoff respawn (with delay for Claude to initialize)
         // Skip if task was carried over from the previous session
@@ -364,6 +392,363 @@ export function createClaudePool(ctx) {
           error: `Auto-handoff failed: ${err.message}`,
         });
       });
+  }
+
+  // ── Context Refresh ─────────────────────────────────────
+
+  /**
+   * Parse a structured handoff from terminal output text.
+   * Looks for a ## HANDOFF section (markdown heading).
+   * @param {string} text - ANSI-stripped terminal output
+   * @returns {string|null} Parsed handoff text, or null if not found
+   */
+  function parseHandoffFromOutput(text) {
+    // Find the ## HANDOFF heading line
+    const headingIdx = text.search(/^##\s+HANDOFF\b/mi);
+    if (headingIdx === -1) return null;
+
+    // Skip the heading line itself
+    const afterHeading = text.slice(headingIdx);
+    const lines = afterHeading.split('\n');
+    const content = [];
+    for (let i = 1; i < lines.length; i++) {
+      // Stop at next heading or horizontal rule
+      if (/^##\s/.test(lines[i]) || /^━/.test(lines[i])) break;
+      content.push(lines[i]);
+    }
+    const handoff = content.join('\n').trim();
+    return handoff.length > 50 ? handoff : null; // require meaningful content
+  }
+
+  /**
+   * Generate a synthetic handoff from output buffer when Claude doesn't produce one.
+   * @param {object} entry - Pool entry
+   * @returns {string} Synthetic handoff text
+   */
+  function generateSyntheticContextHandoff(entry) {
+    const buf = entry.terminal.getOutputBuffer();
+    const stripped = stripAnsi(buf);
+    // Take last ~2000 chars of output as context
+    const tail = stripped.slice(-2000).trim();
+    const taskInfo = entry.assignedTask
+      ? `Task: ${entry.assignedTask.taskId} — ${entry.assignedTask.task}`
+      : 'No specific task assigned';
+    return [
+      '## HANDOFF (auto-generated)',
+      '',
+      `Terminal: ${entry.id}`,
+      taskInfo,
+      `Context refresh #${entry.contextRefreshCount + 1}`,
+      '',
+      '### Recent Output (tail)',
+      '```',
+      tail || '(no output captured)',
+      '```',
+    ].join('\n');
+  }
+
+  /**
+   * Build the system prompt for a context-refreshed terminal.
+   * @param {string} handoff - Handoff text
+   * @param {object} entry - Pool entry (old)
+   * @returns {string} System prompt text
+   */
+  function buildContextRefreshPrompt(handoff, entry) {
+    const parts = [
+      '[CONTEXT-REFRESH] This terminal was restarted with a fresh context window.',
+      `This is context refresh #${entry.contextRefreshCount + 1} for terminal ${entry.id}.`,
+      '',
+      'The previous session generated the following handoff:',
+      '',
+      handoff,
+      '',
+      'Continue working from where the previous session left off.',
+      'Do NOT repeat work that was already completed.',
+    ];
+    if (entry.assignedTask) {
+      parts.push('', `Active task: ${entry.assignedTask.taskId} — ${entry.assignedTask.task}`);
+    }
+    return parts.join('\n');
+  }
+
+  /**
+   * Execute git commit + push for a context refresh.
+   * Non-blocking — failures are logged but don't block the refresh.
+   * @param {object} entry - Pool entry
+   * @param {string} handoff - Handoff summary (first line used in commit msg)
+   */
+  function gitCommitForRefresh(entry, handoff) {
+    const summary = (handoff.split('\n').find(l => l.trim() && !l.startsWith('#')) || 'context refresh').slice(0, 60);
+    const count = entry.contextRefreshCount + 1;
+    const msg = `context-refresh: ${entry.id} #${count} — ${summary}`;
+
+    try {
+      execSync('git add -A', {
+        cwd: entry.config.projectDir || projectDir,
+        timeout: CONTEXT_REFRESH_GIT_TIMEOUT_MS,
+        stdio: 'ignore',
+      });
+      execSync(`git diff --cached --quiet`, {
+        cwd: entry.config.projectDir || projectDir,
+        timeout: 5000,
+        stdio: 'ignore',
+      });
+      // If git diff --cached --quiet exits 0, there's nothing staged — skip commit
+      log(`[claude-pool] ${entry.id} context-refresh: no changes to commit`);
+    } catch {
+      // Non-zero exit from git diff --cached --quiet means there ARE staged changes
+      try {
+        execSync(`git commit -m "${msg.replace(/"/g, '\\"')}"`, {
+          cwd: entry.config.projectDir || projectDir,
+          timeout: CONTEXT_REFRESH_GIT_TIMEOUT_MS,
+          stdio: 'ignore',
+        });
+        log(`[claude-pool] ${entry.id} context-refresh: committed`);
+      } catch (err) {
+        log(`[claude-pool] ${entry.id} context-refresh commit failed: ${err.message}`);
+      }
+    }
+
+    try {
+      execSync('git push', {
+        cwd: entry.config.projectDir || projectDir,
+        timeout: CONTEXT_REFRESH_GIT_TIMEOUT_MS,
+        stdio: 'ignore',
+      });
+    } catch (err) {
+      log(`[claude-pool] ${entry.id} context-refresh push failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Initiate a context refresh: request handoff from Claude, then restart fresh.
+   * Guards against re-entry, max refreshes, and minimum uptime.
+   * @param {object} entry - Pool entry
+   */
+  function maybeContextRefresh(entry) {
+    // Guard: already in progress
+    if (entry._contextRefreshState) return;
+
+    // Guard: max refreshes reached — fall back to natural compaction
+    if (entry.contextRefreshCount >= MAX_CONTEXT_REFRESHES) {
+      log(`[claude-pool] ${entry.id} max context refreshes (${MAX_CONTEXT_REFRESHES}) reached — allowing compaction`);
+      return;
+    }
+
+    // Note: no MIN_UPTIME guard here — context pressure detection already implies
+    // significant runtime. The uptime guard is only needed in maybeAutoHandoff
+    // (prevents rapid restart loops on immediate exit).
+
+    entry._contextRefreshState = 'requesting-handoff';
+    entry._contextRefreshOutputCapture = '';
+    log(`[claude-pool] ${entry.id} context-refresh started (refresh #${entry.contextRefreshCount + 1})`);
+
+    events.emit('claude-terminal:context-refresh-started', {
+      terminalId: entry.id,
+      refreshCount: entry.contextRefreshCount + 1,
+    });
+
+    // Write handoff-generation prompt to PTY
+    const handoffPrompt = [
+      '\n/clear\n',
+      'IMPORTANT: Your context window is nearly full. Generate a handoff document NOW.',
+      'Write a section starting with exactly "## HANDOFF" on its own line.',
+      'Include: (1) what was accomplished, (2) what is in progress, (3) what to do next,',
+      '(4) any important file paths or decisions, (5) current errors or blockers.',
+      'Be thorough but concise. This handoff will be injected into a fresh session.\r',
+    ].join('\n');
+    try {
+      entry.terminal.write(handoffPrompt);
+    } catch {
+      // Terminal may already be dead
+      _finishContextRefresh(entry, null);
+      return;
+    }
+
+    // Listen for output to capture handoff
+    const dataHandler = (evtData) => {
+      if (evtData.terminalId !== entry.id) return;
+      if (entry._contextRefreshState !== 'requesting-handoff') return;
+      const chunk = typeof evtData.data === 'string' ? evtData.data : '';
+      entry._contextRefreshOutputCapture += stripAnsi(chunk);
+
+      // Check if handoff is present
+      const handoff = parseHandoffFromOutput(entry._contextRefreshOutputCapture);
+      if (handoff) {
+        events.off('claude-terminal:data', dataHandler);
+        events.off('claude-terminal:exit', exitHandler);
+        if (entry._contextRefreshTimer) {
+          clearTimeout(entry._contextRefreshTimer);
+          entry._contextRefreshTimer = null;
+        }
+        _finishContextRefresh(entry, handoff);
+      }
+    };
+    events.on('claude-terminal:data', dataHandler);
+
+    // Handle terminal exit during handoff request
+    const exitHandler = (evtData) => {
+      if (evtData.terminalId !== entry.id) return;
+      events.off('claude-terminal:data', dataHandler);
+      events.off('claude-terminal:exit', exitHandler);
+      if (entry._contextRefreshTimer) {
+        clearTimeout(entry._contextRefreshTimer);
+        entry._contextRefreshTimer = null;
+      }
+      // Use whatever was captured
+      const handoff = parseHandoffFromOutput(entry._contextRefreshOutputCapture);
+      _finishContextRefresh(entry, handoff);
+    };
+    events.on('claude-terminal:exit', exitHandler);
+
+    // Timeout: use synthetic handoff after CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS
+    entry._contextRefreshTimer = setTimeout(() => {
+      entry._contextRefreshTimer = null;
+      events.off('claude-terminal:data', dataHandler);
+      events.off('claude-terminal:exit', exitHandler);
+      log(`[claude-pool] ${entry.id} handoff timeout — using synthetic handoff`);
+      _finishContextRefresh(entry, null);
+    }, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS);
+  }
+
+  /**
+   * Complete the context refresh: git commit, kill terminal, spawn fresh.
+   * @param {object} entry - Pool entry
+   * @param {string|null} handoff - Parsed handoff text, or null for synthetic
+   */
+  function _finishContextRefresh(entry, handoff) {
+    // Guard: prevent double-call (e.g., exit fires after data handler already completed)
+    if (entry._contextRefreshState === 'committing' || entry._contextRefreshState === 'restarting') return;
+
+    const finalHandoff = handoff || generateSyntheticContextHandoff(entry);
+    entry._contextRefreshState = 'committing';
+
+    // Git commit + push (fire-and-forget, don't block on failure)
+    try {
+      gitCommitForRefresh(entry, finalHandoff);
+    } catch (err) {
+      log(`[claude-pool] ${entry.id} context-refresh git failed: ${err.message}`);
+    }
+
+    // Write handoff to shared memory
+    if (sharedMemory) {
+      try {
+        sharedMemory.writeSnapshot(entry.id, {
+          lastOutput: entry.terminal.getOutputBuffer(),
+          model: entry.config.model || null,
+          handoffCount: entry.handoffCount,
+          contextRefreshCount: entry.contextRefreshCount + 1,
+          reason: 'context-refresh',
+          handoff: finalHandoff,
+          metadata: entry.config.snapshotMetadata || null,
+        });
+        sharedMemory.set(`context-refresh:${entry.id}:handoff`, finalHandoff);
+      } catch (err) {
+        log(`[claude-pool] ${entry.id} context-refresh snapshot write failed: ${err.message}`);
+      }
+    }
+
+    entry._contextRefreshState = 'restarting';
+
+    // Preserve state for respawn
+    const savedTask = entry.assignedTask;
+    const hadAutoDispatch = entry.autoDispatch;
+    const hadAutoComplete = entry.autoComplete;
+    const newRefreshCount = entry.contextRefreshCount + 1;
+    const newHandoffCount = entry.handoffCount + 1;
+
+    // Build fresh config — NO continueSession, NO resumeSessionId
+    const config = {
+      ...entry.config,
+      continueSession: false,
+      resumeSessionId: undefined,
+      systemPrompt: buildContextRefreshPrompt(finalHandoff, entry),
+      autoHandoff: true,
+      autoDispatch: hadAutoDispatch,
+      autoComplete: hadAutoComplete,
+      _handoffCount: newHandoffCount,
+      _contextRefreshCount: newRefreshCount,
+    };
+
+    // Temporarily disable autoHandoff so the old exit handler doesn't also fire
+    entry.autoHandoff = false;
+
+    // Kill old terminal
+    try {
+      entry.terminal.kill();
+    } catch { /* already dead */ }
+
+    // Wait for exit then spawn fresh
+    const doSpawn = () => {
+      terminals.delete(entry.id);
+
+      setTimeout(() => {
+        spawn(entry.id, config)
+          .then(() => {
+            // Restore carried task
+            if (savedTask && coordinator) {
+              const newEntry = terminals.get(entry.id);
+              if (newEntry) {
+                newEntry.assignedTask = savedTask;
+                newEntry._taskActivityBytes = 0;
+                setTimeout(() => {
+                  write(entry.id, `[CONTEXT-REFRESHED] Continuing task ${savedTask.taskId}: ${savedTask.task}\r`);
+                  if (newEntry.autoComplete) resetCompletionTimer(entry.id);
+                }, AUTO_DISPATCH_DELAY_MS);
+              }
+            }
+
+            events.emit('claude-terminal:context-refresh-completed', {
+              terminalId: entry.id,
+              refreshCount: newRefreshCount,
+              hadTask: !!savedTask,
+              handoffLength: finalHandoff.length,
+            });
+
+            log(`[claude-pool] ${entry.id} context-refresh #${newRefreshCount} completed — fresh terminal spawned`);
+
+            // Auto-dispatch if enabled and no carried task
+            if (hadAutoDispatch && !savedTask) {
+              setTimeout(() => maybeAutoDispatch(entry.id), AUTO_DISPATCH_DELAY_MS);
+            }
+          })
+          .catch((err) => {
+            log(`[claude-pool] ${entry.id} context-refresh respawn failed: ${err.message}`);
+            // Release task back if respawn fails
+            if (savedTask && coordinator && coordinator.taskQueue) {
+              try {
+                coordinator.taskQueue.fail(savedTask.taskId, 'Context-refresh respawn failed');
+                coordinator.taskQueue.retry(savedTask.taskId);
+              } catch { /* task may already be in terminal state */ }
+            }
+            events.emit('claude-terminal:context-refresh-failed', {
+              terminalId: entry.id,
+              error: err.message,
+            });
+          });
+      }, CONTEXT_REFRESH_SPAWN_DELAY_MS);
+    };
+
+    // If terminal is already stopped, spawn immediately
+    if (entry.status === 'stopped') {
+      doSpawn();
+    } else {
+      // Wait for exit
+      const exitWaiter = (evtData) => {
+        if (evtData.terminalId !== entry.id) return;
+        events.off('claude-terminal:exit', exitWaiter);
+        doSpawn();
+      };
+      events.on('claude-terminal:exit', exitWaiter);
+      // Safety timeout
+      setTimeout(() => {
+        events.off('claude-terminal:exit', exitWaiter);
+        if (terminals.has(entry.id) && terminals.get(entry.id).status === 'running') {
+          // Force spawn anyway
+          doSpawn();
+        }
+      }, FORCE_KILL_TIMEOUT_MS + 2000);
+    }
   }
 
   // ── Set Auto-Handoff ──────────────────────────────────
@@ -863,9 +1248,14 @@ export function createClaudePool(ctx) {
 
     const ids = [...terminals.keys()];
 
-    // Clear all completion timers
+    // Clear all completion timers and context-refresh timers
     for (const id of ids) {
       stopCompletionWatch(id);
+      const entry = terminals.get(id);
+      if (entry && entry._contextRefreshTimer) {
+        clearTimeout(entry._contextRefreshTimer);
+        entry._contextRefreshTimer = null;
+      }
     }
 
     if (ids.length === 0) {
@@ -1024,6 +1414,8 @@ export function createClaudePool(ctx) {
       capabilities: entry.capabilities || null,
       role: entry.role || null,
       persistent: entry.persistent || false,
+      contextRefreshCount: entry.contextRefreshCount || 0,
+      contextRefreshState: entry._contextRefreshState || null,
       taskHistory: [...(entry._taskHistory || [])],
     };
   }
@@ -1175,6 +1567,7 @@ export function createClaudePool(ctx) {
       for (const entry of terminals.values()) {
         if (!entry.swarmManaged) continue;
         if (entry.persistent || entry.role === 'master') continue; // Skip persistent/master terminals (Phase 57)
+        if (entry._contextRefreshState) continue; // Skip terminals mid-context-refresh
         if (entry.status !== 'running') continue;
         if (entry.assignedTask) continue;
         const state = getActivityState(entry);
@@ -1308,4 +1701,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES };
