@@ -1,62 +1,69 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-26 05:01:40
+> Generated: 2026-02-26 06:04:50
 > Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-26 05:01:40
-- **Ended**: 2026-02-26 05:01:40
+- **Started**: 2026-02-26 06:04:50
+- **Ended**: 2026-02-26 06:04:50
 - **Total runtime**: 0.0 minutes (0.0 hours)
-- **Rounds completed**: 1
-- **Stop reason**: all agents exhausted their task lists
-- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1772082099236\coord-mission.json
-- **Final test status**: ALL PASSING (1123 tests)
+- **Rounds completed**: 3
+- **Stop reason**: max rounds reached
+- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1772085889037\regression-mission.json
+- **Final test status**: FAILING (1123 passed, 3 failed)
 
 ## Agent Results
 
 | Agent | Type | Role | Final Status | Rounds Active | Timeouts | Errors | Files Modified |
 |-------|------|------|-------------|---------------|----------|--------|----------------|
-| lead | feature | tech-lead | all-done | 1 | 0 | 0 | 1 |
 | dev | feature | engine-dev | all-done | 1 | 0 | 0 | 1 |
+| qa | feature | engine-dev | in-progress | 2 | 0 | 2 | 1 |
 
 ### Agent Details
 
-#### Lead (lead)
+#### Dev (dev)
 - **Status**: all-done
 - **Rounds active**: 1
 - **Files modified**: src/engine/types.ts
 - **Notes**: [dry-run] Mock output for round 1
 
-#### Dev (dev)
-- **Status**: all-done
-- **Rounds active**: 1
-- **Files modified**: src/engine/match.ts
-- **Notes**: [dry-run] Mock output for round 1
+#### QA (qa)
+- **Status**: in-progress
+- **Rounds active**: 2
+- **Files modified**: (none)
+- **Notes**: [dry-run] Mock output for round 3
+- **Errors**: 2
+- **Escalations**: 1
 
 ## Round-by-Round Timeline
 
 | Round | Agents | Test Result | Agent Pool | Tests | Pre-Sim | Post-Sim | Overhead | Total |
 |-------|--------|-------------|------------|-------|---------|----------|----------|-------|
-| 1 | dev(OK, 0m), lead(OK, 0m) | PASS (1123) | 0s | — | — | — | 0s | 0s |
+| 1 | qa(ERROR(1), 0m), dev(OK, 0m) | FAIL (1123p, 3f) | 0s | — | — | — | 0s | 0s |
+| 2 | — | — | — | — | — | — | — | skipped (all blocked) |
+| 3 | qa(ERROR(1), 0m) | PASS (skipped) | 0s | — | — | — | — | 0s |
 
 ## All Files Modified
-- src/engine/match.ts
+- (none)
 - src/engine/types.ts
 
 ## Test Trajectory
-- Round 1: PASS (1123 passed)
+- Round 1: FAIL (1123 passed, 3 failed)
+- Round 3: PASS (skipped passed)
 
 ## Round Quality (v14)
 
 | Round | Active | Idle | Util% | Files | OK | Failed |
 |-------|--------|------|-------|-------|----|--------|
-| 1 | 2 | 0 | 100% | 1 | 2 | 0 |
+| 1 | 2 | 0 | 100% | 2 | 1 | 1 |
+| 2 | — | — | — | — | — | skipped (all blocked) |
+| 3 | 1 | 1 | 50% | 1 | 0 | 1 |
 
 ## Agent Effectiveness (v14)
 
 | Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
 |-------|--------|------------|-------|-------------|-----------|----------|-------|
-| dev | 1 | 1 | 1 | 17353 | $0.1335 | 0.0m | 100% |
-| lead | 1 | 1 | 1 | 8217 | $0.0632 | 0.0m | 100% |
+| qa | 2 | 2 | 2 | 0 | $0.0000 | 0.0m | 100% |
+| dev | 1 | 1 | 1 | 11909 | $0.0916 | 0.0m | 100% |
 
 > **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
 
@@ -70,24 +77,26 @@
 
 | Agent | Model | Avg Time | Success | Files/Rnd | Active | Skipped | Blocked | Idle% |
 |-------|-------|----------|---------|-----------|--------|---------|---------|-------|
-| lead | default | 0.0m | 100% | 1.0 | 1/1 | 0 | 0 | 0% |
-| dev | default | 0.0m | 100% | 1.0 | 1/1 | 0 | 0 | 0% |
+| dev | default | 0.0m | 100% | 1.0 | 1/3 | 2 | 0 | 67% |
+| qa | opus | 0.0m | 0% | 0.5 | 2/3 | 1 | 0 | 33% |
 
 ## Backlog Velocity (v8)
 
 | Round | Pending | Completed | Notes |
 |-------|---------|-----------|-------|
 | 1 | 3 | 0 | |
+| 2 | — | — | skipped (all blocked) |
+| 3 | 3 | 0 | |
 
 ## Cost Summary
 
 | Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
 |-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
-| lead | default | 1 | 6.3k | 1.9k | $0.0632 | $0.0632 | 0 |
-| dev | default | 1 | 13.3k | 4.0k | $0.1335 | $0.1335 | 0 |
-| **TOTAL** | | **2** | **19.7k** | **5.9k** | **$0.1967** | **$0.0984** | **0** |
+| dev | default | 1 | 9.2k | 2.7k | $0.0916 | $0.0916 | 0 |
+| qa | opus | 2 | — | — | — | — | 1 |
+| **TOTAL** | | **3** | **9.2k** | **2.7k** | **$0.0916** | **$0.0305** | **1** |
 
-- **Cost per successful agent-round**: $0.0984
+- **Cost per successful agent-round**: $0.0916
 - **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
 - **Note**: Costs are estimates from token counts if CLI did not report direct cost
 
@@ -95,15 +104,15 @@
 
 | Agent | Base Model | Max Model | Final Model | Escalations |
 |-------|-----------|-----------|-------------|-------------|
-| lead | default | none | default | 0 |
 | dev | default | none | default | 0 |
+| qa | sonnet | none | opus | 1 |
 
 ## Decision Log Summary
 
 | Agent | Included | Skipped | Blocked | Success Rate |
 |-------|----------|---------|---------|-------------|
-| lead | 1 | 0 | 0 | 100% |
-| dev | 1 | 0 | 0 | 100% |
+| dev | 1 | 2 | 0 | 100% |
+| qa | 2 | 1 | 0 | 0% |
 
 > Full decision log: `orchestrator/logs/round-decisions.json`
 

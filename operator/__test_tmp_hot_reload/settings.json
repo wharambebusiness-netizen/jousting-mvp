@@ -1,0 +1,13 @@
+{
+  "model": "sonnet",
+  "maxTurns": 30,
+  "maxContinuations": 5,
+  "maxBudgetUsd": 5,
+  "autoPush": false,
+  "particlesEnabled": true,
+  "defaultTerminalTheme": "nebula",
+  "coordMaxRequestsPerMinute": 60,
+  "coordMaxTokensPerMinute": 100000,
+  "coordGlobalBudgetUsd": 50,
+  "coordPerWorkerBudgetUsd": 10
+}

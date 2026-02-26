@@ -89,5 +89,137 @@
       "terminalId": "master",
       "exitCode": -1073741510
     }
+  },
+  {
+    "id": "4374b297",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T05:09:32.174Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "3876a0bc",
+    "type": "swarm_event",
+    "severity": "info",
+    "title": "Swarm started",
+    "message": "Swarm mode has been activated",
+    "read": false,
+    "ts": "2026-02-26T06:10:24.878Z",
+    "metadata": {
+      "timestamp": "2026-02-26T06:10:24.877Z",
+      "minTerminals": 2,
+      "maxTerminals": 8,
+      "model": "sonnet"
+    }
+  },
+  {
+    "id": "98474cae",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-seed-0 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:11:54.982Z",
+    "metadata": {
+      "terminalId": "swarm-seed-0",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "fefade89",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-seed-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:12:25.031Z",
+    "metadata": {
+      "terminalId": "swarm-seed-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "2779ba0d",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-0 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:13:25.078Z",
+    "metadata": {
+      "terminalId": "swarm-0",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "4f627845",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:13:55.130Z",
+    "metadata": {
+      "terminalId": "swarm-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "9af2c294",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:14:55.179Z",
+    "metadata": {
+      "terminalId": "swarm-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "90a283d3",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-3 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:15:25.224Z",
+    "metadata": {
+      "terminalId": "swarm-3",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "d649d9ca",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-4 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:16:25.274Z",
+    "metadata": {
+      "terminalId": "swarm-4",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "8bffe50b",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal swarm-5 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:16:55.322Z",
+    "metadata": {
+      "terminalId": "swarm-5",
+      "exitCode": -1073741510
+    }
   }
 ]

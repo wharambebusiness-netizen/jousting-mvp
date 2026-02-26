@@ -9,14 +9,19 @@
     "label": "cli-handoff",
     "createdAt": "2026-02-26T02:50:02.749Z"
   },
-  "7dad62bf": {
-    "hash": "85fbc9a770d9060d8a55bb022bfb81741950e252a5dc959dfea6385e3f18b14a",
+  "aa77cee9": {
+    "hash": "06ef5296fe37f66ab82e752695339d756172cdc45acf04a87836ae66dd753786",
     "label": "browser-session",
-    "createdAt": "2026-02-26T05:02:15.872Z"
+    "createdAt": "2026-02-26T06:10:03.905Z"
   },
-  "0fb6fb44": {
-    "hash": "ff5d6617a3bc5ad540793119c08e95107f7e5a934e08e9b3d002e97efb059105",
+  "514a3ce9": {
+    "hash": "3fe7de709ebcb73352fd62a1e79283ef471ad23aadc4864a3fcdb8801b59700a",
+    "label": "cli-session",
+    "createdAt": "2026-02-26T06:10:03.912Z"
+  },
+  "413f13df": {
+    "hash": "bc2e4d5ff3cfbef244b1a587db1637e51cc1f0011ee666100b75a161c3224890",
     "label": "terminal-pool",
-    "createdAt": "2026-02-26T05:02:15.884Z"
+    "createdAt": "2026-02-26T06:10:03.933Z"
   }
 }
