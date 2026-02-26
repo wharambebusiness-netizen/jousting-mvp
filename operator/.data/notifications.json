@@ -221,5 +221,18 @@
       "terminalId": "swarm-5",
       "exitCode": -1073741510
     }
+  },
+  {
+    "id": "d6b47094",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T06:17:20.352Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
   }
 ]
