@@ -532,23 +532,33 @@ export function createClaudeTerminalRoutes(ctx) {
 
   // ── DELETE /claude-terminals/:id ──────────────────────
 
-  router.delete('/claude-terminals/:id', (req, res) => {
+  router.delete('/claude-terminals/:id', async (req, res) => {
     if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
 
     const terminal = claudePool.getTerminal(req.params.id);
     if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
 
-    // Kill if running
+    // Kill if running and wait for exit
     if (terminal.status === 'running') {
       claudePool.kill(req.params.id);
+      // Wait for status to change (up to 3s)
+      await new Promise((resolve) => {
+        const timeout = setTimeout(resolve, 3000);
+        const check = setInterval(() => {
+          const t = claudePool.getTerminal(req.params.id);
+          if (!t || t.status !== 'running') {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
     }
 
-    // Remove after a brief delay to allow exit event to fire
-    setTimeout(() => {
-      try {
-        claudePool.remove(req.params.id);
-      } catch { /* may have already been removed */ }
-    }, 500);
+    // Remove from pool
+    try {
+      claudePool.remove(req.params.id);
+    } catch { /* may have already been removed */ }
 
     res.json({ ok: true, terminalId: req.params.id });
   });

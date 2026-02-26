@@ -1,0 +1,42 @@
+{
+  "sessions": {
+    "master": {
+      "id": "master",
+      "startedAt": "2026-02-26T04:52:13.638Z",
+      "endedAt": null,
+      "exitCode": null,
+      "config": {
+        "model": null,
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": null,
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "",
+      "duration": 0
+    },
+    "test-worker-1": {
+      "id": "test-worker-1",
+      "startedAt": "2026-02-26T03:52:18.380Z",
+      "endedAt": "2026-02-26T03:52:50.497Z",
+      "exitCode": -1073741510,
+      "config": {
+        "model": null,
+        "projectDir": null,
+        "dangerouslySkipPermissions": true,
+        "systemPrompt": null,
+        "capabilities": null
+      },
+      "taskHistory": [],
+      "lastTaskId": null,
+      "handoffCount": 0,
+      "outputSummary": "\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n ▐▛███▜▌   Claude Code v2.1.59\r\n▝▜█████▛▘  Opus 4.6 · Claude Max\r\n  ▘▘ ▝▝    ~\\Documents\\Jousting\\Jousting\\jousting-mvp\r\n\r\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n❯ Try \"refactor <filepath>\"\r\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\n  ⏵⏵ bypass permissions on (shift+tab to cycle)",
+      "duration": 32117
+    }
+  },
+  "savedAt": "2026-02-26T04:52:13.638Z",
+  "version": 1
+}

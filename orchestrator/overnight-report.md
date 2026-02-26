@@ -1,14 +1,14 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-20 07:16:13
+> Generated: 2026-02-26 04:49:51
 > Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-20 07:16:13
-- **Ended**: 2026-02-20 07:16:13
+- **Started**: 2026-02-26 04:49:51
+- **Ended**: 2026-02-26 04:49:51
 - **Total runtime**: 0.0 minutes (0.0 hours)
 - **Rounds completed**: 1
 - **Stop reason**: all agents exhausted their task lists
-- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1771571771639\coord-mission.json
+- **Mission**: C:\Users\rvecc\AppData\Local\Temp\dry-run-integ-1772081389567\coord-mission.json
 - **Final test status**: ALL PASSING (1123 tests)
 
 ## Agent Results
@@ -55,8 +55,8 @@
 
 | Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
 |-------|--------|------------|-------|-------------|-----------|----------|-------|
-| dev | 1 | 1 | 1 | 8994 | $0.0692 | 0.0m | 100% |
-| lead | 1 | 1 | 1 | 14415 | $0.1109 | 0.0m | 100% |
+| dev | 1 | 1 | 1 | 12719 | $0.0978 | 0.0m | 100% |
+| lead | 1 | 1 | 1 | 10492 | $0.0807 | 0.0m | 100% |
 
 > **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
 
@@ -77,17 +77,17 @@
 
 | Round | Pending | Completed | Notes |
 |-------|---------|-----------|-------|
-| 1 | 4 | 0 | |
+| 1 | 3 | 0 | |
 
 ## Cost Summary
 
 | Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
 |-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
-| lead | default | 1 | 11.1k | 3.3k | $0.1109 | $0.1109 | 0 |
-| dev | default | 1 | 6.9k | 2.1k | $0.0692 | $0.0692 | 0 |
-| **TOTAL** | | **2** | **18.0k** | **5.4k** | **$0.1801** | **$0.0900** | **0** |
+| lead | default | 1 | 8.1k | 2.4k | $0.0807 | $0.0807 | 0 |
+| dev | default | 1 | 9.8k | 2.9k | $0.0978 | $0.0978 | 0 |
+| **TOTAL** | | **2** | **17.9k** | **5.4k** | **$0.1785** | **$0.0892** | **0** |
 
-- **Cost per successful agent-round**: $0.0900
+- **Cost per successful agent-round**: $0.0892
 - **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
 - **Note**: Costs are estimates from token counts if CLI did not report direct cost
 

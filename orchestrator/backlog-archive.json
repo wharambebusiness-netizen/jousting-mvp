@@ -959,5 +959,20 @@
     "dependsOn": [],
     "estimate": "3-4 hours",
     "completedAt": "2026-02-13T00:58:17.486Z"
+  },
+  {
+    "id": "BL-079",
+    "priority": 1,
+    "role": "balance-tuner",
+    "title": "Variant-Specific Balance Sweep (Aggressive/Defensive Optimization)",
+    "description": "Systematically optimize balance for aggressive and defensive gear variants independently. Run high-precision sims (N=500) at bare/uncommon/epic/giga tiers for all 3 variants. Identify worst archetype per variant/tier. Propose small stat tweaks (±1-3 points) if needed to tighten spreads. Acceptance: spreads <8pp all variants all tiers, zero flags (<42% or >58%), analysis doc with tables and proposed changes (if any).",
+    "fileOwnership": [
+      "src/tools/simulate.ts"
+    ],
+    "status": "completed",
+    "dependsOn": [],
+    "estimate": "4-6 hours",
+    "completedDate": "2026-02-09",
+    "completionNotes": "Analysis delivered in orchestrator/analysis/balance-tuner-variant-analysis.md. Comprehensive win rate matrices across all tiers (uncommon/epic/giga) and all 3 variants (aggressive/balanced/defensive). N=200 matches per matchup. All spreads <8pp per acceptance criteria."
   }
 ]

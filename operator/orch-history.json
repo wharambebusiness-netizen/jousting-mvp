@@ -1,5 +1,18 @@
 [
   {
+    "id": "0012b89a-9cb7-4fc2-915e-0981313dece8",
+    "instanceId": "worker-3",
+    "mission": "overnight.json",
+    "model": "opus",
+    "dryRun": false,
+    "startedAt": "2026-02-20T08:30:26.912Z",
+    "stoppedAt": "2026-02-20T08:30:28.929Z",
+    "durationMs": 2017,
+    "outcome": "stopped",
+    "rounds": 0,
+    "agents": 0
+  },
+  {
     "id": "4c80ff3b-0820-4491-880e-d42b67f115f1",
     "instanceId": "worker-2",
     "mission": "bugfix-sprint.json",

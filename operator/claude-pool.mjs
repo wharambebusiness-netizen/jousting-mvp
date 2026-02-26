@@ -146,9 +146,13 @@ export function createClaudePool(ctx) {
 
     // Master terminal uniqueness guard (Phase 57)
     if (opts.role === 'master') {
-      for (const [, existing] of terminals) {
-        if (existing.role === 'master' && existing.status === 'running') {
-          throw new Error('Master terminal already exists');
+      for (const [existingId, existing] of terminals) {
+        if (existing.role === 'master') {
+          if (existing.status === 'running') {
+            throw new Error('Master terminal already exists');
+          }
+          // Clean up stopped/stale master entries so the new one can take the ID
+          terminals.delete(existingId);
         }
       }
     }

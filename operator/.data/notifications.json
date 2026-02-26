@@ -1,0 +1,67 @@
+[
+  {
+    "id": "24e36186",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T02:50:13.144Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "0a06b3e9",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T02:55:10.431Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "8a40a668",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal test-worker-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T03:52:50.495Z",
+    "metadata": {
+      "terminalId": "test-worker-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "c9f478f8",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T04:51:37.583Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "777c7564",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T04:51:45.258Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  }
+]
