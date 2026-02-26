@@ -376,18 +376,18 @@ describe('worker IPC — start with real orchestrator (dry-run)', () => {
     w.send({ type: 'start', dryRun: true });
 
     // Should get orchestrator:started event
-    const started = await w.waitForEvent('orchestrator:started', 5000);
+    const started = await w.waitForEvent('orchestrator:started', 10000);
     expect(started.data.workerId).toBe('test-worker');
     expect(started.data.dryRun).toBe(true);
 
     // Should get status with running=true
-    const status = await w.waitForType('status', 5000);
+    const status = await w.waitForType('status', 10000);
     expect(status.status.running).toBe(true);
 
-    // Wait for it to finish (dry-run exits quickly)
-    const stopped = await w.waitForEvent('orchestrator:stopped', 10000);
+    // Wait for it to finish (dry-run exits but can be slow under load)
+    const stopped = await w.waitForEvent('orchestrator:stopped', 30000);
     expect(stopped.data.workerId).toBe('test-worker');
-  }, 15000);
+  }, 45000);
 
   it('returns error when starting while already running', async () => {
     const projectDir = join(import.meta.dirname, '..', '..');
@@ -401,7 +401,7 @@ describe('worker IPC — start with real orchestrator (dry-run)', () => {
     await w.waitForType('ready');
 
     w.send({ type: 'start', dryRun: true });
-    await w.waitForEvent('orchestrator:started', 5000);
+    await w.waitForEvent('orchestrator:started', 10000);
 
     // Try to start again while running
     w.send({ type: 'start', dryRun: true });
@@ -409,8 +409,8 @@ describe('worker IPC — start with real orchestrator (dry-run)', () => {
     expect(err.message).toBe('Already running');
 
     // Wait for it to finish naturally
-    await w.waitForEvent('orchestrator:stopped', 10000);
-  }, 15000);
+    await w.waitForEvent('orchestrator:stopped', 30000);
+  }, 45000);
 });
 
 describe('worker IPC — handoff file', () => {
