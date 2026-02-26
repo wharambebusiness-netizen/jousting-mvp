@@ -180,6 +180,9 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
   // Track client subscriptions
   const clientSubscriptions = new WeakMap();
 
+  // Track binary terminal ping timer handles for cleanup
+  const termClientTimers = new WeakMap(); // ws → binaryPingTimer
+
   // Event replay buffer (Phase 49) — shared across all clients
   const replayBuffer = createReplayBuffer(REPLAY_BUFFER_SIZE);
 
@@ -263,6 +266,9 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     // Start binary heartbeat
     if (PING_INTERVAL_MS > 0) {
       binaryPingTimer = setInterval(sendBinaryPing, PING_INTERVAL_MS);
+      // Allow process to exit even if this interval is running
+      if (binaryPingTimer.unref) binaryPingTimer.unref();
+      termClientTimers.set(ws, binaryPingTimer);
     }
 
     // WS → PTY (user input + control messages)
@@ -308,6 +314,7 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
       handle.off('exit', exitHandler);
       if (binaryPingTimer) { clearInterval(binaryPingTimer); binaryPingTimer = null; }
       if (binaryPongTimer) { clearTimeout(binaryPongTimer); binaryPongTimer = null; }
+      termClientTimers.delete(ws);
     });
   });
 
@@ -576,9 +583,11 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     stats.totalMessagesSent = 0;
     stats.replayRequests = 0;
 
-    // Close binary terminal WS connections
+    // Terminate binary terminal WS connections and clear their ping timers
     for (const client of termWss.clients) {
-      client.close(1001, 'Server shutting down');
+      const pingTimer = termClientTimers.get(client);
+      if (pingTimer) { clearInterval(pingTimer); }
+      try { client.terminate(); } catch { /* noop */ }
     }
   };
 
