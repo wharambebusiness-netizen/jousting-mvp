@@ -1,0 +1,362 @@
+{
+  "timestamp": "2026-02-27T00:00:00Z",
+  "version": "1.0",
+  "summary": {
+    "totalSkills": 17,
+    "totalRoles": 23,
+    "totalProfiles": 6,
+    "skillCategories": ["git", "code", "research", "audit", "testing", "analysis"],
+    "emptyCategories": ["deployment"],
+    "gapsFound": 22,
+    "proposedSkills": 14
+  },
+  "gap1_roles_without_domain_skills": [
+    {
+      "role": "balance-analyst",
+      "profile": "researcher",
+      "assignedSkills": ["web-search", "codebase-search", "file-read", "project-detect"],
+      "issue": "No simulation-running or data-analysis skill. Role needs to run simulate.ts and interpret statistical output. Gets generic researcher skills with zero domain specificity.",
+      "severity": "HIGH"
+    },
+    {
+      "role": "database-dev",
+      "profile": "code-writer",
+      "assignedSkills": ["file-read", "test-runner", "codebase-search", "lint", "git-status"],
+      "issue": "No schema-validation, migration-runner, or query-profiler skills. Role handles Prisma/SQL migrations and EXPLAIN analysis but has zero database-specific tooling.",
+      "severity": "MEDIUM"
+    },
+    {
+      "role": "performance-analyst",
+      "profile": "researcher",
+      "assignedSkills": ["web-search", "codebase-search", "file-read", "project-detect"],
+      "issue": "No benchmarking or profiling skill. performance-audit exists but is in auditor profile, not researcher.",
+      "severity": "HIGH"
+    },
+    {
+      "role": "dependency-manager",
+      "profile": "researcher",
+      "assignedSkills": ["web-search", "codebase-search", "file-read", "project-detect"],
+      "issue": "dependency-audit skill exists but is assigned to auditor profile only. This roles entire mission is dependency auditing yet it cannot access the dependency-audit skill.",
+      "severity": "HIGH"
+    },
+    {
+      "role": "css-artist",
+      "profile": "code-writer",
+      "assignedSkills": ["file-read", "test-runner", "codebase-search", "lint", "git-status"],
+      "issue": "No CSS-specific validation or visual regression skill. Generic lint covers eslint but not stylelint or CSS-specific rules.",
+      "severity": "LOW"
+    },
+    {
+      "role": "game-designer",
+      "profile": "researcher",
+      "assignedSkills": ["web-search", "codebase-search", "file-read", "project-detect"],
+      "issue": "No design-spec or player-experience analysis skill. Role writes specs but has no structured spec-writing or UX heuristic tooling.",
+      "severity": "LOW"
+    },
+    {
+      "role": "producer",
+      "profile": "reviewer",
+      "assignedSkills": ["file-read", "codebase-search", "lint", "git-status", "code-review"],
+      "issue": "No task-management or backlog-parsing skill. Gets code-review and lint which are irrelevant. Needs structured task CRUD.",
+      "severity": "MEDIUM"
+    },
+    {
+      "role": "debugger",
+      "profile": "code-writer",
+      "assignedSkills": ["file-read", "test-runner", "codebase-search", "lint", "git-status"],
+      "issue": "No stack-trace analysis or error-pattern-matching skill. Nothing specialized for root-cause analysis or log parsing.",
+      "severity": "LOW"
+    },
+    {
+      "role": "docs-writer",
+      "profile": "reviewer",
+      "assignedSkills": ["file-read", "codebase-search", "lint", "git-status", "code-review"],
+      "issue": "No doc-generation or doc-validation skill. code-review is irrelevant; lint checks code not prose.",
+      "severity": "MEDIUM"
+    },
+    {
+      "role": "devops",
+      "profile": "deployer",
+      "assignedSkills": ["git-status", "git-commit", "git-push", "test-runner"],
+      "issue": "No CI/CD, build-pipeline, or infrastructure skill. Only has git operations. Zero deployment-category skills despite deployer profile.",
+      "severity": "HIGH"
+    }
+  ],
+  "gap2_missing_skill_categories": [
+    {
+      "category": "deployment",
+      "status": "EMPTY",
+      "issue": "Valid registry category with zero manifests. deployer profile maps only to git skills.",
+      "impactedRoles": ["devops"],
+      "proposedSkills": ["build-runner", "deploy-check", "env-validator"]
+    },
+    {
+      "category": "database",
+      "status": "MISSING",
+      "issue": "No category for database operations despite database-dev role. Schema validation, migration running, query profiling unsupported.",
+      "impactedRoles": ["database-dev", "backend-dev", "full-stack-dev"],
+      "proposedSkills": ["schema-validator", "migration-runner"]
+    },
+    {
+      "category": "simulation",
+      "status": "MISSING",
+      "issue": "balance-analyst requires simulation execution but no skill category or manifest exists.",
+      "impactedRoles": ["balance-analyst", "game-designer"],
+      "proposedSkills": ["balance-sim"]
+    },
+    {
+      "category": "documentation",
+      "status": "MISSING",
+      "issue": "docs-writer and architect produce documentation but no doc-linting or API-doc-extraction skills exist.",
+      "impactedRoles": ["docs-writer", "architect"],
+      "proposedSkills": ["doc-lint"]
+    }
+  ],
+  "gap3_underserved_roles": [
+    {
+      "role": "devops",
+      "profile": "deployer",
+      "effectiveSkillCount": 4,
+      "issue": "deployer profile has only 4 possible skills (3 git + test-runner). Most limited profile despite broad infrastructure responsibilities."
+    },
+    {
+      "role": "research-agent",
+      "profile": "researcher",
+      "effectiveSkillCount": 4,
+      "issue": "researcher profile has only 4 possible skills. project-detect as sole optional is weak."
+    },
+    {
+      "role": "self-reviewer",
+      "profile": "reviewer",
+      "effectiveSkillCount": 5,
+      "issue": "reviewer profile skills (code-review, lint) do not match read-only introspection mission. Needs orchestrator-specific analysis skills."
+    }
+  ],
+  "gap4_cross_cutting_capabilities": [
+    {
+      "capability": "Change Analysis (git diff)",
+      "neededBy": ["tech-lead", "self-reviewer", "qa-engineer", "security-auditor", "performance-analyst", "code-review"],
+      "currentCoverage": "git-status shows file states but no diff-content skill. code-review requires file-read, not diff-aware.",
+      "proposedSkill": "git-diff"
+    },
+    {
+      "capability": "Build/Compile Runner",
+      "neededBy": ["engine-dev", "ui-dev", "full-stack-dev", "devops", "integration-tester"],
+      "currentCoverage": "test-runner validates behavior but no skill for npm run build, tsc --noEmit, or bundle output.",
+      "proposedSkill": "build-runner"
+    },
+    {
+      "capability": "Task/Backlog Management",
+      "neededBy": ["producer", "self-reviewer", "architect"],
+      "currentCoverage": "Zero coverage. Producer manually parses JSON.",
+      "proposedSkill": "backlog-manager"
+    },
+    {
+      "capability": "Documentation Validation",
+      "neededBy": ["docs-writer", "architect", "engine-dev"],
+      "currentCoverage": "Zero coverage. No markdown linting, link validation, or API doc freshness checking.",
+      "proposedSkill": "doc-lint"
+    },
+    {
+      "capability": "Environment/Config Validation",
+      "neededBy": ["devops", "backend-dev", "full-stack-dev"],
+      "currentCoverage": "Zero coverage. No .env validation, port conflict detection, or config drift detection.",
+      "proposedSkill": "env-validator"
+    }
+  ],
+  "proposed_skills": [
+    {
+      "id": "balance-sim",
+      "name": "Balance Simulation",
+      "category": "analysis",
+      "description": "Run the jousting balance simulation tool with configurable tier, variant, and match count. Parse output for win rates, spreads, flags.",
+      "targetRoles": ["balance-analyst", "game-designer", "qa-engineer"],
+      "targetProfiles": ["researcher"],
+      "complexity": "MEDIUM",
+      "priority": "HIGH"
+    },
+    {
+      "id": "git-diff",
+      "name": "Git Diff",
+      "category": "git",
+      "description": "Show file-level and line-level diffs between commits, branches, or working tree. Supports stat-only mode and file filtering.",
+      "targetRoles": ["tech-lead", "qa-engineer", "security-auditor", "performance-analyst", "self-reviewer"],
+      "targetProfiles": ["reviewer", "auditor", "tester"],
+      "complexity": "LOW",
+      "priority": "HIGH"
+    },
+    {
+      "id": "build-runner",
+      "name": "Build Runner",
+      "category": "deployment",
+      "description": "Run project build commands and report success/failure, output size, type errors, and warnings.",
+      "targetRoles": ["devops", "engine-dev", "ui-dev", "full-stack-dev", "integration-tester"],
+      "targetProfiles": ["deployer", "code-writer"],
+      "complexity": "LOW",
+      "priority": "HIGH"
+    },
+    {
+      "id": "type-checker",
+      "name": "Type Checker",
+      "category": "code",
+      "description": "Run TypeScript type checking (tsc --noEmit) and report type errors with file locations.",
+      "targetRoles": ["engine-dev", "ui-dev", "backend-dev", "full-stack-dev", "tech-lead"],
+      "targetProfiles": ["code-writer", "reviewer"],
+      "complexity": "LOW",
+      "priority": "HIGH"
+    },
+    {
+      "id": "backlog-manager",
+      "name": "Backlog Manager",
+      "category": "analysis",
+      "description": "CRUD operations on backlog.json: list, filter, create, update, check dependency graph, archive completed tasks.",
+      "targetRoles": ["producer", "self-reviewer", "architect"],
+      "targetProfiles": ["reviewer"],
+      "complexity": "MEDIUM",
+      "priority": "MEDIUM"
+    },
+    {
+      "id": "doc-lint",
+      "name": "Documentation Linter",
+      "category": "code",
+      "description": "Lint markdown files for broken links, inconsistent headers, missing sections, stale API references.",
+      "targetRoles": ["docs-writer", "architect"],
+      "targetProfiles": ["reviewer"],
+      "complexity": "MEDIUM",
+      "priority": "MEDIUM"
+    },
+    {
+      "id": "deploy-check",
+      "name": "Deploy Readiness Check",
+      "category": "deployment",
+      "description": "Pre-deployment checklist: tests passing, build succeeds, no uncommitted changes, correct branch, env vars set.",
+      "targetRoles": ["devops"],
+      "targetProfiles": ["deployer"],
+      "complexity": "MEDIUM",
+      "priority": "MEDIUM"
+    },
+    {
+      "id": "metrics-analyzer",
+      "name": "Metrics Analyzer",
+      "category": "analysis",
+      "description": "Parse orchestrator metrics to detect patterns: stuck agents, rising costs, declining test counts, role utilization imbalance.",
+      "targetRoles": ["self-reviewer", "producer"],
+      "targetProfiles": ["reviewer"],
+      "complexity": "MEDIUM",
+      "priority": "MEDIUM"
+    },
+    {
+      "id": "handoff-validator",
+      "name": "Handoff Validator",
+      "category": "analysis",
+      "description": "Validate agent handoff files against META schema: required fields, test count, files-modified, status, message tags.",
+      "targetRoles": ["self-reviewer", "producer", "tech-lead"],
+      "targetProfiles": ["reviewer"],
+      "complexity": "LOW",
+      "priority": "MEDIUM"
+    },
+    {
+      "id": "env-validator",
+      "name": "Environment Validator",
+      "category": "deployment",
+      "description": "Validate environment config: .env files, port availability, required env vars, Node version, lock file health.",
+      "targetRoles": ["devops", "backend-dev", "full-stack-dev"],
+      "targetProfiles": ["deployer", "code-writer"],
+      "complexity": "LOW",
+      "priority": "LOW"
+    },
+    {
+      "id": "css-lint",
+      "name": "CSS Linter",
+      "category": "code",
+      "description": "CSS-specific linting: BEM naming, unused selectors, specificity warnings, mobile breakpoint coverage, color contrast.",
+      "targetRoles": ["css-artist", "ui-dev"],
+      "targetProfiles": ["code-writer"],
+      "complexity": "LOW",
+      "priority": "LOW"
+    },
+    {
+      "id": "error-analyzer",
+      "name": "Error Analyzer",
+      "category": "code",
+      "description": "Parse stack traces and test failures to identify root cause patterns and suggest likely files/functions.",
+      "targetRoles": ["debugger", "qa-engineer"],
+      "targetProfiles": ["code-writer", "tester"],
+      "complexity": "MEDIUM",
+      "priority": "LOW"
+    },
+    {
+      "id": "schema-validator",
+      "name": "Schema Validator",
+      "category": "code",
+      "description": "Validate database schemas for consistency, missing indices, foreign key integrity, naming conventions.",
+      "targetRoles": ["database-dev", "backend-dev"],
+      "targetProfiles": ["code-writer"],
+      "complexity": "MEDIUM",
+      "priority": "LOW"
+    },
+    {
+      "id": "benchmark-runner",
+      "name": "Benchmark Runner",
+      "category": "testing",
+      "description": "Run performance benchmarks: time functions, measure memory, compare before/after, detect regressions.",
+      "targetRoles": ["performance-analyst", "engine-dev"],
+      "targetProfiles": ["researcher", "code-writer"],
+      "complexity": "MEDIUM",
+      "priority": "LOW"
+    }
+  ],
+  "profile_assignment_fixes": [
+    {
+      "issue": "dependency-manager uses researcher profile but needs dependency-audit from auditor profile",
+      "fix": "Add dependency-audit to researcher profile optional skills, or create hybrid profile",
+      "priority": "HIGH"
+    },
+    {
+      "issue": "performance-analyst uses researcher profile but needs performance-audit from auditor profile",
+      "fix": "Add performance-audit to researcher profile optional skills",
+      "priority": "HIGH"
+    },
+    {
+      "issue": "self-reviewer uses reviewer profile but lint and code-review are irrelevant to read-only introspection",
+      "fix": "Create analyst profile with orchestrator-status, metrics-analyzer, handoff-validator as core",
+      "priority": "MEDIUM"
+    },
+    {
+      "issue": "producer uses reviewer profile but code-review and lint are irrelevant to task management",
+      "fix": "Add backlog-manager to reviewer profile optional, or create manager profile",
+      "priority": "MEDIUM"
+    },
+    {
+      "issue": "deployer profile has only 4 skills total, most limited profile",
+      "fix": "Add build-runner, deploy-check, env-validator to deployer profile",
+      "priority": "HIGH"
+    }
+  ],
+  "priority_implementation_order": [
+    {
+      "phase": 1,
+      "skills": ["git-diff", "build-runner", "type-checker"],
+      "effort": "3 manifests, ~2h",
+      "impact": "Closes 3 HIGH gaps, benefits 15+ roles"
+    },
+    {
+      "phase": 2,
+      "skills": ["balance-sim", "backlog-manager", "handoff-validator"],
+      "effort": "3 manifests + profile fixes, ~3h",
+      "impact": "Unblocks domain-specific roles, fixes profile mismatches"
+    },
+    {
+      "phase": 3,
+      "skills": ["doc-lint", "metrics-analyzer", "deploy-check"],
+      "effort": "3 manifests, ~3h",
+      "impact": "Fills category gaps, improves reviewer/deployer profiles"
+    },
+    {
+      "phase": 4,
+      "skills": ["env-validator", "css-lint", "error-analyzer", "schema-validator", "benchmark-runner"],
+      "effort": "5 manifests, ~4h",
+      "impact": "Long-tail role-specific improvements"
+    }
+  ]
+}
