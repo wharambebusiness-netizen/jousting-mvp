@@ -260,5 +260,499 @@
       "terminalId": "master",
       "exitCode": -1073741510
     }
+  },
+  {
+    "id": "2536faac",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:33:56.435Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "f8247d8d",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:39.759Z",
+    "metadata": {
+      "terminalId": "worker-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "fa936506",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:40.299Z",
+    "metadata": {
+      "terminalId": "worker-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "5994454d",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-4 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:41.431Z",
+    "metadata": {
+      "terminalId": "worker-4",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "65c0d374",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-5 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:53.375Z",
+    "metadata": {
+      "terminalId": "worker-5",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "a172b326",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-6 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:53.899Z",
+    "metadata": {
+      "terminalId": "worker-6",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "a5e7b7ae",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-7 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:51:54.434Z",
+    "metadata": {
+      "terminalId": "worker-7",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "74ee9d2d",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:54.733Z",
+    "metadata": {
+      "terminalId": "worker-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "931f4ab4",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:55.105Z",
+    "metadata": {
+      "terminalId": "worker-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "7ee03fa5",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-3 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:55.469Z",
+    "metadata": {
+      "terminalId": "worker-3",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "f5d458ec",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-4 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:55.835Z",
+    "metadata": {
+      "terminalId": "worker-4",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "f4812036",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-5 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:56.202Z",
+    "metadata": {
+      "terminalId": "worker-5",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "cf2d3327",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-6 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:56.571Z",
+    "metadata": {
+      "terminalId": "worker-6",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "3dae8df4",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal worker-7 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-26T07:54:56.935Z",
+    "metadata": {
+      "terminalId": "worker-7",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "36244ac2",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal opus-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:48.481Z",
+    "metadata": {
+      "terminalId": "opus-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "05016d42",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal opus-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:48.866Z",
+    "metadata": {
+      "terminalId": "opus-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "55febe99",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal opus-3 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:49.252Z",
+    "metadata": {
+      "terminalId": "opus-3",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "d09bc1cf",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal sonnet-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:49.636Z",
+    "metadata": {
+      "terminalId": "sonnet-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "ce3364bb",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal sonnet-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:50.020Z",
+    "metadata": {
+      "terminalId": "sonnet-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "869d228b",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal sonnet-3 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:50.402Z",
+    "metadata": {
+      "terminalId": "sonnet-3",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "dd88ced1",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal haiku-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T16:29:50.784Z",
+    "metadata": {
+      "terminalId": "haiku-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "580029d0",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T20:51:34.741Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "d8463d94",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal master exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T20:55:06.387Z",
+    "metadata": {
+      "terminalId": "master",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "c2c7e251",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task current-assignment-map completed by terminal skills-agent-3",
+    "read": false,
+    "ts": "2026-02-27T21:19:14.710Z",
+    "metadata": {
+      "taskId": "current-assignment-map",
+      "terminalId": "skills-agent-3"
+    }
+  },
+  {
+    "id": "2fbaa56e",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task role-template-analysis completed by terminal skills-agent-2",
+    "read": false,
+    "ts": "2026-02-27T21:24:25.774Z",
+    "metadata": {
+      "taskId": "role-template-analysis",
+      "terminalId": "skills-agent-2"
+    }
+  },
+  {
+    "id": "5703a906",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task skills-registry-analysis completed by terminal skills-agent-1",
+    "read": false,
+    "ts": "2026-02-27T21:24:57.656Z",
+    "metadata": {
+      "taskId": "skills-registry-analysis",
+      "terminalId": "skills-agent-1"
+    }
+  },
+  {
+    "id": "1cfbee49",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task redundancy-conflict-detection completed by terminal skills-agent-1",
+    "read": false,
+    "ts": "2026-02-27T21:25:41.451Z",
+    "metadata": {
+      "taskId": "redundancy-conflict-detection",
+      "terminalId": "skills-agent-1"
+    }
+  },
+  {
+    "id": "677bf618",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task skill-gap-analysis completed by terminal skills-agent-4",
+    "read": false,
+    "ts": "2026-02-27T21:33:41.342Z",
+    "metadata": {
+      "taskId": "skill-gap-analysis",
+      "terminalId": "skills-agent-4"
+    }
+  },
+  {
+    "id": "fa2a351a",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task skill-redesign-proposal completed by terminal skills-agent-4",
+    "read": false,
+    "ts": "2026-02-27T21:34:23.655Z",
+    "metadata": {
+      "taskId": "skill-redesign-proposal",
+      "terminalId": "skills-agent-4"
+    }
+  },
+  {
+    "id": "4ab1aae6",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task manifest-implementation completed by terminal skills-agent-4",
+    "read": false,
+    "ts": "2026-02-27T21:36:00.529Z",
+    "metadata": {
+      "taskId": "manifest-implementation",
+      "terminalId": "skills-agent-4"
+    }
+  },
+  {
+    "id": "afaee842",
+    "type": "task_complete",
+    "severity": "success",
+    "title": "Task completed",
+    "message": "Task registry-test-implementation completed by terminal skills-agent-4",
+    "read": false,
+    "ts": "2026-02-27T21:40:57.435Z",
+    "metadata": {
+      "taskId": "registry-test-implementation",
+      "terminalId": "skills-agent-4"
+    }
+  },
+  {
+    "id": "6d837f57",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-6 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.590Z",
+    "metadata": {
+      "terminalId": "skills-agent-6",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "1d33f588",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-5 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.594Z",
+    "metadata": {
+      "terminalId": "skills-agent-5",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "2b73838a",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-4 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.598Z",
+    "metadata": {
+      "terminalId": "skills-agent-4",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "93c4431b",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-3 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.601Z",
+    "metadata": {
+      "terminalId": "skills-agent-3",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "ab21ae1f",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-2 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.605Z",
+    "metadata": {
+      "terminalId": "skills-agent-2",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "ae868e11",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-1 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.609Z",
+    "metadata": {
+      "terminalId": "skills-agent-1",
+      "exitCode": -1073741510
+    }
+  },
+  {
+    "id": "2b30a4d6",
+    "type": "terminal_exit",
+    "severity": "warning",
+    "title": "Terminal exited",
+    "message": "Terminal skills-agent-7 exited with code -1073741510",
+    "read": false,
+    "ts": "2026-02-27T21:47:43.639Z",
+    "metadata": {
+      "terminalId": "skills-agent-7",
+      "exitCode": -1073741510
+    }
   }
 ]

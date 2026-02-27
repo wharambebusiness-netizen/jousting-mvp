@@ -1,12 +1,12 @@
 # Overnight Orchestrator Report
-> Generated: 2026-02-26 07:05:59
+> Generated: 2026-02-27 21:49:35
 > Orchestrator: v28
 
 ## Summary
-- **Started**: 2026-02-26 07:05:59
-- **Ended**: 2026-02-26 07:05:59
+- **Started**: 2026-02-27 21:49:35
+- **Ended**: 2026-02-27 21:49:35
 - **Total runtime**: 0.0 minutes (0.0 hours)
-- **Rounds completed**: 1
+- **Rounds completed**: 0
 - **Stop reason**: all agents exhausted their task lists
 - **Mission**: default agents
 - **Final test status**: ALL PASSING (1123 tests)
@@ -50,7 +50,7 @@
 
 | Round | Agents | Test Result | Agent Pool | Tests | Pre-Sim | Post-Sim | Overhead | Total |
 |-------|--------|-------------|------------|-------|---------|----------|----------|-------|
-| 1 | qa(ERROR(1), 0m), dev(OK, 0m) | FAIL (1123p, 3f) | 0s | 0s | — | — | 0s | 0s |
+
 
 ## All Files Modified
 - none
@@ -61,22 +61,17 @@
 - src/ui/SetupScreen.tsx
 
 ## Test Trajectory
-- Round 1: FAIL (1123 passed, 3 failed)
+(no test data)
 
 ## Round Quality (v14)
 
 | Round | Active | Idle | Util% | Files | OK | Failed |
 |-------|--------|------|-------|-------|----|--------|
-| 1 | 2 | 0 | 100% | 2 | 1 | 1 |
+
 
 ## Agent Effectiveness (v14)
 
-| Agent | Rounds | Tasks Done | Files | Tokens/File | Cost/Task | Avg Time | Prod% |
-|-------|--------|------------|-------|-------------|-----------|----------|-------|
-| qa | 1 | 1 | 1 | 0 | $0.0000 | 0.0m | 100% |
-| dev | 1 | 1 | 1 | 18604 | $0.1431 | 0.0m | 100% |
-
-> **Prod%** = rounds with meaningful file output / total rounds run. **Tokens/File** = total tokens consumed / files modified.
+> No effectiveness data captured yet.
 
 
 ## Session Continuity (v16)
@@ -88,30 +83,22 @@
 
 | Agent | Model | Avg Time | Success | Files/Rnd | Active | Skipped | Blocked | Idle% |
 |-------|-------|----------|---------|-----------|--------|---------|---------|-------|
-| engine-refactor | default | 0m | 0% | 0 | 0/1 | 1 | 0 | 100% |
-| gear-system | default | 0m | 0% | 0 | 0/1 | 1 | 0 | 100% |
-| ui-loadout | default | 0m | 0% | 0 | 0/1 | 1 | 0 | 100% |
-| quality-review | default | 0m | 0% | 0 | 0/1 | 1 | 0 | 100% |
+| engine-refactor | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
+| gear-system | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
+| ui-loadout | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
+| quality-review | default | 0m | 0% | 0 | 0/0 | 1 | 0 | 0% |
 
 ## Backlog Velocity (v8)
 
 | Round | Pending | Completed | Notes |
 |-------|---------|-----------|-------|
-| 1 | 3 | 0 | |
+
 
 ## Cost Summary
 
-| Agent | Model | Rounds | Input Tokens | Output Tokens | Est. Cost | Avg Cost/Round | Escalations |
-|-------|-------|--------|-------------|---------------|-----------|----------------|-------------|
-| engine-refactor | default | 0 | — | — | — | — | 0 |
-| gear-system | default | 0 | — | — | — | — | 0 |
-| ui-loadout | default | 0 | — | — | — | — | 0 |
-| quality-review | default | 0 | — | — | — | — | 0 |
-| **TOTAL** | | **0** | **—** | **—** | **—** | **—** | **0** |
+> No cost data captured. Claude CLI may not have emitted token/cost info to stderr.
+> Once cost data is available, this section will populate automatically.
 
-- **Cost per successful agent-round**: —
-- **Pricing basis**: haiku ($0.25/$1.25 per M in/out), sonnet ($3/$15), opus ($15/$75)
-- **Note**: Costs are estimates from token counts if CLI did not report direct cost
 
 ## Model Escalation Summary
 
@@ -126,8 +113,6 @@
 
 | Agent | Included | Skipped | Blocked | Success Rate |
 |-------|----------|---------|---------|-------------|
-| dev | 1 | 0 | 0 | 100% |
-| qa | 1 | 0 | 0 | 0% |
 | engine-refactor | 0 | 1 | 0 | — |
 | gear-system | 0 | 1 | 0 | — |
 | ui-loadout | 0 | 1 | 0 | — |
