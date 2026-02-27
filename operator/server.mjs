@@ -599,7 +599,7 @@ User's request:
 ${raw.trim()}`;
 
     try {
-      const { execFile } = await import('child_process');
+      const { spawn: spawnChild } = await import('child_process');
       // Resolve claude path (Windows needs full path)
       let claudePath = 'claude';
       if (process.platform === 'win32') {
@@ -610,21 +610,38 @@ ${raw.trim()}`;
       }
 
       logger.info?.(`[enhance-prompt] Invoking: ${claudePath} -p --model haiku (input: ${raw.trim().length} chars)`);
-      const child = execFile(claudePath, ['-p', '--model', 'haiku', enhanceInstruction], {
+
+      // Use spawn + stdin pipe — passing long prompts as CLI args fails on Windows
+      const child = spawnChild(claudePath, ['-p', '--model', 'haiku'], {
         timeout: 30000,
-        maxBuffer: 1024 * 64,
         env: { ...process.env, CLAUDECODE: '' },
-      }, (err, stdout, stderr) => {
-        if (err) {
-          logger.error?.(`[enhance-prompt] Error: ${err.message}`);
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+      child.on('error', (err) => {
+        logger.error?.(`[enhance-prompt] Spawn error: ${err.message}`);
+        res.json({ enhanced: raw.trim(), fallback: true, error: err.message });
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          logger.error?.(`[enhance-prompt] Exit code ${code}`);
           if (stderr) logger.error?.(`[enhance-prompt] stderr: ${stderr}`);
-          // Fallback: return original prompt
-          return res.json({ enhanced: raw.trim(), fallback: true, error: err.message });
+          return res.json({ enhanced: raw.trim(), fallback: true, error: `Exit code ${code}` });
         }
         const enhanced = stdout.trim();
         logger.info?.(`[enhance-prompt] Success: ${enhanced.length} chars output${!enhanced ? ' (empty — using fallback)' : ''}`);
         res.json({ enhanced: enhanced || raw.trim(), fallback: !enhanced });
       });
+
+      // Write prompt to stdin and close
+      child.stdin.write(enhanceInstruction);
+      child.stdin.end();
     } catch (err) {
       logger.error?.(`[enhance-prompt] Spawn error: ${err.message}`);
       res.json({ enhanced: raw.trim(), fallback: true });
