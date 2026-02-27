@@ -274,5 +274,54 @@
       });
     });
   </script>
+  <script>
+    // ── Real-time WS widget refresh ─────────────────────────
+    // Subscribe to key events and trigger HTMX widget reloads
+    (function() {
+      if (typeof createWS !== 'function') return;
+
+      var WIDGET_MAP = {
+        'health:': 'dw-health',
+        'claude-terminal:': 'dw-terminals',
+        'coord:': 'dw-tasks',
+        'notification:': 'dw-notifications',
+        'cost:': 'dw-cost',
+        'chain:': 'chain-table',
+      };
+
+      var debounceTimers = {};
+      function refreshWidget(elementId) {
+        if (debounceTimers[elementId]) return;
+        debounceTimers[elementId] = setTimeout(function() {
+          debounceTimers[elementId] = null;
+          var el = document.getElementById(elementId);
+          if (el && el.getAttribute('hx-get')) {
+            htmx.ajax('GET', el.getAttribute('hx-get'), { target: el, swap: 'innerHTML' });
+          }
+        }, 500);
+      }
+
+      var ws = createWS(
+        ['health:', 'claude-terminal:', 'coord:', 'notification:', 'cost:', 'chain:'],
+        function(msg) {
+          if (!msg || !msg.event) return;
+          var keys = Object.keys(WIDGET_MAP);
+          for (var i = 0; i < keys.length; i++) {
+            if (msg.event.indexOf(keys[i]) === 0) {
+              refreshWidget(WIDGET_MAP[keys[i]]);
+              break;
+            }
+          }
+        }
+      );
+
+      if (typeof onPageCleanup === 'function') {
+        onPageCleanup(function() {
+          if (ws) ws.close();
+          Object.keys(debounceTimers).forEach(function(k) { clearTimeout(debounceTimers[k]); });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

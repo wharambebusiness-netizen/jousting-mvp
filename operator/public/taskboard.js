@@ -1554,7 +1554,7 @@
       } else if (ev === 'claude-terminal:task-assigned') {
         // Terminal claimed a task — refresh to show assignment
         if (data.taskId && tasks[data.taskId]) {
-          tasks[data.taskId].status = 'in-progress';
+          tasks[data.taskId].status = 'assigned';
           tasks[data.taskId].assignedTo = data.terminalId || null;
           renderBoard();
         } else {

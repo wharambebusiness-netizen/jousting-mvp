@@ -410,6 +410,14 @@ export function createClaudeTerminalRoutes(ctx) {
       // Track in pool
       claudePool.assignTask(req.params.id, claimable);
 
+      // Emit coord:assigned event (bridges Claude pool with coordinator events)
+      events.emit('coord:assigned', {
+        taskId: claimable.id,
+        workerId: req.params.id,
+        strategy: 'claude-pool',
+        category: claimable.category,
+      });
+
       res.json({ claimed: true, task: claimable });
     } catch (err) {
       res.status(400).json({ error: err.message });

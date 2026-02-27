@@ -285,7 +285,7 @@ export function createApp(options = {}) {
 
   // Coordinator for inter-orchestrator coordination (requires pool or swarm mode)
   let coordinator = null;
-  const needsCoordinator = (pool && options.coordination !== false) || options.swarm;
+  const needsCoordinator = ((pool || options.claudePool) && options.coordination !== false) || options.swarm;
   if (needsCoordinator) {
     const coordPool = pool || createNullPool();
     const coordOpts = typeof options.coordination === 'object' ? options.coordination : {};

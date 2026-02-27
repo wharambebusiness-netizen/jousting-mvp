@@ -686,6 +686,7 @@ document.body.addEventListener('htmx:configRequest', function(evt) {
 });
 
 loadProjects();
+updateSidebarActiveLink();
 
 // ── Settings Defaults ────────────────────────────────────────
 

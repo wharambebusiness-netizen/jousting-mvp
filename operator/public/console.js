@@ -701,6 +701,7 @@
 
       renderWorkerPanel(mergedList);
       updateStatusBar(workerList);
+      updateDismissAllButton();
     } catch (err) {
       // Silently retry on next interval
     }
@@ -838,6 +839,16 @@
     }
 
     if (isStopped) {
+      var respawnBtn = document.createElement('button');
+      respawnBtn.className = 'worker-card__respawn btn btn--xs btn--accent';
+      respawnBtn.title = 'Respawn worker';
+      respawnBtn.textContent = 'Respawn';
+      respawnBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        respawnWorker(w);
+      });
+      header.appendChild(respawnBtn);
+
       var dismissBtn = document.createElement('button');
       dismissBtn.className = 'worker-card__dismiss btn btn--xs btn--ghost';
       dismissBtn.title = 'Dismiss';
@@ -931,7 +942,7 @@
       card.appendChild(capsDiv);
     }
 
-    // ── Meta row (status + age) ─────────────────────────────
+    // ── Meta row (status + age + exit info) ─────────────────
     var meta = document.createElement('div');
     meta.className = 'worker-card__meta';
     var statusSpan = document.createElement('span');
@@ -943,6 +954,17 @@
       meta.appendChild(ageSpan);
     }
     card.appendChild(meta);
+
+    // Exit code/signal for stopped workers
+    if (isStopped && (w.exitCode != null || w.exitSignal)) {
+      var exitDiv = document.createElement('div');
+      exitDiv.className = 'worker-card__exit';
+      var parts = [];
+      if (w.exitCode != null) parts.push('exit ' + w.exitCode);
+      if (w.exitSignal) parts.push(w.exitSignal);
+      exitDiv.textContent = parts.join(' / ');
+      card.appendChild(exitDiv);
+    }
 
     // ── Mini-terminal container (expandable) ────────────────
     var termContainer = document.createElement('div');
@@ -962,9 +984,35 @@
 
     card.appendChild(termContainer);
 
+    // ── Inline prompt input for running workers ──────────────
+    if (isRunning && !isStopped) {
+      var promptDiv = document.createElement('div');
+      promptDiv.className = 'worker-card__prompt';
+      var textarea = document.createElement('textarea');
+      textarea.placeholder = 'Send instruction...';
+      textarea.rows = 1;
+      textarea.addEventListener('click', function(e) { e.stopPropagation(); });
+      textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          sendWorkerPrompt(w.id, textarea);
+        }
+      });
+      promptDiv.appendChild(textarea);
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'btn btn--xs btn--accent';
+      sendBtn.textContent = 'Send';
+      sendBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        sendWorkerPrompt(w.id, textarea);
+      });
+      promptDiv.appendChild(sendBtn);
+      card.appendChild(promptDiv);
+    }
+
     // Click card to open in terminals page
     card.addEventListener('click', function() {
-      window.open('/terminals#' + encodeURIComponent(w.id), '_blank');
+      window.open('/terminals?tab=' + encodeURIComponent(w.id), '_blank');
     });
 
     // Init xterm.js mini-terminal after DOM insertion
@@ -1200,6 +1248,84 @@
       if (window.showToast) window.showToast('Worker ' + workerId + ' killed', 'info');
       refreshWorkers();
     } catch(e) { /* non-critical */ }
+  }
+
+  /**
+   * Send an instruction to a running worker via PTY input.
+   */
+  async function sendWorkerPrompt(workerId, textarea) {
+    var text = textarea.value.trim();
+    if (!text) return;
+    try {
+      var resp = await fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/input', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: text + '\n' })
+      });
+      if (resp.ok) {
+        textarea.value = '';
+        if (window.showToast) window.showToast('Sent to ' + workerId, 'success');
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        if (window.showToast) window.showToast(err.error || 'Send failed', 'error');
+      }
+    } catch(e) {
+      if (window.showToast) window.showToast('Send failed', 'error');
+    }
+  }
+
+  /**
+   * Respawn a stopped worker with a new ID and same config.
+   */
+  async function respawnWorker(w) {
+    var newId = 'worker-' + Math.random().toString(36).slice(2, 6);
+    try {
+      var resp = await fetch('/api/claude-terminals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          role: 'worker',
+          autoDispatch: w.autoDispatch !== false,
+          autoComplete: w.autoComplete !== false,
+          dangerouslySkipPermissions: w.dangerouslySkipPermissions !== false,
+          capabilities: w.capabilities || undefined
+        })
+      });
+      if (resp.ok) {
+        dismissWorker(w.id);
+        if (window.showToast) window.showToast('Respawned as ' + newId, 'success');
+        refreshWorkers();
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        if (window.showToast) window.showToast(err.error || 'Respawn failed', 'error');
+      }
+    } catch(e) {
+      if (window.showToast) window.showToast('Respawn failed', 'error');
+    }
+  }
+
+  /**
+   * Dismiss all stopped workers from the panel.
+   */
+  function dismissAllStopped() {
+    var ids = Object.keys(seenWorkers).filter(function(id) {
+      return seenWorkers[id]._stopped;
+    });
+    ids.forEach(function(id) { dismissWorker(id); });
+    updateDismissAllButton();
+  }
+
+  /**
+   * Show/hide the "Dismiss All Stopped" button based on stopped worker count.
+   */
+  function updateDismissAllButton() {
+    var btn = document.getElementById('dismiss-all-btn');
+    if (!btn) return;
+    var stoppedCount = Object.keys(seenWorkers).filter(function(id) {
+      return seenWorkers[id]._stopped;
+    }).length;
+    btn.style.display = stoppedCount > 0 ? '' : 'none';
   }
 
   // ── Status Bar ─────────────────────────────────────────────
@@ -1459,6 +1585,7 @@
     document.getElementById('start-master-btn').addEventListener('click', startMaster);
     document.getElementById('stop-master-btn').addEventListener('click', stopMaster);
     document.getElementById('spawn-worker-btn').addEventListener('click', spawnWorker);
+    document.getElementById('dismiss-all-btn').addEventListener('click', dismissAllStopped);
 
     // Prompt input handlers
     document.getElementById('send-prompt-btn').addEventListener('click', sendInitialPrompt);
@@ -1499,14 +1626,19 @@
     // Refit terminals when page is restored from cache
     document.addEventListener('terminal-page-restored', function(e) {
       if (e.detail && e.detail.page === '/console') {
-        if (masterFitAddon) {
-          try { masterFitAddon.fit(); } catch (_) {}
-        }
-        Object.keys(workerTerminals).forEach(function(id) {
-          var entry = workerTerminals[id];
-          if (entry && entry.fitAddon) {
-            try { entry.fitAddon.fit(); } catch (_) {}
-          }
+        // Use rAF + setTimeout to ensure CSS layout is complete before measuring
+        requestAnimationFrame(function() {
+          setTimeout(function() {
+            if (masterFitAddon) {
+              try { masterFitAddon.fit(); } catch (_) {}
+            }
+            Object.keys(workerTerminals).forEach(function(id) {
+              var entry = workerTerminals[id];
+              if (entry && entry.fitAddon) {
+                try { entry.fitAddon.fit(); } catch (_) {}
+              }
+            });
+          }, 50);
         });
       }
     });

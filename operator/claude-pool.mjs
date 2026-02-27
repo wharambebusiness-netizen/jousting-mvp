@@ -91,6 +91,9 @@ export function createClaudePool(ctx) {
     _counter: 0,
     _tickCount: 0,
     _crashCounts: new Map(),
+    _consecutiveSpawnFailures: 0,
+    _circuitBroken: false,
+    _lastRespawnTimes: new Map(),
     _metrics: {
       startedAt: null,
       tasksCompleted: 0,
@@ -399,7 +402,15 @@ export function createClaudePool(ctx) {
     try {
       coordinator.taskQueue.fail(taskId, `Terminal ${entry.id} crashed (exit code ${exitCode})`);
       coordinator.taskQueue.retry(taskId);
-    } catch { /* task may already be in terminal state */ }
+    } catch (err) {
+      log(`[claude-pool] Task recovery failed for ${taskId}: ${err.message}`);
+      events.emit('claude-terminal:task-recovery-failed', {
+        terminalId: entry.id,
+        taskId,
+        exitCode,
+        error: err.message,
+      });
+    }
 
     entry.assignedTask = null;
     swarmState._metrics.tasksRecovered++;
@@ -1036,6 +1047,14 @@ export function createClaudePool(ctx) {
         taskId: claimable.id,
         task: claimable.task,
       });
+
+      // Bridge with coordinator events for task board integration
+      events.emit('coord:assigned', {
+        taskId: claimable.id,
+        workerId: terminalId,
+        strategy: 'claude-pool',
+        category: claimable.category,
+      });
     } catch (err) {
       log(`[claude-pool] ${terminalId} auto-dispatch failed: ${err.message}`);
     }
@@ -1666,25 +1685,49 @@ export function createClaudePool(ctx) {
   }
 
   /**
+   * Track consecutive spawn failures and trip circuit breaker at threshold.
+   */
+  function _handleSpawnFailure() {
+    swarmState._consecutiveSpawnFailures++;
+    if (swarmState._consecutiveSpawnFailures >= 5) {
+      swarmState._circuitBroken = true;
+      log(`[claude-pool] Circuit breaker tripped: ${swarmState._consecutiveSpawnFailures} consecutive spawn failures — swarm halted`);
+      events.emit('claude-terminal:swarm-halted', {
+        reason: 'circuit-breaker',
+        consecutiveFailures: swarmState._consecutiveSpawnFailures,
+      });
+    }
+  }
+
+  /**
    * Swarm scale-up/scale-down check (runs on interval).
    */
   function _swarmScaleCheck() {
     if (!swarmState.enabled) return;
+    if (swarmState._circuitBroken) return;
 
     swarmState._tickCount++;
 
-    // ── Crash recovery: respawn stopped swarm terminals ───
+    // ── Crash recovery: respawn stopped swarm terminals (with backoff) ───
     for (const entry of terminals.values()) {
       if (!entry.swarmManaged || entry.status !== 'stopped') continue;
       const crashes = swarmState._crashCounts.get(entry.id) || 0;
       if (crashes >= SWARM_MAX_CRASH_RETRIES) continue;
+
+      // Exponential backoff: 5s * 2^crashes (5s, 10s, 20s)
+      const backoffMs = SWARM_SCALE_CHECK_MS * Math.pow(2, crashes);
+      const lastRespawn = swarmState._lastRespawnTimes.get(entry.id) || 0;
+      if (Date.now() - lastRespawn < backoffMs) continue;
+
       const newCrashCount = crashes + 1;
 
       // Remove stopped entry and respawn with fresh ID
       terminals.delete(entry.id);
+      swarmState._lastRespawnTimes.delete(entry.id);
       const freshId = SWARM_ID_PREFIX + swarmState._counter++;
       // Transfer crash count to new ID for lineage tracking
       swarmState._crashCounts.set(freshId, newCrashCount);
+      swarmState._lastRespawnTimes.set(freshId, Date.now());
       const swarmOpts = {
         projectDir: swarmState.projectDir,
         model: swarmState.model,
@@ -1697,17 +1740,19 @@ export function createClaudePool(ctx) {
       };
       spawn(freshId, swarmOpts)
         .then(() => {
-          log(`[claude-pool] Swarm respawned: ${entry.id} → ${freshId} (crash #${crashes + 1})`);
+          log(`[claude-pool] Swarm respawned: ${entry.id} → ${freshId} (crash #${newCrashCount}, backoff ${backoffMs}ms)`);
           swarmState._metrics.totalSpawns++;
+          swarmState._consecutiveSpawnFailures = 0;
           setTimeout(() => maybeAutoDispatch(freshId), AUTO_DISPATCH_DELAY_MS);
         })
         .catch((err) => {
           log(`[claude-pool] Swarm respawn failed for ${freshId}: ${err.message}`);
+          _handleSpawnFailure();
         });
       break; // one respawn per tick
     }
 
-    // ── Scale-up: spawn if pending tasks exist and no idle terminals
+    // ── Scale-up: batch spawn up to 4 terminals if pending tasks need workers
     const readyTasks = countClaimableTasks();
     let idleTerminals = 0;
     for (const entry of terminals.values()) {
@@ -1716,7 +1761,11 @@ export function createClaudePool(ctx) {
       }
     }
 
-    if (readyTasks > 0 && idleTerminals === 0 && activeCount() < _effectiveMaxTerminals) {
+    const slotsAvailable = _effectiveMaxTerminals - activeCount();
+    const needed = readyTasks - idleTerminals;
+    const toSpawn = Math.min(needed, slotsAvailable, 4); // batch up to 4
+
+    for (let i = 0; i < toSpawn; i++) {
       const swarmId = SWARM_ID_PREFIX + swarmState._counter++;
       const swarmOpts = {
         projectDir: swarmState.projectDir,
@@ -1733,6 +1782,7 @@ export function createClaudePool(ctx) {
           log(`[claude-pool] Swarm scaled up: ${swarmId} (${readyTasks} pending tasks)`);
           swarmState._metrics.scaleUps++;
           swarmState._metrics.totalSpawns++;
+          swarmState._consecutiveSpawnFailures = 0;
           events.emit('claude-terminal:swarm-scaled-up', {
             terminalId: swarmId,
             pendingTasks: readyTasks,
@@ -1743,6 +1793,7 @@ export function createClaudePool(ctx) {
         })
         .catch((err) => {
           log(`[claude-pool] Swarm scale-up failed: ${err.message}`);
+          _handleSpawnFailure();
         });
     }
 
@@ -1793,6 +1844,9 @@ export function createClaudePool(ctx) {
       if (!swarmState._scaleTimer) {
         swarmState._tickCount = 0;
         swarmState._crashCounts.clear();
+        swarmState._consecutiveSpawnFailures = 0;
+        swarmState._circuitBroken = false;
+        swarmState._lastRespawnTimes.clear();
         swarmState._metrics = {
           startedAt: new Date().toISOString(),
           tasksCompleted: 0,
@@ -1853,6 +1907,8 @@ export function createClaudePool(ctx) {
       scaleUpThreshold: swarmState.scaleUpThreshold,
       running: activeCount(),
       pending: countClaimableTasks(),
+      circuitBroken: swarmState._circuitBroken,
+      consecutiveSpawnFailures: swarmState._consecutiveSpawnFailures,
       metrics: getSwarmMetrics(),
     };
   }

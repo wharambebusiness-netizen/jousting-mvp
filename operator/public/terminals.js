@@ -394,12 +394,17 @@ function loadInstances() {
       list.forEach(function(inst) {
         addTerminalInstance(inst.id, inst);
       });
-      // Restore active tab from localStorage or use first
-      var saved = localStorage.getItem('term-active-tab');
-      if (saved && instances.has(saved)) {
-        switchTab(saved);
-      } else if (instances.size > 0) {
-        switchTab(instances.keys().next().value);
+      // Deep-link via ?tab= param, then localStorage fallback
+      var tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam && instances.has(tabParam)) {
+        switchTab(tabParam);
+      } else {
+        var saved = localStorage.getItem('term-active-tab');
+        if (saved && instances.has(saved)) {
+          switchTab(saved);
+        } else if (instances.size > 0) {
+          switchTab(instances.keys().next().value);
+        }
       }
     })
     .catch(function() {
@@ -440,6 +445,11 @@ function loadClaudeTerminals() {
       data.terminals.forEach(function(t) {
         addClaudeTerminalInstance(t.id, t);
       });
+      // Deep-link: if ?tab= targets a Claude terminal, switch to it now
+      var tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam && instances.has(tabParam) && activeTabId !== tabParam) {
+        switchTab(tabParam);
+      }
       // If sidebar is open and we haven't loaded a tree yet, try the active tab
       if (sidebarOpen && !sidebarRoot && activeTabId) {
         var inst = instances.get(activeTabId);
@@ -1294,6 +1304,7 @@ function switchTab(id) {
   if (!instances.has(id)) return;
   activeTabId = id;
   localStorage.setItem('term-active-tab', id);
+  history.replaceState({}, '', '/terminals?tab=' + encodeURIComponent(id));
 
   instances.forEach(function(inst, instId) {
     var isActive = instId === id;
