@@ -1100,7 +1100,7 @@
     card.appendChild(termContainer);
 
     // ── Inline prompt input for running workers ──────────────
-    if (isRunning && !isStopped) {
+    if (isRunning) {
       var promptDiv = document.createElement('div');
       promptDiv.className = 'worker-card__prompt';
       var textarea = document.createElement('textarea');
@@ -1125,9 +1125,9 @@
       card.appendChild(promptDiv);
     }
 
-    // Click card to open in terminals page
+    // Click card to open in terminals page (same tab)
     card.addEventListener('click', function() {
-      window.open('/terminals?tab=' + encodeURIComponent(w.id), '_blank');
+      window.location.href = '/terminals?tab=' + encodeURIComponent(w.id);
     });
 
     // Init xterm.js mini-terminal after DOM insertion

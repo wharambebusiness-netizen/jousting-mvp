@@ -399,9 +399,11 @@ export function createClaudePool(ctx) {
     const taskId = entry.assignedTask.taskId;
     log(`[claude-pool] ${entry.id} crashed with task ${taskId} — releasing back to pending`);
 
+    let recovered = false;
     try {
       coordinator.taskQueue.fail(taskId, `Terminal ${entry.id} crashed (exit code ${exitCode})`);
       coordinator.taskQueue.retry(taskId);
+      recovered = true;
     } catch (err) {
       log(`[claude-pool] Task recovery failed for ${taskId}: ${err.message}`);
       events.emit('claude-terminal:task-recovery-failed', {
@@ -413,14 +415,16 @@ export function createClaudePool(ctx) {
     }
 
     entry.assignedTask = null;
-    swarmState._metrics.tasksRecovered++;
     swarmState._metrics.totalCrashes++;
 
-    events.emit('claude-terminal:task-recovered', {
-      terminalId: entry.id,
-      taskId,
-      exitCode,
-    });
+    if (recovered) {
+      swarmState._metrics.tasksRecovered++;
+      events.emit('claude-terminal:task-recovered', {
+        terminalId: entry.id,
+        taskId,
+        exitCode,
+      });
+    }
   }
 
   // ── Auto-Handoff ────────────────────────────────────────

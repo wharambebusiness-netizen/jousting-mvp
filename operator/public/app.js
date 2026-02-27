@@ -668,6 +668,10 @@ function updateSidebarActiveLink() {
   for (var i = 0; i < links.length; i++) {
     var linkPage = links[i].getAttribute('data-page');
     var isActive = (linkPage === path) || (linkPage === '/' && path === '/index.html');
+    // Prefix matching: /chains/*, /chain/* highlight Dashboard
+    if (!isActive && linkPage === '/dashboard' && (path.startsWith('/chains/') || path.startsWith('/chain/'))) {
+      isActive = true;
+    }
     links[i].classList.toggle('sidebar-nav__link--active', isActive);
   }
 }
