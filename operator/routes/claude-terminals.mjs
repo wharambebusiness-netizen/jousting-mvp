@@ -91,8 +91,8 @@ export function createClaudeTerminalRoutes(ctx) {
     const lines = parseInt(req.query.lines) || 20;
     const raw = req.query.raw === '1';
     const preview = raw
-      ? claudePool.getRawOutputPreview(req.params.id, Math.min(lines, 200))
-      : claudePool.getOutputPreview(req.params.id, Math.min(lines, 200));
+      ? claudePool.getRawOutputPreview(req.params.id, Math.min(lines, 500))
+      : claudePool.getOutputPreview(req.params.id, Math.min(lines, 500));
     if (preview === null) return res.status(404).json({ error: 'Terminal not found' });
     res.json({ id: req.params.id, lines: preview });
   });

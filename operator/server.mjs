@@ -656,6 +656,11 @@ export function createApp(options = {}) {
     res.sendFile(join(publicDir, 'index.html'));
   });
 
+  // Serve master-context.md from operator/ (not in public/)
+  app.get('/master-context.md', (_req, res) => {
+    res.sendFile(join(moduleDir, 'master-context.md'));
+  });
+
   // Root redirect to console (daily-driver interface)
   app.get('/', (_req, res) => {
     res.redirect('/console');

@@ -13,6 +13,10 @@
   var masterFitAddon = null;    // FitAddon instance
   var masterBinaryWs = null;    // Binary WS to master PTY
   var masterTerminalId = null;  // ID of the master terminal
+  var masterOnDataDisposable = null;   // disposable from masterTerminal.onData()
+  var masterOnResizeDisposable = null; // disposable from masterTerminal.onResize()
+  var masterResizeHandler = null;      // bound window resize handler (for removal)
+  var masterResizeObserver = null;     // ResizeObserver instance (for disconnect)
   var workers = {};             // { id: { ...terminalData } }
   var seenWorkers = {};         // { id: { ...terminalData, _stopped: bool } } — persists across refreshes
   var workerTerminals = {};     // { id: { term, fitAddon, binaryWs } } — xterm.js instances
@@ -70,16 +74,27 @@
       if (masterFitAddon) masterFitAddon.fit();
     }, 50);
 
-    // Resize handler
-    window.addEventListener('resize', debounce(function() {
+    // Clean up any previous resize listeners before adding new ones
+    if (masterResizeHandler) {
+      window.removeEventListener('resize', masterResizeHandler);
+    }
+    if (masterResizeObserver) {
+      masterResizeObserver.disconnect();
+      masterResizeObserver = null;
+    }
+
+    // Resize handler (named reference for removal)
+    masterResizeHandler = debounce(function() {
       if (masterFitAddon) masterFitAddon.fit();
-    }, 100));
+    }, 100);
+    window.addEventListener('resize', masterResizeHandler);
 
     // ResizeObserver for container size changes (e.g. panel drag)
     if (typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(debounce(function() {
+      masterResizeObserver = new ResizeObserver(debounce(function() {
         if (masterFitAddon) masterFitAddon.fit();
-      }, 50)).observe(container);
+      }, 50));
+      masterResizeObserver.observe(container);
     }
   }
 
@@ -130,15 +145,19 @@
       }
     };
 
+    // Dispose previous handlers to prevent stacking on reconnect
+    if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
+    if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
+
     // User input -> WS
-    masterTerminal.onData(function(data) {
+    masterOnDataDisposable = masterTerminal.onData(function(data) {
       if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
         masterBinaryWs.send(data);
       }
     });
 
     // Resize -> WS
-    masterTerminal.onResize(function(size) {
+    masterOnResizeDisposable = masterTerminal.onResize(function(size) {
       if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
         masterBinaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
       }
@@ -242,12 +261,20 @@
     btn.textContent = 'Starting...';
 
     try {
+      // Clear any lingering reconnect timer from a previous disconnect
+      if (masterReconnectTimer) {
+        clearInterval(masterReconnectTimer);
+        masterReconnectTimer = null;
+      }
+
       // Clean up any stale master terminal from previous session
       try {
         await fetch('/api/claude-terminals/master', { method: 'DELETE' });
       } catch(e) { /* ignore — may not exist */ }
 
       // Clean up local xterm if restarting
+      if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
+      if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
       if (masterBinaryWs) { masterBinaryWs.close(); masterBinaryWs = null; }
       if (masterTerminal) { masterTerminal.dispose(); masterTerminal = null; }
       masterFitAddon = null;
@@ -315,6 +342,8 @@
       await fetch('/api/claude-terminals/' + encodeURIComponent(masterTerminalId), { method: 'DELETE' });
 
       // Clean up resources
+      if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
+      if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
       if (masterBinaryWs) { masterBinaryWs.close(); masterBinaryWs = null; }
       if (masterTerminal) { masterTerminal.dispose(); masterTerminal = null; }
       masterFitAddon = null;
@@ -445,10 +474,21 @@
     // Send to master terminal via binary WS
     if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
       masterBinaryWs.send(text + '\n');
+      hidePromptInput();
+      if (window.showToast) window.showToast('Prompt sent to master', 'success');
+    } else {
+      // WS not ready yet — retry after a short delay
+      if (window.showToast) window.showToast('Waiting for terminal connection...', 'info');
+      setTimeout(function() {
+        if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
+          masterBinaryWs.send(text + '\n');
+          hidePromptInput();
+          if (window.showToast) window.showToast('Prompt sent to master', 'success');
+        } else {
+          if (window.showToast) window.showToast('Terminal not connected — try again', 'error');
+        }
+      }, 1500);
     }
-
-    hidePromptInput();
-    if (window.showToast) window.showToast('Prompt sent to master', 'success');
   }
 
   function skipPrompt() {
@@ -471,7 +511,7 @@
         var resp = await fetch('/api/claude-terminals/swarm/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workerCount: 3 })
+          body: JSON.stringify({ minTerminals: 3, maxTerminals: 3 })
         });
         if (resp.ok) {
           swarmRunning = true;
