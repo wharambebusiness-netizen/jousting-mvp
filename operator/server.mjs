@@ -609,6 +609,7 @@ ${raw.trim()}`;
         } catch { claudePath = 'claude.exe'; }
       }
 
+      logger.info?.(`[enhance-prompt] Invoking: ${claudePath} -p --model haiku (input: ${raw.trim().length} chars)`);
       const child = execFile(claudePath, ['-p', '--model', 'haiku', enhanceInstruction], {
         timeout: 30000,
         maxBuffer: 1024 * 64,
@@ -616,10 +617,12 @@ ${raw.trim()}`;
       }, (err, stdout, stderr) => {
         if (err) {
           logger.error?.(`[enhance-prompt] Error: ${err.message}`);
+          if (stderr) logger.error?.(`[enhance-prompt] stderr: ${stderr}`);
           // Fallback: return original prompt
-          return res.json({ enhanced: raw.trim(), fallback: true });
+          return res.json({ enhanced: raw.trim(), fallback: true, error: err.message });
         }
         const enhanced = stdout.trim();
+        logger.info?.(`[enhance-prompt] Success: ${enhanced.length} chars output${!enhanced ? ' (empty — using fallback)' : ''}`);
         res.json({ enhanced: enhanced || raw.trim(), fallback: !enhanced });
       });
     } catch (err) {

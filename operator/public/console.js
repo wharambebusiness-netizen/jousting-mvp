@@ -281,7 +281,7 @@
       var container = document.getElementById('master-terminal-container');
       if (container) container.innerHTML = '';
 
-      // Read master context for system prompt
+      // Read master context for system prompt + inject dynamic state
       var systemPrompt = '';
       try {
         var contextResp = await fetch('/master-context.md');
@@ -289,6 +289,30 @@
           systemPrompt = await contextResp.text();
         }
       } catch(e) { /* optional — proceed without context */ }
+
+      // Append dynamic system state so the master knows what's running
+      try {
+        var stateLines = ['\n\n## Current System State (at spawn time)\n'];
+        var [healthResp, tasksResp, poolResp] = await Promise.all([
+          fetch('/api/health').then(function(r) { return r.json(); }).catch(function() { return null; }),
+          fetch('/api/coordination/tasks').then(function(r) { return r.json(); }).catch(function() { return null; }),
+          fetch('/api/claude-terminals/pool-status').then(function(r) { return r.json(); }).catch(function() { return null; })
+        ]);
+        if (healthResp) stateLines.push('- Health: ' + (healthResp.status || 'unknown'));
+        if (tasksResp && tasksResp.items) {
+          var pending = tasksResp.items.filter(function(t) { return t.status === 'pending'; }).length;
+          var assigned = tasksResp.items.filter(function(t) { return t.status === 'assigned'; }).length;
+          var done = tasksResp.items.filter(function(t) { return t.status === 'done'; }).length;
+          stateLines.push('- Tasks: ' + tasksResp.items.length + ' total (' + pending + ' pending, ' + assigned + ' in-progress, ' + done + ' done)');
+        } else {
+          stateLines.push('- Tasks: No tasks yet');
+        }
+        if (poolResp) {
+          stateLines.push('- Workers: ' + (poolResp.active || 0) + ' active, swarm ' + (poolResp.swarm && poolResp.swarm.enabled ? 'ON' : 'OFF'));
+        }
+        stateLines.push('- Time: ' + new Date().toLocaleString());
+        systemPrompt += stateLines.join('\n');
+      } catch(e) { /* dynamic state is optional */ }
 
       // Spawn master terminal via API
       var resp = await fetch('/api/claude-terminals', {
@@ -300,7 +324,7 @@
           persistent: true,
           dangerouslySkipPermissions: true,
           autoHandoff: true,
-          systemPrompt: systemPrompt.slice(0, 8000)
+          systemPrompt: systemPrompt.slice(0, 12000)
         })
       });
 
@@ -465,18 +489,27 @@
     if (el) el.style.display = 'none';
   }
 
-  function sendInitialPrompt() {
+  // Track original prompt text for revert
+  var _originalPromptText = '';
+  var _isEnhancedPreview = false;
+
+  function enhancePrompt() {
     var ta = document.getElementById('master-prompt-input');
+    var enhanceBtn = document.getElementById('enhance-prompt-btn');
     var sendBtn = document.getElementById('send-prompt-btn');
+    var badge = document.getElementById('enhanced-badge');
     if (!ta) return;
     var text = ta.value.trim();
     if (!text) return;
 
+    // Save original for revert
+    _originalPromptText = text;
+
     // Disable UI while enhancing
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Enhancing...'; }
+    if (enhanceBtn) { enhanceBtn.disabled = true; enhanceBtn.textContent = 'Enhancing...'; }
+    if (sendBtn) sendBtn.disabled = true;
     ta.disabled = true;
 
-    // Enhance the prompt via server-side AI, then send to terminal
     fetch('/api/enhance-prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -484,23 +517,76 @@
     })
     .then(function(resp) { return resp.json(); })
     .then(function(data) {
-      var finalPrompt = (data && data.enhanced) ? data.enhanced : text;
-      _sendToMasterTerminal(finalPrompt, data && !data.fallback);
+      if (enhanceBtn) { enhanceBtn.disabled = false; enhanceBtn.textContent = 'Enhance'; }
+      if (sendBtn) sendBtn.disabled = false;
+      ta.disabled = false;
+
+      if (data && data.enhanced && !data.fallback) {
+        // Show enhanced text in textarea for review
+        ta.value = data.enhanced;
+        ta.rows = Math.min(8, Math.max(3, data.enhanced.split('\n').length + 1));
+        _isEnhancedPreview = true;
+        // Show enhanced badge
+        if (badge) badge.style.display = '';
+        // Hide enhance button, focus textarea for editing
+        if (enhanceBtn) enhanceBtn.style.display = 'none';
+        ta.focus();
+        if (window.showToast) window.showToast('Prompt enhanced — review and edit, then Send', 'success');
+      } else {
+        // Enhancement failed or returned fallback
+        _isEnhancedPreview = false;
+        if (badge) badge.style.display = 'none';
+        ta.focus();
+        if (window.showToast) window.showToast('Enhancement unavailable — send as-is or try again', 'warning');
+      }
     })
-    .catch(function() {
-      // Enhancement failed — send original
-      _sendToMasterTerminal(text, false);
+    .catch(function(err) {
+      if (enhanceBtn) { enhanceBtn.disabled = false; enhanceBtn.textContent = 'Enhance'; }
+      if (sendBtn) sendBtn.disabled = false;
+      ta.disabled = false;
+      ta.focus();
+      if (window.showToast) window.showToast('Enhancement failed: ' + (err.message || 'network error'), 'error');
     });
+  }
+
+  function revertPrompt() {
+    var ta = document.getElementById('master-prompt-input');
+    var enhanceBtn = document.getElementById('enhance-prompt-btn');
+    var badge = document.getElementById('enhanced-badge');
+    if (ta && _originalPromptText) {
+      ta.value = _originalPromptText;
+      ta.rows = 2;
+    }
+    _isEnhancedPreview = false;
+    if (badge) badge.style.display = 'none';
+    if (enhanceBtn) enhanceBtn.style.display = '';
+    if (ta) ta.focus();
+  }
+
+  function sendInitialPrompt() {
+    var ta = document.getElementById('master-prompt-input');
+    if (!ta) return;
+    var text = ta.value.trim();
+    if (!text) return;
+
+    _sendToMasterTerminal(text, _isEnhancedPreview);
   }
 
   function _sendToMasterTerminal(text, wasEnhanced) {
     var sendBtn = document.getElementById('send-prompt-btn');
+    var enhanceBtn = document.getElementById('enhance-prompt-btn');
     var ta = document.getElementById('master-prompt-input');
+    var badge = document.getElementById('enhanced-badge');
 
     function doSend() {
       if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
         masterBinaryWs.send(text + '\r');
         hidePromptInput();
+        // Reset enhance state
+        _isEnhancedPreview = false;
+        _originalPromptText = '';
+        if (badge) badge.style.display = 'none';
+        if (enhanceBtn) enhanceBtn.style.display = '';
         if (window.showToast) {
           window.showToast(wasEnhanced ? 'Enhanced prompt sent to master' : 'Prompt sent to master', 'success');
         }
@@ -1617,10 +1703,15 @@
     document.getElementById('dismiss-all-btn').addEventListener('click', dismissAllStopped);
 
     // Prompt input handlers
+    document.getElementById('enhance-prompt-btn').addEventListener('click', enhancePrompt);
     document.getElementById('send-prompt-btn').addEventListener('click', sendInitialPrompt);
     document.getElementById('skip-prompt-btn').addEventListener('click', skipPrompt);
+    document.getElementById('revert-prompt-btn').addEventListener('click', revertPrompt);
     document.getElementById('master-prompt-input').addEventListener('keydown', function(e) {
-      if (e.ctrlKey && e.key === 'Enter') {
+      if (e.ctrlKey && e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        enhancePrompt();
+      } else if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
         sendInitialPrompt();
       }

@@ -5803,6 +5803,34 @@ details[open] > .tree-summary .tree-icon--dir {
   margin-left: auto;
 }
 
+.console-prompt__enhanced-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-2);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--success);
+}
+.console-prompt__badge-icon { font-size: 0.9rem; }
+.console-prompt__enhanced-badge .btn { margin-left: auto; }
+
+.console-prompt textarea.enhanced-preview {
+  border-color: var(--success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.btn--accent {
+  background: var(--info);
+  color: #0d1117;
+  border: none;
+}
+.btn--accent:hover { background: #06b6d4; }
+.btn--accent:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Inline task panel ─────────────────────────────────────── */
 
 .console-taskpanel {

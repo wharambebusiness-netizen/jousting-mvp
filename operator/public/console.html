@@ -58,10 +58,16 @@
         <div class="console-master__terminal" id="master-terminal-container" style="display:none"></div>
         <div class="console-prompt" id="master-prompt" style="display:none">
           <textarea id="master-prompt-input" rows="2" placeholder="What would you like to build? Describe your goal and the master will plan the work..."></textarea>
+          <div class="console-prompt__enhanced-badge" id="enhanced-badge" style="display:none">
+            <span class="console-prompt__badge-icon">&#x2728;</span>
+            <span>Enhanced — review below, then Send or Edit</span>
+            <button class="btn btn--xs btn--ghost" id="revert-prompt-btn" title="Revert to original">Revert</button>
+          </div>
           <div class="console-prompt__actions">
+            <button class="btn btn--sm btn--accent" id="enhance-prompt-btn" title="Enhance prompt with AI before sending">Enhance</button>
             <button class="btn btn--sm btn--primary" id="send-prompt-btn">Send to Master</button>
             <button class="btn btn--sm btn--ghost" id="skip-prompt-btn">Skip</button>
-            <span class="console-prompt__hint">Ctrl+Enter to send</span>
+            <span class="console-prompt__hint">Ctrl+Enter to send &middot; Ctrl+Shift+Enter to enhance</span>
           </div>
         </div>
       </div>
