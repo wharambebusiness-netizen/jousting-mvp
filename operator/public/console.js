@@ -1510,6 +1510,35 @@
         });
       }
     });
+
+    // Register cleanup for HTMX navigation away (uses app.js page cleanup system)
+    // For cached pages, these run only when the cache is disposed, not on initial detach.
+    if (typeof onPageCleanup === 'function') {
+      onPageCleanup(cleanup);
+    }
+    window.addEventListener('beforeunload', cleanup);
+  }
+
+  /**
+   * Full cleanup — close all WS connections, dispose xterm instances, clear timers.
+   * Called before page navigation (hx-boost swap or full reload).
+   */
+  function cleanup() {
+    // Master terminal cleanup
+    if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
+    if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
+    if (masterBinaryWs) { try { masterBinaryWs.close(); } catch(_) {} masterBinaryWs = null; }
+    if (masterTerminal) { try { masterTerminal.dispose(); } catch(_) {} masterTerminal = null; }
+    masterFitAddon = null;
+    if (masterResizeHandler) { window.removeEventListener('resize', masterResizeHandler); masterResizeHandler = null; }
+    if (masterResizeObserver) { masterResizeObserver.disconnect(); masterResizeObserver = null; }
+    if (masterReconnectTimer) { clearInterval(masterReconnectTimer); masterReconnectTimer = null; }
+
+    // Worker terminals cleanup
+    Object.keys(workerTerminals).forEach(function(id) { disposeWorkerTerminal(id); });
+
+    // Clear polling timers
+    if (workerRefreshTimer) { clearInterval(workerRefreshTimer); workerRefreshTimer = null; }
   }
 
   // Wait for DOM

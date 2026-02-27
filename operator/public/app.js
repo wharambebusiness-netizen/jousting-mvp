@@ -351,7 +351,7 @@ document.addEventListener('click', function(e) {
 
   // We have a cached version — restore instead of navigating
   e.preventDefault();
-  e.stopPropagation();
+  e.stopImmediatePropagation();  // prevent HTMX from also processing the click
   restoreCachedPage(pagePath);
 });
 
