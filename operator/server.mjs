@@ -577,6 +577,57 @@ export function createApp(options = {}) {
     res.json({ ok: true });
   });
 
+  // ── Prompt Enhancement Endpoint ───────────────────────────
+  app.post('/api/enhance-prompt', async (req, res) => {
+    const raw = req.body?.prompt;
+    if (!raw || typeof raw !== 'string' || !raw.trim()) {
+      return res.status(400).json({ error: 'prompt is required' });
+    }
+
+    const enhanceInstruction = `You are a prompt engineer for a Claude Code AI agent working on a software project. The user has written a high-level request. Your job is to rewrite it into a technically precise, actionable instruction that a Claude Code agent can immediately execute.
+
+Rules:
+- Return ONLY the improved prompt text, nothing else
+- Be specific about what to build, modify, or fix
+- Include implementation details, acceptance criteria, and file references when possible
+- Keep the scope the same — don't add unrelated work
+- Use imperative voice ("Implement...", "Add...", "Fix...")
+- If the request is vague, infer reasonable technical requirements
+- Keep it concise but thorough (aim for 3-8 sentences)
+
+User's request:
+${raw.trim()}`;
+
+    try {
+      const { execFile } = await import('child_process');
+      // Resolve claude path (Windows needs full path)
+      let claudePath = 'claude';
+      if (process.platform === 'win32') {
+        try {
+          const { execSync } = await import('child_process');
+          claudePath = execSync('where claude', { encoding: 'utf8' }).trim().split(/\r?\n/)[0];
+        } catch { claudePath = 'claude.exe'; }
+      }
+
+      const child = execFile(claudePath, ['-p', '--model', 'haiku', enhanceInstruction], {
+        timeout: 30000,
+        maxBuffer: 1024 * 64,
+        env: { ...process.env, CLAUDECODE: '' },
+      }, (err, stdout, stderr) => {
+        if (err) {
+          logger.error?.(`[enhance-prompt] Error: ${err.message}`);
+          // Fallback: return original prompt
+          return res.json({ enhanced: raw.trim(), fallback: true });
+        }
+        const enhanced = stdout.trim();
+        res.json({ enhanced: enhanced || raw.trim(), fallback: !enhanced });
+      });
+    } catch (err) {
+      logger.error?.(`[enhance-prompt] Spawn error: ${err.message}`);
+      res.json({ enhanced: raw.trim(), fallback: true });
+    }
+  });
+
   // Claude terminal routes (Phase 19: coordinator passed for task bridge)
   app.use('/api', createClaudeTerminalRoutes({ claudePool, events, coordinator }));
 

@@ -467,27 +467,56 @@
 
   function sendInitialPrompt() {
     var ta = document.getElementById('master-prompt-input');
+    var sendBtn = document.getElementById('send-prompt-btn');
     if (!ta) return;
     var text = ta.value.trim();
     if (!text) return;
 
-    // Send to master terminal via binary WS
-    if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
-      masterBinaryWs.send(text + '\n');
-      hidePromptInput();
-      if (window.showToast) window.showToast('Prompt sent to master', 'success');
-    } else {
-      // WS not ready yet — retry after a short delay
-      if (window.showToast) window.showToast('Waiting for terminal connection...', 'info');
-      setTimeout(function() {
-        if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
-          masterBinaryWs.send(text + '\n');
-          hidePromptInput();
-          if (window.showToast) window.showToast('Prompt sent to master', 'success');
-        } else {
-          if (window.showToast) window.showToast('Terminal not connected — try again', 'error');
+    // Disable UI while enhancing
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Enhancing...'; }
+    ta.disabled = true;
+
+    // Enhance the prompt via server-side AI, then send to terminal
+    fetch('/api/enhance-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: text })
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      var finalPrompt = (data && data.enhanced) ? data.enhanced : text;
+      _sendToMasterTerminal(finalPrompt, data && !data.fallback);
+    })
+    .catch(function() {
+      // Enhancement failed — send original
+      _sendToMasterTerminal(text, false);
+    });
+  }
+
+  function _sendToMasterTerminal(text, wasEnhanced) {
+    var sendBtn = document.getElementById('send-prompt-btn');
+    var ta = document.getElementById('master-prompt-input');
+
+    function doSend() {
+      if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
+        masterBinaryWs.send(text + '\r');
+        hidePromptInput();
+        if (window.showToast) {
+          window.showToast(wasEnhanced ? 'Enhanced prompt sent to master' : 'Prompt sent to master', 'success');
         }
-      }, 1500);
+      } else {
+        if (window.showToast) window.showToast('Terminal not connected — try again', 'error');
+        // Re-enable UI
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send to Master'; }
+        if (ta) ta.disabled = false;
+      }
+    }
+
+    if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
+      doSend();
+    } else {
+      if (window.showToast) window.showToast('Waiting for terminal connection...', 'info');
+      setTimeout(doSend, 1500);
     }
   }
 
@@ -1260,7 +1289,7 @@
       var resp = await fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/input', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: text + '\n' })
+        body: JSON.stringify({ data: text + '\r' })
       });
       if (resp.ok) {
         textarea.value = '';

@@ -2,76 +2,92 @@
 
 ## What Happened This Session
 
-**Implemented all 5 priority steps from the S154 worker research review.** All changes are client-side JS/CSS and server-side node, no new test files needed.
+**Implemented all 5 priority steps from S154 worker research review + started prompt enhancement feature.**
 
 **4,005 tests passing** across 74 suites (unchanged).
 
-### Step 1: Trivial Bug Fixes
+### Commit 1: S154 Worker Research Implementation (`f26e708`)
 
-| File | Change |
-|------|--------|
-| `taskboard.js:1557` | `'in-progress'` → `'assigned'` (valid task-queue status for claim event) |
-| `app.js:689` | Added `updateSidebarActiveLink()` call on initial page load |
-| `console.js:1500-1512` | Wrapped fitAddon.fit() in `requestAnimationFrame + setTimeout(50)` for cache restore |
+All 5 steps from the S154 handoff's "Next Steps" section:
 
-### Step 2: Task Board Integration
+**Step 1 — Trivial Fixes:**
+- `taskboard.js:1557`: Fixed `'in-progress'` → `'assigned'` (valid task-queue status)
+- `app.js`: Added `updateSidebarActiveLink()` on initial page load
+- `console.js`: fitAddon.fit() wrapped in rAF+setTimeout(50) for cache restore timing
 
-| File | Change |
-|------|--------|
-| `server.mjs:288` | `needsCoordinator` now includes `options.claudePool` (respects `coordination: false` opt-out) |
-| `routes/claude-terminals.mjs:411-417` | Emits `coord:assigned` event on POST claim-task |
-| `claude-pool.mjs:1040-1045` | Emits `coord:assigned` event on auto-dispatch task claim |
+**Step 2 — Task Board Integration:**
+- `server.mjs:288`: `needsCoordinator` includes `options.claudePool` (respects `coordination: false`)
+- `routes/claude-terminals.mjs`: Emits `coord:assigned` on POST claim-task
+- `claude-pool.mjs`: Emits `coord:assigned` on auto-dispatch
 
-### Step 3: Console UX Improvements
+**Step 3 — Console UX:**
+- Mini-terminals: 80→120px collapsed, 240→360px expanded
+- Respawn button for stopped workers (new ID, copies original config)
+- "Dismiss stopped" button in worker panel header
+- Exit code/signal on stopped worker cards
+- Inline prompt textarea per running worker (Ctrl+Enter to send)
 
-| File | Change |
-|------|--------|
-| `style.css:5418-5430` | Mini-terminal heights: 80→120px collapsed, 240→360px expanded |
-| `style.css:5275-5320` | New CSS: exit info, respawn button, prompt input, dismiss-all button |
-| `console.js` (createWorkerCard) | Added respawn button + exit code/signal for stopped workers |
-| `console.js` (createWorkerCard) | Added inline prompt textarea + send button for running workers |
-| `console.js` | New functions: `sendWorkerPrompt()`, `respawnWorker()`, `dismissAllStopped()`, `updateDismissAllButton()` |
-| `console.html:73` | Added "Dismiss stopped" button in worker panel header |
+**Step 4 — Swarm Hardening:**
+- Batch scale-up: up to 4 terminals per tick (was 1)
+- Circuit breaker: halts swarm after 5 consecutive spawn failures
+- Exponential backoff: `5s × 2^crashes` delay before respawn
+- Task recovery: logging + `task-recovery-failed` event
 
-### Step 4: Swarm Hardening
+**Step 5 — Dashboard & Navigation:**
+- Dashboard widgets auto-refresh via WS events (debounced 500ms)
+- Terminals page: `?tab=<id>` deep-linking with URL state
+- Console worker cards link to `/terminals?tab=<id>`
 
-| File | Change |
-|------|--------|
-| `claude-pool.mjs` (swarmState) | Added `_consecutiveSpawnFailures`, `_circuitBroken`, `_lastRespawnTimes` |
-| `claude-pool.mjs` (_swarmScaleCheck) | Batch scale-up: spawns up to 4 terminals per tick (was 1) |
-| `claude-pool.mjs` (_swarmScaleCheck) | Exponential backoff on crash respawn: `5s * 2^crashes` delay |
-| `claude-pool.mjs` (_handleSpawnFailure) | New circuit breaker: halts swarm after 5 consecutive spawn failures |
-| `claude-pool.mjs` (maybeRecoverTask) | Enhanced try/catch with logging and `task-recovery-failed` event |
-| `claude-pool.mjs` (getSwarmState) | Exposes `circuitBroken` and `consecutiveSpawnFailures` |
-| `ws.mjs:495-496` | Added `swarm-halted` and `task-recovery-failed` to BRIDGED_EVENTS (now 103) |
+### Commit 2: Prompt Enhancement + Execution Fix (uncommitted)
 
-### Step 5: Dashboard & Navigation Polish
+**Bug fix:** `sendInitialPrompt()` sent `\n` (newline) but PTY needs `\r` (carriage return) to execute. Auto-dispatch already used `\r`. Fixed in both master prompt and worker prompt paths.
 
-| File | Change |
-|------|--------|
-| `index.html:277-327` | WS subscription script: maps event prefixes to dashboard widgets, debounced 500ms refresh |
-| `terminals.js:397-407` | `?tab=<id>` deep-linking: URL param → localStorage → first tab fallback |
-| `terminals.js:444-448` | Claude terminal load also resolves `?tab=` for async-loaded tabs |
-| `terminals.js:1296` | `switchTab()` updates URL via `history.replaceState` |
-| `console.js` | Worker card click → `/terminals?tab=<id>` (was `#hash`) |
+**Prompt enhancement endpoint:** Added `POST /api/enhance-prompt` in `server.mjs`:
+- Spawns `claude -p --model haiku` with enhancement instruction
+- Returns `{ enhanced: string, fallback: bool }`
+- 30s timeout, falls back to original prompt on error
+
+**UI flow in `sendInitialPrompt()`:**
+1. User types prompt, clicks Send
+2. Button shows "Enhancing..."
+3. Calls `/api/enhance-prompt` with raw text
+4. Sends enhanced text + `\r` to master terminal via binary WS
+
+---
+
+## KNOWN ISSUE — Prompt Enhancement Not Working As Expected
+
+**User reported:** "The prompt doesn't get edited or reviewed."
+
+**Likely causes to investigate:**
+1. **The `claude -p` command may not be returning output correctly** — the `execFile` callback may have encoding or buffering issues on Windows. Debug by testing: `node -e "require('child_process').execFile('claude', ['-p', '--model', 'haiku', 'Say hello'], {env:{...process.env, CLAUDECODE:''}}, (e,o,s)=>console.log({e,o,s}))"`
+2. **The enhanced prompt is sent but looks the same** — the user may want to SEE the enhanced version before it's sent. Currently it goes straight to the terminal with no preview step.
+3. **Auth issue** — `claude -p` may require auth that isn't available in the server's process env (CLAUDECODE is cleared to prevent nested-session guard).
+4. **Timeout** — 30s may not be enough if the API is slow; check if the fallback fires.
+
+**Recommended fix approach for next session:**
+- Add a **preview step** in the UI: after enhancement, show the improved prompt in the textarea so the user can review/edit before confirming
+- Add a **"Send as-is"** button alongside "Enhance & Send" for users who want to skip enhancement
+- Debug the `claude -p` execution by adding response logging
+- Consider showing a diff or highlight of what changed
 
 ---
 
 ## Files Modified
 
-| File | Lines Changed |
-|------|--------------|
-| `operator/public/taskboard.js` | 1 line (status fix) |
-| `operator/public/app.js` | 1 line (sidebar init) |
-| `operator/public/console.js` | ~100 lines (fitAddon timing, respawn, dismiss, prompt, link) |
-| `operator/public/console.html` | 1 line (dismiss-all button) |
-| `operator/public/style.css` | ~50 lines (heights, new classes) |
-| `operator/public/index.html` | ~45 lines (WS widget script) |
-| `operator/public/terminals.js` | ~10 lines (deep-linking) |
-| `operator/server.mjs` | 1 line (needsCoordinator) |
-| `operator/routes/claude-terminals.mjs` | 7 lines (coord:assigned) |
-| `operator/claude-pool.mjs` | ~60 lines (swarm hardening, coord:assigned) |
-| `operator/ws.mjs` | 2 lines (new bridged events) |
+| File | Changes |
+|------|---------|
+| `operator/server.mjs` | `needsCoordinator` fix + `POST /api/enhance-prompt` endpoint |
+| `operator/public/console.js` | `\n`→`\r` fix, enhancement flow, worker prompt `\r` fix |
+| `operator/public/console.html` | "Dismiss stopped" button |
+| `operator/public/style.css` | Heights, prompt/respawn/exit/dismiss CSS |
+| `operator/public/index.html` | WS widget refresh script |
+| `operator/public/terminals.js` | `?tab=` deep-linking |
+| `operator/public/taskboard.js` | Status fix |
+| `operator/public/app.js` | Sidebar init |
+| `operator/routes/claude-terminals.mjs` | `coord:assigned` event |
+| `operator/claude-pool.mjs` | Swarm hardening + `coord:assigned` |
+| `operator/ws.mjs` | New bridged events |
 
 ## Test Suite
 
@@ -79,17 +95,16 @@
 
 ## Gotchas
 
-- `needsCoordinator` respects `coordination: false` even with claudePool — tests pass `coordination: false` to test without coordinator
-- Task status on claim is `'assigned'` not `'running'` — matches task-queue `assign()` method
-- Respawn generates new client-side ID (`worker-XXXX`) — spawn endpoint accepts `id` field
-- Circuit breaker (`_circuitBroken`) halts entire `_swarmScaleCheck` — reset only via `setSwarmMode` re-enable
-- Dashboard WS refresh uses 500ms debounce per widget to avoid hammering HTMX on burst events
-- `?tab=` param is checked after both `loadInstances()` and `loadClaudeTerminals()` since Claude terminals load async
-- BRIDGED_EVENTS is now 103 (was 101) after adding swarm-halted + task-recovery-failed
+- `needsCoordinator` respects `coordination: false` even with claudePool — tests depend on this
+- Task status on claim is `'assigned'` not `'running'` — matches task-queue semantics
+- Circuit breaker halts entire `_swarmScaleCheck` — reset only via `setSwarmMode` re-enable
+- BRIDGED_EVENTS is now 103 (was 101)
+- `\r` not `\n` for PTY execution in binary WS sends
+- `POST /api/enhance-prompt` uses `execFile('claude', ['-p', '--model', 'haiku', ...])` — needs CLAUDECODE='' env to avoid nested guard
+- Enhancement falls back silently to original prompt on any error
 
-## Next Steps
+## Next Steps — PRIORITY
 
-1. **Phase 61: Template Library** — Pre-built task workflow patterns
-2. **Phase 62: Multi-Project Dashboard** — Aggregate view across projects
-3. **Remaining research items**: utilization chart, popstate handler, message bus PTY bridge, model distribution
-4. Continue console polish items from HANDOFF-S153
+1. **Fix prompt enhancement** — debug `claude -p` execution, add preview step so user sees enhanced prompt before sending
+2. **Phase 61: Template Library** — Pre-built task workflow patterns
+3. **Remaining research items**: utilization chart, popstate handler, message bus PTY bridge
