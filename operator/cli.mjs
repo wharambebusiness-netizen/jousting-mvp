@@ -32,6 +32,8 @@ Operator CLI — subcommands (run against a live server)
     --id TASK-ID                Custom task ID
   tasks cancel <id>           Cancel a task
   search <query>              Global search
+  templates                   List workflow templates
+  templates get <id>          Show template details
   backup                      Create backup (saves to file)
   restore <file>              Restore from backup file
   metrics                     Show Prometheus metrics
@@ -259,6 +261,58 @@ export async function runCommand(command, args = [], options = {}) {
           const score = item.score != null ? ` (score: ${item.score})` : '';
           lines.push(`    - ${title}${score}`);
         }
+      }
+      return { exitCode: 0, output: lines.join('\n') };
+    });
+  }
+
+  if (command === 'templates') {
+    return safeCall(async () => {
+      const sub = filteredArgs[0];
+
+      // templates get <id>
+      if (sub === 'get') {
+        const id = filteredArgs[1];
+        if (!id) return { exitCode: 1, output: 'Error: template ID required. Usage: templates get <id>' };
+        const res = await apiCall('GET', `/api/templates/${encodeURIComponent(id)}`);
+        const err = checkError(res);
+        if (err) return err;
+
+        if (jsonMode) return { exitCode: 0, output: JSON.stringify(res.data, null, 2) };
+
+        const t = res.data;
+        const lines = [
+          `Template: ${t.name} (${t.id})`,
+          `  ${t.builtin ? 'Built-in' : 'Custom'}`,
+          `  ${t.description || '(no description)'}`,
+          '',
+          '  Tasks:',
+        ];
+        for (const task of t.tasks || []) {
+          const deps = task.deps && task.deps.length ? ` [deps: ${task.deps.join(', ')}]` : '';
+          lines.push(`    ${task.id}: ${task.task}${deps}`);
+        }
+        return { exitCode: 0, output: lines.join('\n') };
+      }
+
+      // templates (list)
+      const res = await apiCall('GET', '/api/templates');
+      const err = checkError(res);
+      if (err) return err;
+
+      if (jsonMode) return { exitCode: 0, output: JSON.stringify(res.data, null, 2) };
+
+      const templates = Array.isArray(res.data) ? res.data : [];
+      if (templates.length === 0) return { exitCode: 0, output: 'No templates found.' };
+
+      const lines = ['ID                    Name                         Tasks  Type'];
+      lines.push('─'.repeat(70));
+      for (const t of templates) {
+        const id = (t.id || '').slice(0, 21).padEnd(21);
+        const name = (t.name || '').slice(0, 28).padEnd(28);
+        const tasks = String(t.tasks ? t.tasks.length : 0).padEnd(6);
+        const type = t.builtin ? 'built-in' : 'custom';
+        lines.push(`${id} ${name} ${tasks} ${type}`);
       }
       return { exitCode: 0, output: lines.join('\n') };
     });

@@ -527,6 +527,7 @@ export function createApp(options = {}) {
     registry,
     claudePool,
     sharedMemory,
+    templateManager,
     log: logger.debug?.bind(logger) || (() => {}),
   });
   app.use('/api', createSearchRoutes({ searchEngine }));

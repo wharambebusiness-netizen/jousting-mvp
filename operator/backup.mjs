@@ -30,6 +30,7 @@ const KNOWN_FILES = [
   '.data/notifications.json',
   '.data/terminal-sessions.json',
   '.data/terminal-templates.json',
+  '.data/templates.json',
   '.data/secrets.vault',
   '.data/auth-tokens.json',
   '.data/.migration-version',

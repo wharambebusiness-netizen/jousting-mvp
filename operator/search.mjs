@@ -69,11 +69,12 @@ function makeSnippet(text, queryLower) {
  * @param {object}   [ctx.registry]     - Chain registry
  * @param {object}   [ctx.claudePool]   - Claude terminal pool
  * @param {object}   [ctx.sharedMemory] - Shared memory store
+ * @param {object}   [ctx.templateManager] - Template manager
  * @param {Function} [ctx.log]          - Logger
  * @returns {object} Search engine API
  */
 export function createSearchEngine(ctx = {}) {
-  const { coordinator, messageBus, auditLog, registry, claudePool, sharedMemory } = ctx;
+  const { coordinator, messageBus, auditLog, registry, claudePool, sharedMemory, templateManager } = ctx;
   const log = ctx.log || (() => {});
 
   /**
@@ -88,6 +89,7 @@ export function createSearchEngine(ctx = {}) {
     if (registry) sources.push('chains');
     if (claudePool) sources.push('terminals');
     if (sharedMemory) sources.push('memory');
+    if (templateManager) sources.push('templates');
     return sources;
   }
 
@@ -273,6 +275,38 @@ export function createSearchEngine(ctx = {}) {
         }
       } catch (err) {
         log(`[search] memory error: ${err.message}`);
+      }
+    }
+
+    // ── Search templates ────────────────────────────────
+    if (requestedSources.includes('templates') && templateManager) {
+      try {
+        const templates = templateManager.list();
+        for (const tmpl of templates) {
+          const s1 = scoreField(tmpl.name, qLower, 'primary');
+          const s2 = scoreField(tmpl.description, qLower, 'primary');
+          const s3 = scoreField(tmpl.id, qLower, 'secondary');
+          // Also search task descriptions within the template
+          let s4 = 0;
+          for (const t of tmpl.tasks || []) {
+            s4 = Math.max(s4, scoreField(t.task, qLower, 'secondary'));
+            s4 = Math.max(s4, scoreField(t.id, qLower, 'secondary'));
+          }
+          const score = Math.max(s1, s2, s3, s4);
+          if (score > 0) {
+            allResults.push({
+              source: 'templates',
+              id: tmpl.id,
+              title: tmpl.name,
+              snippet: makeSnippet(tmpl.description || tmpl.name, qLower),
+              score,
+              ts: tmpl.createdAt || null,
+              meta: { builtin: tmpl.builtin, taskCount: tmpl.tasks.length },
+            });
+          }
+        }
+      } catch (err) {
+        log(`[search] templates error: ${err.message}`);
       }
     }
 
