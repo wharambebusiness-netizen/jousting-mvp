@@ -549,6 +549,7 @@ export function createApp(options = {}) {
     messageBus,
     auditLog,
     deadLetterQueue,
+    templateManager,
     dataDir,
   });
 

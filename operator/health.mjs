@@ -2,7 +2,7 @@
 // Health Checker — Component-Level Health Probes (Phase 34)
 // ============================================================
 // Inspects each subsystem (coordinator, claude pool, shared
-// memory, message bus, audit log, dead letter queue, disk)
+// memory, message bus, audit log, dead letter queue, templates, disk)
 // and produces a composite health status.
 //
 // Statuses: healthy | degraded | unhealthy
@@ -27,6 +27,7 @@ import { join } from 'node:path';
  * @param {object}  [ctx.messageBus]      - Terminal message bus
  * @param {object}  [ctx.auditLog]        - Audit log
  * @param {object}  [ctx.deadLetterQueue] - Dead letter queue
+ * @param {object}  [ctx.templateManager] - Template manager
  * @param {string}  [ctx.dataDir]         - Path to .data/ directory for disk check
  * @returns {object} { check(), ready() }
  */
@@ -38,6 +39,7 @@ export function createHealthChecker(ctx = {}) {
     messageBus,
     auditLog,
     deadLetterQueue,
+    templateManager,
     dataDir,
   } = ctx;
 
@@ -121,6 +123,19 @@ export function createHealthChecker(ctx = {}) {
       return {
         status: pendingCount > 10 ? 'degraded' : 'healthy',
         pendingCount,
+      };
+    });
+
+    // ── Template Manager ────────────────────────────────
+    components.templateManager = probeComponent('templateManager', () => {
+      if (!templateManager) return { status: 'unavailable' };
+      const templates = templateManager.list();
+      const builtinCount = templates.filter(t => t.builtin).length;
+      const customCount = templates.filter(t => !t.builtin).length;
+      return {
+        status: 'healthy',
+        builtinCount,
+        customCount,
       };
     });
 
