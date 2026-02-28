@@ -34,6 +34,12 @@ const KNOWN_TAGS = [
   { name: 'dead-letter', description: 'Dead letter queue' },
   { name: 'cost-forecast', description: 'Cost forecasting & burn rate' },
   { name: 'openapi', description: 'API documentation' },
+  { name: 'templates', description: 'Workflow template library' },
+  { name: 'search', description: 'Global search' },
+  { name: 'secrets', description: 'Encrypted secrets vault' },
+  { name: 'backup', description: 'Backup & restore' },
+  { name: 'performance', description: 'Performance monitoring' },
+  { name: 'terminal-sessions', description: 'Terminal session management' },
 ];
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head']);
