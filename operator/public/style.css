@@ -4719,6 +4719,104 @@ details[open] > .tree-summary .tree-icon--dir {
   color: var(--text-secondary, #9a9cc0);
 }
 
+/* Timeline search input */
+.timeline-search {
+  flex: 1;
+  min-width: 140px;
+  max-width: 240px;
+}
+
+/* Timeline header controls (live toggle + counter) */
+.timeline-header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+  margin-left: auto;
+}
+.timeline-live-counter {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted, #505278);
+  white-space: nowrap;
+}
+.timeline-live-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-1, 4px) var(--sp-2, 8px);
+  border-radius: 6px;
+  border: 1px solid var(--border-default, rgba(140,140,255,0.14));
+  background: var(--bg-raised, #0e0e2a);
+  color: var(--text-secondary, #9a9cc0);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.timeline-live-toggle:hover { border-color: var(--accent-color, #6366f1); }
+.timeline-live-toggle--active {
+  border-color: var(--status-success, #10b981);
+  color: var(--status-success, #10b981);
+}
+
+/* Live dot (green pulsing when active) */
+.timeline-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted, #505278);
+  transition: background 0.2s;
+}
+.timeline-live-dot--active {
+  background: var(--status-success, #10b981);
+  animation: timeline-pulse 1.5s ease-in-out infinite;
+}
+@keyframes timeline-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+}
+
+/* Live feed label */
+.timeline-live-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--status-success, #10b981);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: var(--sp-1, 4px);
+  border-bottom: 1px solid rgba(16,185,129,0.2);
+  margin-bottom: var(--sp-1, 4px);
+}
+
+/* Live entry slide-in animation */
+.timeline-entry--live {
+  animation: timeline-slide-in 0.3s ease-out;
+}
+@keyframes timeline-slide-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Search highlight */
+.timeline-entry mark {
+  background: rgba(99,102,241,0.35);
+  color: var(--text-primary, #e2e4f0);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* New category badge colors */
+.timeline-badge--webhook      { background: rgba(168,85,247,0.12); color: #a855f7; }
+.timeline-badge--dlq          { background: rgba(239,68,68,0.12); color: var(--status-error, #ef4444); }
+.timeline-badge--notification { background: rgba(245,158,11,0.12); color: var(--status-warning, #f59e0b); }
+.timeline-badge--audit        { background: rgba(34,211,238,0.12); color: var(--status-info, #22d3ee); }
+
+/* New category entry border-left colors */
+.timeline-entry--webhook      { border-left-color: #a855f7; }
+.timeline-entry--dlq          { border-left-color: var(--status-error, #ef4444); }
+.timeline-entry--notification { border-left-color: var(--status-warning, #f59e0b); }
+.timeline-entry--audit        { border-left-color: var(--status-info, #22d3ee); }
+
 /* === Command Palette / Global Search (Phase 46) === */
 
 .search-palette {

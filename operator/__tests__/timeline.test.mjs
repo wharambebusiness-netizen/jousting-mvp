@@ -387,9 +387,9 @@ describe('categorizeAction()', () => {
 // ── CATEGORY_ACTIONS mapping ────────────────────────────────
 
 describe('CATEGORY_ACTIONS', () => {
-  it('has entries for all 5 categories', () => {
+  it('has entries for all 9 categories', () => {
     expect(Object.keys(CATEGORY_ACTIONS)).toEqual(
-      expect.arrayContaining(['terminal', 'task', 'swarm', 'system', 'memory'])
+      expect.arrayContaining(['terminal', 'task', 'swarm', 'system', 'memory', 'webhook', 'dlq', 'notification', 'audit'])
     );
   });
 
@@ -463,5 +463,196 @@ describe('renderTimelineSummary()', () => {
     const counts = { terminal: 0, task: 0, swarm: 0, system: 0, memory: 0, total: 0 };
     const html = renderTimelineSummary(counts);
     expect(html).toContain('Total: 0');
+  });
+
+  it('includes webhook, dlq, notification, audit badges', () => {
+    const counts = { terminal: 1, task: 1, swarm: 0, system: 0, memory: 0, webhook: 3, dlq: 2, notification: 5, audit: 1, total: 13 };
+    const html = renderTimelineSummary(counts);
+    expect(html).toContain('timeline-badge--webhook');
+    expect(html).toContain('timeline-badge--dlq');
+    expect(html).toContain('timeline-badge--notification');
+    expect(html).toContain('timeline-badge--audit');
+    expect(html).toContain('Total: 13');
+  });
+});
+
+// ── New Categories (Activity Stream Enhancement) ─────────
+
+describe('New categories in CATEGORY_ACTIONS', () => {
+  it('has 9 categories total', () => {
+    expect(Object.keys(CATEGORY_ACTIONS).length).toBe(9);
+  });
+
+  it('has webhook category with delivered and failed', () => {
+    expect(CATEGORY_ACTIONS.webhook).toContain('webhook.delivered');
+    expect(CATEGORY_ACTIONS.webhook).toContain('webhook.failed');
+  });
+
+  it('has dlq category with added, retried, dismissed', () => {
+    expect(CATEGORY_ACTIONS.dlq).toContain('dlq.added');
+    expect(CATEGORY_ACTIONS.dlq).toContain('dlq.retried');
+    expect(CATEGORY_ACTIONS.dlq).toContain('dlq.dismissed');
+  });
+
+  it('has notification category', () => {
+    expect(CATEGORY_ACTIONS.notification).toContain('notification.new');
+    expect(CATEGORY_ACTIONS.notification).toContain('notification.read');
+  });
+
+  it('has audit category', () => {
+    expect(CATEGORY_ACTIONS.audit).toContain('audit.recorded');
+  });
+
+  it('ACTION_CATEGORY_MAP maps new actions correctly', () => {
+    expect(ACTION_CATEGORY_MAP['webhook.delivered']).toBe('webhook');
+    expect(ACTION_CATEGORY_MAP['webhook.failed']).toBe('webhook');
+    expect(ACTION_CATEGORY_MAP['dlq.added']).toBe('dlq');
+    expect(ACTION_CATEGORY_MAP['dlq.retried']).toBe('dlq');
+    expect(ACTION_CATEGORY_MAP['dlq.dismissed']).toBe('dlq');
+    expect(ACTION_CATEGORY_MAP['notification.new']).toBe('notification');
+    expect(ACTION_CATEGORY_MAP['notification.read']).toBe('notification');
+    expect(ACTION_CATEGORY_MAP['audit.recorded']).toBe('audit');
+  });
+});
+
+// ── New Summary Templates ────────────────────────────────
+
+describe('new category generateSummary()', () => {
+  it('webhook.delivered summary', () => {
+    expect(generateSummary({ action: 'webhook.delivered', target: 'hook-1' }))
+      .toBe('Webhook delivered to hook-1');
+  });
+
+  it('webhook.failed summary', () => {
+    expect(generateSummary({ action: 'webhook.failed', target: 'hook-2' }))
+      .toBe('Webhook delivery failed for hook-2');
+  });
+
+  it('dlq.added summary', () => {
+    expect(generateSummary({ action: 'dlq.added', target: 'msg-1' }))
+      .toBe('Dead letter queued: msg-1');
+  });
+
+  it('notification.new summary', () => {
+    expect(generateSummary({ action: 'notification.new', target: 'alert' }))
+      .toBe('Notification: alert');
+  });
+
+  it('audit.recorded summary', () => {
+    expect(generateSummary({ action: 'audit.recorded', target: 'terminal.spawn' }))
+      .toBe('Audit event recorded: terminal.spawn');
+  });
+});
+
+// ── Search Filter ────────────────────────────────────────
+
+describe('GET /api/timeline search param', () => {
+  let server;
+  afterEach(() => { if (server) { server.close(); server = null; } });
+
+  it('filters entries by search term in summary', async () => {
+    const auditLog = createAuditLog({ persistPath: PERSIST_PATH });
+    seedEntries(auditLog, [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 'alpha' },
+      { ts: '2026-02-25T11:00:00.000Z', action: 'terminal.spawn', target: 'beta' },
+      { ts: '2026-02-25T12:00:00.000Z', action: 'task.complete', target: 'gamma' },
+    ]);
+
+    const result = await startTestServer(auditLog);
+    server = result.server;
+
+    const res = await fetch(`${result.baseUrl}/api/timeline?since=2026-02-25T00:00:00.000Z&search=alpha`);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.items.length).toBe(1);
+    expect(body.items[0].target).toBe('alpha');
+  });
+
+  it('search is case-insensitive', async () => {
+    const auditLog = createAuditLog({ persistPath: PERSIST_PATH });
+    seedEntries(auditLog, [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 'MyTerminal' },
+      { ts: '2026-02-25T11:00:00.000Z', action: 'task.complete', target: 'task-1' },
+    ]);
+
+    const result = await startTestServer(auditLog);
+    server = result.server;
+
+    const res = await fetch(`${result.baseUrl}/api/timeline?since=2026-02-25T00:00:00.000Z&search=MYTERMINAL`);
+    const body = await res.json();
+
+    expect(body.items.length).toBe(1);
+    expect(body.items[0].target).toBe('MyTerminal');
+  });
+
+  it('search matches action field', async () => {
+    const auditLog = createAuditLog({ persistPath: PERSIST_PATH });
+    seedEntries(auditLog, [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1' },
+      { ts: '2026-02-25T11:00:00.000Z', action: 'task.complete', target: 't2' },
+    ]);
+
+    const result = await startTestServer(auditLog);
+    server = result.server;
+
+    const res = await fetch(`${result.baseUrl}/api/timeline?since=2026-02-25T00:00:00.000Z&search=task.complete`);
+    const body = await res.json();
+
+    expect(body.items.length).toBe(1);
+    expect(body.items[0].action).toBe('task.complete');
+  });
+
+  it('empty search returns all entries', async () => {
+    const auditLog = createAuditLog({ persistPath: PERSIST_PATH });
+    seedEntries(auditLog, [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1' },
+      { ts: '2026-02-25T11:00:00.000Z', action: 'task.complete', target: 't2' },
+    ]);
+
+    const result = await startTestServer(auditLog);
+    server = result.server;
+
+    const res = await fetch(`${result.baseUrl}/api/timeline?since=2026-02-25T00:00:00.000Z&search=`);
+    const body = await res.json();
+
+    expect(body.items.length).toBe(2);
+  });
+});
+
+// ── Search Highlight in renderTimeline ───────────────────
+
+describe('renderTimeline search highlight', () => {
+  it('wraps matching text in <mark> tags when search provided', () => {
+    const entries = [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1', category: 'terminal', summary: 'Terminal t1 spawned', detail: {} },
+    ];
+    const html = renderTimeline(entries, { search: 'spawned' });
+    expect(html).toContain('<mark>spawned</mark>');
+  });
+
+  it('highlight is case-insensitive', () => {
+    const entries = [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1', category: 'terminal', summary: 'Terminal t1 spawned', detail: {} },
+    ];
+    const html = renderTimeline(entries, { search: 'TERMINAL' });
+    expect(html).toContain('<mark>');
+    expect(html).toContain('Terminal');
+  });
+
+  it('no highlight when search is empty', () => {
+    const entries = [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1', category: 'terminal', summary: 'Terminal t1 spawned', detail: {} },
+    ];
+    const html = renderTimeline(entries, { search: '' });
+    expect(html).not.toContain('<mark>');
+  });
+
+  it('no highlight when opts not provided', () => {
+    const entries = [
+      { ts: '2026-02-25T10:00:00.000Z', action: 'terminal.spawn', target: 't1', category: 'terminal', summary: 'Terminal t1 spawned', detail: {} },
+    ];
+    const html = renderTimeline(entries);
+    expect(html).not.toContain('<mark>');
   });
 });

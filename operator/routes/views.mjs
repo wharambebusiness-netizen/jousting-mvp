@@ -1089,6 +1089,7 @@ export function createViewRoutes(ctx) {
       const since = req.query.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const until = req.query.until || undefined;
       const category = req.query.category || '';
+      const search = req.query.search || '';
       const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
 
       let queryOpts = { since, until, limit: 10000 };
@@ -1102,13 +1103,23 @@ export function createViewRoutes(ctx) {
       }
 
       // Limit + enrich
-      const enriched = entries.slice(0, limit).map(e => ({
+      let enriched = entries.slice(0, limit).map(e => ({
         ...e,
         category: categorizeAction(e.action),
         summary: generateSummary(e),
       }));
 
-      res.type('text/html').send(renderTimelineView(enriched));
+      // Post-filter by search term (matches summary, action, or target)
+      if (search.trim()) {
+        const term = search.trim().toLowerCase();
+        enriched = enriched.filter(e =>
+          (e.summary || '').toLowerCase().includes(term)
+          || (e.action || '').toLowerCase().includes(term)
+          || (e.target || '').toLowerCase().includes(term)
+        );
+      }
+
+      res.type('text/html').send(renderTimelineView(enriched, { search }));
     } catch (err) {
       res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }
@@ -1125,7 +1136,7 @@ export function createViewRoutes(ctx) {
       const until = req.query.until || undefined;
 
       const result = auditLog.query({ since, until, limit: 10000 });
-      const counts = { terminal: 0, task: 0, swarm: 0, system: 0, memory: 0 };
+      const counts = { terminal: 0, task: 0, swarm: 0, system: 0, memory: 0, webhook: 0, dlq: 0, notification: 0, audit: 0 };
       let total = 0;
       for (const entry of result.entries) {
         const cat = categorizeAction(entry.action);

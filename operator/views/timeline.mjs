@@ -10,11 +10,15 @@ import { escapeHtml, relativeTime } from './helpers.mjs';
 // ── Category Icons (Unicode) ────────────────────────────────
 
 const CATEGORY_ICONS = {
-  terminal: '\u{1F5A5}',  // desktop computer
-  task:     '\u2713',      // check mark (generic), overridden per action
-  swarm:    '\u{1F537}',  // blue diamond
-  system:   '\u2699',      // gear
-  memory:   '\u{1F4BE}',  // floppy disk
+  terminal:     '\u{1F5A5}',  // desktop computer
+  task:         '\u2713',      // check mark (generic), overridden per action
+  swarm:        '\u{1F537}',  // blue diamond
+  system:       '\u2699',      // gear
+  memory:       '\u{1F4BE}',  // floppy disk
+  webhook:      '\u{1F517}',  // link
+  dlq:          '\u{1F4E5}',  // inbox tray
+  notification: '\u{1F514}',  // bell
+  audit:        '\u{1F4CB}',  // clipboard
 };
 
 function iconForEntry(entry) {
@@ -40,15 +44,31 @@ function dateLabel(isoTs) {
 // ── Renderers ───────────────────────────────────────────────
 
 /**
+ * Highlight search term in text (already HTML-escaped).
+ * @param {string} escaped - HTML-escaped text
+ * @param {string} [search] - Raw search term (will be escaped)
+ * @returns {string} HTML with <mark> tags around matches
+ */
+function highlightSearch(escaped, search) {
+  if (!search || !search.trim()) return escaped;
+  const term = escapeHtml(search.trim());
+  const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return escaped.replace(re, '<mark>$1</mark>');
+}
+
+/**
  * Render a vertical timeline of enriched audit entries as HTML.
  * @param {object[]} entries - Enriched entries (with category, summary fields)
+ * @param {object} [opts]
+ * @param {string} [opts.search] - Search term to highlight
  * @returns {string} HTML string
  */
-export function renderTimeline(entries) {
+export function renderTimeline(entries, opts) {
   if (!entries || entries.length === 0) {
     return '<div class="timeline-empty">No activity in this time range.</div>';
   }
 
+  const search = opts && opts.search;
   let html = '';
   let currentGroup = null;
 
@@ -61,7 +81,7 @@ export function renderTimeline(entries) {
 
     const icon = iconForEntry(entry);
     const cat = escapeHtml(entry.category || 'system');
-    const summary = escapeHtml(entry.summary || '');
+    const summary = highlightSearch(escapeHtml(entry.summary || ''), search);
     const time = relativeTime(entry.ts);
     const isoTime = escapeHtml(entry.ts || '');
     const detailJson = escapeHtml(JSON.stringify(entry.detail || {}, null, 2));
@@ -86,11 +106,15 @@ export function renderTimelineSummary(counts) {
   if (!counts) return '';
 
   const badges = [
-    { key: 'terminal', icon: CATEGORY_ICONS.terminal, label: 'Terminal' },
-    { key: 'task',     icon: '\u2713',                 label: 'Task' },
-    { key: 'swarm',    icon: CATEGORY_ICONS.swarm,     label: 'Swarm' },
-    { key: 'system',   icon: CATEGORY_ICONS.system,    label: 'System' },
-    { key: 'memory',   icon: CATEGORY_ICONS.memory,    label: 'Memory' },
+    { key: 'terminal',     icon: CATEGORY_ICONS.terminal,     label: 'Terminal' },
+    { key: 'task',         icon: '\u2713',                     label: 'Task' },
+    { key: 'swarm',        icon: CATEGORY_ICONS.swarm,         label: 'Swarm' },
+    { key: 'system',       icon: CATEGORY_ICONS.system,        label: 'System' },
+    { key: 'memory',       icon: CATEGORY_ICONS.memory,        label: 'Memory' },
+    { key: 'webhook',      icon: CATEGORY_ICONS.webhook,       label: 'Webhook' },
+    { key: 'dlq',          icon: CATEGORY_ICONS.dlq,           label: 'DLQ' },
+    { key: 'notification', icon: CATEGORY_ICONS.notification,  label: 'Notification' },
+    { key: 'audit',        icon: CATEGORY_ICONS.audit,         label: 'Audit' },
   ];
 
   const badgeHtml = badges.map(b => {

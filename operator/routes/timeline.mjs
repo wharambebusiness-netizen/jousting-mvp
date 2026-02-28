@@ -23,14 +23,26 @@ export const ACTION_CATEGORY_MAP = {
   'coordinator.start': 'system',
   'coordinator.stop':  'system',
   'memory.write':   'memory',
+  'webhook.delivered': 'webhook',
+  'webhook.failed':    'webhook',
+  'dlq.added':         'dlq',
+  'dlq.retried':       'dlq',
+  'dlq.dismissed':     'dlq',
+  'notification.new':  'notification',
+  'notification.read': 'notification',
+  'audit.recorded':    'audit',
 };
 
 export const CATEGORY_ACTIONS = {
-  terminal: ['terminal.spawn', 'terminal.exit'],
-  task:     ['task.complete', 'task.fail'],
-  swarm:    ['swarm.start', 'swarm.stop'],
-  system:   ['coordinator.start', 'coordinator.stop'],
-  memory:   ['memory.write'],
+  terminal:     ['terminal.spawn', 'terminal.exit'],
+  task:         ['task.complete', 'task.fail'],
+  swarm:        ['swarm.start', 'swarm.stop'],
+  system:       ['coordinator.start', 'coordinator.stop'],
+  memory:       ['memory.write'],
+  webhook:      ['webhook.delivered', 'webhook.failed'],
+  dlq:          ['dlq.added', 'dlq.retried', 'dlq.dismissed'],
+  notification: ['notification.new', 'notification.read'],
+  audit:        ['audit.recorded'],
 };
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_ACTIONS);
@@ -47,6 +59,14 @@ const SUMMARY_TEMPLATES = {
   'coordinator.start': () => 'Coordinator started',
   'coordinator.stop':  () => 'Coordinator stopped',
   'memory.write':      (e) => `Shared memory key '${e.target || 'unknown'}' updated`,
+  'webhook.delivered': (e) => `Webhook delivered to ${e.target || 'unknown'}`,
+  'webhook.failed':    (e) => `Webhook delivery failed for ${e.target || 'unknown'}`,
+  'dlq.added':         (e) => `Dead letter queued: ${e.target || 'unknown'}`,
+  'dlq.retried':       (e) => `Dead letter retried: ${e.target || 'unknown'}`,
+  'dlq.dismissed':     (e) => `Dead letter dismissed: ${e.target || 'unknown'}`,
+  'notification.new':  (e) => `Notification: ${e.target || 'unknown'}`,
+  'notification.read': (e) => `Notification read: ${e.target || 'unknown'}`,
+  'audit.recorded':    (e) => `Audit event recorded: ${e.target || 'unknown'}`,
 };
 
 export function generateSummary(entry) {
@@ -92,7 +112,7 @@ export function createTimelineRoutes(ctx) {
   router.get('/timeline', (req, res) => {
     try {
       const { limit, offset } = paginationParams(req);
-      const { category } = req.query;
+      const { category, search } = req.query;
 
       // Default since = last 24 hours
       const since = req.query.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -107,6 +127,17 @@ export function createTimelineRoutes(ctx) {
       if (category && CATEGORY_ACTIONS[category]) {
         const allowedActions = new Set(CATEGORY_ACTIONS[category]);
         entries = entries.filter(e => allowedActions.has(e.action));
+      }
+
+      // Post-filter by search term (matches summary, action, or target)
+      if (search && search.trim()) {
+        const term = search.trim().toLowerCase();
+        entries = entries.filter(e => {
+          const enriched = enrichEntry(e);
+          return (enriched.summary || '').toLowerCase().includes(term)
+            || (e.action || '').toLowerCase().includes(term)
+            || (e.target || '').toLowerCase().includes(term);
+        });
       }
 
       const total = entries.length;

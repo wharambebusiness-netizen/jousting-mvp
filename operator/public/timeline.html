@@ -30,6 +30,12 @@
   <main class="page">
     <div class="page-header">
       <h1>Activity Timeline</h1>
+      <div class="timeline-header-controls">
+        <span class="timeline-live-counter" id="live-counter" title="Events per minute">0 evt/min</span>
+        <button class="timeline-live-toggle" id="live-toggle" onclick="toggleLive()" title="Toggle live updates">
+          <span class="timeline-live-dot" id="live-dot"></span> Live
+        </button>
+      </div>
     </div>
 
     <!-- Summary Bar -->
@@ -43,6 +49,7 @@
     <!-- Filter Bar -->
     <div class="section">
       <div class="timeline-filters" id="timeline-filters">
+        <input type="search" id="timeline-search" name="search" placeholder="Search events..." class="timeline-search" oninput="debouncedSearch()">
         <select id="timeline-category" name="category" onchange="reloadTimeline()">
           <option value="">All Categories</option>
           <option value="terminal">Terminal</option>
@@ -50,6 +57,10 @@
           <option value="swarm">Swarm</option>
           <option value="system">System</option>
           <option value="memory">Memory</option>
+          <option value="webhook">Webhook</option>
+          <option value="dlq">DLQ</option>
+          <option value="notification">Notification</option>
+          <option value="audit">Audit</option>
         </select>
         <label class="timeline-filter-label">Since
           <input type="datetime-local" id="timeline-since" name="since" onchange="reloadTimeline()">
@@ -63,6 +74,12 @@
           <option value="100">100</option>
         </select>
       </div>
+    </div>
+
+    <!-- Live Feed (WS-driven, prepended entries) -->
+    <div class="section" id="live-feed-section" style="display:none">
+      <div class="timeline-live-label">Live Feed</div>
+      <div id="live-feed" class="timeline-list"></div>
     </div>
 
     <!-- Timeline Content -->
@@ -80,9 +97,116 @@
   <div id="toast-container"></div>
   <script src="/app.js"></script>
   <script>
+    // ── Search Debounce ─────────────────────────────────────────
+    var _searchTimer = null;
+    function debouncedSearch() {
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(function() { reloadTimeline(); }, 300);
+    }
+
     function reloadTimeline() {
       htmx.trigger(document.getElementById('timeline-content'), 'load');
       htmx.trigger(document.getElementById('timeline-summary-section'), 'load');
+    }
+
+    // ── Live Mode ───────────────────────────────────────────────
+    var _liveActive = false;
+    var _liveWs = null;
+    var _liveEventTimes = [];  // timestamps of recent events for rate calc
+    var _liveCounterInterval = null;
+
+    function toggleLive() {
+      _liveActive = !_liveActive;
+      var dot = document.getElementById('live-dot');
+      var toggle = document.getElementById('live-toggle');
+      var feedSection = document.getElementById('live-feed-section');
+      var contentEl = document.getElementById('timeline-content');
+
+      if (_liveActive) {
+        dot.classList.add('timeline-live-dot--active');
+        toggle.classList.add('timeline-live-toggle--active');
+        feedSection.style.display = '';
+        // Pause HTMX polling by removing hx-trigger
+        contentEl.removeAttribute('hx-trigger');
+        htmx.process(contentEl);
+        startLiveWS();
+        _liveCounterInterval = setInterval(updateLiveCounter, 5000);
+      } else {
+        dot.classList.remove('timeline-live-dot--active');
+        toggle.classList.remove('timeline-live-toggle--active');
+        feedSection.style.display = 'none';
+        // Restore HTMX polling
+        contentEl.setAttribute('hx-trigger', 'load, every 30s');
+        htmx.process(contentEl);
+        htmx.trigger(contentEl, 'load');
+        stopLiveWS();
+        clearInterval(_liveCounterInterval);
+        _liveCounterInterval = null;
+      }
+    }
+
+    function startLiveWS() {
+      if (_liveWs) return;
+      if (typeof createWS !== 'function') return;
+      _liveWs = createWS(['audit:recorded'], function(msg) {
+        if (msg.event !== 'audit:recorded' || !msg.data) return;
+        _liveEventTimes.push(Date.now());
+        prependLiveEntry(msg.data);
+        updateLiveCounter();
+      });
+    }
+
+    function stopLiveWS() {
+      if (_liveWs && _liveWs.close) {
+        _liveWs.close();
+      }
+      _liveWs = null;
+    }
+
+    function prependLiveEntry(data) {
+      var feed = document.getElementById('live-feed');
+      if (!feed) return;
+
+      var cat = data.category || 'system';
+      var summary = data.summary || data.action || 'Event occurred';
+      var time = new Date(data.ts || Date.now()).toLocaleTimeString();
+
+      var entry = document.createElement('div');
+      entry.className = 'timeline-entry timeline-entry--' + cat + ' timeline-entry--live';
+      entry.innerHTML =
+        '<span class="timeline-time">' + escapeForHtml(time) + '</span>' +
+        '<span class="timeline-icon">' + iconForCategory(cat) + '</span>' +
+        '<span class="timeline-summary">' + escapeForHtml(summary) + '</span>';
+
+      feed.insertBefore(entry, feed.firstChild);
+
+      // Cap live feed at 50 entries
+      while (feed.children.length > 50) {
+        feed.removeChild(feed.lastChild);
+      }
+    }
+
+    function updateLiveCounter() {
+      var now = Date.now();
+      var oneMinAgo = now - 60000;
+      _liveEventTimes = _liveEventTimes.filter(function(t) { return t > oneMinAgo; });
+      var el = document.getElementById('live-counter');
+      if (el) el.textContent = _liveEventTimes.length + ' evt/min';
+    }
+
+    function escapeForHtml(str) {
+      var d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    var _categoryIcons = {
+      terminal: '\u{1F5A5}', task: '\u2713', swarm: '\u{1F537}', system: '\u2699',
+      memory: '\u{1F4BE}', webhook: '\u{1F517}', dlq: '\u{1F4E5}',
+      notification: '\u{1F514}', audit: '\u{1F4CB}'
+    };
+    function iconForCategory(cat) {
+      return _categoryIcons[cat] || '\u2022';
     }
   </script>
 </body>
