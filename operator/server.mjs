@@ -77,6 +77,8 @@ import { createRequestTimer } from './middleware/request-timer.mjs';
 import { createSecurityHeaders } from './middleware/security-headers.mjs';
 import { createCsrfProtection } from './middleware/csrf.mjs';
 import { createPerformanceRoutes } from './routes/performance.mjs';
+import { createTemplateManager } from './template-manager.mjs';
+import { createTemplateRoutes } from './routes/templates.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // ── Constants ───────────────────────────────────────────────
@@ -325,6 +327,14 @@ export function createApp(options = {}) {
 
   // Coordination routes (task queue, rate limiter, costs)
   app.use('/api', createCoordinationRoutes({ coordinator }));
+
+  // Template library (Phase 61) — workflow template CRUD
+  const templatePersist = join(operatorDir, '.data', 'templates.json');
+  const templateManager = options.templateManager || createTemplateManager({
+    persistPath: templatePersist,
+    events,
+  });
+  app.use('/api', createTemplateRoutes({ templateManager, coordinator }));
 
   // Cost forecast routes (Phase 43) — burn rate & budget exhaustion
   const costForecaster = coordinator ? coordinator.costForecaster : null;

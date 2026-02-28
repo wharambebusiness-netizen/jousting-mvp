@@ -512,6 +512,7 @@ export function createWebSocketHandler({ server, events, claudePool, auth, pingI
     'perf:slow-request',
     'settings:changed',
     'coordinator:reconfigured',
+    'template:saved', 'template:deleted',
   ];
 
   const bridgeHandlers = [];

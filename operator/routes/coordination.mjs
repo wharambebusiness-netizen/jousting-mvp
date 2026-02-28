@@ -226,7 +226,7 @@ export function createCoordinationRoutes(ctx) {
     res.json(coordinator.taskQueue.getDependencyGraph());
   });
 
-  // ── Templates ─────────────────────────────────────────
+  // ── Templates (legacy endpoint — delegates to /api/templates) ──
 
   router.get('/coordination/templates', (_req, res) => {
     res.json(TASK_TEMPLATES);

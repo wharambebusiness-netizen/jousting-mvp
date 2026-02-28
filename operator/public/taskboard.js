@@ -1076,9 +1076,9 @@
 
   // ── Task Templates ─────────────────────────────────────────
 
-  function loadTemplates() {
-    if (templateData) return;
-    fetch('/api/coordination/templates')
+  function loadTemplates(force) {
+    if (templateData && !force) return;
+    fetch('/api/templates')
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -1117,16 +1117,25 @@
     var html = '';
     for (var i = 0; i < templateData.length; i++) {
       var tmpl = templateData[i];
+      var badge = tmpl.builtin ? '<span class="task-board__template-badge">built-in</span>' : '<span class="task-board__template-badge task-board__template-badge--custom">custom</span>';
+      var deleteBtn = !tmpl.builtin ? ' <button class="btn btn--xs btn--ghost task-board__template-delete" data-delete-template="' + escapeHtml(tmpl.id) + '" title="Delete template">&times;</button>' : '';
       html += '<div class="task-board__template-item" data-template="' + escapeHtml(tmpl.id) + '">' +
-        '<div class="task-board__template-item-name">' + escapeHtml(tmpl.name) + '</div>' +
+        '<div class="task-board__template-item-name">' + escapeHtml(tmpl.name) + ' ' + badge + deleteBtn + '</div>' +
         '<div class="task-board__template-item-desc">' + escapeHtml(tmpl.description) + '</div>' +
         '<div class="task-board__template-item-count">' + tmpl.tasks.length + ' tasks</div>' +
         '</div>';
     }
     list.innerHTML = html;
 
-    // Click handlers
+    // Click handlers for selecting templates
     list.addEventListener('click', function handler(e) {
+      // Delete button click
+      var delBtn = e.target.closest('[data-delete-template]');
+      if (delBtn) {
+        e.stopPropagation();
+        deleteTemplate(delBtn.dataset.deleteTemplate);
+        return;
+      }
       var item = e.target.closest('[data-template]');
       if (!item) return;
       list.removeEventListener('click', handler);
@@ -1138,6 +1147,67 @@
         }
       }
     });
+  }
+
+  function deleteTemplate(id) {
+    if (!confirm('Delete template "' + id + '"?')) return;
+    fetch('/api/templates/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+        return r.json();
+      })
+      .then(function () {
+        if (typeof showToast === 'function') showToast('Template deleted', 'success');
+        templateData = null;
+        loadTemplates(true);
+        setTimeout(function () { renderTemplateList(); }, 300);
+      })
+      .catch(function (err) {
+        if (typeof showToast === 'function') showToast('Delete failed: ' + err.message, 'error');
+      });
+  }
+
+  function saveAsTemplate() {
+    var id = prompt('Template ID (kebab-case, e.g. "my-workflow"):');
+    if (!id) return;
+    var name = prompt('Template name:', id);
+    if (!name) return;
+    var desc = prompt('Description:', '') || '';
+
+    // Gather all visible tasks
+    var allTasks = taskStore || [];
+    if (allTasks.length === 0) {
+      if (typeof showToast === 'function') showToast('No tasks to save as template', 'error');
+      return;
+    }
+
+    var tmplTasks = [];
+    for (var i = 0; i < allTasks.length; i++) {
+      var t = allTasks[i];
+      var entry = { id: t.id, task: t.task || t.title || '' };
+      if (t.priority) entry.priority = t.priority;
+      if (t.category) entry.category = t.category;
+      if (t.deps && t.deps.length) entry.deps = t.deps.slice();
+      tmplTasks.push(entry);
+    }
+
+    fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, name: name, description: desc, tasks: tmplTasks }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (b) { throw new Error(b.error || 'HTTP ' + r.status); });
+        return r.json();
+      })
+      .then(function () {
+        if (typeof showToast === 'function') showToast('Template "' + name + '" saved', 'success');
+        templateData = null;
+        loadTemplates(true);
+      })
+      .catch(function (err) {
+        if (typeof showToast === 'function') showToast('Save failed: ' + err.message, 'error');
+      });
   }
 
   function selectTemplate(tmpl) {
