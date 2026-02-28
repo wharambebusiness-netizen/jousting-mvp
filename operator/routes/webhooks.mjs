@@ -37,11 +37,11 @@ export function createWebhookRoutes(ctx) {
 
   router.post('/webhooks', (req, res) => {
     try {
-      const { url, events, label, secret } = req.body || {};
+      const { url, events, label, secret, format } = req.body || {};
       if (!url || !events) {
         return res.status(400).json({ error: 'url and events are required' });
       }
-      const wh = webhookManager.register({ url, events, label, secret });
+      const wh = webhookManager.register({ url, events, label, secret, format });
       res.status(201).json(wh);
     } catch (err) {
       res.status(400).json({ error: err.message });

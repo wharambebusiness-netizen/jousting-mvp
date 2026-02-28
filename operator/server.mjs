@@ -687,6 +687,8 @@ ${raw.trim()}`;
     notifications,
     costForecaster,
     auth,
+    webhookManager,
+    secretVault,
     get wss() { return wss; },
   };
   app.use('/views', createViewRoutes(viewCtx));

@@ -159,6 +159,48 @@
       </div>
     </div>
 
+    <!-- Webhooks (Phase 64) -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v4M10 13v4M3 10h4M13 10h4"/><circle cx="10" cy="10" r="3"/></svg></span>
+          <div>
+            <p class="settings-section__title">Webhooks</p>
+            <p class="settings-section__desc">HTTP event dispatching to Slack, Discord, or custom endpoints</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="webhooks-settings"
+               hx-get="/views/settings-webhooks"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:160px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Secrets Vault (Phase 64) -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="12" height="8" rx="2"/><path d="M7 9V6a3 3 0 016 0v3"/><circle cx="10" cy="13" r="1"/></svg></span>
+          <div>
+            <p class="settings-section__title">Secrets Vault</p>
+            <p class="settings-section__desc">Encrypted storage for sensitive values (AES-256-GCM)</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="secrets-settings"
+               hx-get="/views/settings-secrets"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:160px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
     <!-- Danger Zone -->
     <div class="section">
       <div class="settings-section settings-section--danger">
@@ -289,6 +331,110 @@
       }).catch(function() {});
       return false;
     }
+    // ── Webhooks Management (Phase 64) ────────────────────────
+
+    function createWebhook(form) {
+      var fd = new FormData(form);
+      var eventsStr = fd.get('events') || '*';
+      var events = eventsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      fetch('/api/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: fd.get('url'),
+          events: events,
+          format: fd.get('format') || 'generic',
+          label: fd.get('label') || ''
+        })
+      }).then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Failed'); });
+        showToast('Webhook created', 'success');
+        form.reset();
+        htmx.trigger(document.getElementById('webhooks-settings'), 'load');
+      }).catch(function(err) { showToast(err.message, 'error'); });
+      return false;
+    }
+
+    function deleteWebhook(id) {
+      if (!confirm('Delete webhook ' + id + '?')) return;
+      fetch('/api/webhooks/' + id, { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+          showToast('Webhook deleted', 'success');
+          htmx.trigger(document.getElementById('webhooks-settings'), 'load');
+        }
+      });
+    }
+
+    function testWebhook(id) {
+      fetch('/api/webhooks/' + id + '/test', { method: 'POST' }).then(function(r) {
+        if (r.ok) showToast('Test delivery sent', 'success');
+        else showToast('Test delivery failed', 'error');
+      });
+    }
+
+    function toggleWebhook(id, active) {
+      fetch('/api/webhooks/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: active })
+      }).then(function(r) {
+        if (r.ok) {
+          showToast(active ? 'Webhook enabled' : 'Webhook disabled', 'success');
+          htmx.trigger(document.getElementById('webhooks-settings'), 'load');
+        }
+      });
+    }
+
+    // ── Secrets Management (Phase 64) ───────────────────────────
+
+    function createSecret(form) {
+      var fd = new FormData(form);
+      var name = fd.get('name');
+      var value = fd.get('value');
+      if (!name || !value) { showToast('Name and value required', 'error'); return false; }
+      fetch('/api/secrets/' + encodeURIComponent(name), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: value })
+      }).then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Failed'); });
+        showToast('Secret stored', 'success');
+        form.reset();
+        htmx.trigger(document.getElementById('secrets-settings'), 'load');
+      }).catch(function(err) { showToast(err.message, 'error'); });
+      return false;
+    }
+
+    function deleteSecret(name) {
+      if (!confirm('Delete secret "' + name + '"?')) return;
+      fetch('/api/secrets/' + encodeURIComponent(name), { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+          showToast('Secret deleted', 'success');
+          htmx.trigger(document.getElementById('secrets-settings'), 'load');
+        }
+      });
+    }
+
+    function toggleSecretReveal(name, btn) {
+      var cell = btn.closest('tr').querySelector('.secret-value');
+      if (!cell) return;
+      if (cell.dataset.revealed === 'true') {
+        cell.textContent = '••••••••';
+        cell.dataset.revealed = 'false';
+        btn.textContent = 'Reveal';
+        return;
+      }
+      fetch('/api/secrets/' + encodeURIComponent(name) + '?reveal=true').then(function(r) {
+        return r.json();
+      }).then(function(data) {
+        cell.textContent = data.value || '(empty)';
+        cell.dataset.revealed = 'true';
+        btn.textContent = 'Hide';
+      }).catch(function() {
+        showToast('Failed to reveal secret', 'error');
+      });
+    }
+
     // ── API Key Management (Phase 59) ─────────────────────────
 
     function createApiKey(form) {

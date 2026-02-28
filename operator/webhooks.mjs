@@ -18,6 +18,7 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomBytes, createHmac, randomUUID } from 'node:crypto';
+import { createFormatterRegistry } from './plugins/formatters.mjs';
 
 // ── Pattern Matching ────────────────────────────────────────
 
@@ -62,6 +63,7 @@ export function createWebhookManager(ctx = {}) {
   const maxRetries = ctx.maxRetries ?? 3;
   const timeoutMs = ctx.timeoutMs ?? 5000;
   const fetchFn = ctx.fetch || globalThis.fetch;
+  const formatters = ctx.formatters || createFormatterRegistry();
 
   /** @type {Map<string, object>} id -> webhook registration */
   const webhooks = new Map();
@@ -189,15 +191,19 @@ export function createWebhookManager(ctx = {}) {
 
   async function _deliver(wh, eventName, eventData, attempt) {
     const deliveryId = randomUUID();
-    const body = JSON.stringify({
+    const payload = {
       event: eventName,
       data: eventData,
       timestamp: new Date().toISOString(),
       webhookId: wh.id,
-    });
+    };
+
+    // Apply formatter (generic by default)
+    const formatted = formatters.format(wh.format || 'generic', payload);
+    const body = formatted.body;
 
     const headers = {
-      'Content-Type': 'application/json',
+      ...formatted.headers,
       'X-Jousting-Event': eventName,
       'X-Jousting-Delivery': deliveryId,
     };
@@ -312,7 +318,7 @@ export function createWebhookManager(ctx = {}) {
    * @param {string}   [opts.secret] - HMAC signing secret
    * @returns {object} Created webhook (without secret)
    */
-  function register({ url, events: eventPatterns, label, secret }) {
+  function register({ url, events: eventPatterns, label, secret, format }) {
     // Validate URL format
     try {
       new URL(url);
@@ -331,6 +337,7 @@ export function createWebhookManager(ctx = {}) {
       events: eventPatterns,
       label: label || '',
       secret: secret || null,
+      format: format || 'generic',
       active: true,
       createdAt: new Date().toISOString(),
     };
@@ -349,6 +356,7 @@ export function createWebhookManager(ctx = {}) {
       url: wh.url,
       events: wh.events,
       label: wh.label,
+      format: wh.format,
       active: wh.active,
       createdAt: wh.createdAt,
     };
@@ -392,6 +400,7 @@ export function createWebhookManager(ctx = {}) {
       url: wh.url,
       events: wh.events,
       label: wh.label,
+      format: wh.format || 'generic',
       active: wh.active,
       createdAt: wh.createdAt,
       hasSecret: !!wh.secret,
@@ -411,6 +420,7 @@ export function createWebhookManager(ctx = {}) {
       url: wh.url,
       events: wh.events,
       label: wh.label,
+      format: wh.format || 'generic',
       active: wh.active,
       createdAt: wh.createdAt,
       hasSecret: !!wh.secret,
@@ -446,6 +456,7 @@ export function createWebhookManager(ctx = {}) {
     }
     if (fields.events !== undefined) wh.events = fields.events;
     if (fields.label !== undefined) wh.label = fields.label;
+    if (fields.format !== undefined) wh.format = fields.format || 'generic';
     if (fields.active !== undefined) wh.active = !!fields.active;
     if (fields.secret !== undefined) wh.secret = fields.secret || null;
 
@@ -456,6 +467,7 @@ export function createWebhookManager(ctx = {}) {
       url: wh.url,
       events: wh.events,
       label: wh.label,
+      format: wh.format || 'generic',
       active: wh.active,
       createdAt: wh.createdAt,
       hasSecret: !!wh.secret,
@@ -504,5 +516,6 @@ export function createWebhookManager(ctx = {}) {
     sendTest,
     load,
     destroy,
+    formatters,
   };
 }

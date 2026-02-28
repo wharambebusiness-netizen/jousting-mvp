@@ -23,6 +23,7 @@ import {
   renderSystemHealth, renderActiveTerminals, renderTaskSummary,
   renderRecentNotifications, renderCostBurnRate,
 } from '../views/dashboard-widgets.mjs';
+import { renderMultiProjectDashboard } from '../views/multi-project.mjs';
 import { categorizeAction, generateSummary, CATEGORY_ACTIONS } from './timeline.mjs';
 import { scanDirectory } from './files.mjs';
 import { getGitFileStatus } from './git.mjs';
@@ -827,6 +828,98 @@ export function createViewRoutes(ctx) {
     }
   });
 
+  // ── Webhooks Settings Fragment (Phase 64) ───────────────────
+  router.get('/settings-webhooks', (_req, res) => {
+    try {
+      const webhookMgr = ctx.webhookManager;
+      if (!webhookMgr) {
+        res.type('text/html').send(`<p class="settings-notice">Webhook manager not available</p>`);
+        return;
+      }
+      const webhooks = webhookMgr.list();
+      const rows = webhooks.map(wh => {
+        const evts = (wh.events || []).join(', ');
+        const activeClass = wh.active ? '' : ' style="opacity:0.5"';
+        return `<tr${activeClass}>
+          <td><code class="wh-id">${escapeHtml(wh.id)}</code></td>
+          <td class="wh-url">${escapeHtml(wh.url.length > 40 ? wh.url.slice(0, 37) + '...' : wh.url)}</td>
+          <td>${escapeHtml(wh.format || 'generic')}</td>
+          <td class="wh-events">${escapeHtml(evts.length > 30 ? evts.slice(0, 27) + '...' : evts)}</td>
+          <td>
+            <button class="btn btn--xs btn--ghost" onclick="toggleWebhook('${escapeHtml(wh.id)}', ${!wh.active})">${wh.active ? 'Disable' : 'Enable'}</button>
+            <button class="btn btn--xs btn--ghost" onclick="testWebhook('${escapeHtml(wh.id)}')">Test</button>
+            <button class="btn btn--xs btn--ghost btn--danger-text" onclick="deleteWebhook('${escapeHtml(wh.id)}')">Delete</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      const emptyRow = `<tr><td colspan="5" style="text-align:center;opacity:.6">No webhooks registered</td></tr>`;
+
+      res.type('text/html').send(`
+        <div class="wh-section">
+          <table class="wh-table">
+            <thead><tr><th>ID</th><th>URL</th><th>Format</th><th>Events</th><th></th></tr></thead>
+            <tbody>${rows || emptyRow}</tbody>
+          </table>
+          <form onsubmit="return createWebhook(this)" class="wh-create">
+            <input type="url" name="url" placeholder="https://hooks.slack.com/..." required class="wh-create__input">
+            <input type="text" name="events" placeholder="Events (e.g. chain:*, coord:*)" value="*" class="wh-create__input">
+            <select name="format" class="wh-create__select">
+              <option value="generic">Generic</option>
+              <option value="slack">Slack</option>
+              <option value="discord">Discord</option>
+            </select>
+            <input type="text" name="label" placeholder="Label (optional)" class="wh-create__input wh-create__input--sm">
+            <button type="submit" class="btn btn--sm btn--primary">Add Webhook</button>
+          </form>
+        </div>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Secrets Settings Fragment (Phase 64) ───────────────────
+  router.get('/settings-secrets', (_req, res) => {
+    try {
+      const vault = ctx.secretVault;
+      if (!vault) {
+        res.type('text/html').send(`<p class="settings-notice">Secrets vault not available</p>`);
+        return;
+      }
+      const secrets = vault.list();
+      const rows = secrets.map(s => {
+        return `<tr>
+          <td><code>${escapeHtml(s.name)}</code></td>
+          <td class="secret-value" data-revealed="false">••••••••</td>
+          <td>${relativeTime(s.updatedAt)}</td>
+          <td>
+            <button class="btn btn--xs btn--ghost" onclick="toggleSecretReveal('${escapeHtml(s.name)}', this)">Reveal</button>
+            <button class="btn btn--xs btn--ghost btn--danger-text" onclick="deleteSecret('${escapeHtml(s.name)}')">Delete</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      const emptyRow = `<tr><td colspan="4" style="text-align:center;opacity:.6">No secrets stored</td></tr>`;
+
+      res.type('text/html').send(`
+        <div class="secrets-section">
+          <table class="secrets-table">
+            <thead><tr><th>Name</th><th>Value</th><th>Updated</th><th></th></tr></thead>
+            <tbody>${rows || emptyRow}</tbody>
+          </table>
+          <form onsubmit="return createSecret(this)" class="secrets-create">
+            <input type="text" name="name" placeholder="Secret name" required class="secrets-create__input">
+            <input type="password" name="value" placeholder="Secret value" required class="secrets-create__input">
+            <button type="submit" class="btn btn--sm btn--primary">Store Secret</button>
+          </form>
+        </div>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
   // ── Orchestrator Run History Fragment ────────────────────────
   router.get('/orch-history', (_req, res) => {
     try {
@@ -1195,6 +1288,57 @@ export function createViewRoutes(ctx) {
       res.type('text/html').send(renderCostBurnRate(forecast));
     } catch (err) {
       res.type('text/html').send(renderCostBurnRate(null));
+    }
+  });
+
+  // ── Multi-Project Dashboard Fragment (Phase 62) ─────────────
+  router.get('/dashboard/multi-project', (_req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chains = registry.chains || [];
+
+      const projectMap = {};
+      for (const chain of chains) {
+        const proj = chain.projectDir || '(default)';
+        if (!projectMap[proj]) {
+          projectMap[proj] = {
+            projectDir: chain.projectDir,
+            chains: 0, running: 0, completed: 0, failed: 0,
+            totalCostUsd: 0, lastActivity: null,
+          };
+        }
+        const entry = projectMap[proj];
+        entry.chains++;
+        if (chain.status === 'running') entry.running++;
+        if (chain.status === 'complete' || chain.status === 'assumed-complete') entry.completed++;
+        if (chain.status === 'failed' || chain.status === 'aborted') entry.failed++;
+        entry.totalCostUsd += chain.totalCostUsd || 0;
+        if (!entry.lastActivity || chain.updatedAt > entry.lastActivity) {
+          entry.lastActivity = chain.updatedAt;
+        }
+      }
+
+      // Include server's own project directory even if no chains
+      if (ctx.projectDir) {
+        const norm = ctx.projectDir.replace(/\\/g, '/');
+        const listed = Object.keys(projectMap).some(
+          k => k.replace(/\\/g, '/') === norm
+        );
+        if (!listed) {
+          projectMap[ctx.projectDir] = {
+            projectDir: ctx.projectDir,
+            chains: 0, running: 0, completed: 0, failed: 0,
+            totalCostUsd: 0, lastActivity: null,
+          };
+        }
+      }
+
+      const projects = Object.values(projectMap)
+        .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
+
+      res.type('text/html').send(renderMultiProjectDashboard(projects));
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
     }
   });
 

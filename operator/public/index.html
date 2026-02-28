@@ -97,6 +97,14 @@
       </div>
     </div>
 
+    <!-- Multi-Project Overview (Phase 62) -->
+    <div class="section" id="multi-project-section"
+         hx-get="/views/dashboard/multi-project"
+         hx-trigger="load, every 15s"
+         hx-swap="innerHTML">
+      <div class="mp-dashboard"><div class="skeleton" style="height:140px"></div></div>
+    </div>
+
     <!-- Cost Summary -->
     <div class="section">
       <div class="metrics-grid" id="cost-summary-grid"
@@ -275,6 +283,19 @@
     });
   </script>
   <script>
+    // ── Multi-project card click → project filter ──────────
+    document.addEventListener('click', function(e) {
+      var card = e.target.closest('.mp-card');
+      if (!card) return;
+      var proj = card.getAttribute('data-project');
+      var select = document.getElementById('project-select');
+      if (select) {
+        select.value = proj || '';
+        onProjectChange(proj || '');
+      }
+    });
+  </script>
+  <script>
     // ── Real-time WS widget refresh ─────────────────────────
     // Subscribe to key events and trigger HTMX widget reloads
     (function() {
@@ -288,6 +309,9 @@
         'cost:': 'dw-cost',
         'chain:': 'chain-table',
       };
+
+      // Chain events also refresh the multi-project overview
+      var MP_ELEMENT = 'multi-project-section';
 
       var debounceTimers = {};
       function refreshWidget(elementId) {
@@ -311,6 +335,10 @@
               refreshWidget(WIDGET_MAP[keys[i]]);
               break;
             }
+          }
+          // Chain events refresh multi-project overview
+          if (msg.event.indexOf('chain:') === 0) {
+            refreshWidget(MP_ELEMENT);
           }
         }
       );
