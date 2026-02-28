@@ -828,6 +828,78 @@ export function createViewRoutes(ctx) {
     }
   });
 
+  // ── Backup Settings Fragment (Phase 65) ─────────────────────
+  router.get('/settings-backup', async (_req, res) => {
+    try {
+      const bm = ctx.backupManager;
+      if (!bm) {
+        res.type('text/html').send(`<p class="settings-notice">Backup manager not available</p>`);
+        return;
+      }
+
+      const backups = bm.listBackups();
+      const rows = backups.slice(0, 10).map(b => {
+        const sizeKb = ((b.size || 0) / 1024).toFixed(1);
+        return `<tr>
+          <td>${escapeHtml(b.name)}</td>
+          <td>${sizeKb} KB</td>
+          <td>${relativeTime(b.createdAt)}</td>
+        </tr>`;
+      }).join('');
+
+      const emptyRow = `<tr><td colspan="3" style="text-align:center;opacity:.6">No backups found</td></tr>`;
+
+      res.type('text/html').send(`
+        <div class="backup-section">
+          <div class="backup-actions">
+            <button class="btn btn--sm btn--primary" onclick="createBackup()">Auto-Backup Now</button>
+            <button class="btn btn--sm btn--ghost" onclick="downloadBackup()">Download Full Backup</button>
+            <button class="btn btn--sm btn--ghost" onclick="restoreBackup()">Restore from File</button>
+          </div>
+          <table class="backup-table">
+            <thead><tr><th>Backup</th><th>Size</th><th>Created</th></tr></thead>
+            <tbody>${rows || emptyRow}</tbody>
+          </table>
+        </div>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
+  // ── Retention Settings Fragment (Phase 65) ─────────────────
+  router.get('/settings-retention', (_req, res) => {
+    try {
+      const rp = ctx.retentionPolicy;
+      if (!rp) {
+        res.type('text/html').send(`<p class="settings-notice">Retention policy not available</p>`);
+        return;
+      }
+
+      const maxAge = rp.maxAgeDays || 30;
+      const maxEntries = rp.maxEntries || 1000;
+
+      res.type('text/html').send(`
+        <div class="retention-section">
+          <div class="retention-info">
+            <div class="retention-stat">
+              <span class="retention-stat__value">${maxAge}</span>
+              <span class="retention-stat__label">Max Age (days)</span>
+            </div>
+            <div class="retention-stat">
+              <span class="retention-stat__value">${maxEntries}</span>
+              <span class="retention-stat__label">Max Entries</span>
+            </div>
+          </div>
+          <p class="retention-desc">Automatically removes messages, snapshots, and completed tasks older than ${maxAge} days or exceeding ${maxEntries} entries.</p>
+          <button class="btn btn--sm btn--warning" onclick="runRetention()">Run Cleanup Now</button>
+        </div>
+      `);
+    } catch (err) {
+      res.type('text/html').send(`<p>Error: ${escapeHtml(err.message)}</p>`);
+    }
+  });
+
   // ── Webhooks Settings Fragment (Phase 64) ───────────────────
   router.get('/settings-webhooks', (_req, res) => {
     try {

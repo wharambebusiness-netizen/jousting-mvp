@@ -689,6 +689,8 @@ ${raw.trim()}`;
     auth,
     webhookManager,
     secretVault,
+    backupManager,
+    retentionPolicy,
     get wss() { return wss; },
   };
   app.use('/views', createViewRoutes(viewCtx));

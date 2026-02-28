@@ -6126,6 +6126,79 @@ details[open] > .tree-summary .tree-icon--dir {
   justify-content: flex-end;
 }
 
+/* ── Backup & Retention Settings (Phase 65) ────────────────── */
+
+.backup-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.backup-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.backup-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.backup-table th,
+.backup-table td {
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.retention-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.retention-info {
+  display: flex;
+  gap: var(--sp-6);
+}
+
+.retention-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.retention-stat__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.retention-stat__label {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.retention-desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.btn--warning {
+  background: var(--status-warning);
+  color: #000;
+  border-color: var(--status-warning);
+}
+
+.btn--warning:hover {
+  background: #d97706;
+}
+
 /* ── Webhooks Settings (Phase 64) ──────────────────────────── */
 
 .wh-section,

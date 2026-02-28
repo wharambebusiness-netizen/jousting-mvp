@@ -201,6 +201,48 @@
       </div>
     </div>
 
+    <!-- Backup & Restore (Phase 65) -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v2a2 2 0 002 2h8a2 2 0 002-2v-2"/><path d="M7 10l3 3 3-3"/><path d="M10 3v10"/></svg></span>
+          <div>
+            <p class="settings-section__title">Backup & Restore</p>
+            <p class="settings-section__desc">Create snapshots and restore operator state</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="backup-settings"
+               hx-get="/views/settings-backup"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:120px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- Retention Policy (Phase 65) -->
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <span class="settings-section__icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2.5"/></svg></span>
+          <div>
+            <p class="settings-section__title">Retention Policy</p>
+            <p class="settings-section__desc">Automatic cleanup of old messages, snapshots, and tasks</p>
+          </div>
+        </div>
+        <article class="settings-card">
+          <div id="retention-settings"
+               hx-get="/views/settings-retention"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="skeleton" style="height:100px"></div>
+          </div>
+        </article>
+      </div>
+    </div>
+
     <!-- Danger Zone -->
     <div class="section">
       <div class="settings-section settings-section--danger">
@@ -331,6 +373,77 @@
       }).catch(function() {});
       return false;
     }
+    // ── Backup & Restore (Phase 65) ───────────────────────────
+
+    function createBackup() {
+      showToast('Creating backup...', 'info');
+      fetch('/api/backup/auto', { method: 'POST' }).then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Failed'); });
+        return r.json();
+      }).then(function(result) {
+        showToast('Backup created (' + result.size + ' bytes)', 'success');
+        htmx.trigger(document.getElementById('backup-settings'), 'load');
+      }).catch(function(err) { showToast(err.message, 'error'); });
+    }
+
+    function downloadBackup() {
+      fetch('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(function(r) { return r.json(); })
+        .then(function(bundle) {
+          var blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'operator-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Backup downloaded', 'success');
+        }).catch(function(err) { showToast(err.message, 'error'); });
+    }
+
+    function restoreBackup() {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = function() {
+        var file = input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function() {
+          var bundle;
+          try { bundle = JSON.parse(reader.result); } catch(e) {
+            showToast('Invalid backup file', 'error'); return;
+          }
+          if (!confirm('Restore from backup? This will overwrite current data.')) return;
+          fetch('/api/backup/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bundle)
+          }).then(function(r) {
+            if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Restore failed'); });
+            return r.json();
+          }).then(function(result) {
+            showToast('Restored ' + result.restored.length + ' files', 'success');
+          }).catch(function(err) { showToast(err.message, 'error'); });
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    function runRetention() {
+      if (!confirm('Run retention cleanup now? Old messages, snapshots, and completed tasks will be removed.')) return;
+      fetch('/api/system/retention', { method: 'POST' }).then(function(r) {
+        if (!r.ok) throw new Error('Retention cleanup failed');
+        return r.json();
+      }).then(function(result) {
+        var msg = 'Cleaned: ' + (result.messagesRemoved || 0) + ' messages, ' +
+                  (result.snapshotsRemoved || 0) + ' snapshots, ' +
+                  (result.tasksRemoved || 0) + ' tasks';
+        showToast(msg, 'success');
+      }).catch(function(err) { showToast(err.message, 'error'); });
+    }
+
     // ── Webhooks Management (Phase 64) ────────────────────────
 
     function createWebhook(form) {
