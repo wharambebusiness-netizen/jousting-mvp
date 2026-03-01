@@ -168,19 +168,31 @@ export function createBulkRoutes(ctx) {
     if (err) return res.status(400).json(err);
 
     const regData = registry.load();
-    const results = req.body.ids.map(id => {
+    const idSet = new Set(req.body.ids);
+    const now = new Date().toISOString();
+
+    // Build modified chains array (copy-before-mutate to prevent race)
+    const results = [];
+    regData.chains = regData.chains.map(c => {
+      if (!idSet.has(c.id)) return c;
       try {
-        const chain = regData.chains.find(c => c.id === id);
-        if (!chain) {
-          return { id, success: false, error: 'Chain not found' };
-        }
-        chain.status = 'archived';
-        chain.updatedAt = new Date().toISOString();
-        return { id, success: true };
+        const updated = { ...c, status: 'archived', updatedAt: now };
+        results.push({ id: c.id, success: true });
+        return updated;
       } catch (e) {
-        return { id, success: false, error: e.message };
+        results.push({ id: c.id, success: false, error: e.message });
+        return c;
       }
     });
+
+    // Report missing IDs
+    const foundIds = new Set(results.map(r => r.id));
+    for (const id of req.body.ids) {
+      if (!foundIds.has(id)) {
+        results.push({ id, success: false, error: 'Chain not found' });
+      }
+    }
+
     registry.save(regData);
 
     const resp = bulkResponse(results);

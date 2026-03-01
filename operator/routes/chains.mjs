@@ -51,6 +51,16 @@ export function createChainRoutes(ctx) {
         chains = chains.filter(c => c.status === statusFilter);
       }
 
+      // Text search on task and id
+      const q = _req.query.q;
+      if (q && typeof q === 'string' && q.trim().length > 0) {
+        const needle = q.trim().toLowerCase();
+        chains = chains.filter(c =>
+          (c.task && c.task.toLowerCase().includes(needle)) ||
+          (c.id && c.id.toLowerCase().includes(needle))
+        );
+      }
+
       // Sort by updatedAt descending (newest first)
       chains.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
@@ -81,6 +91,54 @@ export function createChainRoutes(ctx) {
         return res.status(404).json({ error: 'Chain not found' });
       }
       res.json(chain);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── PATCH /api/chains/:id ──────────────────────────────
+  // Update chain task description and/or metadata.
+  router.patch('/chains/:id', (req, res) => {
+    try {
+      const registry = loadRegistry();
+      const chain = findChainById(registry, req.params.id);
+      if (!chain) {
+        return res.status(404).json({ error: 'Chain not found' });
+      }
+
+      const { task, metadata } = req.body || {};
+      let changed = false;
+
+      if (task !== undefined) {
+        if (typeof task !== 'string' || task.trim().length === 0) {
+          return res.status(400).json({ error: 'task must be a non-empty string' });
+        }
+        chain.task = task.trim();
+        changed = true;
+      }
+
+      if (metadata !== undefined) {
+        if (metadata !== null && typeof metadata !== 'object') {
+          return res.status(400).json({ error: 'metadata must be an object or null' });
+        }
+        chain.metadata = metadata;
+        changed = true;
+      }
+
+      if (!changed) {
+        return res.status(400).json({ error: 'No fields to update (provide task and/or metadata)' });
+      }
+
+      chain.updatedAt = new Date().toISOString();
+      saveRegistry(registry);
+
+      ctx.events.emit('chain:updated', {
+        chainId: chain.id,
+        task: chain.task,
+        metadata: chain.metadata || null,
+      });
+
+      res.json(getChainSummary(chain));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

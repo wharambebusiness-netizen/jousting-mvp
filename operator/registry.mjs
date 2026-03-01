@@ -295,6 +295,7 @@ export function getChainSummary(chain) {
     projectDir: chain.projectDir,
     restartedFrom: chain.restartedFrom || null,
     config: chain.config,
+    metadata: chain.metadata || null,
   };
 }
 
