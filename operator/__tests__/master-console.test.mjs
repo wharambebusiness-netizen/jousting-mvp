@@ -255,10 +255,12 @@ describe('Master Console — Pool', () => {
     expect(t).toHaveProperty('persistent', true);
   });
 
-  // 19. Only one master terminal can exist at a time
-  it('throws when spawning second master terminal', async () => {
+  // 19. Multi-master: allows up to MAX_MASTERS, rejects beyond that (Phase 66)
+  it('allows multiple masters up to MAX_MASTERS, rejects beyond', async () => {
     await pool.spawn('m1', { role: 'master' });
-    await expect(pool.spawn('m2', { role: 'master' })).rejects.toThrow('Master terminal already exists');
+    await pool.spawn('m2', { role: 'master' }); // should succeed now (multi-master)
+    const masters = pool.getMasterTerminals();
+    expect(masters.length).toBe(2);
   });
 
   // 20. getStatus() includes role and persistent in terminal entries

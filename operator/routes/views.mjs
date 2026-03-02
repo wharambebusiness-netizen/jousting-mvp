@@ -1414,6 +1414,57 @@ export function createViewRoutes(ctx) {
     }
   });
 
+  // ── Console Master/Worker Fragments (Phase 66) ─────────────
+  router.get('/console/masters', async (req, res) => {
+    const { claudePool } = ctx;
+    if (!claudePool || !claudePool.getMasterTerminals) {
+      return res.type('text/html').send('<p class="muted">No pool</p>');
+    }
+
+    const mastersList = claudePool.getMasterTerminals();
+    const colors = ['#6366f1', '#10b981', '#f59e0b', '#22d3ee'];
+    const html = mastersList.map((m, i) => {
+      const color = colors[i % colors.length];
+      const match = m.id.match(/master-(\d+)/);
+      const label = 'M' + (match ? match[1] : (i + 1));
+      return `<div class="master-info" style="border-left: 3px solid ${color}; padding: 0.3rem 0.5rem;">
+        <strong>${escapeHtml(label)}</strong> (${escapeHtml(m.id)}) — ${escapeHtml(m.status || 'unknown')}
+        ${m.assignedTask ? ` — Task: ${escapeHtml(m.assignedTask.taskId || m.assignedTask.task || '')}` : ''}
+      </div>`;
+    }).join('');
+
+    res.type('text/html').send(html || '<p class="muted">No masters running</p>');
+  });
+
+  router.get('/console/workers', async (req, res) => {
+    const { claudePool } = ctx;
+    if (!claudePool || !claudePool.getStatus) {
+      return res.type('text/html').send('<p class="muted">No pool</p>');
+    }
+
+    const terminals = claudePool.getStatus();
+    const workersList = terminals.filter(t => t.role !== 'master');
+    const colors = ['#6366f1', '#10b981', '#f59e0b', '#22d3ee'];
+
+    const html = workersList.map(w => {
+      let badge = '';
+      if (w.config && w.config._masterId) {
+        const mId = w.config._masterId;
+        const match = mId.match(/master-(\d+)/);
+        const idx = match ? parseInt(match[1]) - 1 : 0;
+        const color = colors[Math.max(0, idx) % colors.length];
+        const label = 'M' + (idx + 1);
+        badge = `<span class="worker-master-badge" style="background:${color}">${label}</span>`;
+      }
+      return `<div class="worker-card-mini">
+        <span class="worker-id">${escapeHtml(w.id)}${badge}</span>
+        <span class="worker-status dot-${escapeHtml(w.status || 'unknown')}">${escapeHtml(w.status || 'unknown')}</span>
+      </div>`;
+    }).join('');
+
+    res.type('text/html').send(html || '<p class="muted">No workers</p>');
+  });
+
   // ── WS Stats Fragment (Phase 49) ────────────────────────────
   router.get('/ws-stats', (_req, res) => {
     try {

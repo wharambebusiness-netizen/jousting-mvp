@@ -371,6 +371,99 @@ export function createWorktreeManager(ctx) {
     return worktrees.has(workerId);
   }
 
+  // ── Multi-Master Worktree Support (Phase 66) ─────────────
+
+  /**
+   * Create a worktree namespaced under a master terminal.
+   * Path: {projectDir}/.worktrees/{masterId}/{workerId}/
+   * Branch: master-{masterId}-worker-{workerId}
+   * @param {string} masterId
+   * @param {string} workerId
+   * @returns {Promise<{ok: boolean, path: string, branch: string, error?: string}>}
+   */
+  async function createForMaster(masterId, workerId) {
+    if (!masterId || !workerId) {
+      return { ok: false, path: '', branch: '', error: 'masterId and workerId are required' };
+    }
+
+    const branch = `master-${masterId}-worker-${workerId}`;
+    const masterDir = join(worktreeDir, masterId);
+    const wtPath = join(masterDir, workerId);
+
+    // Clean up any existing worktree for this worker
+    const compositeId = `${masterId}/${workerId}`;
+    if (worktrees.has(compositeId)) {
+      await remove(compositeId);
+    }
+
+    // Ensure parent directories exist
+    if (!existsSync(worktreeDir)) {
+      mkdirSync(worktreeDir, { recursive: true });
+    }
+    if (!existsSync(masterDir)) {
+      mkdirSync(masterDir, { recursive: true });
+    }
+
+    // Remove stale directory if it exists
+    if (existsSync(wtPath)) {
+      try {
+        rmSync(wtPath, { recursive: true, force: true });
+      } catch {
+        return { ok: false, path: wtPath, branch, error: 'Failed to remove stale worktree directory' };
+      }
+    }
+
+    // Delete any leftover branch
+    await git(['branch', '-D', branch], projectDir);
+
+    // Create the worktree
+    const result = await git(['worktree', 'add', wtPath, '-b', branch], projectDir);
+
+    if (!result.ok) {
+      return { ok: false, path: wtPath, branch, error: result.stderr || 'git worktree add failed' };
+    }
+
+    const entry = { path: wtPath, branch, createdAt: new Date().toISOString(), masterId };
+    worktrees.set(compositeId, entry);
+
+    log(`[worktree] Created master worktree for ${masterId}/${workerId}: ${wtPath} (branch: ${branch})`);
+    if (events) {
+      events.emit('coord:worktree-created', { workerId: compositeId, masterId, path: wtPath, branch });
+    }
+
+    return { ok: true, path: wtPath, branch };
+  }
+
+  /**
+   * Attempt a clean merge: dry-run first, then merge if no conflicts.
+   * @param {string} workerId - Can be a simple workerId or composite masterId/workerId
+   * @returns {Promise<{merged: boolean, conflicted: boolean, files: string[], error?: string}>}
+   */
+  async function mergeIfClean(workerId) {
+    const entry = worktrees.get(workerId);
+    if (!entry) {
+      return { merged: false, conflicted: false, files: [], error: `No worktree for worker ${workerId}` };
+    }
+
+    // First do a dry-run
+    const dryResult = await dryRunMerge(workerId);
+    if (!dryResult.ok) {
+      return { merged: false, conflicted: false, files: [], error: dryResult.error };
+    }
+
+    if (dryResult.conflicted) {
+      return { merged: false, conflicted: true, files: dryResult.files || [] };
+    }
+
+    // No conflicts — merge for real
+    const mergeResult = await merge(workerId);
+    if (!mergeResult.ok) {
+      return { merged: false, conflicted: mergeResult.conflicted, files: [], error: mergeResult.error };
+    }
+
+    return { merged: true, conflicted: false, files: [] };
+  }
+
   return {
     create,
     remove,
@@ -381,6 +474,8 @@ export function createWorktreeManager(ctx) {
     getStatus,
     get,
     has,
+    createForMaster,
+    mergeIfClean,
   };
 }
 

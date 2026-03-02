@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // ============================================================
 // Operator HTTP Server (M4 + M5)
 // ============================================================
@@ -79,14 +78,18 @@ import { createCsrfProtection } from './middleware/csrf.mjs';
 import { createPerformanceRoutes } from './routes/performance.mjs';
 import { createTemplateManager } from './template-manager.mjs';
 import { createTemplateRoutes } from './routes/templates.mjs';
+import { createWorktreeManager } from './coordination/worktree-manager.mjs';
+import { createMasterCoordinator } from './master-coordinator.mjs';
+import { createMcpServer } from './mcp-server.mjs';
+import { createMcpRoutes } from './routes/mcp.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
-// ── Constants ───────────────────────────────────────────────
+// -- Constants -----------------------------------------------------------
 
 const DEFAULT_PORT = 3100;
 const DEFAULT_HOST = '127.0.0.1';
 
-// ── CORS Middleware ─────────────────────────────────────────
+// -- CORS Middleware -----------------------------------------------------
 
 function corsMiddleware(req, res, next) {
   const origin = req.headers.origin || '';
@@ -105,7 +108,7 @@ function corsMiddleware(req, res, next) {
   next();
 }
 
-// ── App Factory ─────────────────────────────────────────────
+// -- App Factory ---------------------------------------------------------
 
 /**
  * Create the Express app and HTTP server.
@@ -125,7 +128,7 @@ export function createApp(options = {}) {
   const registry = options.registry || createRegistry({ operatorDir, log: () => {} });
   const settings = options.settings || createSettings({ operatorDir, events });
 
-  // Auth layer (Phase 27) — opt out with auth: false for backward-compat
+  // Auth layer (Phase 27) -- opt out with auth: false for backward-compat
   let auth = null;
   if (options.auth && typeof options.auth === 'object') {
     auth = options.auth;
@@ -143,7 +146,7 @@ export function createApp(options = {}) {
     sink: defaultSink,
   });
 
-  // Request timer (Phase 50) — created early so it captures all requests
+  // Request timer (Phase 50) -- created early so it captures all requests
   const requestTimer = options.requestTimer || createRequestTimer({
     log: logger,
     events,
@@ -158,7 +161,7 @@ export function createApp(options = {}) {
   app.use(createRequestIdMiddleware(logger));
   app.use(requestTimer.middleware);
 
-  // CSRF protection (Phase 58) — double-submit cookie pattern
+  // CSRF protection (Phase 58) -- double-submit cookie pattern
   // Auto-disabled when auth: false (testing mode) unless explicitly enabled
   let csrf = null;
   const csrfEnabled = options.csrf !== false && (options.csrf === true || options.auth !== false);
@@ -167,12 +170,12 @@ export function createApp(options = {}) {
     app.use(csrf.middleware);
   }
 
-  // Rate limit headers (Phase 42) — deferred reference since coordinator is created later.
+  // Rate limit headers (Phase 42) -- deferred reference since coordinator is created later.
   // The middleware reads rateHeaderCtx.rateLimiter lazily on each request.
   const rateHeaderCtx = { rateLimiter: null };  // set after coordinator creation
   app.use(createRateHeadersMiddleware(rateHeaderCtx));
 
-  // Response cache (Phase 42) — in-memory GET response cache
+  // Response cache (Phase 42) -- in-memory GET response cache
   const responseCache = options.responseCache || createResponseCache({
     defaultTtl: options.cacheTtl ?? 5000,
     maxEntries: options.cacheMaxEntries ?? 100,
@@ -225,7 +228,7 @@ export function createApp(options = {}) {
     app.use('/api', createAuthRoutes({ auth }));
   }
 
-  // ── Resolve paths ──────────────────────────────────────
+  // -- Resolve paths ------------------------------------------------------
   // moduleDir resolves from this module's location (not operatorDir,
   // which may be a test temp directory for registry isolation).
   const moduleDir = import.meta.dirname || operatorDir;
@@ -279,7 +282,7 @@ export function createApp(options = {}) {
     };
   }
 
-  // Dead letter queue (Phase 32) — stores permanently-failed tasks
+  // Dead letter queue (Phase 32) -- stores permanently-failed tasks
   let deadLetterQueue = null;
   if (options.deadLetterQueue && typeof options.deadLetterQueue === 'object') {
     deadLetterQueue = options.deadLetterQueue;
@@ -328,7 +331,7 @@ export function createApp(options = {}) {
   // Coordination routes (task queue, rate limiter, costs)
   app.use('/api', createCoordinationRoutes({ coordinator }));
 
-  // Template library (Phase 61) — workflow template CRUD
+  // Template library (Phase 61) -- workflow template CRUD
   const templatePersist = join(operatorDir, '.data', 'templates.json');
   const templateManager = options.templateManager || createTemplateManager({
     persistPath: templatePersist,
@@ -336,14 +339,14 @@ export function createApp(options = {}) {
   });
   app.use('/api', createTemplateRoutes({ templateManager, coordinator }));
 
-  // Cost forecast routes (Phase 43) — burn rate & budget exhaustion
+  // Cost forecast routes (Phase 43) -- burn rate & budget exhaustion
   const costForecaster = coordinator ? coordinator.costForecaster : null;
   app.use('/api', createCostForecastRoutes({ costForecaster }));
 
   // Dead letter queue routes (Phase 32)
   app.use('/api', createDeadLetterRoutes({ deadLetterQueue, coordinator }));
 
-  // Shared memory (Phase 17) — cross-terminal persistent state
+  // Shared memory (Phase 17) -- cross-terminal persistent state
   // Created before Claude pool so it can be passed to terminals
   let sharedMemory = null;
   if (options.sharedMemory && typeof options.sharedMemory === 'object') {
@@ -361,7 +364,7 @@ export function createApp(options = {}) {
   // Shared memory routes
   app.use('/api', createSharedMemoryRoutes({ sharedMemory }));
 
-  // Terminal message bus (Phase 18) — inter-terminal communication
+  // Terminal message bus (Phase 18) -- inter-terminal communication
   let messageBus = null;
   if (options.messageBus && typeof options.messageBus === 'object') {
     messageBus = options.messageBus;
@@ -372,7 +375,7 @@ export function createApp(options = {}) {
   }
   app.use('/api', createTerminalMessageRoutes({ messageBus }));
 
-  // Data migration runner (Phase 30) — versioned schema changes
+  // Data migration runner (Phase 30) -- versioned schema changes
   const dataDir = join(operatorDir, '.data');
   const migrationRunner = options.migrationRunner || createMigrationRunner({ dataDir, log: logger });
   if (options.migrations !== false) {
@@ -386,7 +389,7 @@ export function createApp(options = {}) {
     }
   }
 
-  // Retention policy (Phase 30) — age-based data cleanup
+  // Retention policy (Phase 30) -- age-based data cleanup
   const retentionPolicy = options.retentionPolicy || createRetentionPolicy({
     log: logger,
     maxAgeDays: options.retentionMaxAgeDays,
@@ -411,7 +414,7 @@ export function createApp(options = {}) {
     }
   });
 
-  // Audit log (Phase 31) — append-only JSONL event journal
+  // Audit log (Phase 31) -- append-only JSONL event journal
   let auditLog = null;
   if (options.auditLog && typeof options.auditLog === 'object') {
     auditLog = options.auditLog;
@@ -425,13 +428,13 @@ export function createApp(options = {}) {
   }
   app.use('/api', createAuditRoutes({ auditLog }));
 
-  // Data export routes (Phase 36) — CSV, JSON, JSONL export
+  // Data export routes (Phase 36) -- CSV, JSON, JSONL export
   app.use('/api', createExportRoutes({ coordinator, auditLog, messageBus, deadLetterQueue }));
 
-  // Timeline routes (Phase 37) — aggregated activity feed from audit log
+  // Timeline routes (Phase 37) -- aggregated activity feed from audit log
   app.use('/api', createTimelineRoutes({ auditLog }));
 
-  // Webhook manager (Phase 38) — event-driven HTTP dispatching
+  // Webhook manager (Phase 38) -- event-driven HTTP dispatching
   let webhookManager = null;
   if (options.webhookManager && typeof options.webhookManager === 'object') {
     webhookManager = options.webhookManager;
@@ -446,7 +449,7 @@ export function createApp(options = {}) {
   }
   app.use('/api', createWebhookRoutes({ webhookManager }));
 
-  // User preferences (Phase 39) — per-user preference persistence
+  // User preferences (Phase 39) -- per-user preference persistence
   let preferences = null;
   if (options.preferences && typeof options.preferences === 'object') {
     preferences = options.preferences;
@@ -459,10 +462,10 @@ export function createApp(options = {}) {
   }
   app.use('/api', createPreferencesRoutes({ preferences }));
 
-  // Bulk operations routes (Phase 40) — batch task/chain/DLQ operations
+  // Bulk operations routes (Phase 40) -- batch task/chain/DLQ operations
   app.use('/api', createBulkRoutes({ coordinator, deadLetterQueue, registry, auditLog }));
 
-  // Notifications (Phase 41) — in-app notification system
+  // Notifications (Phase 41) -- in-app notification system
   let notifications = null;
   if (options.notifications && typeof options.notifications === 'object') {
     notifications = options.notifications;
@@ -476,7 +479,7 @@ export function createApp(options = {}) {
   }
   app.use('/api', createNotificationRoutes({ notifications }));
 
-  // Secrets vault (Phase 45) — encrypted API key / sensitive config storage
+  // Secrets vault (Phase 45) -- encrypted API key / sensitive config storage
   let secretVault = null;
   if (options.secretVault && typeof options.secretVault === 'object') {
     secretVault = options.secretVault;
@@ -490,18 +493,28 @@ export function createApp(options = {}) {
   }
   app.use('/api', createSecretRoutes({ secretVault }));
 
-  // Performance routes (Phase 50) — request latency stats
+  // Performance routes (Phase 50) -- request latency stats
   app.use('/api', createPerformanceRoutes({ requestTimer }));
 
-  // Claude terminal pool (Phase 15) — with shared memory for snapshots + coordinator for auto-dispatch
+  // Claude terminal pool (Phase 15) -- with shared memory for snapshots + coordinator for auto-dispatch
   let claudePool = null;
   if (options.claudePool === true) {
-    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, log: () => {} });
+    let poolWorktreeManager = null;
+    if (options.enableWorktrees) {
+      poolWorktreeManager = createWorktreeManager({ projectDir, events, log: () => {} });
+    }
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, worktreeManager: poolWorktreeManager, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
   }
 
-  // Terminal session store (Phase 48) — session recording, resume, templates
+  // Master coordinator (Phase 66) -- multi-master heartbeat & domain affinity
+  let masterCoordinator = null;
+  if (claudePool && sharedMemory) {
+    masterCoordinator = createMasterCoordinator({ events, sharedMemory, claudePool, coordinator, log: () => {} });
+  }
+
+  // Terminal session store (Phase 48) -- session recording, resume, templates
   let terminalSessionStore = null;
   if (options.terminalSessionStore && typeof options.terminalSessionStore === 'object') {
     terminalSessionStore = options.terminalSessionStore;
@@ -519,7 +532,7 @@ export function createApp(options = {}) {
   }
   app.use('/api', createTerminalSessionRoutes({ sessionStore: terminalSessionStore, claudePool }));
 
-  // Global search engine (Phase 46) — unified cross-subsystem search
+  // Global search engine (Phase 46) -- unified cross-subsystem search
   const searchEngine = options.searchEngine || createSearchEngine({
     coordinator,
     messageBus,
@@ -532,7 +545,7 @@ export function createApp(options = {}) {
   });
   app.use('/api', createSearchRoutes({ searchEngine }));
 
-  // Backup manager (Phase 51) — full state backup/restore
+  // Backup manager (Phase 51) -- full state backup/restore
   let backupManager = null;
   if (options.backupManager && typeof options.backupManager === 'object') {
     backupManager = options.backupManager;
@@ -541,7 +554,7 @@ export function createApp(options = {}) {
   }
   app.use('/api', createBackupRoutes({ backupManager, coordinator }));
 
-  // Health checker & metrics collector (Phase 34) — created after all subsystems
+  // Health checker & metrics collector (Phase 34) -- created after all subsystems
   const healthChecker = options.healthChecker || createHealthChecker({
     coordinator,
     claudePool,
@@ -589,7 +602,7 @@ export function createApp(options = {}) {
     res.json({ ok: true });
   });
 
-  // ── Prompt Enhancement Endpoint ───────────────────────────
+  // -- Prompt Enhancement Endpoint -----------------------------------------
   app.post('/api/enhance-prompt', async (req, res) => {
     const raw = req.body?.prompt;
     if (!raw || typeof raw !== 'string' || !raw.trim()) {
@@ -602,7 +615,7 @@ Rules:
 - Return ONLY the improved prompt text, nothing else
 - Be specific about what to build, modify, or fix
 - Include implementation details, acceptance criteria, and file references when possible
-- Keep the scope the same — don't add unrelated work
+- Keep the scope the same -- don't add unrelated work
 - Use imperative voice ("Implement...", "Add...", "Fix...")
 - If the request is vague, infer reasonable technical requirements
 - Keep it concise but thorough (aim for 3-8 sentences)
@@ -623,7 +636,7 @@ ${raw.trim()}`;
 
       logger.info?.(`[enhance-prompt] Invoking: ${claudePath} -p --model haiku (input: ${raw.trim().length} chars)`);
 
-      // Use spawn + stdin pipe — passing long prompts as CLI args fails on Windows
+      // Use spawn + stdin pipe -- passing long prompts as CLI args fails on Windows
       const child = spawnChild(claudePath, ['-p', '--model', 'haiku'], {
         timeout: 30000,
         env: { ...process.env, CLAUDECODE: '' },
@@ -647,7 +660,7 @@ ${raw.trim()}`;
           return res.json({ enhanced: raw.trim(), fallback: true, error: `Exit code ${code}` });
         }
         const enhanced = stdout.trim();
-        logger.info?.(`[enhance-prompt] Success: ${enhanced.length} chars output${!enhanced ? ' (empty — using fallback)' : ''}`);
+        logger.info?.(`[enhance-prompt] Success: ${enhanced.length} chars output${!enhanced ? ' (empty -- using fallback)' : ''}`);
         res.json({ enhanced: enhanced || raw.trim(), fallback: !enhanced });
       });
 
@@ -662,6 +675,29 @@ ${raw.trim()}`;
 
   // Claude terminal routes (Phase 19: coordinator passed for task bridge)
   app.use('/api', createClaudeTerminalRoutes({ claudePool, events, coordinator }));
+
+  // Master coordination status (Phase 66)
+  app.get('/api/master-coordination/status', (_req, res) => {
+    if (!masterCoordinator) {
+      return res.json({ masters: [], totalMasters: 0, activeMasters: 0, staleMasters: 0 });
+    }
+    res.json(masterCoordinator.getMultiMasterStatus());
+  });
+
+  // MCP server (Phase 66) -- Model Context Protocol tool server
+  let mcpServer = null;
+  if (options.mcp !== false) {
+    mcpServer = createMcpServer({
+      coordinator,
+      sharedMemory,
+      claudePool,
+      metricsCollector,
+      searchEngine,
+      masterCoordinator,
+      log: () => {},
+    });
+  }
+  app.use('/api', createMcpRoutes({ mcpServer }));
 
   // Resolve missions dir
   const missionsDir = join(projectDir, 'orchestrator', 'missions');
@@ -691,6 +727,7 @@ ${raw.trim()}`;
     secretVault,
     backupManager,
     retentionPolicy,
+    masterCoordinator,
     get wss() { return wss; },
   };
   app.use('/views', createViewRoutes(viewCtx));
@@ -756,7 +793,7 @@ ${raw.trim()}`;
   // Static files (CSS, JS, images)
   app.use(express.static(publicDir));
 
-  // OpenAPI spec generator & docs routes (Phase 44) — mounted after all
+  // OpenAPI spec generator & docs routes (Phase 44) -- mounted after all
   // other routes so the router scanner captures everything.
   const openApiGenerator = options.openApiGenerator || createOpenApiGenerator({
     app,
@@ -769,7 +806,7 @@ ${raw.trim()}`;
   // Catch-all 404 for unmatched API routes (Phase 29)
   app.use('/api', notFoundHandler);
 
-  // Error-handling middleware — must be last (Phase 29)
+  // Error-handling middleware -- must be last (Phase 29)
   app.use(errorHandler(logger));
 
   // Create HTTP server (needed for WebSocket upgrade)
@@ -827,6 +864,9 @@ ${raw.trim()}`;
     // Clean up webhook manager
     if (webhookManager) webhookManager.destroy();
 
+    // Clean up master coordinator (Phase 66)
+    if (masterCoordinator) masterCoordinator.destroy();
+
     // Stop settings file watcher (Phase 52)
     if (settings.stopWatch) settings.stopWatch();
 
@@ -855,7 +895,7 @@ ${raw.trim()}`;
   }
 
   /**
-   * Clean teardown for tests — closes server, WS, removes listeners.
+   * Clean teardown for tests -- closes server, WS, removes listeners.
    */
   function close() {
     return new Promise((resolve) => {
@@ -867,10 +907,10 @@ ${raw.trim()}`;
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, csrf, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, csrf, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, masterCoordinator, mcpServer, close };
 }
 
-// ── CLI Entry Point ─────────────────────────────────────────
+// -- CLI Entry Point -----------------------------------------------------
 
 function parseCliArgs() {
   const { values } = parseArgs({
@@ -882,6 +922,7 @@ function parseCliArgs() {
       pool:     { type: 'boolean', default: false },
       swarm:    { type: 'boolean', default: false },
       retention:{ type: 'boolean', default: false },
+      mcp:      { type: 'boolean', default: false },
       'no-auth':   { type: 'boolean', default: false },
       'log-level': { type: 'string', default: 'info' },
       help:     { type: 'boolean', short: 'h', default: false },
@@ -903,6 +944,7 @@ Options:
   --pool          Enable process pool + coordinator (task board, multi-orchestrator)
   --swarm         Enable swarm mode (coordinator + Claude pool for autonomous task draining)
   --retention     Run retention cleanup on startup
+  --mcp           Launch as MCP server over stdin/stdout (JSON-RPC transport)
   --no-auth       Disable authentication (not recommended)
   --log-level LVL Log level: debug, info, warn, error (default: info)
   -h, --help      Show this help
@@ -927,6 +969,7 @@ Subcommands (against running server):
     pool: values.pool,
     swarm: values.swarm,
     retention: values.retention,
+    mcp: values.mcp,
     noAuth: values['no-auth'],
     logLevel: values['log-level'],
   };
@@ -951,80 +994,99 @@ if (isMain) {
   const args = parseCliArgs();
   const operatorDir = resolve(import.meta.dirname || '.', '.');
 
-  const appOptions = { operatorDir, _registerSignalHandlers: true, claudePool: true, logLevel: args.logLevel };
+  // MCP mode: launch as MCP server over stdin/stdout (no HTTP)
+  if (args.mcp) {
+    const appOptions = { operatorDir, claudePool: true, auth: false, logLevel: args.logLevel };
+    if (args.swarm) appOptions.swarm = true;
+    if (args.pool) appOptions.pool = true;
+    const appResult = createApp(appOptions);
+    const mcpStdio = createMcpServer({
+      coordinator: appResult.coordinator,
+      sharedMemory: appResult.sharedMemory,
+      claudePool: appResult.claudePool,
+      metricsCollector: appResult.metricsCollector,
+      searchEngine: appResult.searchEngine || null,
+      masterCoordinator: appResult.masterCoordinator || null,
+    });
+    mcpStdio.start();
+    // Keep process alive -- readline on stdin will block until EOF
+    process.stderr.write('[mcp] MCP server running on stdin/stdout\n');
+  } else {
+    const appOptions = { operatorDir, _registerSignalHandlers: true, claudePool: true, logLevel: args.logLevel };
 
-  // Auth: disabled with --no-auth
-  if (args.noAuth) {
-    appOptions.auth = false;
-  }
-
-  // Pool mode: enable process pool + coordinator for task board / multi-orchestrator
-  if (args.pool) {
-    appOptions.pool = true;
-  }
-
-  // Swarm mode: enable coordinator (without process pool) for autonomous task draining
-  if (args.swarm) {
-    appOptions.swarm = true;
-  }
-
-  // Combined mode: wire up chain execution via operator's runChain
-  if (args.operator) {
-    const { runChain, MODEL_MAP } = await import('./operator.mjs');
-    const { createRegistry: createReg } = await import('./registry.mjs');
-    const reg = createReg({ operatorDir });
-    appOptions.registry = reg;
-
-    appOptions.runChainFn = async (chain) => {
-      const regData = reg.load();
-      const modelShort = chain.config?.model || 'sonnet';
-      const config = {
-        task: chain.task,
-        model: MODEL_MAP[modelShort] || modelShort,
-        modelShort,
-        maxTurns: chain.config?.maxTurns || 30,
-        maxContinuations: chain.config?.maxContinuations || 5,
-        maxBudgetUsd: chain.config?.maxBudgetUsd || 5.0,
-        projectDir: chain.projectDir || resolve(operatorDir, '..'),
-        permissionMode: 'bypassPermissions',
-        autoPush: false,
-        notifyWebhook: '',
-        dryRun: false,
-      };
-      return runChain(config, regData, chain, reg);
-    };
-  }
-
-  const { server, auth: cliAuth, retentionPolicy: cliRetention, messageBus: cliMsgBus, sharedMemory: cliSharedMem, coordinator: cliCoord } = createApp(appOptions);
-
-  // Run retention cleanup on startup if --retention flag is set
-  if (args.retention && cliRetention) {
-    const taskQueue = cliCoord?.taskQueue || null;
-    const result = cliRetention.runAll({ messageBus: cliMsgBus, sharedMemory: cliSharedMem, taskQueue });
-    console.log(`Retention cleanup: ${result.messagesRemoved} messages, ${result.snapshotsRemoved} snapshots, ${result.tasksRemoved} tasks removed`);
-  }
-
-  // Auto-generate first token if auth is enabled and no tokens exist
-  if (cliAuth) {
-    const existing = cliAuth.listTokens();
-    if (existing.length === 0) {
-      const { token } = cliAuth.generateToken('auto-generated');
-      console.log(`\nAuth enabled. First API token generated (save this — shown once):`);
-      console.log(`  ${token}\n`);
+    // Auth: disabled with --no-auth
+    if (args.noAuth) {
+      appOptions.auth = false;
     }
-  }
 
-  server.listen(args.port, args.host, () => {
-    console.log(`Operator API server listening on http://${args.host}:${args.port}`);
-    console.log(`WebSocket available at ws://${args.host}:${args.port}/ws`);
-    if (args.operator) {
-      console.log('Combined mode: operator daemon active');
-    }
+    // Pool mode: enable process pool + coordinator for task board / multi-orchestrator
     if (args.pool) {
-      console.log('Pool mode: process pool + coordinator active');
+      appOptions.pool = true;
     }
+
+    // Swarm mode: enable coordinator (without process pool) for autonomous task draining
     if (args.swarm) {
-      console.log('Swarm mode: coordinator active (use /terminals UI to start swarm)');
+      appOptions.swarm = true;
     }
-  });
+
+    // Combined mode: wire up chain execution via operator's runChain
+    if (args.operator) {
+      const { runChain, MODEL_MAP } = await import('./operator.mjs');
+      const { createRegistry: createReg } = await import('./registry.mjs');
+      const reg = createReg({ operatorDir });
+      appOptions.registry = reg;
+
+      appOptions.runChainFn = async (chain) => {
+        const regData = reg.load();
+        const modelShort = chain.config?.model || 'sonnet';
+        const config = {
+          task: chain.task,
+          model: MODEL_MAP[modelShort] || modelShort,
+          modelShort,
+          maxTurns: chain.config?.maxTurns || 30,
+          maxContinuations: chain.config?.maxContinuations || 5,
+          maxBudgetUsd: chain.config?.maxBudgetUsd || 5.0,
+          projectDir: chain.projectDir || resolve(operatorDir, '..'),
+          permissionMode: 'bypassPermissions',
+          autoPush: false,
+          notifyWebhook: '',
+          dryRun: false,
+        };
+        return runChain(config, regData, chain, reg);
+      };
+    }
+
+    const { server, auth: cliAuth, retentionPolicy: cliRetention, messageBus: cliMsgBus, sharedMemory: cliSharedMem, coordinator: cliCoord } = createApp(appOptions);
+
+    // Run retention cleanup on startup if --retention flag is set
+    if (args.retention && cliRetention) {
+      const taskQueue = cliCoord?.taskQueue || null;
+      const result = cliRetention.runAll({ messageBus: cliMsgBus, sharedMemory: cliSharedMem, taskQueue });
+      console.log(`Retention cleanup: ${result.messagesRemoved} messages, ${result.snapshotsRemoved} snapshots, ${result.tasksRemoved} tasks removed`);
+    }
+
+    // Auto-generate first token if auth is enabled and no tokens exist
+    if (cliAuth) {
+      const existing = cliAuth.listTokens();
+      if (existing.length === 0) {
+        const { token } = cliAuth.generateToken('auto-generated');
+        console.log(`\nAuth enabled. First API token generated (save this -- shown once):`);
+        console.log(`  ${token}\n`);
+      }
+    }
+
+    server.listen(args.port, args.host, () => {
+      console.log(`Operator API server listening on http://${args.host}:${args.port}`);
+      console.log(`WebSocket available at ws://${args.host}:${args.port}/ws`);
+      if (args.operator) {
+        console.log('Combined mode: operator daemon active');
+      }
+      if (args.pool) {
+        console.log('Pool mode: process pool + coordinator active');
+      }
+      if (args.swarm) {
+        console.log('Swarm mode: coordinator active (use /terminals UI to start swarm)');
+      }
+    });
+  }
 }

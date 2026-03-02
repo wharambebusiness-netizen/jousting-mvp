@@ -1,22 +1,23 @@
 // ============================================================
-// Master Console — Console Page JS (Phase 57)
+// Master Console — Console Page JS (Phase 57 + Phase 66 Multi-Master)
 // ============================================================
-// Interactive master terminal + worker panel.
+// Interactive multi-master terminal + worker panel.
 // Connects to Claude terminal PTY via binary WS.
+// Supports up to 4 concurrent master terminals with tabbed UI.
 // ============================================================
 
 (function() {
   'use strict';
 
-  // ── State ──────────────────────────────────────────────────
-  var masterTerminal = null;    // xterm.js Terminal instance
-  var masterFitAddon = null;    // FitAddon instance
-  var masterBinaryWs = null;    // Binary WS to master PTY
-  var masterTerminalId = null;  // ID of the master terminal
-  var masterOnDataDisposable = null;   // disposable from masterTerminal.onData()
-  var masterOnResizeDisposable = null; // disposable from masterTerminal.onResize()
-  var masterResizeHandler = null;      // bound window resize handler (for removal)
-  var masterResizeObserver = null;     // ResizeObserver instance (for disconnect)
+  // ── Multi-Master State (Phase 66) ───────────────────────
+  var masters = {};            // { id: { terminal, fitAddon, binaryWs, panel, tab, colorIdx, onDataDisposable, onResizeDisposable, reconnectTimer } }
+  var activeMasterId = null;   // Currently visible master tab
+  var masterCounter = 0;       // Counter for generating unique master IDs
+  var MASTER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#22d3ee'];
+  var MAX_MASTERS = 4;
+  var masterSystemPrompt = '';  // Cached master-context.md
+
+  // ── Worker State ─────────────────────────────────────────
   var workers = {};             // { id: { ...terminalData } }
   var seenWorkers = {};         // { id: { ...terminalData, _stopped: bool } } — persists across refreshes
   var workerTerminals = {};     // { id: { term, fitAddon, binaryWs } } — xterm.js instances
@@ -48,14 +49,95 @@
     brightWhite: '#f0f6fc'
   };
 
-  // ── Master Terminal ────────────────────────────────────────
+  // ── Multi-Master Helpers ──────────────────────────────────
 
-  function initMasterTerminal() {
-    var container = document.getElementById('master-terminal-container');
-    if (!container) return;
+  function getMasterColor(index) {
+    return MASTER_COLORS[index % MASTER_COLORS.length];
+  }
 
-    masterTerminal = new Terminal({
-      theme: MASTER_THEME,
+  function getMasterLabel(id) {
+    var match = id.match(/master-(\d+)/);
+    var idx = match ? parseInt(match[1]) : 1;
+    return 'M' + idx;
+  }
+
+  function getMasterCount() {
+    return Object.keys(masters).length;
+  }
+
+  function updateMasterCount() {
+    var count = getMasterCount();
+    var el = document.getElementById('master-count');
+    if (el) el.textContent = count + '/' + MAX_MASTERS + ' masters';
+    var statusEl = document.getElementById('status-masters');
+    if (statusEl) statusEl.textContent = count + '/' + MAX_MASTERS + ' masters';
+
+    // Update header status
+    var headerStatus = document.getElementById('master-status');
+    if (headerStatus) {
+      if (count === 0) {
+        headerStatus.textContent = 'No masters';
+        headerStatus.classList.remove('console-header__status--running');
+      } else {
+        headerStatus.textContent = count + ' master' + (count !== 1 ? 's' : '') + ' running';
+        headerStatus.classList.add('console-header__status--running');
+      }
+    }
+
+    // Show/hide tabs bar and placeholder
+    var tabsBar = document.getElementById('master-tabs-bar');
+    var placeholder = document.getElementById('master-placeholder');
+    if (tabsBar) tabsBar.style.display = count > 0 ? '' : 'none';
+    if (placeholder) placeholder.style.display = count > 0 ? 'none' : '';
+
+    // Show/hide stop button based on active master
+    var stopBtn = document.getElementById('stop-master-btn');
+    if (stopBtn) stopBtn.style.display = activeMasterId ? '' : 'none';
+
+    // Disable add button at max
+    var addBtn = document.getElementById('add-master-btn');
+    if (addBtn) addBtn.disabled = count >= MAX_MASTERS;
+  }
+
+  // ── Master Terminal Creation ──────────────────────────────
+
+  function addMasterTab(id, colorIdx) {
+    var tabsEl = document.getElementById('master-tabs');
+    var panelsEl = document.getElementById('master-panels');
+    if (!tabsEl || !panelsEl) return;
+
+    // Create tab button
+    var tab = document.createElement('button');
+    tab.className = 'master-tab';
+    tab.dataset.masterId = id;
+    tab.style.borderColor = getMasterColor(colorIdx);
+    tab.innerHTML = '<span class="master-tab-dot" style="background:' + getMasterColor(colorIdx) + '"></span> ' + getMasterLabel(id);
+    tab.onclick = function() { switchToMaster(id); };
+
+    // Add close button on the tab
+    var closeBtn = document.createElement('span');
+    closeBtn.className = 'master-tab-close';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.title = 'Stop ' + getMasterLabel(id);
+    closeBtn.onclick = function(e) {
+      e.stopPropagation();
+      stopMaster(id);
+    };
+    tab.appendChild(closeBtn);
+
+    tabsEl.appendChild(tab);
+
+    // Create terminal panel
+    var panel = document.createElement('div');
+    panel.className = 'master-panel';
+    panel.id = 'master-panel-' + id;
+    panel.style.display = 'none';
+    panelsEl.appendChild(panel);
+
+    // Create xterm.js terminal
+    var theme = Object.assign({}, MASTER_THEME, { cursor: getMasterColor(colorIdx) });
+    var terminal = new Terminal({
+      theme: theme,
       fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
       fontSize: 13,
       lineHeight: 1.3,
@@ -65,57 +147,111 @@
       disableStdin: false
     });
 
-    masterFitAddon = new FitAddon.FitAddon();
-    masterTerminal.loadAddon(masterFitAddon);
-    masterTerminal.open(container);
+    var fitAddon = new FitAddon.FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(panel);
 
     // Slight delay to ensure container has dimensions before fitting
     setTimeout(function() {
-      if (masterFitAddon) masterFitAddon.fit();
+      if (fitAddon) {
+        try { fitAddon.fit(); } catch(_) {}
+      }
     }, 50);
 
-    // Clean up any previous resize listeners before adding new ones
-    if (masterResizeHandler) {
-      window.removeEventListener('resize', masterResizeHandler);
-    }
-    if (masterResizeObserver) {
-      masterResizeObserver.disconnect();
-      masterResizeObserver = null;
-    }
-
-    // Resize handler (named reference for removal)
-    masterResizeHandler = debounce(function() {
-      if (masterFitAddon) masterFitAddon.fit();
-    }, 100);
-    window.addEventListener('resize', masterResizeHandler);
-
-    // ResizeObserver for container size changes (e.g. panel drag)
-    if (typeof ResizeObserver !== 'undefined') {
-      masterResizeObserver = new ResizeObserver(debounce(function() {
-        if (masterFitAddon) masterFitAddon.fit();
-      }, 50));
-      masterResizeObserver.observe(container);
-    }
+    masters[id] = {
+      terminal: terminal,
+      fitAddon: fitAddon,
+      binaryWs: null,
+      panel: panel,
+      tab: tab,
+      colorIdx: colorIdx,
+      onDataDisposable: null,
+      onResizeDisposable: null,
+      reconnectTimer: null
+    };
   }
 
-  function connectMasterBinaryWs(terminalId) {
+  function removeMasterTab(id) {
+    var entry = masters[id];
+    if (!entry) return;
+
+    // Clear reconnect timer
+    if (entry.reconnectTimer) {
+      clearInterval(entry.reconnectTimer);
+      entry.reconnectTimer = null;
+    }
+
+    // Clean up WS and disposables
+    if (entry.onDataDisposable) { entry.onDataDisposable.dispose(); }
+    if (entry.onResizeDisposable) { entry.onResizeDisposable.dispose(); }
+    if (entry.binaryWs) { try { entry.binaryWs.close(); } catch(_) {} }
+
+    // Dispose terminal
+    if (entry.terminal) { try { entry.terminal.dispose(); } catch(_) {} }
+
+    // Remove DOM elements
+    if (entry.tab) entry.tab.remove();
+    if (entry.panel) entry.panel.remove();
+
+    delete masters[id];
+
+    // Switch to another master if this was active
+    if (activeMasterId === id) {
+      var remaining = Object.keys(masters);
+      if (remaining.length > 0) {
+        switchToMaster(remaining[0]);
+      } else {
+        activeMasterId = null;
+      }
+    }
+
+    updateMasterCount();
+  }
+
+  function switchToMaster(id) {
+    var ids = Object.keys(masters);
+    for (var i = 0; i < ids.length; i++) {
+      var mId = ids[i];
+      var entry = masters[mId];
+      if (!entry) continue;
+      var isActive = mId === id;
+      entry.panel.style.display = isActive ? '' : 'none';
+      entry.tab.classList.toggle('active', isActive);
+      if (isActive) {
+        setTimeout(function() {
+          try { entry.fitAddon.fit(); } catch(_) {}
+        }, 50);
+      }
+    }
+    activeMasterId = id;
+
+    // Update stop button visibility
+    var stopBtn = document.getElementById('stop-master-btn');
+    if (stopBtn) stopBtn.style.display = id ? '' : 'none';
+  }
+
+  function connectMasterBinaryWs(id) {
+    var entry = masters[id];
+    if (!entry) return;
+
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(terminalId);
+    var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(id);
 
-    masterBinaryWs = new WebSocket(url);
-    masterBinaryWs.binaryType = 'arraybuffer';
+    var ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
 
-    masterBinaryWs.onopen = function() {
+    ws.onopen = function() {
+      entry.tab.classList.remove('disconnected');
       // Send initial resize
-      if (masterFitAddon) {
-        var dims = masterFitAddon.proposeDimensions();
+      if (entry.fitAddon) {
+        var dims = entry.fitAddon.proposeDimensions();
         if (dims) {
-          masterBinaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+          ws.send('\x01' + JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
         }
       }
     };
 
-    masterBinaryWs.onmessage = function(evt) {
+    ws.onmessage = function(evt) {
       var data = typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data);
 
       // Check for control messages (0x01 prefix)
@@ -123,181 +259,87 @@
         try {
           var ctrl = JSON.parse(data.slice(1));
           if (ctrl.type === 'ping') {
-            masterBinaryWs.send('\x01' + JSON.stringify({ type: 'pong' }));
+            ws.send('\x01' + JSON.stringify({ type: 'pong' }));
           }
         } catch(e) { /* ignore malformed control */ }
         return;
       }
 
-      if (masterTerminal) masterTerminal.write(data);
+      if (entry.terminal) entry.terminal.write(data);
     };
 
-    masterBinaryWs.onclose = function() {
-      if (masterTerminal) {
-        masterTerminal.write('\r\n\x1b[33m[Master terminal disconnected]\x1b[0m\r\n');
+    ws.onclose = function() {
+      entry.tab.classList.add('disconnected');
+      if (entry.terminal) {
+        entry.terminal.write('\r\n\x1b[33m[' + getMasterLabel(id) + ' disconnected]\x1b[0m\r\n');
       }
-      showMasterDisconnected();
+      entry.binaryWs = null;
+      showMasterDisconnected(id);
     };
 
-    masterBinaryWs.onerror = function() {
-      if (masterTerminal) {
-        masterTerminal.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
+    ws.onerror = function() {
+      if (entry.terminal) {
+        entry.terminal.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
       }
     };
 
     // Dispose previous handlers to prevent stacking on reconnect
-    if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
-    if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
+    if (entry.onDataDisposable) { entry.onDataDisposable.dispose(); entry.onDataDisposable = null; }
+    if (entry.onResizeDisposable) { entry.onResizeDisposable.dispose(); entry.onResizeDisposable = null; }
 
     // User input -> WS
-    masterOnDataDisposable = masterTerminal.onData(function(data) {
-      if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
-        masterBinaryWs.send(data);
+    entry.onDataDisposable = entry.terminal.onData(function(data) {
+      if (entry.binaryWs && entry.binaryWs.readyState === WebSocket.OPEN) {
+        entry.binaryWs.send(data);
       }
     });
 
     // Resize -> WS
-    masterOnResizeDisposable = masterTerminal.onResize(function(size) {
-      if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
-        masterBinaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+    entry.onResizeDisposable = entry.terminal.onResize(function(size) {
+      if (entry.binaryWs && entry.binaryWs.readyState === WebSocket.OPEN) {
+        entry.binaryWs.send('\x01' + JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
       }
     });
-  }
 
-  // ── Worker Mini-Terminals ─────────────────────────────────
-
-  /**
-   * Create a tiny xterm.js instance for a worker card.
-   * @param {string} workerId
-   * @param {HTMLElement} container - DOM element to mount into
-   */
-  function initWorkerTerminal(workerId, container) {
-    if (workerTerminals[workerId]) return; // already exists
-
-    var term = new Terminal({
-      theme: MASTER_THEME,
-      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-      fontSize: 9,
-      lineHeight: 1.2,
-      cursorBlink: false,
-      scrollback: 1000,
-      convertEol: true,
-      disableStdin: true
-    });
-
-    var fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
-
-    setTimeout(function() {
-      try { fitAddon.fit(); } catch (_) {}
-    }, 50);
-
-    workerTerminals[workerId] = { term: term, fitAddon: fitAddon, binaryWs: null };
-
-    // Load raw ANSI output for restoration
-    fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/output?lines=200&raw=1')
-      .then(function(resp) { return resp.ok ? resp.json() : null; })
-      .then(function(data) {
-        if (data && data.lines && data.lines.length > 0 && workerTerminals[workerId]) {
-          workerTerminals[workerId].term.write(data.lines.join('\n'));
-        }
-      })
-      .catch(function() { /* non-critical */ });
-  }
-
-  /**
-   * Connect a read-only binary WS for live streaming to a worker terminal.
-   * @param {string} workerId
-   */
-  function connectWorkerBinaryWs(workerId) {
-    var entry = workerTerminals[workerId];
-    if (!entry || entry.binaryWs) return;
-
-    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(workerId);
-
-    var ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
     entry.binaryWs = ws;
-
-    ws.onmessage = function(evt) {
-      var data = typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data);
-      // Skip control messages (0x01 prefix)
-      if (data.length > 0 && data.charCodeAt(0) === 1) {
-        try {
-          var ctrl = JSON.parse(data.slice(1));
-          if (ctrl.type === 'ping') {
-            ws.send('\x01' + JSON.stringify({ type: 'pong' }));
-          }
-        } catch(_) {}
-        return;
-      }
-      if (entry.term) entry.term.write(data);
-    };
-
-    ws.onclose = function() {
-      if (entry) entry.binaryWs = null;
-    };
   }
 
-  /**
-   * Dispose a worker terminal and its WS.
-   * @param {string} workerId
-   */
-  function disposeWorkerTerminal(workerId) {
-    var entry = workerTerminals[workerId];
-    if (!entry) return;
-    if (entry.binaryWs) { try { entry.binaryWs.close(); } catch(_) {} }
-    if (entry.term) { try { entry.term.dispose(); } catch(_) {} }
-    delete workerTerminals[workerId];
-  }
+  // ── Spawn / Stop Master ──────────────────────────────────
 
-  // ── Start / Stop Master ────────────────────────────────────
+  async function spawnMaster() {
+    if (getMasterCount() >= MAX_MASTERS) {
+      if (window.showToast) window.showToast('Maximum masters (' + MAX_MASTERS + ') reached', 'warning');
+      return;
+    }
 
-  async function startMaster() {
+    masterCounter++;
+    var id = 'master-' + masterCounter;
+    var colorIdx = getMasterCount();
+
     var btn = document.getElementById('start-master-btn');
-    btn.disabled = true;
-    btn.textContent = 'Starting...';
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting...'; }
 
     try {
-      // Clear any lingering reconnect timer from a previous disconnect
-      if (masterReconnectTimer) {
-        clearInterval(masterReconnectTimer);
-        masterReconnectTimer = null;
+      // Load master-context.md if not cached
+      if (!masterSystemPrompt) {
+        try {
+          var contextResp = await fetch('/master-context.md');
+          if (contextResp.ok) {
+            masterSystemPrompt = await contextResp.text();
+          }
+        } catch(e) { /* optional */ }
       }
 
-      // Clean up any stale master terminal from previous session
-      try {
-        await fetch('/api/claude-terminals/master', { method: 'DELETE' });
-      } catch(e) { /* ignore — may not exist */ }
-
-      // Clean up local xterm if restarting
-      if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
-      if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
-      if (masterBinaryWs) { masterBinaryWs.close(); masterBinaryWs = null; }
-      if (masterTerminal) { masterTerminal.dispose(); masterTerminal = null; }
-      masterFitAddon = null;
-      var container = document.getElementById('master-terminal-container');
-      if (container) container.innerHTML = '';
-
-      // Read master context for system prompt + inject dynamic state
-      var systemPrompt = '';
-      try {
-        var contextResp = await fetch('/master-context.md');
-        if (contextResp.ok) {
-          systemPrompt = await contextResp.text();
-        }
-      } catch(e) { /* optional — proceed without context */ }
-
-      // Append dynamic system state so the master knows what's running
+      // Append dynamic system state
+      var systemPrompt = masterSystemPrompt || '';
       try {
         var stateLines = ['\n\n## Current System State (at spawn time)\n'];
-        var [healthResp, tasksResp, poolResp] = await Promise.all([
+        var results = await Promise.all([
           fetch('/api/health').then(function(r) { return r.json(); }).catch(function() { return null; }),
           fetch('/api/coordination/tasks').then(function(r) { return r.json(); }).catch(function() { return null; }),
           fetch('/api/claude-terminals/pool-status').then(function(r) { return r.json(); }).catch(function() { return null; })
         ]);
+        var healthResp = results[0], tasksResp = results[1], poolResp = results[2];
         if (healthResp) stateLines.push('- Health: ' + (healthResp.status || 'unknown'));
         if (tasksResp && tasksResp.items) {
           var pending = tasksResp.items.filter(function(t) { return t.status === 'pending'; }).length;
@@ -310,6 +352,8 @@
         if (poolResp) {
           stateLines.push('- Workers: ' + (poolResp.active || 0) + ' active, swarm ' + (poolResp.swarm && poolResp.swarm.enabled ? 'ON' : 'OFF'));
         }
+        stateLines.push('- Masters: ' + getMasterCount() + '/' + MAX_MASTERS + ' active');
+        stateLines.push('- Master ID: ' + id + ' (' + getMasterLabel(id) + ')');
         stateLines.push('- Time: ' + new Date().toLocaleString());
         systemPrompt += stateLines.join('\n');
       } catch(e) { /* dynamic state is optional */ }
@@ -319,7 +363,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: 'master',
+          id: id,
           role: 'master',
           persistent: true,
           dangerouslySkipPermissions: true,
@@ -333,58 +377,32 @@
         throw new Error(err.error || 'Failed to spawn master');
       }
 
-      var data = await resp.json();
-      masterTerminalId = data.id;
-
-      // Show terminal, hide placeholder
-      document.getElementById('master-placeholder').style.display = 'none';
-      document.getElementById('master-terminal-container').style.display = '';
-      document.getElementById('start-master-btn').style.display = 'none';
-      document.getElementById('stop-master-btn').style.display = '';
-      document.getElementById('master-status').textContent = 'Master running';
-      document.getElementById('master-status').classList.add('console-header__status--running');
-
-      // Init xterm.js and connect binary WS
-      initMasterTerminal();
-      connectMasterBinaryWs(masterTerminalId);
+      // Create tab + terminal
+      addMasterTab(id, colorIdx);
+      connectMasterBinaryWs(id);
+      switchToMaster(id);
+      updateMasterCount();
 
       // Show prompt input for first instruction
       showPromptInput();
 
-      if (window.showToast) window.showToast('Master terminal started', 'success');
+      if (window.showToast) window.showToast(getMasterLabel(id) + ' started', 'success');
     } catch (err) {
-      btn.disabled = false;
-      btn.textContent = 'Start Master';
+      masterCounter--; // Roll back counter on failure
       if (window.showToast) window.showToast(err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '+ Master'; }
     }
   }
 
-  async function stopMaster() {
-    if (!masterTerminalId) return;
+  async function stopMaster(id) {
+    if (!id) id = activeMasterId;
+    if (!id) return;
 
     try {
-      await fetch('/api/claude-terminals/' + encodeURIComponent(masterTerminalId), { method: 'DELETE' });
-
-      // Clean up resources
-      if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
-      if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
-      if (masterBinaryWs) { masterBinaryWs.close(); masterBinaryWs = null; }
-      if (masterTerminal) { masterTerminal.dispose(); masterTerminal = null; }
-      masterFitAddon = null;
-      masterTerminalId = null;
-
-      // Reset UI
-      document.getElementById('master-placeholder').style.display = '';
-      document.getElementById('master-terminal-container').style.display = 'none';
-      document.getElementById('master-terminal-container').innerHTML = '';
-      document.getElementById('start-master-btn').style.display = '';
-      document.getElementById('start-master-btn').disabled = false;
-      document.getElementById('start-master-btn').textContent = 'Start Master';
-      document.getElementById('stop-master-btn').style.display = 'none';
-      document.getElementById('master-status').textContent = 'No master terminal';
-      document.getElementById('master-status').classList.remove('console-header__status--running');
-
-      if (window.showToast) window.showToast('Master terminal stopped', 'info');
+      await fetch('/api/claude-terminals/' + encodeURIComponent(id), { method: 'DELETE' });
+      removeMasterTab(id);
+      if (window.showToast) window.showToast(getMasterLabel(id) + ' stopped', 'info');
     } catch (err) {
       if (window.showToast) window.showToast('Failed to stop master: ' + err.message, 'error');
     }
@@ -392,83 +410,54 @@
 
   // ── Master Disconnect / Reconnect ────────────────────────
 
-  var masterReconnectTimer = null;
+  function showMasterDisconnected(id) {
+    var entry = masters[id];
+    if (!entry) return;
 
-  function showMasterDisconnected() {
-    // Clean up WS (terminal stays visible with scrollback)
-    if (masterBinaryWs) { masterBinaryWs = null; }
+    // Update tab to show disconnected
+    if (entry.tab) entry.tab.classList.add('disconnected');
 
-    // Update header status
-    var statusEl = document.getElementById('master-status');
-    if (statusEl) {
-      statusEl.textContent = 'Master disconnected — checking for respawn...';
-      statusEl.classList.remove('console-header__status--running');
+    // Hide prompt input if this is active master
+    if (activeMasterId === id) {
+      hidePromptInput();
     }
 
-    // Hide prompt input if open
-    hidePromptInput();
-
-    // Poll for auto-handoff respawn — the pool may respawn the master under the same ID
+    // Poll for auto-handoff respawn
     var attempts = 0;
-    var maxAttempts = 15; // 15 attempts × 2s = 30s window
-    if (masterReconnectTimer) clearInterval(masterReconnectTimer);
+    var maxAttempts = 15; // 15 attempts x 2s = 30s window
 
-    masterReconnectTimer = setInterval(async function() {
+    if (entry.reconnectTimer) clearInterval(entry.reconnectTimer);
+
+    entry.reconnectTimer = setInterval(async function() {
       attempts++;
       try {
-        var resp = await fetch('/api/claude-terminals/master');
+        var resp = await fetch('/api/claude-terminals/' + encodeURIComponent(id));
         if (resp.ok) {
-          var master = await resp.json();
-          if (master.status === 'running') {
+          var data = await resp.json();
+          if (data.status === 'running') {
             // Master is back (auto-handoff respawned it)
-            clearInterval(masterReconnectTimer);
-            masterReconnectTimer = null;
-            masterTerminalId = master.id;
+            clearInterval(entry.reconnectTimer);
+            entry.reconnectTimer = null;
 
-            if (masterTerminal) {
-              masterTerminal.write('\r\n\x1b[32m[Master respawned — reconnecting...]\x1b[0m\r\n');
+            if (entry.terminal) {
+              entry.terminal.write('\r\n\x1b[32m[' + getMasterLabel(id) + ' respawned — reconnecting...]\x1b[0m\r\n');
             }
 
-            // Reconnect binary WS to the new PTY
-            connectMasterBinaryWs(masterTerminalId);
-
-            // Update UI
-            if (statusEl) {
-              statusEl.textContent = 'Master running';
-              statusEl.classList.add('console-header__status--running');
-            }
-            document.getElementById('start-master-btn').style.display = 'none';
-            document.getElementById('stop-master-btn').style.display = '';
-
-            if (window.showToast) window.showToast('Master auto-reconnected', 'success');
+            connectMasterBinaryWs(id);
+            if (entry.tab) entry.tab.classList.remove('disconnected');
+            if (window.showToast) window.showToast(getMasterLabel(id) + ' auto-reconnected', 'success');
             return;
           }
         }
       } catch(e) { /* non-critical */ }
 
-      // Update countdown
-      if (statusEl) {
-        var remaining = (maxAttempts - attempts) * 2;
-        statusEl.textContent = 'Master disconnected — checking for respawn... (' + remaining + 's)';
-      }
-
       if (attempts >= maxAttempts) {
-        // Give up — show manual restart button
-        clearInterval(masterReconnectTimer);
-        masterReconnectTimer = null;
+        clearInterval(entry.reconnectTimer);
+        entry.reconnectTimer = null;
 
-        if (statusEl) statusEl.textContent = 'Master disconnected';
-
-        var startBtn = document.getElementById('start-master-btn');
-        var stopBtn = document.getElementById('stop-master-btn');
-        if (startBtn) {
-          startBtn.style.display = '';
-          startBtn.disabled = false;
-          startBtn.textContent = 'Restart Master';
-        }
-        if (stopBtn) stopBtn.style.display = 'none';
-
-        if (window.showToast) window.showToast('Master disconnected — click Restart to start fresh', 'warning');
+        // Master didn't come back — remove the tab
+        removeMasterTab(id);
+        if (window.showToast) window.showToast(getMasterLabel(id) + ' disconnected permanently', 'warning');
       }
     }, 2000);
   }
@@ -578,9 +567,13 @@
     var ta = document.getElementById('master-prompt-input');
     var badge = document.getElementById('enhanced-badge');
 
+    // Get the active master's binary WS
+    var entry = activeMasterId ? masters[activeMasterId] : null;
+    var ws = entry ? entry.binaryWs : null;
+
     function doSend() {
-      if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
-        masterBinaryWs.send(text + '\r');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(text + '\r');
         hidePromptInput();
         // Reset enhance state
         _isEnhancedPreview = false;
@@ -588,7 +581,8 @@
         if (badge) badge.style.display = 'none';
         if (enhanceBtn) enhanceBtn.style.display = '';
         if (window.showToast) {
-          window.showToast(wasEnhanced ? 'Enhanced prompt sent to master' : 'Prompt sent to master', 'success');
+          var label = activeMasterId ? getMasterLabel(activeMasterId) : 'Master';
+          window.showToast(wasEnhanced ? 'Enhanced prompt sent to ' + label : 'Prompt sent to ' + label, 'success');
         }
       } else {
         if (window.showToast) window.showToast('Terminal not connected — try again', 'error');
@@ -598,7 +592,7 @@
       }
     }
 
-    if (masterBinaryWs && masterBinaryWs.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       doSend();
     } else {
       if (window.showToast) window.showToast('Waiting for terminal connection...', 'info');
@@ -608,6 +602,95 @@
 
   function skipPrompt() {
     hidePromptInput();
+  }
+
+  // ── Worker Mini-Terminals ─────────────────────────────────
+
+  /**
+   * Create a tiny xterm.js instance for a worker card.
+   * @param {string} workerId
+   * @param {HTMLElement} container - DOM element to mount into
+   */
+  function initWorkerTerminal(workerId, container) {
+    if (workerTerminals[workerId]) return; // already exists
+
+    var term = new Terminal({
+      theme: MASTER_THEME,
+      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+      fontSize: 9,
+      lineHeight: 1.2,
+      cursorBlink: false,
+      scrollback: 1000,
+      convertEol: true,
+      disableStdin: true
+    });
+
+    var fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(container);
+
+    setTimeout(function() {
+      try { fitAddon.fit(); } catch (_) {}
+    }, 50);
+
+    workerTerminals[workerId] = { term: term, fitAddon: fitAddon, binaryWs: null };
+
+    // Load raw ANSI output for restoration
+    fetch('/api/claude-terminals/' + encodeURIComponent(workerId) + '/output?lines=200&raw=1')
+      .then(function(resp) { return resp.ok ? resp.json() : null; })
+      .then(function(data) {
+        if (data && data.lines && data.lines.length > 0 && workerTerminals[workerId]) {
+          workerTerminals[workerId].term.write(data.lines.join('\n'));
+        }
+      })
+      .catch(function() { /* non-critical */ });
+  }
+
+  /**
+   * Connect a read-only binary WS for live streaming to a worker terminal.
+   * @param {string} workerId
+   */
+  function connectWorkerBinaryWs(workerId) {
+    var entry = workerTerminals[workerId];
+    if (!entry || entry.binaryWs) return;
+
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = proto + '//' + location.host + '/ws/claude-terminal/' + encodeURIComponent(workerId);
+
+    var ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    entry.binaryWs = ws;
+
+    ws.onmessage = function(evt) {
+      var data = typeof evt.data === 'string' ? evt.data : new TextDecoder().decode(evt.data);
+      // Skip control messages (0x01 prefix)
+      if (data.length > 0 && data.charCodeAt(0) === 1) {
+        try {
+          var ctrl = JSON.parse(data.slice(1));
+          if (ctrl.type === 'ping') {
+            ws.send('\x01' + JSON.stringify({ type: 'pong' }));
+          }
+        } catch(_) {}
+        return;
+      }
+      if (entry.term) entry.term.write(data);
+    };
+
+    ws.onclose = function() {
+      if (entry) entry.binaryWs = null;
+    };
+  }
+
+  /**
+   * Dispose a worker terminal and its WS.
+   * @param {string} workerId
+   */
+  function disposeWorkerTerminal(workerId) {
+    var entry = workerTerminals[workerId];
+    if (!entry) return;
+    if (entry.binaryWs) { try { entry.binaryWs.close(); } catch(_) {} }
+    if (entry.term) { try { entry.term.dispose(); } catch(_) {} }
+    delete workerTerminals[workerId];
   }
 
   // ── Quick Actions ────────────────────────────────────────
@@ -779,7 +862,7 @@
 
       // Filter: keep only non-master terminals
       var workerList = terminals.filter(function(t) {
-        return t.id !== 'master' && t.role !== 'master';
+        return t.role !== 'master';
       });
 
       // Merge cost data into each worker
@@ -904,6 +987,19 @@
   }
 
   /**
+   * Render a master ownership badge for a worker card.
+   */
+  function renderWorkerMasterBadge(w) {
+    if (!w.config || !w.config._masterId) return '';
+    var masterId = w.config._masterId;
+    var label = getMasterLabel(masterId);
+    var match = masterId.match(/master-(\d+)/);
+    var idx = match ? parseInt(match[1]) - 1 : 0;
+    var color = getMasterColor(Math.max(0, idx));
+    return '<span class="worker-master-badge" style="background:' + color + '">' + label + '</span>';
+  }
+
+  /**
    * Create a worker card DOM element with embedded xterm mini-terminal.
    */
   function createWorkerCard(w) {
@@ -925,6 +1021,14 @@
     idSpan.className = 'worker-card__id';
     idSpan.textContent = w.id;
     header.appendChild(idSpan);
+
+    // Master ownership badge (Phase 66)
+    var badgeHtml = renderWorkerMasterBadge(w);
+    if (badgeHtml) {
+      var badgeContainer = document.createElement('span');
+      badgeContainer.innerHTML = badgeHtml;
+      header.appendChild(badgeContainer.firstChild);
+    }
 
     // Model badge
     var modelFamily = detectModelFamily(w.model);
@@ -1114,14 +1218,14 @@
         }
       });
       promptDiv.appendChild(textarea);
-      var sendBtn = document.createElement('button');
-      sendBtn.className = 'btn btn--xs btn--accent';
-      sendBtn.textContent = 'Send';
-      sendBtn.addEventListener('click', function(e) {
+      var sendBtnW = document.createElement('button');
+      sendBtnW.className = 'btn btn--xs btn--accent';
+      sendBtnW.textContent = 'Send';
+      sendBtnW.addEventListener('click', function(e) {
         e.stopPropagation();
         sendWorkerPrompt(w.id, textarea);
       });
-      promptDiv.appendChild(sendBtn);
+      promptDiv.appendChild(sendBtnW);
       card.appendChild(promptDiv);
     }
 
@@ -1208,6 +1312,21 @@
     } else if (modelFamily && existingModel) {
       existingModel.className = 'worker-card__model worker-card__model--' + modelFamily;
       existingModel.textContent = modelFamily;
+    }
+
+    // Update master ownership badge (Phase 66)
+    var existingBadge = card.querySelector('.worker-master-badge');
+    if (w.config && w.config._masterId && !existingBadge) {
+      var badgeHtml = renderWorkerMasterBadge(w);
+      if (badgeHtml) {
+        var headerEl = card.querySelector('.worker-card__header');
+        var idEl2 = headerEl && headerEl.querySelector('.worker-card__id');
+        if (idEl2) {
+          var tmp = document.createElement('span');
+          tmp.innerHTML = badgeHtml;
+          idEl2.insertAdjacentElement('afterend', tmp.firstChild);
+        }
+      }
     }
 
     // Update task info
@@ -1477,6 +1596,9 @@
     var workerText = 'Workers: ' + runningWorkers;
     if (activeWorkers > 0) workerText += ' (' + activeWorkers + ' active)';
     document.getElementById('worker-count-display').textContent = workerText;
+
+    // Master count (Phase 66)
+    updateMasterCount();
   }
 
   // ── Utilities ──────────────────────────────────────────────
@@ -1519,7 +1641,7 @@
         // Real-time activity state change — update worker card dot immediately
         if (type === 'claude-terminal:activity-changed') {
           var termId = data.terminalId || data.id;
-          if (termId && termId !== 'master') {
+          if (termId && !masters[termId]) {
             updateWorkerActivityDot(termId, data.state, data.previousState, data.assignedTask);
             appendLiveFeedEntry(termId, data.state, data.previousState, data.assignedTask);
           }
@@ -1542,15 +1664,12 @@
           appendLiveFeedEntry(data.terminalId || data.id, 'task-completed', null, data.task || data.taskId);
         }
 
-        // Handle master terminal exit
+        // Handle master terminal exit (Phase 66 — multi-master)
         if (type === 'claude-terminal:exit') {
-          if (data.id === 'master' || data.id === masterTerminalId) {
-            document.getElementById('master-status').textContent = 'Master exited';
-            document.getElementById('master-status').classList.remove('console-header__status--running');
-            document.getElementById('start-master-btn').style.display = '';
-            document.getElementById('start-master-btn').disabled = false;
-            document.getElementById('start-master-btn').textContent = 'Restart Master';
-            document.getElementById('stop-master-btn').style.display = 'none';
+          var exitId = data.id || data.terminalId;
+          if (exitId && masters[exitId]) {
+            // Master exited — the disconnect handler will try reconnect
+            // If it times out, removeMasterTab will be called
           }
         }
       } catch(e) { /* ignore parse errors */ }
@@ -1650,55 +1769,64 @@
     }
   }
 
+  // ── Init Multi-Master (Phase 66) ─────────────────────────
+
+  /**
+   * On page load, fetch existing masters and reconnect to them.
+   */
+  async function initMultiMaster() {
+    try {
+      var res = await fetch('/api/claude-terminals/masters');
+      if (!res.ok) return;
+      var data = await res.json();
+      var masterList = data.masters || [];
+
+      masterList.forEach(function(master, idx) {
+        if (master.status === 'running') {
+          // Track the highest counter
+          var match = master.id.match(/master-(\d+)/);
+          if (match) {
+            var num = parseInt(match[1]);
+            if (num > masterCounter) masterCounter = num;
+          }
+
+          addMasterTab(master.id, idx);
+
+          // Restore scrollback from raw ANSI output buffer
+          var entry = masters[master.id];
+          if (entry && entry.terminal) {
+            fetch('/api/claude-terminals/' + encodeURIComponent(master.id) + '/output?lines=500&raw=1')
+              .then(function(resp) { return resp.ok ? resp.json() : null; })
+              .then(function(outputData) {
+                if (outputData && outputData.lines && outputData.lines.length > 0 && entry.terminal) {
+                  entry.terminal.write(outputData.lines.join('\n'));
+                  entry.terminal.scrollToBottom();
+                }
+              })
+              .catch(function() { /* non-critical */ });
+          }
+
+          connectMasterBinaryWs(master.id);
+          if (!activeMasterId) switchToMaster(master.id);
+        }
+      });
+
+      updateMasterCount();
+    } catch (err) {
+      // Masters API not available — that's fine, proceed without
+    }
+  }
+
   // ── Init ───────────────────────────────────────────────────
 
   async function init() {
-    // Check if master terminal already exists
-    try {
-      var resp = await fetch('/api/claude-terminals/master');
-      if (resp.ok) {
-        var master = await resp.json();
-        masterTerminalId = master.id;
+    // Initialize multi-master — load existing masters
+    await initMultiMaster();
 
-        // Master exists — show terminal
-        document.getElementById('master-placeholder').style.display = 'none';
-        document.getElementById('master-terminal-container').style.display = '';
-        document.getElementById('start-master-btn').style.display = 'none';
-        document.getElementById('stop-master-btn').style.display = '';
-
-        if (master.status === 'running') {
-          document.getElementById('master-status').textContent = 'Master running';
-          document.getElementById('master-status').classList.add('console-header__status--running');
-        } else {
-          document.getElementById('master-status').textContent = 'Master stopped';
-          document.getElementById('start-master-btn').style.display = '';
-          document.getElementById('start-master-btn').textContent = 'Restart Master';
-          document.getElementById('stop-master-btn').style.display = 'none';
-        }
-
-        initMasterTerminal();
-
-        // Restore scrollback from raw ANSI output buffer (preserves colors)
-        try {
-          var outputResp = await fetch('/api/claude-terminals/master/output?lines=500&raw=1');
-          if (outputResp.ok) {
-            var outputData = await outputResp.json();
-            if (outputData.lines && outputData.lines.length > 0) {
-              masterTerminal.write(outputData.lines.join('\n'));
-              masterTerminal.scrollToBottom();
-            }
-          }
-        } catch(e2) { /* non-critical */ }
-
-        if (master.status === 'running') {
-          connectMasterBinaryWs(masterTerminalId);
-        }
-      }
-    } catch(e) { /* master does not exist yet — that's fine */ }
-
-    // Button handlers
-    document.getElementById('start-master-btn').addEventListener('click', startMaster);
-    document.getElementById('stop-master-btn').addEventListener('click', stopMaster);
+    // Button handlers (Phase 66: start-master-btn now spawns a new master)
+    document.getElementById('start-master-btn').addEventListener('click', spawnMaster);
+    document.getElementById('stop-master-btn').addEventListener('click', function() { stopMaster(); });
+    document.getElementById('add-master-btn').addEventListener('click', spawnMaster);
     document.getElementById('spawn-worker-btn').addEventListener('click', spawnWorker);
     document.getElementById('dismiss-all-btn').addEventListener('click', dismissAllStopped);
 
@@ -1743,14 +1871,22 @@
     setupWsEvents();
     initLiveFeed();
 
+    // Resize handler — fit the active master terminal
+    var resizeHandler = debounce(function() {
+      if (activeMasterId && masters[activeMasterId]) {
+        try { masters[activeMasterId].fitAddon.fit(); } catch(_) {}
+      }
+    }, 100);
+    window.addEventListener('resize', resizeHandler);
+
     // Refit terminals when page is restored from cache
     document.addEventListener('terminal-page-restored', function(e) {
       if (e.detail && e.detail.page === '/console') {
         // Use rAF + setTimeout to ensure CSS layout is complete before measuring
         requestAnimationFrame(function() {
           setTimeout(function() {
-            if (masterFitAddon) {
-              try { masterFitAddon.fit(); } catch (_) {}
+            if (activeMasterId && masters[activeMasterId]) {
+              try { masters[activeMasterId].fitAddon.fit(); } catch (_) {}
             }
             Object.keys(workerTerminals).forEach(function(id) {
               var entry = workerTerminals[id];
@@ -1776,15 +1912,17 @@
    * Called before page navigation (hx-boost swap or full reload).
    */
   function cleanup() {
-    // Master terminal cleanup
-    if (masterOnDataDisposable) { masterOnDataDisposable.dispose(); masterOnDataDisposable = null; }
-    if (masterOnResizeDisposable) { masterOnResizeDisposable.dispose(); masterOnResizeDisposable = null; }
-    if (masterBinaryWs) { try { masterBinaryWs.close(); } catch(_) {} masterBinaryWs = null; }
-    if (masterTerminal) { try { masterTerminal.dispose(); } catch(_) {} masterTerminal = null; }
-    masterFitAddon = null;
-    if (masterResizeHandler) { window.removeEventListener('resize', masterResizeHandler); masterResizeHandler = null; }
-    if (masterResizeObserver) { masterResizeObserver.disconnect(); masterResizeObserver = null; }
-    if (masterReconnectTimer) { clearInterval(masterReconnectTimer); masterReconnectTimer = null; }
+    // Multi-master cleanup (Phase 66)
+    Object.keys(masters).forEach(function(id) {
+      var entry = masters[id];
+      if (entry.onDataDisposable) { entry.onDataDisposable.dispose(); }
+      if (entry.onResizeDisposable) { entry.onResizeDisposable.dispose(); }
+      if (entry.binaryWs) { try { entry.binaryWs.close(); } catch(_) {} }
+      if (entry.terminal) { try { entry.terminal.dispose(); } catch(_) {} }
+      if (entry.reconnectTimer) { clearInterval(entry.reconnectTimer); }
+    });
+    masters = {};
+    activeMasterId = null;
 
     // Worker terminals cleanup
     Object.keys(workerTerminals).forEach(function(id) { disposeWorkerTerminal(id); });

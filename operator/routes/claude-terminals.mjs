@@ -73,6 +73,15 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json(master);
   });
 
+  // ── GET /claude-terminals/masters (Phase 66) ────────
+  // Returns all master terminals
+
+  router.get('/claude-terminals/masters', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
+    const masters = claudePool.getMasterTerminals();
+    res.json({ masters, count: masters.length });
+  });
+
   // ── GET /claude-terminals/:id ─────────────────────────
 
   router.get('/claude-terminals/:id', (req, res) => {

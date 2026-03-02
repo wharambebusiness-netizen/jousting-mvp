@@ -17,5 +17,10 @@ export default defineConfig({
       '**/.worktrees/**',
       '**/__test_tmp_*/**',
     ],
+    server: {
+      deps: {
+        external: [/\/operator\/views\/projects\.mjs/],
+      },
+    },
   },
 })

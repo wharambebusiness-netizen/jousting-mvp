@@ -30,6 +30,8 @@ const SWARM_MAX_CRASH_RETRIES = 3;       // max respawn attempts per crashed ter
 const MAX_TASK_HISTORY = 5;              // max categories tracked per terminal
 const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history category
 const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
+const MAX_MASTERS = 4;                   // max concurrent master terminals (Phase 66)
+const MASTER_DOMAIN_AFFINITY_BONUS = 5;  // scoring bonus for master domain match (Phase 66)
 const ACTIVITY_CHECK_INTERVAL_MS = 2000; // check activity state transitions every 2s
 const STALE_TERMINAL_TTL_MS = 5 * 60 * 1000; // remove non-persistent stopped terminals after 5 minutes
 
@@ -61,6 +63,10 @@ export function createClaudePool(ctx) {
   const sharedMemory = ctx.sharedMemory || null;
   const coordinator = ctx.coordinator || null;
   const auth = ctx.auth || null;
+  const worktreeManager = ctx.worktreeManager || null;
+
+  // Master registry: tracks each master's state for multi-master coordination (Phase 66)
+  const _masterRegistry = new Map(); // masterId → { id, spawnedAt, claimedTaskIds: Set, workerIds: Set, domain: null }
 
   // Generate a long-lived token for spawned terminals to call the operator API
   let terminalApiToken = null;
@@ -221,16 +227,39 @@ export function createClaudePool(ctx) {
       log,
     });
 
-    // Master terminal uniqueness guard (Phase 57)
+    // Multi-master support (Phase 66)
     if (opts.role === 'master') {
+      // Count running masters
+      let runningMasters = 0;
+      for (const [, existing] of terminals) {
+        if (existing.role === 'master' && existing.status === 'running') {
+          runningMasters++;
+        }
+      }
+      if (runningMasters >= MAX_MASTERS) {
+        throw new Error(`Maximum masters (${MAX_MASTERS}) reached`);
+      }
+      // Clean up stopped/stale master entries
       for (const [existingId, existing] of terminals) {
-        if (existing.role === 'master') {
-          if (existing.status === 'running') {
-            throw new Error('Master terminal already exists');
-          }
-          // Clean up stopped/stale master entries so the new one can take the ID
+        if (existing.role === 'master' && existing.status !== 'running' && existingId !== terminalId) {
           terminals.delete(existingId);
         }
+      }
+    }
+
+    // Worktree isolation for master's workers (Phase 66)
+    let worktreePath = null;
+    if (worktreeManager && opts._masterId) {
+      try {
+        const wtResult = await worktreeManager.createForMaster(opts._masterId, terminalId);
+        if (wtResult.ok) {
+          worktreePath = wtResult.path;
+          // Override project dir to the worktree path
+          // Note: the terminal is already created with opts.projectDir,
+          // but the worktree path should be used for the worker's context
+        }
+      } catch (err) {
+        log(`[claude-pool] Worktree creation failed for ${terminalId}: ${err.message}`);
       }
     }
 
@@ -253,6 +282,7 @@ export function createClaudePool(ctx) {
       capabilities: opts.capabilities || null,
       role: opts.role || null,
       persistent: !!opts.persistent,
+      worktreePath: worktreePath || null,
       contextRefreshCount: opts._contextRefreshCount || 0,
       _contextRefreshState: null,   // null | 'requesting-handoff' | 'committing' | 'restarting'
       _contextRefreshOutputCapture: '',
@@ -272,6 +302,19 @@ export function createClaudePool(ctx) {
     };
 
     terminals.set(terminalId, entry);
+
+    // Register in master registry (Phase 66)
+    if (opts.role === 'master') {
+      _masterRegistry.set(terminalId, {
+        id: terminalId,
+        spawnedAt: now,
+        claimedTaskIds: new Set(),
+        workerIds: new Set(),
+        domain: null,
+      });
+      events.emit('master:spawned', { id: terminalId, count: _masterRegistry.size });
+      events.emit('master:count-changed', { count: _masterRegistry.size });
+    }
 
     // Wire terminal events to EventBus
     terminal.on('data', (data) => {
@@ -328,6 +371,52 @@ export function createClaudePool(ctx) {
         exitCode,
         signal,
       });
+
+      // Master exit cleanup (Phase 66)
+      if (entry.role === 'master') {
+        const masterInfo = _masterRegistry.get(terminalId);
+        if (masterInfo) {
+          // Release all claimed tasks back to pending
+          if (coordinator && coordinator.taskQueue) {
+            for (const taskId of masterInfo.claimedTaskIds) {
+              try {
+                coordinator.taskQueue.fail(taskId, `Master ${terminalId} exited`);
+                coordinator.taskQueue.retry(taskId);
+              } catch { /* task may be in terminal state */ }
+            }
+          }
+          _masterRegistry.delete(terminalId);
+          events.emit('master:exited', { id: terminalId, releasedTasks: [...masterInfo.claimedTaskIds] });
+          events.emit('master:count-changed', { count: _masterRegistry.size });
+        }
+      }
+
+      // Worktree cleanup on worker exit (Phase 66)
+      if (entry.worktreePath && worktreeManager && entry.config._masterId) {
+        const compositeId = `${entry.config._masterId}/${terminalId}`;
+        if (exitCode === 0) {
+          // Clean exit: attempt auto-merge
+          worktreeManager.mergeIfClean(compositeId)
+            .then((result) => {
+              if (result.merged) {
+                log(`[claude-pool] Auto-merged worktree for ${terminalId}`);
+              } else if (result.conflicted) {
+                log(`[claude-pool] Merge conflict for ${terminalId}: ${result.files.join(', ')}`);
+                events.emit('master:merge-conflict', {
+                  terminalId,
+                  masterId: entry.config._masterId,
+                  files: result.files,
+                });
+              }
+            })
+            .catch((err) => {
+              log(`[claude-pool] Worktree merge failed for ${terminalId}: ${err.message}`);
+            });
+        } else {
+          // Crash exit: leave worktree for inspection
+          log(`[claude-pool] Worker ${terminalId} crashed — leaving worktree for inspection`);
+        }
+      }
 
       // Crash recovery: release task back to pending on non-zero exit
       maybeRecoverTask(entry, exitCode);
@@ -962,6 +1051,22 @@ export function createClaudePool(ctx) {
       if (depsComplete) claimable.push(task);
     }
 
+    // Multi-master exclusion: skip tasks claimed by other masters (Phase 66)
+    if (_masterRegistry.size > 1) {
+      const callerEntry = terminalId ? terminals.get(terminalId) : null;
+      if (callerEntry && callerEntry.role === 'master') {
+        const otherMasterClaimed = new Set();
+        for (const [mId, mInfo] of _masterRegistry) {
+          if (mId !== terminalId) {
+            for (const tId of mInfo.claimedTaskIds) otherMasterClaimed.add(tId);
+          }
+        }
+        for (let i = claimable.length - 1; i >= 0; i--) {
+          if (otherMasterClaimed.has(claimable[i].id)) claimable.splice(i, 1);
+        }
+      }
+    }
+
     if (claimable.length === 0) return null;
 
     // If no terminalId, fall back to priority-only
@@ -984,9 +1089,17 @@ export function createClaudePool(ctx) {
     const history = entry._taskHistory || [];
     const mostRecent = history.length > 0 ? history[history.length - 1] : null;
 
+    // Master domain affinity: boost tasks matching this master's domain (Phase 66)
+    const masterInfo = entry.role === 'master' ? _masterRegistry.get(terminalId) : null;
+    const masterDomain = masterInfo ? masterInfo.domain : null;
+
     filtered.sort((a, b) => {
-      const scoreA = _affinityScore(a, history, mostRecent);
-      const scoreB = _affinityScore(b, history, mostRecent);
+      let scoreA = _affinityScore(a, history, mostRecent);
+      let scoreB = _affinityScore(b, history, mostRecent);
+      if (masterDomain) {
+        if (a.category === masterDomain) scoreA += MASTER_DOMAIN_AFFINITY_BONUS;
+        if (b.category === masterDomain) scoreB += MASTER_DOMAIN_AFFINITY_BONUS;
+      }
       return scoreB - scoreA;
     });
 
@@ -1040,6 +1153,12 @@ export function createClaudePool(ctx) {
       // Track in pool
       assignTask(terminalId, claimable);
 
+      // Register in master's claimed set (Phase 66)
+      const masterInfoForClaim = _masterRegistry.get(terminalId);
+      if (masterInfoForClaim) {
+        masterInfoForClaim.claimedTaskIds.add(claimable.id);
+      }
+
       // Write the task prompt to PTY
       const prompt = `[AUTO-DISPATCH] Task ${claimable.id}: ${claimable.task}`;
       write(terminalId, prompt + '\r');
@@ -1088,6 +1207,13 @@ export function createClaudePool(ctx) {
       const failEntry = terminals.get(data.terminalId);
       if (failEntry) {
         failEntry._utilization.tasksFailed++;
+      }
+    }
+
+    // Remove from master's claimed set (Phase 66)
+    if (data.taskId) {
+      for (const [, mInfo] of _masterRegistry) {
+        mInfo.claimedTaskIds.delete(data.taskId);
       }
     }
   };
@@ -1468,20 +1594,79 @@ export function createClaudePool(ctx) {
       });
     }));
 
+    // Clean up all worktrees (Phase 66)
+    if (worktreeManager) {
+      try {
+        await worktreeManager.cleanupAll();
+      } catch (err) {
+        log(`[claude-pool] Worktree cleanup failed: ${err.message}`);
+      }
+    }
+
     destroy();
   }
 
-  // ── Master Console (Phase 57) ────────────────────
+  // ── Master Console (Phase 57 + Phase 66 Multi-Master) ────
 
   /**
-   * Get the master terminal entry, or null if no master exists.
+   * Get a master terminal entry by id, or the first master if no id given.
+   * @param {string} [id] - Optional master terminal id
    * @returns {object|null}
    */
-  function getMasterTerminal() {
+  function getMasterTerminal(id) {
+    if (id) {
+      const entry = terminals.get(id);
+      if (entry && entry.role === 'master') return formatEntry(entry);
+      return null;
+    }
+    // Backward compat: return first master
     for (const [, entry] of terminals) {
       if (entry.role === 'master') return formatEntry(entry);
     }
     return null;
+  }
+
+  /**
+   * Get all master terminal entries.
+   * @returns {Array<object>}
+   */
+  function getMasterTerminals() {
+    const masters = [];
+    for (const [, entry] of terminals) {
+      if (entry.role === 'master') masters.push(formatEntry(entry));
+    }
+    return masters;
+  }
+
+  /**
+   * Get the master registry info (for coordination).
+   * @returns {Array<object>}
+   */
+  function getMasterRegistry() {
+    const result = [];
+    for (const [id, info] of _masterRegistry) {
+      result.push({
+        id,
+        spawnedAt: info.spawnedAt,
+        claimedTaskIds: [...info.claimedTaskIds],
+        workerIds: [...info.workerIds],
+        domain: info.domain,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Set a master's domain affinity.
+   * @param {string} masterId
+   * @param {string|null} domain
+   * @returns {boolean}
+   */
+  function setMasterDomain(masterId, domain) {
+    const info = _masterRegistry.get(masterId);
+    if (!info) return false;
+    info.domain = domain;
+    return true;
   }
 
   /**
@@ -1611,6 +1796,7 @@ export function createClaudePool(ctx) {
       capabilities: entry.capabilities || null,
       role: entry.role || null,
       persistent: entry.persistent || false,
+      worktreePath: entry.worktreePath || null,
       contextRefreshCount: entry.contextRefreshCount || 0,
       contextRefreshState: entry._contextRefreshState || null,
       taskHistory: [...(entry._taskHistory || [])],
@@ -1938,6 +2124,9 @@ export function createClaudePool(ctx) {
     activeCount,
     getPoolStatus,
     getMasterTerminal,
+    getMasterTerminals,
+    getMasterRegistry,
+    setMasterDomain,
     getOutputPreview,
     getRawOutputPreview,
     findNextClaimableTask,
@@ -1949,4 +2138,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS, STALE_TERMINAL_TTL_MS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS, STALE_TERMINAL_TTL_MS, MAX_MASTERS, MASTER_DOMAIN_AFFINITY_BONUS };

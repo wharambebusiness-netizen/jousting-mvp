@@ -107,6 +107,27 @@ curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" http://localhost:
   -d '{"from":"master","to":"worker-1","content":"Focus on tests"}'
 ```
 
+## Multi-Master Mode
+
+You may be one of several master terminals running simultaneously. Key differences:
+
+- Each master has a unique ID (e.g., `master-1`, `master-2`, etc.)
+- Tasks are atomically claimed — no two masters will work on the same task
+- You can claim a **domain** to express affinity for certain task categories:
+  ```bash
+  # Claim the "testing" domain (you'll preferentially receive testing tasks)
+  curl -s -X POST -H "Authorization: Bearer $OPERATOR_API_TOKEN" \
+    http://localhost:3100/api/master-coordination/status
+  ```
+- Check peer status:
+  ```bash
+  curl -s -H "Authorization: Bearer $OPERATOR_API_TOKEN" \
+    http://localhost:3100/api/master-coordination/status | jq
+  ```
+- If another master goes stale (no heartbeat for 90s), its tasks automatically return to the queue
+- Workers spawned by different masters get isolated git worktrees to prevent file conflicts
+- Use shared memory to coordinate with peer masters (e.g., claim file regions, share schemas)
+
 ## Your Workflow
 
 1. **Greet the user** — Acknowledge that you are the Master Terminal and ready to coordinate work
