@@ -2262,3 +2262,275 @@ describe('Claude Terminal Routes (Phase 15C)', () => {
     });
   });
 });
+
+// ============================================================
+// Coordination Helpers (Phase 67)
+// ============================================================
+
+describe('Coordination Helpers (Phase 67)', () => {
+  let events;
+  let pool;
+  let sharedMemory;
+  let messageBus;
+
+  function createMockSharedMemory() {
+    const store = new Map();
+    return {
+      get: vi.fn((key) => {
+        const entry = store.get(key);
+        return entry !== undefined ? entry : undefined;
+      }),
+      set: vi.fn((key, value) => {
+        store.set(key, value);
+        return true;
+      }),
+      delete: vi.fn((key) => store.delete(key)),
+      has: vi.fn((key) => store.has(key)),
+      keys: vi.fn(() => [...store.keys()]),
+      watchPrefix: vi.fn(() => vi.fn()),
+      _store: store,
+    };
+  }
+
+  function createMockMessageBus() {
+    const messages = [];
+    return {
+      send: vi.fn((opts) => {
+        const msg = { id: `m-${messages.length}`, ...opts, timestamp: new Date().toISOString(), deleted: false };
+        messages.push(msg);
+        return msg;
+      }),
+      getUnreadCount: vi.fn(() => 0),
+      getInbox: vi.fn(() => []),
+      markRead: vi.fn(),
+      _messages: messages,
+    };
+  }
+
+  beforeEach(() => {
+    events = new EventBus();
+    sharedMemory = createMockSharedMemory();
+    messageBus = createMockMessageBus();
+    claudeTermMock.createClaudeTerminal.mockImplementation(async (opts) => {
+      return createFakeTerminal(opts.id, 200);
+    });
+    claudeTermMock.isNodePtyAvailable.mockResolvedValue(true);
+    pool = createClaudePool({
+      events,
+      projectDir: '/tmp/pool-test',
+      sharedMemory,
+      messageBus,
+      log: () => {},
+    });
+  });
+
+  afterEach(async () => {
+    if (pool) await pool.shutdownAll();
+    vi.clearAllMocks();
+  });
+
+  describe('publishDiscovery', () => {
+    it('should write discovery to shared memory', () => {
+      const ok = pool.publishDiscovery('master-1', 'api-endpoint', 'Found GET /users');
+      expect(ok).toBe(true);
+      expect(sharedMemory.set).toHaveBeenCalledWith('discovery:master-1:api-endpoint', 'Found GET /users', 'master');
+    });
+
+    it('should truncate value to 200 chars', () => {
+      const longValue = 'x'.repeat(300);
+      pool.publishDiscovery('master-1', 'topic', longValue);
+      const callArgs = sharedMemory.set.mock.calls[0];
+      expect(callArgs[1].length).toBe(200);
+    });
+
+    it('should emit discovery-published event', () => {
+      const emitted = [];
+      events.on('master:discovery-published', (d) => emitted.push(d));
+      pool.publishDiscovery('master-1', 'bug', 'Found race condition');
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].topic).toBe('bug');
+    });
+
+    it('should return false with no shared memory', () => {
+      const noSmPool = createClaudePool({ events, projectDir: '/tmp/test', log: () => {} });
+      expect(noSmPool.publishDiscovery('m1', 'topic', 'val')).toBe(false);
+    });
+  });
+
+  describe('claimFile', () => {
+    it('should claim a file successfully', () => {
+      const result = pool.claimFile('master-1', 'src/index.ts');
+      expect(result.ok).toBe(true);
+      expect(sharedMemory.set).toHaveBeenCalledWith('claim:master-1:src/index.ts', 'src/index.ts', 'master');
+    });
+
+    it('should reject double-claim by another master', () => {
+      // Set up existing claim
+      sharedMemory._store.set('claim:master-2:src/index.ts', 'src/index.ts');
+
+      const result = pool.claimFile('master-1', 'src/index.ts');
+      expect(result.ok).toBe(false);
+      expect(result.holder).toBe('master-2');
+    });
+
+    it('should allow same master to re-claim their own file', () => {
+      sharedMemory._store.set('claim:master-1:src/index.ts', 'src/index.ts');
+      const result = pool.claimFile('master-1', 'src/index.ts');
+      expect(result.ok).toBe(true);
+    });
+
+    it('should emit file-claimed event', () => {
+      const emitted = [];
+      events.on('master:file-claimed', (d) => emitted.push(d));
+      pool.claimFile('master-1', 'src/app.ts');
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].filepath).toBe('src/app.ts');
+    });
+  });
+
+  describe('releaseClaim', () => {
+    it('should delete the claim key', () => {
+      pool.releaseClaim('master-1', 'src/index.ts');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('claim:master-1:src/index.ts');
+    });
+
+    it('should emit file-released event', () => {
+      const emitted = [];
+      events.on('master:file-released', (d) => emitted.push(d));
+      pool.releaseClaim('master-1', 'src/app.ts');
+      expect(emitted).toHaveLength(1);
+    });
+  });
+
+  describe('setMasterFocus', () => {
+    it('should set focus in shared memory', () => {
+      pool.setMasterFocus('master-1', 'Implementing auth flow');
+      expect(sharedMemory.set).toHaveBeenCalledWith('focus:master-1', 'Implementing auth flow', 'master');
+    });
+
+    it('should truncate focus to 200 chars', () => {
+      pool.setMasterFocus('master-1', 'x'.repeat(300));
+      const callArgs = sharedMemory.set.mock.calls[0];
+      expect(callArgs[1].length).toBe(200);
+    });
+  });
+
+  describe('buildCoordinationSummary', () => {
+    it('should return empty string with no coordination data', () => {
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toBe('');
+    });
+
+    it('should include other masters from heartbeats', () => {
+      sharedMemory._store.set('master:master-2:heartbeat', {
+        alive: true, lastBeat: new Date().toISOString(), domain: 'testing', claimedTasks: 2, workerCount: 1,
+      });
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toContain('[COORDINATION CONTEXT]');
+      expect(summary).toContain('master-2');
+      expect(summary).toContain('testing');
+    });
+
+    it('should exclude own master from summary', () => {
+      sharedMemory._store.set('master:master-1:heartbeat', {
+        alive: true, lastBeat: new Date().toISOString(), domain: 'features',
+      });
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toBe('');
+    });
+
+    it('should include discoveries from other masters', () => {
+      sharedMemory._store.set('discovery:master-2:api-bug', 'Found null pointer in /users endpoint');
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toContain('Recent Discoveries');
+      expect(summary).toContain('api-bug');
+      expect(summary).toContain('null pointer');
+    });
+
+    it('should include file claims from other masters', () => {
+      sharedMemory._store.set('claim:master-2:src/server.ts', 'src/server.ts');
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toContain('File Claims');
+      expect(summary).toContain('src/server.ts');
+      expect(summary).toContain('do NOT edit');
+    });
+
+    it('should include focus from other masters', () => {
+      sharedMemory._store.set('focus:master-2', 'Refactoring auth middleware');
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toContain('Focus');
+      expect(summary).toContain('Refactoring auth middleware');
+    });
+
+    it('should include unread messages from message bus', () => {
+      messageBus.getUnreadCount.mockReturnValue(2);
+      messageBus.getInbox.mockReturnValue([
+        { from: 'master-2', content: 'Task completed successfully', deleted: false },
+      ]);
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).toContain('Unread Messages');
+      expect(summary).toContain('Task completed');
+      expect(messageBus.markRead).toHaveBeenCalledWith('master-1');
+    });
+
+    it('should not include messages when unread count is 0', () => {
+      messageBus.getUnreadCount.mockReturnValue(0);
+
+      const summary = pool.buildCoordinationSummary('master-1');
+      expect(summary).not.toContain('Unread Messages');
+      expect(messageBus.markRead).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('task completion broadcasts', () => {
+    it('should broadcast task completion to message bus', async () => {
+      await pool.spawn('master-1', { role: 'master' });
+
+      // Simulate task completion event
+      events.emit('claude-terminal:task-completed', {
+        terminalId: 'master-1',
+        taskId: 'task-1',
+        status: 'complete',
+        category: 'testing',
+      });
+
+      expect(messageBus.send).toHaveBeenCalledWith({
+        from: 'master-1',
+        to: null,
+        content: expect.stringContaining('[TASK-COMPLETE]'),
+        category: 'coordination',
+      });
+    });
+  });
+
+  describe('master exit coordination cleanup', () => {
+    it('should clean up coordination keys on master exit', async () => {
+      // Set up coordination data
+      sharedMemory._store.set('claim:master-1:src/a.ts', 'src/a.ts');
+      sharedMemory._store.set('discovery:master-1:finding', 'some finding');
+      sharedMemory._store.set('focus:master-1', 'working on stuff');
+      // Also a key for master-2 (should NOT be cleaned)
+      sharedMemory._store.set('claim:master-2:src/b.ts', 'src/b.ts');
+
+      await pool.spawn('master-1', { role: 'master' });
+
+      // Trigger exit
+      pool.getTerminalHandle('master-1')._triggerExit(0);
+
+      // Wait for async cleanup
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(sharedMemory.delete).toHaveBeenCalledWith('claim:master-1:src/a.ts');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('discovery:master-1:finding');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('focus:master-1');
+      // master-2's claim should be untouched
+      expect(sharedMemory._store.has('claim:master-2:src/b.ts')).toBe(true);
+    });
+  });
+});

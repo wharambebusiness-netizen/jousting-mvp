@@ -503,7 +503,7 @@ export function createApp(options = {}) {
     if (options.enableWorktrees) {
       poolWorktreeManager = createWorktreeManager({ projectDir, events, log: () => {} });
     }
-    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, worktreeManager: poolWorktreeManager, log: () => {} });
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, worktreeManager: poolWorktreeManager, messageBus, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
   }

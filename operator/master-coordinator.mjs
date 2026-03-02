@@ -84,10 +84,11 @@ export function createMasterCoordinator(ctx) {
       _heartbeatTimers.delete(masterId);
     }
 
-    // Clean up shared memory
+    // Clean up shared memory heartbeat + coordination keys (Phase 67)
     try {
       sharedMemory.delete(`master:${masterId}:heartbeat`);
     } catch { /* key may not exist */ }
+    _cleanupCoordinationKeys(masterId);
 
     log(`[master-coordinator] Deregistered master: ${masterId}`);
     events.emit('master-coordinator:deregistered', { masterId });
@@ -204,12 +205,32 @@ export function createMasterCoordinator(ctx) {
       }
     }
 
+    // Enrich heartbeat with coordination data (Phase 67)
+    let currentFocus = null;
+    let claimedFiles = [];
+    let recentDiscoveries = [];
+    const allKeys = sharedMemory.keys();
+    for (const k of allKeys) {
+      if (k === `focus:${masterId}`) {
+        currentFocus = sharedMemory.get(k) || null;
+      } else if (k.startsWith(`claim:${masterId}:`)) {
+        claimedFiles.push(k.slice(`claim:${masterId}:`.length));
+      } else if (k.startsWith(`discovery:${masterId}:`)) {
+        const topic = k.slice(`discovery:${masterId}:`.length);
+        const val = sharedMemory.get(k);
+        if (val) recentDiscoveries.push({ topic, value: String(val).slice(0, 100) });
+      }
+    }
+
     sharedMemory.set(key, {
       alive: true,
       lastBeat: new Date().toISOString(),
       claimedTasks,
       workerCount,
       domain,
+      currentFocus,
+      claimedFiles,
+      recentDiscoveries,
     }, 'master-coordinator');
   }
 
@@ -238,15 +259,31 @@ export function createMasterCoordinator(ctx) {
         }
       }
 
-      // Clean up shared memory heartbeat
+      // Clean up shared memory heartbeat + coordination keys (Phase 67)
       try {
         sharedMemory.delete(`master:${master.id}:heartbeat`);
       } catch { /* already deleted */ }
+      _cleanupCoordinationKeys(master.id);
 
       events.emit('master-coordinator:stale-recovered', {
         masterId: master.id,
         staleMs: master.staleMs,
       });
+    }
+  }
+
+  /**
+   * Clean up coordination keys (claim:, discovery:, focus:) for a departing master. (Phase 67)
+   * @param {string} masterId
+   */
+  function _cleanupCoordinationKeys(masterId) {
+    const allKeys = sharedMemory.keys();
+    for (const key of allKeys) {
+      if (key.startsWith(`claim:${masterId}:`) ||
+          key.startsWith(`discovery:${masterId}:`) ||
+          key === `focus:${masterId}`) {
+        try { sharedMemory.delete(key); } catch { /* ignore */ }
+      }
     }
   }
 

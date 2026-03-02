@@ -657,5 +657,60 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json({ ok: true, terminalId: req.params.id });
   });
 
+  // ── POST /claude-terminals/:id/discovery (Phase 67) ──
+  // Publish a discovery from a master terminal
+
+  router.post('/claude-terminals/:id/discovery', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+    const { topic, value } = req.body || {};
+    if (!topic || !value) return res.status(400).json({ error: 'topic and value are required' });
+    const ok = claudePool.publishDiscovery(req.params.id, topic, value);
+    res.json({ ok });
+  });
+
+  // ── POST /claude-terminals/:id/claim (Phase 67) ──
+  // Claim a file for exclusive editing
+
+  router.post('/claude-terminals/:id/claim', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+    const { filepath } = req.body || {};
+    if (!filepath) return res.status(400).json({ error: 'filepath is required' });
+    const result = claudePool.claimFile(req.params.id, filepath);
+    if (!result.ok) {
+      return res.status(409).json({ error: 'File already claimed', holder: result.holder });
+    }
+    res.json({ ok: true, filepath });
+  });
+
+  // ── DELETE /claude-terminals/:id/claim (Phase 67) ──
+  // Release a file claim
+
+  router.delete('/claude-terminals/:id/claim', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+    const { filepath } = req.body || {};
+    if (!filepath) return res.status(400).json({ error: 'filepath is required' });
+    claudePool.releaseClaim(req.params.id, filepath);
+    res.json({ ok: true, filepath });
+  });
+
+  // ── PATCH /claude-terminals/:id/focus (Phase 67) ──
+  // Set the current focus for a master terminal
+
+  router.patch('/claude-terminals/:id/focus', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude terminals not available' });
+    const terminal = claudePool.getTerminal(req.params.id);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+    const { focus } = req.body || {};
+    if (!focus) return res.status(400).json({ error: 'focus is required' });
+    claudePool.setMasterFocus(req.params.id, focus);
+    res.json({ ok: true, focus });
+  });
+
   return router;
 }

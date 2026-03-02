@@ -340,5 +340,71 @@ describe('Master Coordinator (Phase 66)', () => {
       expect(heartbeat.claimedTasks).toBe(1);
       expect(heartbeat.workerCount).toBe(2);
     });
+
+    it('should include coordination data in heartbeat (Phase 67)', () => {
+      claudePool._addMaster('master-1');
+
+      // Set up coordination keys
+      sharedMemory._store.set('focus:master-1', { value: 'Implementing auth' });
+      sharedMemory._store.set('claim:master-1:src/auth.ts', { value: 'src/auth.ts' });
+      sharedMemory._store.set('discovery:master-1:api-pattern', { value: 'REST endpoints use /api/v2' });
+
+      mc = createMasterCoordinator({ events, sharedMemory, claudePool, coordinator });
+      mc.register('master-1');
+
+      const heartbeat = sharedMemory.set.mock.calls.find(c => c[0] === 'master:master-1:heartbeat')[1];
+      expect(heartbeat.currentFocus).toBeTruthy();
+      expect(heartbeat.claimedFiles).toContain('src/auth.ts');
+      expect(heartbeat.recentDiscoveries).toHaveLength(1);
+      expect(heartbeat.recentDiscoveries[0].topic).toBe('api-pattern');
+    });
+  });
+
+  describe('Coordination key cleanup (Phase 67)', () => {
+    it('should clean up coordination keys on deregister', () => {
+      mc = createMasterCoordinator({ events, sharedMemory, claudePool, coordinator });
+      mc.register('master-1');
+
+      // Add coordination keys
+      sharedMemory._store.set('claim:master-1:src/a.ts', { value: 'src/a.ts' });
+      sharedMemory._store.set('discovery:master-1:bug', { value: 'Found bug' });
+      sharedMemory._store.set('focus:master-1', { value: 'Working on fix' });
+
+      mc.deregister('master-1');
+
+      // All coordination keys should be deleted
+      expect(sharedMemory.delete).toHaveBeenCalledWith('claim:master-1:src/a.ts');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('discovery:master-1:bug');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('focus:master-1');
+    });
+
+    it('should clean up coordination keys for stale masters', () => {
+      mc = createMasterCoordinator({ events, sharedMemory, claudePool, coordinator });
+
+      // Add stale heartbeat + coordination keys
+      sharedMemory._store.set('master:stale-1:heartbeat', {
+        value: {
+          alive: true,
+          lastBeat: new Date(Date.now() - STALE_THRESHOLD_MS - 5000).toISOString(),
+          domain: null,
+          claimedTasks: 0,
+          workerCount: 0,
+        },
+      });
+      sharedMemory._store.set('claim:stale-1:src/file.ts', { value: 'src/file.ts' });
+      sharedMemory._store.set('discovery:stale-1:info', { value: 'some info' });
+      sharedMemory._store.set('focus:stale-1', { value: 'working' });
+
+      // Register a live master to start recovery
+      mc.register('master-1');
+
+      // Advance to trigger recovery check
+      vi.advanceTimersByTime(RECOVERY_CHECK_INTERVAL_MS);
+
+      // Coordination keys should be cleaned up
+      expect(sharedMemory.delete).toHaveBeenCalledWith('claim:stale-1:src/file.ts');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('discovery:stale-1:info');
+      expect(sharedMemory.delete).toHaveBeenCalledWith('focus:stale-1');
+    });
   });
 });

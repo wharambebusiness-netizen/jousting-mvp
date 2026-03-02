@@ -145,6 +145,66 @@ export function createMcpServer(ctx) {
         required: ['query'],
       },
     },
+    {
+      name: 'publish_discovery',
+      description: 'Publish a discovery for other masters to see',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          master_id: { type: 'string', description: 'Master terminal ID' },
+          topic: { type: 'string', description: 'Discovery topic' },
+          value: { type: 'string', description: 'Discovery content (max 200 chars)' },
+        },
+        required: ['master_id', 'topic', 'value'],
+      },
+    },
+    {
+      name: 'claim_file',
+      description: 'Claim a file for exclusive editing to prevent conflicts with other masters',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          master_id: { type: 'string', description: 'Master terminal ID' },
+          filepath: { type: 'string', description: 'File path to claim' },
+        },
+        required: ['master_id', 'filepath'],
+      },
+    },
+    {
+      name: 'release_file_claim',
+      description: 'Release a previously claimed file',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          master_id: { type: 'string', description: 'Master terminal ID' },
+          filepath: { type: 'string', description: 'File path to release' },
+        },
+        required: ['master_id', 'filepath'],
+      },
+    },
+    {
+      name: 'set_focus',
+      description: 'Set the current work focus for a master terminal',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          master_id: { type: 'string', description: 'Master terminal ID' },
+          focus: { type: 'string', description: 'Current work focus description' },
+        },
+        required: ['master_id', 'focus'],
+      },
+    },
+    {
+      name: 'get_coordination_context',
+      description: 'Get the full coordination context for a master (other masters, discoveries, claims, messages)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          master_id: { type: 'string', description: 'Master terminal ID' },
+        },
+        required: ['master_id'],
+      },
+    },
   ];
 
   // ── Resource Definitions ──────────────────────────────
@@ -188,6 +248,16 @@ export function createMcpServer(ctx) {
         return handleGetMetrics();
       case 'search':
         return handleSearch(args);
+      case 'publish_discovery':
+        return handlePublishDiscovery(args);
+      case 'claim_file':
+        return handleClaimFile(args);
+      case 'release_file_claim':
+        return handleReleaseFileClaim(args);
+      case 'set_focus':
+        return handleSetFocus(args);
+      case 'get_coordination_context':
+        return handleGetCoordinationContext(args);
       default:
         throw { code: -32601, message: `Unknown tool: ${name}` };
     }
@@ -336,6 +406,54 @@ export function createMcpServer(ctx) {
         text: JSON.stringify(results, null, 2),
       }],
     };
+  }
+
+  // ── Coordination Tool Handlers (Phase 67) ────────────
+
+  function handlePublishDiscovery(args) {
+    if (!claudePool) {
+      return { content: [{ type: 'text', text: 'Error: Pool not available' }], isError: true };
+    }
+    const ok = claudePool.publishDiscovery(args.master_id, args.topic, args.value);
+    if (!ok) {
+      return { content: [{ type: 'text', text: 'Error: Failed to publish discovery' }], isError: true };
+    }
+    return { content: [{ type: 'text', text: `Discovery published: ${args.topic}` }] };
+  }
+
+  function handleClaimFile(args) {
+    if (!claudePool) {
+      return { content: [{ type: 'text', text: 'Error: Pool not available' }], isError: true };
+    }
+    const result = claudePool.claimFile(args.master_id, args.filepath);
+    if (!result.ok) {
+      return { content: [{ type: 'text', text: `File already claimed by ${result.holder || 'unknown'}` }], isError: true };
+    }
+    return { content: [{ type: 'text', text: `File claimed: ${args.filepath}` }] };
+  }
+
+  function handleReleaseFileClaim(args) {
+    if (!claudePool) {
+      return { content: [{ type: 'text', text: 'Error: Pool not available' }], isError: true };
+    }
+    claudePool.releaseClaim(args.master_id, args.filepath);
+    return { content: [{ type: 'text', text: `File claim released: ${args.filepath}` }] };
+  }
+
+  function handleSetFocus(args) {
+    if (!claudePool) {
+      return { content: [{ type: 'text', text: 'Error: Pool not available' }], isError: true };
+    }
+    claudePool.setMasterFocus(args.master_id, args.focus);
+    return { content: [{ type: 'text', text: `Focus set: ${args.focus}` }] };
+  }
+
+  function handleGetCoordinationContext(args) {
+    if (!claudePool) {
+      return { content: [{ type: 'text', text: 'Error: Pool not available' }], isError: true };
+    }
+    const summary = claudePool.buildCoordinationSummary(args.master_id);
+    return { content: [{ type: 'text', text: summary || '(no coordination context — single master or no shared data)' }] };
   }
 
   // ── Resource Handlers ─────────────────────────────────

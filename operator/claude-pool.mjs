@@ -64,9 +64,227 @@ export function createClaudePool(ctx) {
   const coordinator = ctx.coordinator || null;
   const auth = ctx.auth || null;
   const worktreeManager = ctx.worktreeManager || null;
+  const messageBus = ctx.messageBus || null;
 
   // Master registry: tracks each master's state for multi-master coordination (Phase 66)
   const _masterRegistry = new Map(); // masterId → { id, spawnedAt, claimedTaskIds: Set, workerIds: Set, domain: null }
+
+  // Discovery watchers per master (Phase 67 coordination)
+  const _discoveryWatchers = new Map(); // masterId → unwatch function
+
+  // ── Coordination Helpers (Phase 67) ────────────────────
+
+  /**
+   * Build a coordination summary for a master terminal.
+   * Reads other masters' heartbeats, discoveries, file claims, focus, and unread messages.
+   * @param {string} masterId - The master to build context for
+   * @returns {string} Coordination summary text (empty string if nothing to report)
+   */
+  function buildCoordinationSummary(masterId) {
+    if (!sharedMemory) return '';
+    const parts = [];
+
+    // 1. Other active masters
+    const allKeys = sharedMemory.keys();
+    const otherMasters = [];
+    for (const key of allKeys) {
+      if (!key.startsWith('master:') || !key.endsWith(':heartbeat')) continue;
+      const id = key.replace('master:', '').replace(':heartbeat', '');
+      if (id === masterId) continue;
+      const hb = sharedMemory.get(key);
+      if (!hb || !hb.alive) continue;
+      otherMasters.push({ id, domain: hb.domain || 'unassigned', claimedTasks: hb.claimedTasks || 0, workerCount: hb.workerCount || 0 });
+    }
+    if (otherMasters.length > 0) {
+      parts.push('## Other Active Masters');
+      for (const m of otherMasters) {
+        parts.push(`- ${m.id}: domain=${m.domain}, tasks=${m.claimedTasks}, workers=${m.workerCount}`);
+      }
+    }
+
+    // 2. Focus declarations
+    const focusEntries = [];
+    for (const key of allKeys) {
+      if (!key.startsWith('focus:')) continue;
+      const id = key.replace('focus:', '');
+      if (id === masterId) continue;
+      const val = sharedMemory.get(key);
+      if (val) focusEntries.push({ id, focus: String(val).slice(0, 200) });
+    }
+    if (focusEntries.length > 0) {
+      parts.push('## Other Masters\' Focus');
+      for (const f of focusEntries) {
+        parts.push(`- ${f.id}: ${f.focus}`);
+      }
+    }
+
+    // 3. Recent discoveries from other masters
+    const discoveries = [];
+    for (const key of allKeys) {
+      if (!key.startsWith('discovery:')) continue;
+      const rest = key.slice('discovery:'.length);
+      const colonIdx = rest.indexOf(':');
+      const id = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+      if (id === masterId) continue;
+      const topic = colonIdx >= 0 ? rest.slice(colonIdx + 1) : '';
+      const val = sharedMemory.get(key);
+      if (val) discoveries.push({ id, topic, value: String(val).slice(0, 200) });
+    }
+    if (discoveries.length > 0) {
+      parts.push('## Recent Discoveries');
+      for (const d of discoveries) {
+        parts.push(`- [${d.id}] ${d.topic}: ${d.value}`);
+      }
+    }
+
+    // 4. File claims from other masters
+    const claims = [];
+    for (const key of allKeys) {
+      if (!key.startsWith('claim:')) continue;
+      const rest = key.slice('claim:'.length);
+      const colonIdx = rest.indexOf(':');
+      const id = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+      if (id === masterId) continue;
+      const filepath = colonIdx >= 0 ? rest.slice(colonIdx + 1) : '';
+      claims.push({ id, filepath });
+    }
+    if (claims.length > 0) {
+      parts.push('## File Claims (do NOT edit these files)');
+      for (const c of claims) {
+        parts.push(`- ${c.id} owns: ${c.filepath}`);
+      }
+    }
+
+    // 5. Unread messages from message bus
+    if (messageBus) {
+      const unread = messageBus.getUnreadCount(masterId);
+      if (unread > 0) {
+        const inbox = messageBus.getInbox(masterId, { limit: 5 });
+        const recent = inbox.filter(m => !m.deleted).slice(0, 5);
+        if (recent.length > 0) {
+          parts.push('## Unread Messages');
+          for (const msg of recent) {
+            parts.push(`- [${msg.from}] ${String(msg.content).slice(0, 150)}`);
+          }
+        }
+        messageBus.markRead(masterId);
+      }
+    }
+
+    if (parts.length === 0) return '';
+    return ['[COORDINATION CONTEXT]', ...parts].join('\n');
+  }
+
+  /**
+   * Publish a discovery to shared memory.
+   * @param {string} masterId
+   * @param {string} topic
+   * @param {string} value - Max 200 chars
+   */
+  function publishDiscovery(masterId, topic, value) {
+    if (!sharedMemory || !masterId || !topic) return false;
+    const key = `discovery:${masterId}:${topic}`;
+    sharedMemory.set(key, String(value).slice(0, 200), 'master');
+    events.emit('master:discovery-published', { masterId, topic, value: String(value).slice(0, 200) });
+    return true;
+  }
+
+  /**
+   * Claim a file for exclusive editing.
+   * @param {string} masterId
+   * @param {string} filepath
+   * @returns {{ ok: boolean, holder?: string }} ok=true if claimed, holder=existing claimer if rejected
+   */
+  function claimFile(masterId, filepath) {
+    if (!sharedMemory || !masterId || !filepath) return { ok: false };
+    // Check for existing claim by another master
+    const allKeys = sharedMemory.keys();
+    for (const key of allKeys) {
+      if (!key.startsWith('claim:')) continue;
+      const rest = key.slice('claim:'.length);
+      const colonIdx = rest.indexOf(':');
+      const id = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+      const claimedPath = colonIdx >= 0 ? rest.slice(colonIdx + 1) : '';
+      if (id !== masterId && claimedPath === filepath) {
+        return { ok: false, holder: id };
+      }
+    }
+    const key = `claim:${masterId}:${filepath}`;
+    sharedMemory.set(key, filepath, 'master');
+    events.emit('master:file-claimed', { masterId, filepath });
+    return { ok: true };
+  }
+
+  /**
+   * Release a file claim.
+   * @param {string} masterId
+   * @param {string} filepath
+   */
+  function releaseClaim(masterId, filepath) {
+    if (!sharedMemory || !masterId || !filepath) return false;
+    const key = `claim:${masterId}:${filepath}`;
+    sharedMemory.delete(key);
+    events.emit('master:file-released', { masterId, filepath });
+    return true;
+  }
+
+  /**
+   * Set a master's current focus description.
+   * @param {string} masterId
+   * @param {string} focus
+   */
+  function setMasterFocus(masterId, focus) {
+    if (!sharedMemory || !masterId) return false;
+    const key = `focus:${masterId}`;
+    sharedMemory.set(key, String(focus).slice(0, 200), 'master');
+    return true;
+  }
+
+  /**
+   * Clean up all coordination keys for a departing master.
+   * @param {string} masterId
+   */
+  function cleanupMasterCoordinationKeys(masterId) {
+    if (!sharedMemory) return;
+    const allKeys = sharedMemory.keys();
+    for (const key of allKeys) {
+      if (key.startsWith(`claim:${masterId}:`) ||
+          key.startsWith(`discovery:${masterId}:`) ||
+          key === `focus:${masterId}`) {
+        sharedMemory.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Set up discovery watcher for a master — emits events when other masters publish.
+   * @param {string} masterId
+   */
+  function setupDiscoveryWatcher(masterId) {
+    if (!sharedMemory || _discoveryWatchers.has(masterId)) return;
+    const unwatch = sharedMemory.watchPrefix('discovery:', (key, value) => {
+      // Only fire for discoveries from OTHER masters
+      const rest = key.slice('discovery:'.length);
+      const colonIdx = rest.indexOf(':');
+      const sourceId = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+      if (sourceId !== masterId) {
+        events.emit('master:discovery-received', { masterId, sourceId, key, value });
+      }
+    });
+    _discoveryWatchers.set(masterId, unwatch);
+  }
+
+  /**
+   * Tear down discovery watcher for a master.
+   * @param {string} masterId
+   */
+  function teardownDiscoveryWatcher(masterId) {
+    const unwatch = _discoveryWatchers.get(masterId);
+    if (unwatch) {
+      unwatch();
+      _discoveryWatchers.delete(masterId);
+    }
+  }
 
   // Generate a long-lived token for spawned terminals to call the operator API
   let terminalApiToken = null;
@@ -314,6 +532,22 @@ export function createClaudePool(ctx) {
       });
       events.emit('master:spawned', { id: terminalId, count: _masterRegistry.size });
       events.emit('master:count-changed', { count: _masterRegistry.size });
+
+      // Inject coordination context if other masters exist (Phase 67)
+      if (_masterRegistry.size > 1) {
+        const coordSummary = buildCoordinationSummary(terminalId);
+        if (coordSummary) {
+          // Prepend to system prompt via PTY write after brief delay for shell init
+          setTimeout(() => {
+            if (entry.status === 'running') {
+              write(terminalId, coordSummary + '\r');
+            }
+          }, 500);
+        }
+      }
+
+      // Set up discovery watcher for this master (Phase 67)
+      setupDiscoveryWatcher(terminalId);
     }
 
     // Wire terminal events to EventBus
@@ -389,6 +623,9 @@ export function createClaudePool(ctx) {
           events.emit('master:exited', { id: terminalId, releasedTasks: [...masterInfo.claimedTaskIds] });
           events.emit('master:count-changed', { count: _masterRegistry.size });
         }
+        // Clean up coordination keys and discovery watcher (Phase 67)
+        cleanupMasterCoordinationKeys(terminalId);
+        teardownDiscoveryWatcher(terminalId);
       }
 
       // Worktree cleanup on worker exit (Phase 66)
@@ -699,6 +936,13 @@ export function createClaudePool(ctx) {
     ];
     if (entry.assignedTask) {
       parts.push('', `Active task: ${entry.assignedTask.taskId} — ${entry.assignedTask.task}`);
+    }
+    // Append coordination context for master-role terminals (Phase 67)
+    if (entry.role === 'master') {
+      const coordSummary = buildCoordinationSummary(entry.id);
+      if (coordSummary) {
+        parts.push('', coordSummary);
+      }
     }
     return parts.join('\n');
   }
@@ -1093,12 +1337,38 @@ export function createClaudePool(ctx) {
     const masterInfo = entry.role === 'master' ? _masterRegistry.get(terminalId) : null;
     const masterDomain = masterInfo ? masterInfo.domain : null;
 
+    // File conflict scoring: deprioritize tasks whose metadata.files overlap with other masters' claims (Phase 67)
+    const FILE_CONFLICT_PENALTY = 3;
+    let claimedFilesSet = null;
+    if (sharedMemory && _masterRegistry.size > 1) {
+      claimedFilesSet = new Set();
+      const allKeys = sharedMemory.keys();
+      for (const key of allKeys) {
+        if (!key.startsWith('claim:')) continue;
+        const rest = key.slice('claim:'.length);
+        const colonIdx = rest.indexOf(':');
+        const claimerId = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+        if (claimerId !== terminalId) {
+          const claimedPath = colonIdx >= 0 ? rest.slice(colonIdx + 1) : '';
+          if (claimedPath) claimedFilesSet.add(claimedPath);
+        }
+      }
+      if (claimedFilesSet.size === 0) claimedFilesSet = null;
+    }
+
     filtered.sort((a, b) => {
       let scoreA = _affinityScore(a, history, mostRecent);
       let scoreB = _affinityScore(b, history, mostRecent);
       if (masterDomain) {
         if (a.category === masterDomain) scoreA += MASTER_DOMAIN_AFFINITY_BONUS;
         if (b.category === masterDomain) scoreB += MASTER_DOMAIN_AFFINITY_BONUS;
+      }
+      // Apply file conflict penalty (Phase 67)
+      if (claimedFilesSet) {
+        const filesA = (a.metadata && a.metadata.files) || [];
+        const filesB = (b.metadata && b.metadata.files) || [];
+        if (filesA.some(f => claimedFilesSet.has(f))) scoreA -= FILE_CONFLICT_PENALTY;
+        if (filesB.some(f => claimedFilesSet.has(f))) scoreB -= FILE_CONFLICT_PENALTY;
       }
       return scoreB - scoreA;
     });
@@ -1159,8 +1429,14 @@ export function createClaudePool(ctx) {
         masterInfoForClaim.claimedTaskIds.add(claimable.id);
       }
 
-      // Write the task prompt to PTY
-      const prompt = `[AUTO-DISPATCH] Task ${claimable.id}: ${claimable.task}`;
+      // Write the task prompt to PTY, with coordination context for multi-master (Phase 67)
+      let prompt = `[AUTO-DISPATCH] Task ${claimable.id}: ${claimable.task}`;
+      if (entry.role === 'master' && _masterRegistry.size > 1) {
+        const coordSummary = buildCoordinationSummary(terminalId);
+        if (coordSummary) {
+          prompt += '\n\n' + coordSummary;
+        }
+      }
       write(terminalId, prompt + '\r');
 
       log(`[claude-pool] ${terminalId} auto-dispatched task ${claimable.id}`);
@@ -1215,6 +1491,18 @@ export function createClaudePool(ctx) {
       for (const [, mInfo] of _masterRegistry) {
         mInfo.claimedTaskIds.delete(data.taskId);
       }
+    }
+
+    // Auto-broadcast task completion to message bus (Phase 67)
+    if (messageBus && data.terminalId && data.taskId) {
+      try {
+        messageBus.send({
+          from: data.terminalId,
+          to: null, // broadcast
+          content: `[TASK-COMPLETE] ${data.taskId}: ${data.status}${data.category ? ` (${data.category})` : ''}`,
+          category: 'coordination',
+        });
+      } catch { /* message bus failure is non-critical */ }
     }
   };
   events.on('claude-terminal:task-completed', _onTaskCompleted);
@@ -1539,6 +1827,10 @@ export function createClaudePool(ctx) {
     events.off('claude-terminal:data', _onData);
     events.off('claude-terminal:task-released', _onTaskReleased);
     events.off('claude-terminal:exit', _onExit);
+    // Clean up discovery watchers (Phase 67)
+    for (const [masterId] of _discoveryWatchers) {
+      teardownDiscoveryWatcher(masterId);
+    }
   }
 
   async function shutdownAll() {
@@ -2133,6 +2425,11 @@ export function createClaudePool(ctx) {
     setSwarmMode,
     getSwarmState,
     getSwarmMetrics,
+    publishDiscovery,
+    claimFile,
+    releaseClaim,
+    setMasterFocus,
+    buildCoordinationSummary,
     shutdownAll,
     destroy,
   };

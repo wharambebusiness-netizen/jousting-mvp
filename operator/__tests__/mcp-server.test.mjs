@@ -135,7 +135,7 @@ describe('MCP Server (Phase 66)', () => {
         params: {},
       });
 
-      expect(res.result.tools).toHaveLength(10);
+      expect(res.result.tools).toHaveLength(15);
       const names = res.result.tools.map(t => t.name);
       expect(names).toContain('add_task');
       expect(names).toContain('list_tasks');
@@ -533,7 +533,7 @@ describe('MCP Server (Phase 66)', () => {
   describe('getTools / getResources helpers', () => {
     it('should expose tool definitions via getTools()', () => {
       const tools = mcp.getTools();
-      expect(tools).toHaveLength(10);
+      expect(tools).toHaveLength(15);
       expect(tools[0].name).toBe('add_task');
     });
 
