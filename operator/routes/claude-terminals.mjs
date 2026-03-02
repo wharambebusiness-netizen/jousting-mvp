@@ -82,6 +82,48 @@ export function createClaudeTerminalRoutes(ctx) {
     res.json({ masters, count: masters.length });
   });
 
+  // ── POST /claude-terminals/masters/:id/swarm (Phase 69) ────
+  // Start/stop per-master swarm mode
+
+  router.post('/claude-terminals/masters/:id/swarm', async (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
+    if (!claudePool.setMasterSwarm) return res.status(501).json({ error: 'Per-master swarm not available' });
+
+    const masterId = req.params.id;
+    const {
+      enabled = true,
+      minTerminals = 2,
+      maxTerminals = 8,
+      model = 'sonnet',
+      dangerouslySkipPermissions = true,
+    } = req.body || {};
+
+    const result = claudePool.setMasterSwarm(masterId, {
+      enabled: !!enabled,
+      minTerminals,
+      maxTerminals,
+      model,
+      dangerouslySkipPermissions,
+    });
+
+    if (!result.ok) {
+      return res.status(404).json({ error: result.error });
+    }
+
+    res.json({ ok: true, masterId, swarm: result.swarm });
+  });
+
+  // ── GET /claude-terminals/masters/:id/swarm (Phase 69) ────
+
+  router.get('/claude-terminals/masters/:id/swarm', (req, res) => {
+    if (!claudePool) return res.status(503).json({ error: 'Claude pool not active' });
+    if (!claudePool.getMasterSwarm) return res.status(501).json({ error: 'Per-master swarm not available' });
+
+    const info = claudePool.getMasterSwarm(req.params.id);
+    if (!info) return res.status(404).json({ error: 'Master not found' });
+    res.json({ masterId: req.params.id, ...info });
+  });
+
   // ── GET /claude-terminals/:id ─────────────────────────
 
   router.get('/claude-terminals/:id', (req, res) => {
@@ -555,6 +597,7 @@ export function createClaudeTerminalRoutes(ctx) {
       systemPrompt,
       scaleUpThreshold = 2,
       dangerouslySkipPermissions = true,
+      _masterId,
     } = req.body || {};
 
     // Enable swarm mode on the pool
@@ -567,6 +610,7 @@ export function createClaudeTerminalRoutes(ctx) {
       systemPrompt: systemPrompt || null,
       scaleUpThreshold: Math.max(1, Math.min(10, parseInt(scaleUpThreshold) || 2)),
       dangerouslySkipPermissions: !!dangerouslySkipPermissions,
+      _masterId: _masterId || null,
     });
 
     // Start coordinator if in init state
@@ -589,6 +633,7 @@ export function createClaudeTerminalRoutes(ctx) {
           autoDispatch: true,
           autoComplete: true,
           _swarmManaged: true,
+          ...(_masterId ? { _masterId } : {}),
         });
         seeded++;
       } catch (err) {

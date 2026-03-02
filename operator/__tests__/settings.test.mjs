@@ -36,6 +36,7 @@ describe('exports', () => {
       coordMaxTokensPerMinute: 100000,
       coordGlobalBudgetUsd: 50,
       coordPerWorkerBudgetUsd: 10,
+      maxPoolTerminals: 8,
     });
   });
 
@@ -105,6 +106,7 @@ describe('load', () => {
       coordMaxTokensPerMinute: 200000,
       coordGlobalBudgetUsd: 100,
       coordPerWorkerBudgetUsd: 20,
+      maxPoolTerminals: 16,
     };
     writeFileSync(join(TEST_DIR, 'settings.json'), JSON.stringify(custom));
     const s = createSettings({ operatorDir: TEST_DIR });
@@ -286,6 +288,7 @@ describe('save', () => {
       coordMaxTokensPerMinute: 50000,
       coordGlobalBudgetUsd: 25,
       coordPerWorkerBudgetUsd: 5,
+      maxPoolTerminals: 16,
     };
     const saved = s.save(custom);
     expect(saved).toEqual(custom);

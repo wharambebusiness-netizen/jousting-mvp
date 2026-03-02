@@ -132,6 +132,41 @@
       </form>
     </dialog>
 
+    <!-- Swarm Config Dialog (Phase 69) -->
+    <dialog class="console-dialog" id="swarm-config-dialog">
+      <form class="console-dialog__form" id="swarm-config-form">
+        <h4>Swarm Configuration</h4>
+        <label>
+          Min Workers <small>(initial seed)</small>
+          <input type="number" name="minTerminals" value="2" min="1" max="16" step="1">
+        </label>
+        <label>
+          Max Workers <small>(scale ceiling)</small>
+          <input type="number" name="maxTerminals" value="8" min="1" max="32" step="1">
+        </label>
+        <label>
+          Model
+          <select name="model">
+            <option value="sonnet" selected>Sonnet</option>
+            <option value="haiku">Haiku</option>
+            <option value="opus">Opus</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" name="perMaster" id="swarm-per-master">
+          Assign to active master
+        </label>
+        <label>
+          <input type="checkbox" name="dangerouslySkipPermissions" checked>
+          Skip Permissions
+        </label>
+        <div class="console-dialog__actions">
+          <button type="submit" class="btn btn--sm btn--primary">Start Swarm</button>
+          <button type="button" class="btn btn--sm btn--ghost" id="cancel-swarm-btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- Status Bar -->
     <div class="console-statusbar" id="status-bar">
       <div class="console-statusbar__tasks">

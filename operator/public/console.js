@@ -685,30 +685,56 @@
 
   async function toggleSwarm() {
     var btn = document.getElementById('swarm-btn');
-    try {
-      if (swarmRunning) {
+    if (swarmRunning) {
+      try {
         await fetch('/api/claude-terminals/swarm/stop', { method: 'POST' });
         swarmRunning = false;
         if (btn) btn.textContent = 'Swarm';
         if (window.showToast) window.showToast('Swarm stopped', 'info');
+      } catch(e) {
+        if (window.showToast) window.showToast('Swarm stop failed', 'error');
+      }
+      refreshWorkers();
+    } else {
+      // Open config dialog instead of hardcoded start
+      var dialog = document.getElementById('swarm-config-dialog');
+      if (dialog && dialog.showModal) dialog.showModal();
+    }
+  }
+
+  async function submitSwarmConfig(evt) {
+    evt.preventDefault();
+    var form = document.getElementById('swarm-config-form');
+    var dialog = document.getElementById('swarm-config-dialog');
+    var btn = document.getElementById('swarm-btn');
+    var data = new FormData(form);
+    var config = {
+      minTerminals: parseInt(data.get('minTerminals'), 10) || 2,
+      maxTerminals: parseInt(data.get('maxTerminals'), 10) || 8,
+      model: data.get('model') || 'sonnet',
+      dangerouslySkipPermissions: !!data.get('dangerouslySkipPermissions')
+    };
+    if (data.get('perMaster') && activeMasterId) {
+      config._masterId = activeMasterId;
+    }
+    try {
+      var resp = await fetch('/api/claude-terminals/swarm/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (resp.ok) {
+        swarmRunning = true;
+        if (btn) btn.textContent = 'Stop Swarm';
+        if (window.showToast) window.showToast('Swarm started (' + config.minTerminals + '-' + config.maxTerminals + ' workers)', 'success');
       } else {
-        var resp = await fetch('/api/claude-terminals/swarm/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ minTerminals: 3, maxTerminals: 3 })
-        });
-        if (resp.ok) {
-          swarmRunning = true;
-          if (btn) btn.textContent = 'Stop Swarm';
-          if (window.showToast) window.showToast('Swarm started with 3 workers', 'success');
-        } else {
-          var err = await resp.json().catch(function() { return {}; });
-          if (window.showToast) window.showToast(err.error || 'Failed to start swarm', 'error');
-        }
+        var err = await resp.json().catch(function() { return {}; });
+        if (window.showToast) window.showToast(err.error || 'Failed to start swarm', 'error');
       }
     } catch(e) {
-      if (window.showToast) window.showToast('Swarm action failed', 'error');
+      if (window.showToast) window.showToast('Swarm start failed', 'error');
     }
+    if (dialog) dialog.close();
     refreshWorkers();
   }
 
@@ -1399,16 +1425,20 @@
   async function spawnWorker() {
     var workerId = 'worker-' + Math.random().toString(36).slice(2, 6);
     try {
+      var spawnOpts = {
+        id: workerId,
+        role: 'worker',
+        autoDispatch: true,
+        autoComplete: true,
+        dangerouslySkipPermissions: true
+      };
+      if (activeMasterId) {
+        spawnOpts._masterId = activeMasterId;
+      }
       var resp = await fetch('/api/claude-terminals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: workerId,
-          role: 'worker',
-          autoDispatch: true,
-          autoComplete: true,
-          dangerouslySkipPermissions: true
-        })
+        body: JSON.stringify(spawnOpts)
       });
       if (resp.ok) {
         if (window.showToast) window.showToast('Worker ' + workerId + ' spawned', 'success');
@@ -2179,6 +2209,10 @@
     document.getElementById('create-task-form').addEventListener('submit', submitCreateTask);
     document.getElementById('cancel-task-btn').addEventListener('click', function() {
       document.getElementById('create-task-dialog').close();
+    });
+    document.getElementById('swarm-config-form').addEventListener('submit', submitSwarmConfig);
+    document.getElementById('cancel-swarm-btn').addEventListener('click', function() {
+      document.getElementById('swarm-config-dialog').close();
     });
 
     // Check swarm status on load

@@ -163,6 +163,10 @@ export function createCoordinationRoutes(ctx) {
     category: { type: 'string' },
   }), (req, res) => {
     try {
+      // Propagate createdBy into task metadata for master-affinity routing (Phase 69)
+      if (req.body.createdBy) {
+        req.body.metadata = { ...(req.body.metadata || {}), createdBy: req.body.createdBy };
+      }
       const task = coordinator.addTask(req.body);
       res.status(201).json(task);
     } catch (err) {
@@ -174,7 +178,14 @@ export function createCoordinationRoutes(ctx) {
     tasks: { type: 'array', required: true },
   }), (req, res) => {
     try {
-      const tasks = coordinator.addTasks(req.body.tasks || []);
+      // Propagate createdBy into task metadata for master-affinity routing (Phase 69)
+      const taskDefs = (req.body.tasks || []).map(t => {
+        if (t.createdBy) {
+          return { ...t, metadata: { ...(t.metadata || {}), createdBy: t.createdBy } };
+        }
+        return t;
+      });
+      const tasks = coordinator.addTasks(taskDefs);
       res.status(201).json(tasks);
     } catch (err) {
       res.status(400).json({ error: err.message });

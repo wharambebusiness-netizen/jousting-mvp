@@ -687,6 +687,11 @@ export function createViewRoutes(ctx) {
               <input type="number" name="perWorkerBudgetUsd" value="${workerBudget}" min="0" max="100" step="0.5">
               <small>Budget cap per individual worker</small>
             </label>
+            <label>
+              Max Pool Terminals
+              <input type="number" name="maxPoolTerminals" value="${settings.maxPoolTerminals}" min="2" max="64" step="1">
+              <small>Maximum concurrent terminals (masters + workers)</small>
+            </label>
           </div>
           <div class="settings-actions">
             <button type="submit" class="btn btn--primary">Save</button>

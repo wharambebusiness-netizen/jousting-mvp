@@ -353,12 +353,14 @@
       var tpm = parseFloat(fd.get('maxTokensPerMinute')) || 100000;
       var gb = parseFloat(fd.get('globalBudgetUsd')) || 50;
       var wb = parseFloat(fd.get('perWorkerBudgetUsd')) || 10;
+      var mpt = parseInt(fd.get('maxPoolTerminals')) || 8;
       // Always persist to settings
       mergeSettings({
         coordMaxRequestsPerMinute: rpm,
         coordMaxTokensPerMinute: tpm,
         coordGlobalBudgetUsd: gb,
-        coordPerWorkerBudgetUsd: wb
+        coordPerWorkerBudgetUsd: wb,
+        maxPoolTerminals: mpt
       }, 'Coordination settings saved');
       // Also apply live if coordinator is active
       fetch('/api/coordination/config', {

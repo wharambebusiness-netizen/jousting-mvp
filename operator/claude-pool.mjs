@@ -32,6 +32,7 @@ const AFFINITY_CATEGORY_BONUS = 2;       // bonus for matching any history categ
 const AFFINITY_RECENT_BONUS = 1;         // extra bonus for matching most recent category
 const MAX_MASTERS = 4;                   // max concurrent master terminals (Phase 66)
 const MASTER_DOMAIN_AFFINITY_BONUS = 5;  // scoring bonus for master domain match (Phase 66)
+const MASTER_OWNER_AFFINITY_BONUS = 4;  // scoring bonus for worker's own master's tasks (Phase 69)
 const ACTIVITY_CHECK_INTERVAL_MS = 2000; // check activity state transitions every 2s
 const STALE_TERMINAL_TTL_MS = 5 * 60 * 1000; // remove non-persistent stopped terminals after 5 minutes
 
@@ -59,7 +60,7 @@ const MAX_CONTEXT_REFRESHES = 10;                   // prevent infinite loops
 export function createClaudePool(ctx) {
   const { events, projectDir } = ctx;
   const log = ctx.log || console.log;
-  const maxTerminals = ctx.maxTerminals ?? MAX_TERMINALS;
+  let maxTerminals = ctx.maxTerminals ?? MAX_TERMINALS;
   const sharedMemory = ctx.sharedMemory || null;
   const coordinator = ctx.coordinator || null;
   const auth = ctx.auth || null;
@@ -311,6 +312,7 @@ export function createClaudePool(ctx) {
     dangerouslySkipPermissions: true,
     systemPrompt: null,
     scaleUpThreshold: 2,
+    _masterId: null,
     _scaleTimer: null,
     _counter: 0,
     _tickCount: 0,
@@ -521,6 +523,15 @@ export function createClaudePool(ctx) {
 
     terminals.set(terminalId, entry);
 
+    // Register worker in its master's workerIds (Phase 69)
+    if (opts._masterId && opts.role !== 'master') {
+      const masterInfo = _masterRegistry.get(opts._masterId);
+      if (masterInfo) {
+        masterInfo.workerIds.add(terminalId);
+        events.emit('master:worker-added', { masterId: opts._masterId, workerId: terminalId, workerCount: masterInfo.workerIds.size });
+      }
+    }
+
     // Register in master registry (Phase 66)
     if (opts.role === 'master') {
       _masterRegistry.set(terminalId, {
@@ -626,6 +637,15 @@ export function createClaudePool(ctx) {
         // Clean up coordination keys and discovery watcher (Phase 67)
         cleanupMasterCoordinationKeys(terminalId);
         teardownDiscoveryWatcher(terminalId);
+      }
+
+      // Remove worker from its master's workerIds (Phase 69)
+      if (entry.config._masterId && entry.role !== 'master') {
+        const masterInfo = _masterRegistry.get(entry.config._masterId);
+        if (masterInfo) {
+          masterInfo.workerIds.delete(terminalId);
+          events.emit('master:worker-removed', { masterId: entry.config._masterId, workerId: terminalId, workerCount: masterInfo.workerIds.size });
+        }
       }
 
       // Worktree cleanup on worker exit (Phase 66)
@@ -1337,6 +1357,9 @@ export function createClaudePool(ctx) {
     const masterInfo = entry.role === 'master' ? _masterRegistry.get(terminalId) : null;
     const masterDomain = masterInfo ? masterInfo.domain : null;
 
+    // Master owner affinity: workers prefer tasks created by their owning master (Phase 69)
+    const workerMasterId = entry.config._masterId || null;
+
     // File conflict scoring: deprioritize tasks whose metadata.files overlap with other masters' claims (Phase 67)
     const FILE_CONFLICT_PENALTY = 3;
     let claimedFilesSet = null;
@@ -1362,6 +1385,13 @@ export function createClaudePool(ctx) {
       if (masterDomain) {
         if (a.category === masterDomain) scoreA += MASTER_DOMAIN_AFFINITY_BONUS;
         if (b.category === masterDomain) scoreB += MASTER_DOMAIN_AFFINITY_BONUS;
+      }
+      // Apply master owner affinity (Phase 69)
+      if (workerMasterId) {
+        const createdByA = (a.metadata && a.metadata.createdBy) || null;
+        const createdByB = (b.metadata && b.metadata.createdBy) || null;
+        if (createdByA === workerMasterId) scoreA += MASTER_OWNER_AFFINITY_BONUS;
+        if (createdByB === workerMasterId) scoreB += MASTER_OWNER_AFFINITY_BONUS;
       }
       // Apply file conflict penalty (Phase 67)
       if (claimedFilesSet) {
@@ -1845,6 +1875,11 @@ export function createClaudePool(ctx) {
       swarmState._scaleTimer = null;
       swarmState.enabled = false;
     }
+    // Stop per-master swarm timer (Phase 69)
+    if (_masterSwarmTimer) {
+      clearInterval(_masterSwarmTimer);
+      _masterSwarmTimer = null;
+    }
 
     const ids = [...terminals.keys()];
 
@@ -2219,6 +2254,7 @@ export function createClaudePool(ctx) {
         autoDispatch: true,
         autoComplete: true,
         _swarmManaged: true,
+        ...(swarmState._masterId ? { _masterId: swarmState._masterId } : {}),
       };
       spawn(freshId, swarmOpts)
         .then(() => {
@@ -2258,6 +2294,7 @@ export function createClaudePool(ctx) {
         autoDispatch: true,
         autoComplete: true,
         _swarmManaged: true,
+        ...(swarmState._masterId ? { _masterId: swarmState._masterId } : {}),
       };
       spawn(swarmId, swarmOpts)
         .then(() => {
@@ -2311,12 +2348,175 @@ export function createClaudePool(ctx) {
   }
 
   /**
+   * Update the pool's max terminal cap at runtime (Phase 69).
+   * @param {number} newMax
+   */
+  function setMaxTerminals(newMax) {
+    maxTerminals = Math.max(2, Math.min(64, newMax || MAX_TERMINALS));
+    if (!swarmState.enabled) {
+      _effectiveMaxTerminals = maxTerminals;
+    }
+  }
+
+  /**
+   * Enable/disable per-master swarm mode (Phase 69).
+   * Each master gets its own min/max worker limits.
+   * @param {string} masterId
+   * @param {object} opts - { enabled, minTerminals, maxTerminals, model }
+   * @returns {{ ok: boolean, swarm?: object, error?: string }}
+   */
+  function setMasterSwarm(masterId, opts = {}) {
+    const masterInfo = _masterRegistry.get(masterId);
+    if (!masterInfo) return { ok: false, error: 'Master not found' };
+
+    if (opts.enabled) {
+      masterInfo.swarm = {
+        enabled: true,
+        minTerminals: Math.max(1, Math.min(16, parseInt(opts.minTerminals) || 2)),
+        maxTerminals: Math.max(1, Math.min(16, parseInt(opts.maxTerminals) || 8)),
+        model: opts.model || 'sonnet',
+        dangerouslySkipPermissions: opts.dangerouslySkipPermissions !== false,
+      };
+      // Raise effective cap to accommodate per-master workers
+      const totalPerMaster = _getTotalPerMasterMax();
+      _effectiveMaxTerminals = Math.max(maxTerminals, totalPerMaster + MAX_MASTERS);
+      events.emit('master:swarm-started', { masterId, swarm: masterInfo.swarm });
+      _ensureMasterSwarmTimer();
+    } else {
+      masterInfo.swarm = null;
+      // Recalculate effective cap
+      const totalPerMaster = _getTotalPerMasterMax();
+      if (swarmState.enabled) {
+        _effectiveMaxTerminals = Math.max(maxTerminals, swarmState.maxTerminals, totalPerMaster + MAX_MASTERS);
+      } else {
+        _effectiveMaxTerminals = Math.max(maxTerminals, totalPerMaster + MAX_MASTERS);
+      }
+      events.emit('master:swarm-stopped', { masterId });
+      _ensureMasterSwarmTimer();
+    }
+    return { ok: true, swarm: masterInfo.swarm };
+  }
+
+  /**
+   * Get total maxTerminals across all per-master swarm configs.
+   */
+  function _getTotalPerMasterMax() {
+    let total = 0;
+    for (const [, info] of _masterRegistry) {
+      if (info.swarm && info.swarm.enabled) {
+        total += info.swarm.maxTerminals;
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Get a master's swarm config.
+   * @param {string} masterId
+   * @returns {object|null}
+   */
+  function getMasterSwarm(masterId) {
+    const masterInfo = _masterRegistry.get(masterId);
+    if (!masterInfo) return null;
+    const swarm = masterInfo.swarm || null;
+    const workerCount = masterInfo.workerIds.size;
+    const runningWorkers = [...masterInfo.workerIds].filter(wId => {
+      const entry = terminals.get(wId);
+      return entry && entry.status === 'running';
+    }).length;
+    return { swarm, workerCount, runningWorkers };
+  }
+
+  // Per-master swarm scale timer (Phase 69)
+  let _masterSwarmTimer = null;
+
+  /**
+   * Per-master scale check: ensure each master with swarm config has enough workers.
+   * Spawns workers to fill up to minTerminals, caps at maxTerminals.
+   */
+  function _masterSwarmScaleCheck() {
+    for (const [masterId, masterInfo] of _masterRegistry) {
+      if (!masterInfo.swarm || !masterInfo.swarm.enabled) continue;
+      const sw = masterInfo.swarm;
+
+      // Count running workers for this master
+      let runningWorkers = 0;
+      for (const wId of masterInfo.workerIds) {
+        const entry = terminals.get(wId);
+        if (entry && entry.status === 'running') runningWorkers++;
+      }
+
+      // Scale up if below min
+      if (runningWorkers < sw.minTerminals) {
+        const toSpawn = Math.min(sw.minTerminals - runningWorkers, 2); // batch up to 2
+        for (let i = 0; i < toSpawn; i++) {
+          const wId = `${masterId}-w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
+          spawn(wId, {
+            role: 'worker',
+            model: sw.model,
+            dangerouslySkipPermissions: sw.dangerouslySkipPermissions,
+            autoHandoff: true,
+            autoDispatch: true,
+            autoComplete: true,
+            _masterId: masterId,
+            _swarmManaged: true,
+          }).then(() => {
+            log(`[claude-pool] Master ${masterId} swarm: spawned worker ${wId} (${runningWorkers + 1}/${sw.maxTerminals})`);
+            setTimeout(() => maybeAutoDispatch(wId), AUTO_DISPATCH_DELAY_MS);
+          }).catch((err) => {
+            log(`[claude-pool] Master ${masterId} swarm spawn failed: ${err.message}`);
+          });
+        }
+      }
+
+      // Scale down idle workers beyond min (every 6th tick = ~30s)
+      if (runningWorkers > sw.minTerminals) {
+        for (const wId of masterInfo.workerIds) {
+          if (runningWorkers <= sw.minTerminals) break;
+          const entry = terminals.get(wId);
+          if (!entry || entry.status !== 'running') continue;
+          if (entry.assignedTask) continue;
+          const state = getActivityState(entry);
+          if (state !== 'idle') continue;
+          const idleMs = Date.now() - new Date(entry.lastActivityAt).getTime();
+          if (idleMs >= SWARM_SCALE_DOWN_IDLE_MS) {
+            kill(wId);
+            runningWorkers--;
+            log(`[claude-pool] Master ${masterId} swarm: scaled down worker ${wId}`);
+          }
+        }
+      }
+    }
+
+    // Stop timer if no masters have swarm enabled
+    const anyActive = [..._masterRegistry.values()].some(m => m.swarm && m.swarm.enabled);
+    if (!anyActive && _masterSwarmTimer) {
+      clearInterval(_masterSwarmTimer);
+      _masterSwarmTimer = null;
+    }
+  }
+
+  /**
+   * Start or stop the per-master swarm timer as needed.
+   */
+  function _ensureMasterSwarmTimer() {
+    const anyActive = [..._masterRegistry.values()].some(m => m.swarm && m.swarm.enabled);
+    if (anyActive && !_masterSwarmTimer) {
+      _masterSwarmTimer = setInterval(_masterSwarmScaleCheck, SWARM_SCALE_CHECK_MS);
+    }
+    if (!anyActive && _masterSwarmTimer) {
+      clearInterval(_masterSwarmTimer);
+      _masterSwarmTimer = null;
+    }
+  }
+
+  /**
    * Enable or disable swarm mode.
    * @param {object} opts - { enabled, minTerminals, maxTerminals, projectDir, model, ... }
    * @returns {object} Updated swarmState summary
    */
   function setSwarmMode(opts = {}) {
-    const SWARM_CONFIG_KEYS = ['enabled', 'minTerminals', 'maxTerminals', 'projectDir', 'model', 'dangerouslySkipPermissions', 'systemPrompt', 'scaleUpThreshold'];
+    const SWARM_CONFIG_KEYS = ['enabled', 'minTerminals', 'maxTerminals', 'projectDir', 'model', 'dangerouslySkipPermissions', 'systemPrompt', 'scaleUpThreshold', '_masterId'];
     for (const key of SWARM_CONFIG_KEYS) {
       if (key in opts) swarmState[key] = opts[key];
     }
@@ -2387,6 +2587,7 @@ export function createClaudePool(ctx) {
       dangerouslySkipPermissions: swarmState.dangerouslySkipPermissions,
       systemPrompt: swarmState.systemPrompt,
       scaleUpThreshold: swarmState.scaleUpThreshold,
+      _masterId: swarmState._masterId || null,
       running: activeCount(),
       pending: countClaimableTasks(),
       circuitBroken: swarmState._circuitBroken,
@@ -2422,6 +2623,9 @@ export function createClaudePool(ctx) {
     getOutputPreview,
     getRawOutputPreview,
     findNextClaimableTask,
+    setMaxTerminals,
+    setMasterSwarm,
+    getMasterSwarm,
     setSwarmMode,
     getSwarmState,
     getSwarmMetrics,
@@ -2435,4 +2639,4 @@ export function createClaudePool(ctx) {
   };
 }
 
-export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS, STALE_TERMINAL_TTL_MS, MAX_MASTERS, MASTER_DOMAIN_AFFINITY_BONUS };
+export { MAX_TERMINALS, FORCE_KILL_TIMEOUT_MS, AUTO_DISPATCH_DELAY_MS, IDLE_THRESHOLD_MS, COMPLETION_IDLE_THRESHOLD_MS, MIN_ACTIVITY_BYTES, SWARM_SCALE_CHECK_MS, SWARM_SCALE_DOWN_IDLE_MS, SWARM_ID_PREFIX, SWARM_MAX_CRASH_RETRIES, MAX_TASK_HISTORY, AFFINITY_CATEGORY_BONUS, AFFINITY_RECENT_BONUS, CONTEXT_REFRESH_HANDOFF_TIMEOUT_MS, CONTEXT_REFRESH_GIT_TIMEOUT_MS, CONTEXT_REFRESH_SPAWN_DELAY_MS, MAX_CONTEXT_REFRESHES, ACTIVITY_CHECK_INTERVAL_MS, STALE_TERMINAL_TTL_MS, MAX_MASTERS, MASTER_DOMAIN_AFFINITY_BONUS, MASTER_OWNER_AFFINITY_BONUS };

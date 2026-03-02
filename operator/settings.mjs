@@ -28,6 +28,7 @@ const DEFAULTS = {
   coordMaxTokensPerMinute: 100000,
   coordGlobalBudgetUsd: 50,
   coordPerWorkerBudgetUsd: 10,
+  maxPoolTerminals: 8,
 };
 
 const VALID_MODELS = ['haiku', 'sonnet', 'opus'];
@@ -63,6 +64,7 @@ export function createSettings(ctx) {
       coordMaxTokensPerMinute: clampInt(data.coordMaxTokensPerMinute, 1000, 10000000, DEFAULTS.coordMaxTokensPerMinute),
       coordGlobalBudgetUsd: clampFloat(data.coordGlobalBudgetUsd, 0, 1000, DEFAULTS.coordGlobalBudgetUsd),
       coordPerWorkerBudgetUsd: clampFloat(data.coordPerWorkerBudgetUsd, 0, 100, DEFAULTS.coordPerWorkerBudgetUsd),
+      maxPoolTerminals: clampInt(data.maxPoolTerminals, 2, 64, DEFAULTS.maxPoolTerminals),
     };
   }
 

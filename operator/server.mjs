@@ -504,9 +504,19 @@ export function createApp(options = {}) {
     if (options.enableWorktrees) {
       poolWorktreeManager = createWorktreeManager({ projectDir, events, log: () => {} });
     }
-    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, worktreeManager: poolWorktreeManager, messageBus, log: () => {} });
+    const poolMaxTerminals = settings.get('maxPoolTerminals');
+    claudePool = createClaudePool({ events, projectDir, sharedMemory, coordinator, auth, worktreeManager: poolWorktreeManager, messageBus, maxTerminals: poolMaxTerminals, log: () => {} });
   } else if (options.claudePool && typeof options.claudePool === 'object') {
     claudePool = options.claudePool;
+  }
+
+  // Hot-reload pool cap from settings (Phase 69)
+  if (claudePool && claudePool.setMaxTerminals) {
+    settings.onChange(({ changes }) => {
+      if (changes && changes.maxPoolTerminals) {
+        claudePool.setMaxTerminals(changes.maxPoolTerminals.to);
+      }
+    });
   }
 
   // Master coordinator (Phase 66) -- multi-master heartbeat & domain affinity
