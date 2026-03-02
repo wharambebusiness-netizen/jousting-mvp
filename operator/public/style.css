@@ -5606,8 +5606,125 @@ details[open] > .tree-summary .tree-icon--dir {
   height: 360px;
 }
 
+.worker-card__terminal--fullwidth {
+  position: fixed;
+  top: 60px;
+  left: var(--sidebar-width-collapsed);
+  right: 0;
+  bottom: 0;
+  height: auto;
+  z-index: 50;
+  border-radius: 0;
+  margin: 0;
+}
+
+.worker-card__terminal--fullwidth .worker-card__expand {
+  opacity: 1;
+  width: 24px;
+  height: 24px;
+  font-size: 0.75rem;
+}
+
 .worker-card__terminal .xterm {
   height: 100% !important;
+}
+
+/* ── M1: Context Health Bar ─────────────────────────── */
+
+.worker-card__health {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+
+.worker-card__health-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.worker-card__health--green {
+  background: linear-gradient(90deg, var(--status-success), var(--status-success));
+}
+
+.worker-card__health--yellow {
+  background: linear-gradient(90deg, var(--status-warning), var(--status-warning) 60%, var(--border-subtle) 100%);
+}
+
+.worker-card__health--red {
+  background: linear-gradient(90deg, var(--status-error), var(--status-error) 40%, var(--border-subtle) 100%);
+  animation: pulse-bar 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.worker-card__health-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── M1: Worktree Badge ─────────────────────────────── */
+
+.worker-card__worktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--status-purple-bg);
+  color: var(--status-purple);
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── M1: Detail Section (expanded view) ─────────────── */
+
+.worker-card__detail {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.worker-card__util-detail {
+  display: flex;
+  gap: var(--sp-3);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.worker-card__history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: var(--sp-1);
+}
+
+.worker-card__history-pill {
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .worker-card__output {
@@ -6833,4 +6950,107 @@ details[open] > .tree-summary .tree-icon--dir {
 
 .console-statusbar__observer.observer--inactive {
   color: #64748b;
+}
+
+/* ── Page Transition Animation (M3 SPA Fix) ───────────── */
+
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page--restored {
+  animation: page-fade-in 200ms ease-out;
+}
+
+/* ── M2: Terminal Tab Role Badges ───────────────────── */
+
+.term-tab__role {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+  margin-right: 2px;
+}
+
+.term-tab__role--master {
+  background: var(--status-purple-bg);
+  color: var(--status-purple);
+}
+
+.term-tab__role--worker {
+  background: var(--status-info-bg);
+  color: var(--status-info);
+}
+
+.term-tab__master-badge {
+  font-size: 0.5rem;
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: var(--radius-sm);
+  background: rgba(167,139,250,0.12);
+  color: var(--status-purple);
+  margin-right: 2px;
+}
+
+/* ── M2: Status Bar Role & Activity Badges ──────────── */
+
+.term-status__role {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+.term-status__role--master {
+  background: var(--status-purple-bg);
+  color: var(--status-purple);
+}
+
+.term-status__role--worker {
+  background: var(--status-info-bg);
+  color: var(--status-info);
+}
+
+.term-status__activity {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  text-transform: capitalize;
+}
+
+.term-status__activity--active {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+
+.term-status__activity--idle {
+  background: rgba(100,116,139,0.12);
+  color: #64748b;
+}
+
+.term-status__activity--waiting {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.term-status__activity--stopped {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.term-status__task-badge {
+  font-size: 0.6rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent-bg);
+  color: var(--accent-hover);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
 }

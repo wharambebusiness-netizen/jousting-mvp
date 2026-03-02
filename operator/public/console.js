@@ -1083,6 +1083,19 @@
     }
     card.appendChild(taskDiv);
 
+    // ── Context health bar ────────────────────────────────────
+    var healthDiv = document.createElement('div');
+    healthDiv.className = 'worker-card__health';
+    var refreshCount = w.contextRefreshCount || 0;
+    var isRefreshing = !!w.contextRefreshState;
+    var healthLevel = (refreshCount >= 4 || (refreshCount >= 2 && isRefreshing)) ? 'red'
+      : (refreshCount >= 2 || isRefreshing) ? 'yellow' : 'green';
+    var healthLabel = healthLevel === 'red' ? 'critical' : healthLevel === 'yellow' ? 'pressured' : 'healthy';
+    healthDiv.innerHTML =
+      '<div class="worker-card__health-bar worker-card__health--' + healthLevel + '"></div>' +
+      '<span class="worker-card__health-label">Context: ' + healthLabel + '</span>';
+    card.appendChild(healthDiv);
+
     // ── Info row: cost | handoffs | context ──────────────────
     var info = document.createElement('div');
     info.className = 'worker-card__info';
@@ -1120,6 +1133,16 @@
       card.appendChild(info);
     }
 
+    // ── Worktree badge ──────────────────────────────────────
+    if (w.worktreePath) {
+      var wtBadge = document.createElement('div');
+      wtBadge.className = 'worker-card__worktree';
+      var wtName = w.worktreePath.split(/[/\\]/).pop() || w.worktreePath;
+      wtBadge.textContent = '\u2387 ' + wtName;
+      wtBadge.title = w.worktreePath;
+      card.appendChild(wtBadge);
+    }
+
     // ── Capabilities pills ──────────────────────────────────
     if (w.capabilities && w.capabilities.length > 0) {
       var capsDiv = document.createElement('div');
@@ -1131,6 +1154,48 @@
         capsDiv.appendChild(pill);
       });
       card.appendChild(capsDiv);
+    }
+
+    // ── Detail section (expanded view) ─────────────────────
+    var detail = document.createElement('div');
+    detail.className = 'worker-card__detail';
+
+    // Utilization breakdown
+    if (w.utilization) {
+      var utilDetail = document.createElement('div');
+      utilDetail.className = 'worker-card__util-detail';
+      var activeMs = w.utilization.activeMs || 0;
+      var idleMs = w.utilization.idleMs || 0;
+      var totalMs = activeMs + idleMs;
+      var activePct = totalMs > 0 ? Math.round(100 * activeMs / totalMs) : 0;
+      var completed = w.utilization.tasksCompleted || 0;
+      var failed = w.utilization.tasksFailed || 0;
+      var totalTasks = completed + failed;
+      var successRate = totalTasks > 0 ? Math.round(100 * completed / totalTasks) : 100;
+      utilDetail.innerHTML =
+        '<span>Active: ' + activePct + '%</span>' +
+        '<span>Tasks: ' + completed + '/' + totalTasks + ' (' + successRate + '%)</span>' +
+        (idleMs > 60000 ? '<span>Idle ' + formatDurationShort(idleMs) + '</span>' : '');
+      detail.appendChild(utilDetail);
+    }
+
+    // Task history breadcrumb
+    if (w.taskHistory && w.taskHistory.length > 0) {
+      var histDiv = document.createElement('div');
+      histDiv.className = 'worker-card__history';
+      var recentTasks = w.taskHistory.slice(-5);
+      recentTasks.forEach(function(taskCat) {
+        var pill = document.createElement('span');
+        pill.className = 'worker-card__history-pill';
+        pill.textContent = taskCat.length > 12 ? taskCat.slice(0, 12) + '\u2026' : taskCat;
+        pill.title = taskCat;
+        histDiv.appendChild(pill);
+      });
+      detail.appendChild(histDiv);
+    }
+
+    if (detail.children.length > 0) {
+      card.appendChild(detail);
     }
 
     // ── Meta row (status + age + exit info) ─────────────────
@@ -1219,10 +1284,25 @@
 
   /**
    * Toggle expand/collapse on a worker mini-terminal.
+   * Cycles: collapsed → expanded → fullwidth → collapsed
    */
   function toggleWorkerExpand(workerId, termContainer, expandBtn) {
-    var expanded = termContainer.classList.toggle('worker-card__terminal--expanded');
-    expandBtn.innerHTML = expanded ? '&#9660;' : '&#9650;';
+    var isFullwidth = termContainer.classList.contains('worker-card__terminal--fullwidth');
+    var isExpanded = termContainer.classList.contains('worker-card__terminal--expanded');
+
+    if (isFullwidth) {
+      // Fullwidth → collapsed
+      termContainer.classList.remove('worker-card__terminal--fullwidth', 'worker-card__terminal--expanded');
+      expandBtn.innerHTML = '&#9650;';
+    } else if (isExpanded) {
+      // Expanded → fullwidth
+      termContainer.classList.add('worker-card__terminal--fullwidth');
+      expandBtn.innerHTML = '&#9660;';
+    } else {
+      // Collapsed → expanded
+      termContainer.classList.add('worker-card__terminal--expanded');
+      expandBtn.innerHTML = '&#9660;';
+    }
 
     // Refit xterm after expand transition
     var entry = workerTerminals[workerId];
@@ -1232,6 +1312,23 @@
       }, 220);
     }
   }
+
+  // Close fullwidth terminal on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var fw = document.querySelector('.worker-card__terminal--fullwidth');
+      if (fw) {
+        fw.classList.remove('worker-card__terminal--fullwidth', 'worker-card__terminal--expanded');
+        var btn = fw.querySelector('.worker-card__expand');
+        if (btn) btn.innerHTML = '&#9650;';
+        var wId = fw.id.replace('worker-term-', '');
+        var entry = workerTerminals[wId];
+        if (entry && entry.fitAddon) {
+          setTimeout(function() { try { entry.fitAddon.fit(); } catch(_) {} }, 220);
+        }
+      }
+    }
+  });
 
   /**
    * Trigger a context refresh / respawn for a worker.
@@ -1389,6 +1486,71 @@
         if (infoR) infoR.appendChild(utilEl);
       }
       if (utilEl) utilEl.textContent = w.utilization.tasksCompleted + ' done';
+    }
+
+    // Update context health bar
+    var healthDiv = card.querySelector('.worker-card__health');
+    if (healthDiv) {
+      var refreshCount = w.contextRefreshCount || 0;
+      var isRefreshing = !!w.contextRefreshState;
+      var healthLevel = (refreshCount >= 4 || (refreshCount >= 2 && isRefreshing)) ? 'red'
+        : (refreshCount >= 2 || isRefreshing) ? 'yellow' : 'green';
+      var healthLabel = healthLevel === 'red' ? 'critical' : healthLevel === 'yellow' ? 'pressured' : 'healthy';
+      var bar = healthDiv.querySelector('.worker-card__health-bar');
+      if (bar) bar.className = 'worker-card__health-bar worker-card__health--' + healthLevel;
+      var label = healthDiv.querySelector('.worker-card__health-label');
+      if (label) label.textContent = 'Context: ' + healthLabel;
+    }
+
+    // Update worktree badge
+    var wtBadge = card.querySelector('.worker-card__worktree');
+    if (w.worktreePath && !wtBadge) {
+      wtBadge = document.createElement('div');
+      wtBadge.className = 'worker-card__worktree';
+      var wtName = w.worktreePath.split(/[/\\]/).pop() || w.worktreePath;
+      wtBadge.textContent = '\u2387 ' + wtName;
+      wtBadge.title = w.worktreePath;
+      var infoRow2 = card.querySelector('.worker-card__info');
+      if (infoRow2) infoRow2.insertAdjacentElement('afterend', wtBadge);
+    }
+
+    // Update detail section (utilization + task history)
+    var detailDiv = card.querySelector('.worker-card__detail');
+    if (detailDiv) {
+      // Update utilization detail
+      var utilDetail = detailDiv.querySelector('.worker-card__util-detail');
+      if (w.utilization && utilDetail) {
+        var activeMs = w.utilization.activeMs || 0;
+        var idleMs = w.utilization.idleMs || 0;
+        var totalMs = activeMs + idleMs;
+        var activePct = totalMs > 0 ? Math.round(100 * activeMs / totalMs) : 0;
+        var completed = w.utilization.tasksCompleted || 0;
+        var failed = w.utilization.tasksFailed || 0;
+        var totalTasks = completed + failed;
+        var successRate = totalTasks > 0 ? Math.round(100 * completed / totalTasks) : 100;
+        utilDetail.innerHTML =
+          '<span>Active: ' + activePct + '%</span>' +
+          '<span>Tasks: ' + completed + '/' + totalTasks + ' (' + successRate + '%)</span>' +
+          (idleMs > 60000 ? '<span>Idle ' + formatDurationShort(idleMs) + '</span>' : '');
+      }
+
+      // Update task history
+      var histDiv = detailDiv.querySelector('.worker-card__history');
+      if (w.taskHistory && w.taskHistory.length > 0) {
+        if (!histDiv) {
+          histDiv = document.createElement('div');
+          histDiv.className = 'worker-card__history';
+          detailDiv.appendChild(histDiv);
+        }
+        histDiv.innerHTML = '';
+        w.taskHistory.slice(-5).forEach(function(taskCat) {
+          var pill = document.createElement('span');
+          pill.className = 'worker-card__history-pill';
+          pill.textContent = taskCat.length > 12 ? taskCat.slice(0, 12) + '\u2026' : taskCat;
+          pill.title = taskCat;
+          histDiv.appendChild(pill);
+        });
+      }
     }
 
     // Update meta
@@ -1593,6 +1755,12 @@
     if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
     if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
     return Math.floor(secs / 86400) + 'd ago';
+  }
+
+  function formatDurationShort(ms) {
+    if (ms < 60000) return Math.round(ms / 1000) + 's';
+    if (ms < 3600000) return Math.round(ms / 60000) + 'm';
+    return Math.round(ms / 3600000) + 'h';
   }
 
   function debounce(fn, delay) {
@@ -2254,13 +2422,35 @@
         // Use rAF + setTimeout to ensure CSS layout is complete before measuring
         requestAnimationFrame(function() {
           setTimeout(function() {
-            if (activeMasterId && masters[activeMasterId]) {
-              try { masters[activeMasterId].fitAddon.fit(); } catch (_) {}
-            }
+            // Refit and reconnect master terminals
+            Object.keys(masters).forEach(function(id) {
+              var entry = masters[id];
+              if (!entry) return;
+              if (entry.fitAddon) {
+                try { entry.fitAddon.fit(); } catch (_) {}
+              }
+              // Reconnect binary WS if stale or closed
+              if (!entry.binaryWs || entry.binaryWs.readyState !== WebSocket.OPEN) {
+                if (entry.binaryWs) { try { entry.binaryWs.close(); } catch (_) {} }
+                entry.binaryWs = null;
+                connectMasterBinaryWs(id);
+              }
+            });
+            // Refit and reconnect worker mini-terminals
             Object.keys(workerTerminals).forEach(function(id) {
               var entry = workerTerminals[id];
-              if (entry && entry.fitAddon) {
+              if (!entry) return;
+              if (entry.fitAddon) {
                 try { entry.fitAddon.fit(); } catch (_) {}
+              }
+              // Reconnect worker binary WS if stale
+              if (!entry.binaryWs || entry.binaryWs.readyState !== WebSocket.OPEN) {
+                if (entry.binaryWs) { try { entry.binaryWs.close(); } catch (_) {} }
+                entry.binaryWs = null;
+                var w = seenWorkers[id] || workers[id];
+                if (w && w.status === 'running') {
+                  connectWorkerBinaryWs(id);
+                }
               }
             });
           }, 50);

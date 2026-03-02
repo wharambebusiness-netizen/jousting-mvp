@@ -197,14 +197,24 @@ var sidebarFilterTimer = null;
   }
   checkPendingProject();
 
-  // Refit all terminals when page is restored from cache
+  // Refit all terminals and reconnect WS when page is restored from cache
   document.addEventListener('terminal-page-restored', function(e) {
     if (e.detail && e.detail.page === '/terminals') {
       instances.forEach(function(inst) {
         if (inst.fitAddon) {
           try { inst.fitAddon.fit(); } catch (_) { /* ignore */ }
         }
+        // Reconnect Claude terminal binary WS if stale
+        if (inst.type === 'claude' && inst.running) {
+          if (!inst.binaryWs || inst.binaryWs.readyState !== WebSocket.OPEN) {
+            connectClaudeBinaryWs(inst);
+          }
+        }
       });
+      // Reconnect main JSON WS if it was closed
+      if (!wsHandle) {
+        connectWS();
+      }
     }
   });
 
@@ -504,7 +514,7 @@ function addClaudeTerminalInstance(id, state) {
     term.loadAddon(searchAddon);
   }
 
-  // Create tab (with Claude badge)
+  // Create tab (with Claude badge + role badge)
   var tab = document.createElement('button');
   tab.className = 'term-tab';
   tab.setAttribute('role', 'tab');
@@ -513,12 +523,60 @@ function addClaudeTerminalInstance(id, state) {
   tab.style.setProperty('--tab-glow', theme.glow);
   tab.dataset.instanceId = id;
   var isRunning = state && state.status === 'running';
+
+  // Determine role from state or id pattern
+  var termRole = (state && state.role) || (id.match(/^master/) ? 'master' : id.match(/^worker/) ? 'worker' : '');
+  var masterId = state && state.config && state.config._masterId ? state.config._masterId : '';
+  tab.dataset.role = termRole;
+  tab.dataset.master = masterId;
+
+  var roleBadgeHtml = '';
+  if (termRole === 'master') {
+    roleBadgeHtml = '<span class="term-tab__role term-tab__role--master">M</span>';
+  } else if (termRole === 'worker') {
+    var masterLabel = masterId ? masterId.replace(/^master-/, 'M') : '';
+    roleBadgeHtml = '<span class="term-tab__role term-tab__role--worker">W</span>' +
+      (masterLabel ? '<span class="term-tab__master-badge">' + escHtml(masterLabel) + '</span>' : '');
+  }
+
   tab.innerHTML =
     '<span class="term-tab__dot' + (isRunning ? ' term-tab__dot--running' : ' term-tab__dot--stopped') + '"></span>' +
+    roleBadgeHtml +
     '<span class="term-tab__label">' + escHtml(id) + '</span>' +
     '<button class="term-tab__close" onclick="event.stopPropagation(); removeClaudeInstance(\'' + escHtml(id) + '\')" title="Remove" aria-label="Remove ' + escHtml(id) + '">&times;</button>';
   tab.addEventListener('click', function() { switchTab(id); });
-  tabBar.appendChild(tab);
+
+  // Insert tab grouped by role: masters first, then workers grouped by master
+  var inserted = false;
+  if (termRole === 'worker') {
+    // Find last tab for this master or last master tab, insert after
+    var tabs = tabBar.querySelectorAll('.term-tab');
+    var lastMasterTab = null;
+    var lastSameMasterWorkerTab = null;
+    for (var ti = 0; ti < tabs.length; ti++) {
+      var tRole = tabs[ti].dataset.role;
+      var tMaster = tabs[ti].dataset.master;
+      if (tRole === 'master' && tabs[ti].dataset.instanceId === masterId) lastMasterTab = tabs[ti];
+      if (tRole === 'worker' && tMaster === masterId) lastSameMasterWorkerTab = tabs[ti];
+    }
+    var insertAfter = lastSameMasterWorkerTab || lastMasterTab;
+    if (insertAfter && insertAfter.nextSibling) {
+      tabBar.insertBefore(tab, insertAfter.nextSibling);
+      inserted = true;
+    }
+  } else if (termRole === 'master') {
+    // Insert after the last master tab (before workers)
+    var allTabs = tabBar.querySelectorAll('.term-tab');
+    var lastMaster = null;
+    for (var tj = 0; tj < allTabs.length; tj++) {
+      if (allTabs[tj].dataset.role === 'master') lastMaster = allTabs[tj];
+    }
+    if (lastMaster && lastMaster.nextSibling) {
+      tabBar.insertBefore(tab, lastMaster.nextSibling);
+      inserted = true;
+    }
+  }
+  if (!inserted) tabBar.appendChild(tab);
 
   // Create panel
   var panel = document.createElement('div');
@@ -534,11 +592,33 @@ function addClaudeTerminalInstance(id, state) {
   var isAutoDispatch = state && state.autoDispatch;
   var isAutoComplete = state && state.autoComplete;
   var handoffCount = (state && state.handoffCount) || 0;
+
+  // Activity and task badges
+  var activityState = (state && state.activityState) || (isRunning ? 'idle' : 'stopped');
+  var assignedTask = state && state.assignedTask;
+  var activityBadgeHtml =
+    '<span class="term-status__activity term-status__activity--' + activityState + '" data-field="activity">' + activityState + '</span>';
+  var taskBadgeHtml = assignedTask
+    ? '<span class="term-status__task-badge" data-field="task" title="' + escHtml(assignedTask.task || assignedTask.taskId || assignedTask.id || '') + '">' +
+        '\u2699 ' + escHtml((assignedTask.task || assignedTask.taskId || assignedTask.id || '').slice(0, 20)) + '</span>'
+    : '';
+
+  // Role/master badge for status bar
+  var roleLabelHtml = '';
+  if (termRole === 'master') {
+    roleLabelHtml = '<span class="term-status__role term-status__role--master">Master</span>';
+  } else if (termRole === 'worker' && masterId) {
+    roleLabelHtml = '<span class="term-status__role term-status__role--worker">Worker \u2192 ' + escHtml(masterId) + '</span>';
+  }
+
   var statusBar = document.createElement('div');
   statusBar.className = 'term-status';
   statusBar.innerHTML =
     '<span class="term-status__dot ' + (isRunning ? 'term-status__dot--running' : 'term-status__dot--stopped') + '"></span>' +
     '<span class="term-status__id">\u2728 ' + escHtml(id) + '</span>' +
+    roleLabelHtml +
+    activityBadgeHtml +
+    taskBadgeHtml +
     '<span data-field="model">' + (state && state.model ? escHtml(state.model) : '') + '</span>' +
     '<span data-field="permissions" class="' + (state && state.dangerouslySkipPermissions ? 'term-status__perm--danger' : 'term-status__perm--safe') + '">' + permLabel + '</span>' +
     '<span data-field="handoff-badge" class="term-status__handoff-badge' + (isAutoHandoff ? ' term-status__handoff-badge--active' : '') + '" title="Auto-handoff ' + (isAutoHandoff ? 'ON' : 'OFF') + (handoffCount > 0 ? ' (' + handoffCount + ' handoffs)' : '') + '">' +
@@ -661,6 +741,10 @@ function addClaudeTerminalInstance(id, state) {
     handoffCount: state ? (state.handoffCount || 0) : 0,
     capabilities: state ? (state.capabilities || null) : null,
     taskHistory: state ? (state.taskHistory || []) : [],
+    role: termRole,
+    masterId: masterId,
+    activityState: activityState,
+    assignedTask: assignedTask || null,
     binaryWs: null,
     coord: {
       tasks: { total: 0, pending: 0, assigned: 0, running: 0, complete: 0, failed: 0, cancelled: 0 },
@@ -1925,6 +2009,9 @@ function connectWS() {
             status: 'running',
             model: msg.data.config ? msg.data.config.model : null,
             dangerouslySkipPermissions: msg.data.config ? msg.data.config.dangerouslySkipPermissions : false,
+            role: msg.data.config ? msg.data.config.role : null,
+            config: msg.data.config || null,
+            activityState: 'idle',
           });
         } else if (cId) {
           // Instance already tracked — server respawned the PTY (e.g. context-refresh or respawn API).
@@ -2118,12 +2205,23 @@ function connectWS() {
         break;
       }
 
+      // Activity state change
+      case 'claude-terminal:activity-changed': {
+        var actInst = instances.get(msg.data.terminalId);
+        if (actInst) {
+          actInst.activityState = msg.data.state || 'idle';
+          updateTerminalBadges(msg.data.terminalId);
+        }
+        break;
+      }
+
       // Terminal task bridge (Phase 19)
       case 'claude-terminal:task-assigned': {
         var taskInst = instances.get(msg.data.terminalId);
         if (taskInst) {
           taskInst.assignedTask = { taskId: msg.data.taskId, task: msg.data.task, category: msg.data.category };
           updateTaskIndicator(msg.data.terminalId);
+          updateTerminalBadges(msg.data.terminalId);
           showToast(msg.data.terminalId + ' claimed task: ' + (msg.data.task || '').slice(0, 60), 'success');
         }
         break;
@@ -2133,6 +2231,7 @@ function connectWS() {
         if (relInst) {
           relInst.assignedTask = null;
           updateTaskIndicator(msg.data.terminalId);
+          updateTerminalBadges(msg.data.terminalId);
         }
         break;
       }
@@ -2147,6 +2246,7 @@ function connectWS() {
           }
           compInst.assignedTask = null;
           updateTaskIndicator(msg.data.terminalId);
+          updateTerminalBadges(msg.data.terminalId);
           showToast(msg.data.terminalId + ' ' + msg.data.status + ' task ' + msg.data.taskId, msg.data.status === 'complete' ? 'success' : 'error');
         }
         break;
@@ -2367,6 +2467,45 @@ function updateTabDot(id) {
   var dot = inst.tab.querySelector('.term-tab__dot');
   if (dot) {
     dot.className = 'term-tab__dot ' + (inst.running ? 'term-tab__dot--running' : 'term-tab__dot--stopped');
+  }
+}
+
+// ── Update activity + task badges in status bar (M2) ─────────
+function updateTerminalBadges(id) {
+  var inst = instances.get(id);
+  if (!inst || !inst.panel) return;
+
+  var statusBar = inst.panel.querySelector('.term-status');
+  if (!statusBar) return;
+
+  // Activity badge
+  var actEl = statusBar.querySelector('[data-field="activity"]');
+  if (actEl) {
+    var state = inst.activityState || 'idle';
+    actEl.className = 'term-status__activity term-status__activity--' + state;
+    actEl.textContent = state;
+  }
+
+  // Task badge
+  var taskEl = statusBar.querySelector('[data-field="task"]');
+  if (inst.assignedTask) {
+    var taskLabel = inst.assignedTask.task || inst.assignedTask.taskId || inst.assignedTask.id || '';
+    if (!taskEl) {
+      taskEl = document.createElement('span');
+      taskEl.className = 'term-status__task-badge';
+      taskEl.setAttribute('data-field', 'task');
+      var activityEl = statusBar.querySelector('[data-field="activity"]');
+      if (activityEl && activityEl.nextSibling) {
+        statusBar.insertBefore(taskEl, activityEl.nextSibling);
+      }
+    }
+    if (taskEl) {
+      taskEl.textContent = '\u2699 ' + taskLabel.slice(0, 20);
+      taskEl.title = taskLabel;
+      taskEl.style.display = '';
+    }
+  } else if (taskEl) {
+    taskEl.style.display = 'none';
   }
 }
 

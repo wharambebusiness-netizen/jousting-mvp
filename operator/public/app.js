@@ -274,11 +274,14 @@ document.body.addEventListener('htmx:beforeSwap', function () {
     var pageId = currentMain.getAttribute('data-page-id');
     var pagePath = '/' + pageId;
     if (CACHEABLE_PAGES.indexOf(pagePath) !== -1) {
+      // Save scroll position before detaching
+      var scrollTop = currentMain.scrollTop || document.documentElement.scrollTop || 0;
       // Detach to JS variable (preserves xterm instances)
       currentMain.remove();
       _pageCache[pagePath] = {
         main: currentMain,
-        cleanups: _pageCleanups.slice()  // save cleanups for later disposal
+        cleanups: _pageCleanups.slice(),  // save cleanups for later disposal
+        scrollTop: scrollTop
       };
       _pageCleanups = [];
       return; // skip running cleanups for cached pages
@@ -320,7 +323,17 @@ function restoreCachedPage(pagePath) {
   history.pushState({}, '', pagePath);
   updateSidebarActiveLink();
 
-  // Notify page scripts to refit terminals
+  // Restore scroll position
+  var savedScroll = cached.scrollTop || 0;
+  requestAnimationFrame(function() {
+    (cached.main || document.documentElement).scrollTop = savedScroll;
+  });
+
+  // Add fade-in animation class
+  cached.main.classList.add('page--restored');
+  setTimeout(function() { cached.main.classList.remove('page--restored'); }, 250);
+
+  // Notify page scripts to refit terminals and reconnect WS
   document.dispatchEvent(new CustomEvent('terminal-page-restored', { detail: { page: pagePath } }));
 
   return true;
