@@ -17,6 +17,12 @@
   var MAX_MASTERS = 4;
   var masterSystemPrompt = '';  // Cached master-context.md
 
+  // ── Master Strip State ───────────────────────────────────
+  var masterStripData = {};      // { masterId: { id, alive, isStale, domain, workerCount, currentFocus, staleMs, costUsd } }
+
+  // ── Alert State ─────────────────────────────────────────
+  var activeAlerts = {};         // { key: { type, message, since } }
+
   // ── Worker State ─────────────────────────────────────────
   var workers = {};             // { id: { ...terminalData } }
   var seenWorkers = {};         // { id: { ...terminalData, _stopped: bool } } — persists across refreshes
@@ -67,8 +73,6 @@
 
   function updateMasterCount() {
     var count = getMasterCount();
-    var el = document.getElementById('master-count');
-    if (el) el.textContent = count + '/' + MAX_MASTERS + ' masters';
     var statusEl = document.getElementById('status-masters');
     if (statusEl) statusEl.textContent = count + '/' + MAX_MASTERS + ' masters';
 
@@ -84,48 +88,25 @@
       }
     }
 
-    // Show/hide tabs bar and placeholder
-    var tabsBar = document.getElementById('master-tabs-bar');
+    // Show/hide strip and placeholder
+    var strip = document.getElementById('master-strip');
     var placeholder = document.getElementById('master-placeholder');
-    if (tabsBar) tabsBar.style.display = count > 0 ? '' : 'none';
+    if (strip) strip.style.display = count > 0 ? '' : 'none';
     if (placeholder) placeholder.style.display = count > 0 ? 'none' : '';
 
     // Show/hide stop button based on active master
     var stopBtn = document.getElementById('stop-master-btn');
     if (stopBtn) stopBtn.style.display = activeMasterId ? '' : 'none';
 
-    // Disable add button at max
-    var addBtn = document.getElementById('add-master-btn');
-    if (addBtn) addBtn.disabled = count >= MAX_MASTERS;
+    // Re-render the strip cells
+    renderMasterStripCells();
   }
 
   // ── Master Terminal Creation ──────────────────────────────
 
   function addMasterTab(id, colorIdx) {
-    var tabsEl = document.getElementById('master-tabs');
     var panelsEl = document.getElementById('master-panels');
-    if (!tabsEl || !panelsEl) return;
-
-    // Create tab button
-    var tab = document.createElement('button');
-    tab.className = 'master-tab';
-    tab.dataset.masterId = id;
-    tab.style.borderColor = getMasterColor(colorIdx);
-    tab.innerHTML = '<span class="master-tab-dot" style="background:' + getMasterColor(colorIdx) + '"></span> ' + getMasterLabel(id);
-    tab.onclick = function() { switchToMaster(id); };
-
-    // Add close button on the tab
-    var closeBtn = document.createElement('span');
-    closeBtn.className = 'master-tab-close';
-    closeBtn.textContent = '\u00d7';
-    closeBtn.title = 'Stop ' + getMasterLabel(id);
-    closeBtn.onclick = function(e) {
-      e.stopPropagation();
-      stopMaster(id);
-    };
-    tab.appendChild(closeBtn);
-
-    tabsEl.appendChild(tab);
+    if (!panelsEl) return;
 
     // Create terminal panel
     var panel = document.createElement('div');
@@ -163,12 +144,13 @@
       fitAddon: fitAddon,
       binaryWs: null,
       panel: panel,
-      tab: tab,
       colorIdx: colorIdx,
       onDataDisposable: null,
       onResizeDisposable: null,
       reconnectTimer: null
     };
+
+    renderMasterStripCells();
   }
 
   function removeMasterTab(id) {
@@ -189,8 +171,7 @@
     // Dispose terminal
     if (entry.terminal) { try { entry.terminal.dispose(); } catch(_) {} }
 
-    // Remove DOM elements
-    if (entry.tab) entry.tab.remove();
+    // Remove panel DOM element
     if (entry.panel) entry.panel.remove();
 
     delete masters[id];
@@ -216,7 +197,6 @@
       if (!entry) continue;
       var isActive = mId === id;
       entry.panel.style.display = isActive ? '' : 'none';
-      entry.tab.classList.toggle('active', isActive);
       if (isActive) {
         setTimeout(function() {
           try { entry.fitAddon.fit(); } catch(_) {}
@@ -228,6 +208,8 @@
     // Update stop button visibility
     var stopBtn = document.getElementById('stop-master-btn');
     if (stopBtn) stopBtn.style.display = id ? '' : 'none';
+
+    renderMasterStripCells();
   }
 
   function connectMasterBinaryWs(id) {
@@ -241,7 +223,8 @@
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = function() {
-      entry.tab.classList.remove('disconnected');
+      entry._disconnected = false;
+      renderMasterStripCells();
       // Send initial resize
       if (entry.fitAddon) {
         var dims = entry.fitAddon.proposeDimensions();
@@ -269,7 +252,8 @@
     };
 
     ws.onclose = function() {
-      entry.tab.classList.add('disconnected');
+      entry._disconnected = true;
+      renderMasterStripCells();
       if (entry.terminal) {
         entry.terminal.write('\r\n\x1b[33m[' + getMasterLabel(id) + ' disconnected]\x1b[0m\r\n');
       }
@@ -414,8 +398,9 @@
     var entry = masters[id];
     if (!entry) return;
 
-    // Update tab to show disconnected
-    if (entry.tab) entry.tab.classList.add('disconnected');
+    // Mark disconnected for strip rendering
+    entry._disconnected = true;
+    renderMasterStripCells();
 
     // Hide prompt input if this is active master
     if (activeMasterId === id) {
@@ -444,7 +429,8 @@
             }
 
             connectMasterBinaryWs(id);
-            if (entry.tab) entry.tab.classList.remove('disconnected');
+            entry._disconnected = false;
+            renderMasterStripCells();
             if (window.showToast) window.showToast(getMasterLabel(id) + ' auto-reconnected', 'success');
             return;
           }
@@ -906,47 +892,7 @@
   }
 
   function renderWorkerPanel(workerList) {
-    var list = document.getElementById('worker-list');
-    var empty = document.getElementById('worker-empty');
-    if (!list) return;
-
-    if (workerList.length === 0) {
-      if (empty) empty.style.display = '';
-      // Remove stale cards but preserve empty message
-      var cards = list.querySelectorAll('.worker-card');
-      cards.forEach(function(c) { c.remove(); });
-      return;
-    }
-
-    if (empty) empty.style.display = 'none';
-
-    // DOM-diff: track which cards exist, add/update/remove as needed
-    var existingCards = {};
-    list.querySelectorAll('.worker-card').forEach(function(card) {
-      existingCards[card.getAttribute('data-id')] = card;
-    });
-
-    var desiredIds = {};
-    workerList.forEach(function(w) {
-      desiredIds[w.id] = true;
-
-      if (existingCards[w.id]) {
-        // Update existing card metadata (don't recreate — preserves xterm)
-        updateWorkerCardMeta(existingCards[w.id], w);
-      } else {
-        // Create new card
-        var card = createWorkerCard(w);
-        list.appendChild(card);
-      }
-    });
-
-    // Remove cards no longer in list
-    Object.keys(existingCards).forEach(function(id) {
-      if (!desiredIds[id]) {
-        existingCards[id].remove();
-        disposeWorkerTerminal(id);
-      }
-    });
+    renderWorkerGroups(workerList);
   }
 
   /**
@@ -1628,12 +1574,364 @@
     };
   }
 
+  // ── Master Strip ──────────────────────────────────────────
+
+  async function refreshMasterStrip() {
+    try {
+      var results = await Promise.all([
+        fetch('/api/master-coordination/status').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetch('/api/coordination/costs').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+      ]);
+
+      var statusData = results[0];
+      var costData = results[1];
+
+      masterStripData = {};
+      if (statusData && statusData.masters) {
+        statusData.masters.forEach(function(m) {
+          var costUsd = 0;
+          if (costData && costData.workers) {
+            // Sum costs for workers owned by this master
+            Object.keys(costData.workers).forEach(function(wid) {
+              var w = workers[wid] || seenWorkers[wid];
+              if (w && w.config && w.config._masterId === m.id) {
+                costUsd += costData.workers[wid].totalUsd || 0;
+              }
+            });
+          }
+          masterStripData[m.id] = {
+            id: m.id,
+            alive: m.alive,
+            isStale: m.isStale,
+            staleMs: m.staleMs,
+            domain: m.domain,
+            workerCount: m.workerCount,
+            currentFocus: m.currentFocus,
+            claimedFiles: m.claimedFiles || [],
+            recentDiscoveries: m.recentDiscoveries || [],
+            costUsd: costUsd
+          };
+        });
+      }
+
+      renderMasterStripCells();
+      checkAlerts();
+    } catch (e) { /* non-critical */ }
+  }
+
+  function renderMasterStripCells() {
+    var container = document.getElementById('master-strip-cells');
+    if (!container) return;
+
+    var html = '';
+    var masterIds = Object.keys(masters);
+
+    // Render active master cells
+    for (var i = 0; i < masterIds.length; i++) {
+      var id = masterIds[i];
+      var entry = masters[id];
+      var data = masterStripData[id] || {};
+      var isActive = id === activeMasterId;
+      var colorIdx = entry ? entry.colorIdx : i;
+      var color = getMasterColor(colorIdx);
+      var isDisconnected = entry && entry._disconnected;
+
+      var dotClass = 'master-cell__dot';
+      if (isDisconnected) dotClass += ' master-cell__dot--dead';
+      else if (data.isStale) dotClass += ' master-cell__dot--stale';
+      else dotClass += ' master-cell__dot--alive';
+
+      var focusText = '';
+      if (data.currentFocus) focusText = escapeHtml(String(data.currentFocus).slice(0, 40));
+      else if (data.domain) focusText = escapeHtml(data.domain);
+      else focusText = isDisconnected ? 'disconnected' : 'waiting...';
+
+      var statsLine = '';
+      statsLine += (data.workerCount || 0) + 'w';
+      if (data.costUsd > 0) statsLine += '  $' + data.costUsd.toFixed(2);
+      var ageS = data.staleMs ? Math.round(data.staleMs / 1000) : 0;
+      if (ageS > 0) statsLine += '  ' + ageS + 's';
+
+      html += '<div class="master-cell' + (isActive ? ' master-cell--active' : '') + (isDisconnected ? ' master-cell--disconnected' : '') + '" style="border-left-color:' + color + '" data-master-id="' + escapeHtml(id) + '">';
+      html += '<div class="master-cell__top"><span class="' + dotClass + '"></span> <strong>' + getMasterLabel(id) + '</strong>';
+      html += '<span class="master-cell__close" title="Stop ' + getMasterLabel(id) + '">&times;</span>';
+      html += '</div>';
+      html += '<div class="master-cell__focus">' + focusText + '</div>';
+      html += '<div class="master-cell__stats">' + escapeHtml(statsLine) + '</div>';
+      html += '</div>';
+    }
+
+    // Empty slots (up to MAX_MASTERS)
+    for (var j = masterIds.length; j < MAX_MASTERS; j++) {
+      html += '<div class="master-cell master-cell--empty" data-slot="' + (j + 1) + '">';
+      html += '<span class="master-cell__spawn">+ Spawn M' + (j + 1) + '</span>';
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+
+    // Attach click handlers
+    container.querySelectorAll('.master-cell:not(.master-cell--empty)').forEach(function(cell) {
+      var mId = cell.dataset.masterId;
+      cell.addEventListener('click', function(e) {
+        if (e.target.classList.contains('master-cell__close')) {
+          e.stopPropagation();
+          stopMaster(mId);
+          return;
+        }
+        switchToMaster(mId);
+      });
+    });
+
+    container.querySelectorAll('.master-cell--empty').forEach(function(cell) {
+      cell.addEventListener('click', function() {
+        spawnMaster();
+      });
+    });
+  }
+
+  // ── Alert Banner ────────────────────────────────────────
+
+  function addAlert(key, type, message) {
+    activeAlerts[key] = { type: type, message: message, since: Date.now() };
+    renderAlertBanner();
+  }
+
+  function removeAlert(key) {
+    if (activeAlerts[key]) {
+      delete activeAlerts[key];
+      renderAlertBanner();
+    }
+  }
+
+  function renderAlertBanner() {
+    var banner = document.getElementById('alert-banner');
+    var list = document.getElementById('alert-list');
+    if (!banner || !list) return;
+
+    var keys = Object.keys(activeAlerts);
+    if (keys.length === 0) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    banner.style.display = '';
+    var html = '';
+    var ICONS = { error: '\u26a0', warning: '\u26a0', info: '\u2139' };
+    keys.forEach(function(key) {
+      var a = activeAlerts[key];
+      var icon = ICONS[a.type] || '\u2022';
+      var ageSec = Math.round((Date.now() - a.since) / 1000);
+      html += '<div class="console-alert console-alert--' + escapeHtml(a.type) + '">';
+      html += '<span class="console-alert__icon">' + icon + '</span>';
+      html += '<span class="console-alert__msg">' + escapeHtml(a.message) + '</span>';
+      if (ageSec > 5) html += '<span class="console-alert__age">' + ageSec + 's ago</span>';
+      html += '<span class="console-alert__dismiss" data-alert-key="' + escapeHtml(key) + '">&times;</span>';
+      html += '</div>';
+    });
+    list.innerHTML = html;
+
+    // Dismiss handlers
+    list.querySelectorAll('.console-alert__dismiss').forEach(function(el) {
+      el.addEventListener('click', function() {
+        removeAlert(el.dataset.alertKey);
+      });
+    });
+  }
+
+  function checkAlerts() {
+    // Stale masters
+    var stripIds = Object.keys(masterStripData);
+    for (var i = 0; i < stripIds.length; i++) {
+      var m = masterStripData[stripIds[i]];
+      var key = 'stale:' + m.id;
+      if (m.isStale) {
+        addAlert(key, 'warning', getMasterLabel(m.id) + ' heartbeat stale (' + Math.round(m.staleMs / 1000) + 's) \u2014 may need intervention');
+      } else {
+        removeAlert(key);
+      }
+    }
+
+    // Stuck workers (waiting + assigned task + idle >60s)
+    var workerIds = Object.keys(workers);
+    for (var j = 0; j < workerIds.length; j++) {
+      var w = workers[workerIds[j]];
+      if (!w || w.status !== 'running') continue;
+      var wKey = 'stuck:' + w.id;
+      if (w.activityState === 'waiting' && w.assignedTask) {
+        var lastAct = w.lastActivityAt ? new Date(w.lastActivityAt).getTime() : 0;
+        var idleSec = lastAct > 0 ? Math.round((Date.now() - lastAct) / 1000) : 0;
+        if (idleSec > 60) {
+          var taskLabel = w.assignedTask.task || w.assignedTask.taskId || w.assignedTask.id || '';
+          addAlert(wKey, 'warning', w.id + ' stuck waiting (' + idleSec + 's, task: "' + taskLabel + '")');
+        } else {
+          removeAlert(wKey);
+        }
+      } else {
+        removeAlert(wKey);
+      }
+    }
+  }
+
+  // ── Worker Grouping ────────────────────────────────────
+
+  function renderWorkerGroups(workerList) {
+    var list = document.getElementById('worker-list');
+    var empty = document.getElementById('worker-empty');
+    if (!list) return;
+
+    if (workerList.length === 0) {
+      if (empty) empty.style.display = '';
+      // Remove stale groups and cards
+      list.querySelectorAll('.worker-group').forEach(function(g) { g.remove(); });
+      list.querySelectorAll('.worker-card').forEach(function(c) { c.remove(); });
+      return;
+    }
+
+    if (empty) empty.style.display = 'none';
+
+    // Group workers by masterId
+    var groups = {};      // { masterId: [worker, ...] }
+    var unassigned = [];
+    workerList.forEach(function(w) {
+      var mid = w.config && w.config._masterId;
+      if (mid) {
+        if (!groups[mid]) groups[mid] = [];
+        groups[mid].push(w);
+      } else {
+        unassigned.push(w);
+      }
+    });
+
+    // Track desired group order: master groups first, then unassigned
+    var groupOrder = Object.keys(groups).sort();
+    if (unassigned.length > 0) groupOrder.push('__unassigned__');
+
+    // Track existing groups
+    var existingGroups = {};
+    list.querySelectorAll('.worker-group').forEach(function(g) {
+      existingGroups[g.dataset.groupId] = g;
+    });
+
+    // Render each group
+    var desiredGroupIds = {};
+    groupOrder.forEach(function(gId) {
+      desiredGroupIds[gId] = true;
+      var workerArr = gId === '__unassigned__' ? unassigned : groups[gId];
+      var groupEl = existingGroups[gId];
+
+      if (!groupEl) {
+        groupEl = document.createElement('div');
+        groupEl.className = 'worker-group';
+        groupEl.dataset.groupId = gId;
+
+        var header = document.createElement('div');
+        header.className = 'worker-group__header';
+        header.addEventListener('click', function() {
+          var cards = groupEl.querySelector('.worker-group__cards');
+          if (cards) cards.classList.toggle('worker-group__cards--collapsed');
+          var toggle = header.querySelector('.worker-group__toggle');
+          if (toggle) toggle.textContent = cards && cards.classList.contains('worker-group__cards--collapsed') ? '\u25b6' : '\u25bc';
+        });
+        groupEl.appendChild(header);
+
+        var cardsContainer = document.createElement('div');
+        cardsContainer.className = 'worker-group__cards';
+        groupEl.appendChild(cardsContainer);
+
+        list.appendChild(groupEl);
+      }
+
+      // Update group header
+      updateWorkerGroupHeader(groupEl, gId, workerArr);
+
+      // DOM-diff cards inside group
+      var cardsEl = groupEl.querySelector('.worker-group__cards');
+      if (!cardsEl) return;
+
+      var existingCards = {};
+      cardsEl.querySelectorAll('.worker-card').forEach(function(card) {
+        existingCards[card.getAttribute('data-id')] = card;
+      });
+
+      var desiredCardIds = {};
+      workerArr.forEach(function(w) {
+        desiredCardIds[w.id] = true;
+        if (existingCards[w.id]) {
+          updateWorkerCardMeta(existingCards[w.id], w);
+          // Move into this group if not already there
+          if (existingCards[w.id].parentNode !== cardsEl) {
+            cardsEl.appendChild(existingCards[w.id]);
+          }
+        } else {
+          // Check if card exists elsewhere in the list (ungrouped or different group)
+          var existingCard = list.querySelector('.worker-card[data-id="' + w.id + '"]');
+          if (existingCard) {
+            updateWorkerCardMeta(existingCard, w);
+            cardsEl.appendChild(existingCard); // Move preserves xterm
+          } else {
+            var card = createWorkerCard(w);
+            cardsEl.appendChild(card);
+          }
+        }
+      });
+
+      // Remove cards no longer in this group
+      Object.keys(existingCards).forEach(function(cid) {
+        if (!desiredCardIds[cid]) {
+          existingCards[cid].remove();
+          disposeWorkerTerminal(cid);
+        }
+      });
+    });
+
+    // Remove groups no longer needed
+    Object.keys(existingGroups).forEach(function(gId) {
+      if (!desiredGroupIds[gId]) {
+        // Dispose worker terminals in the removed group
+        existingGroups[gId].querySelectorAll('.worker-card').forEach(function(c) {
+          disposeWorkerTerminal(c.getAttribute('data-id'));
+        });
+        existingGroups[gId].remove();
+      }
+    });
+
+    // Remove any orphaned top-level cards (not in a group)
+    list.querySelectorAll(':scope > .worker-card').forEach(function(c) { c.remove(); });
+  }
+
+  function updateWorkerGroupHeader(groupEl, groupId, workerArr) {
+    var header = groupEl.querySelector('.worker-group__header');
+    if (!header) return;
+
+    var isMasterGroup = groupId !== '__unassigned__';
+    var data = isMasterGroup ? masterStripData[groupId] : null;
+    var colorIdx = 0;
+    if (isMasterGroup) {
+      var match = groupId.match(/master-(\d+)/);
+      colorIdx = match ? parseInt(match[1]) - 1 : 0;
+    }
+    var color = isMasterGroup ? getMasterColor(Math.max(0, colorIdx)) : '#64748b';
+
+    var activeCount = workerArr.filter(function(w) { return w.activityState === 'active' || w.status === 'running'; }).length;
+    var label = isMasterGroup ? getMasterLabel(groupId) : 'Unassigned';
+    var domain = data && data.domain ? ' \u2014 ' + escapeHtml(data.domain) : '';
+
+    var cardsEl = groupEl.querySelector('.worker-group__cards');
+    var isCollapsed = cardsEl && cardsEl.classList.contains('worker-group__cards--collapsed');
+
+    header.innerHTML = '<span class="worker-group__toggle">' + (isCollapsed ? '\u25b6' : '\u25bc') + '</span>' +
+      '<span class="worker-group__dot" style="background:' + color + '"></span>' +
+      '<span class="worker-group__label">' + escapeHtml(label) + domain + '</span>' +
+      '<span class="worker-group__count">' + workerArr.length + ' worker' + (workerArr.length !== 1 ? 's' : '') + ' (' + activeCount + ' active)</span>';
+  }
+
   // ── WebSocket Events ──────────────────────────────────────
 
   function setupWsEvents() {
     if (typeof createWS !== 'function') return;
 
-    createWS(['claude-terminal:*', 'coord:task-*'], function(msg) {
+    createWS(['claude-terminal:*', 'coord:task-*', 'coord:budget-*', 'observer:*', 'cost:*'], function(msg) {
       try {
         var type = msg.type || msg.event || '';
         var data = msg.data || {};
@@ -1670,6 +1968,30 @@
           if (exitId && masters[exitId]) {
             // Master exited — the disconnect handler will try reconnect
             // If it times out, removeMasterTab will be called
+          }
+        }
+
+        // Observer events → alert banner
+        if (type === 'coord:budget-warning') {
+          addAlert('budget-warning', 'warning', 'Budget: ' + (data.message || 'approaching limit'));
+        } else if (type === 'coord:budget-exceeded') {
+          addAlert('budget-exceeded', 'error', 'Budget exceeded — spawning halted');
+        } else if (type === 'observer:circuit-open') {
+          addAlert('observer-circuit', 'error', 'Circuit breaker open: ' + (data.crashes || 0) + ' crashes in ' + Math.round((data.windowMs || 0) / 1000) + 's');
+        } else if (type === 'observer:circuit-closed') {
+          removeAlert('observer-circuit');
+        } else if (type === 'observer:budget-halt') {
+          addAlert('observer-budget', 'error', 'Observer halted swarm: cost at ' + Math.round((data.pct || 0) * 100) + '% of budget');
+        } else if (type === 'observer:action') {
+          appendLiveFeedEntry('observer', data.action || data.rule, null, data.detail);
+        }
+
+        // Observer status indicator
+        if (type === 'observer:started' || type === 'observer:stopped') {
+          var obsEl = document.getElementById('observer-status');
+          if (obsEl) {
+            var isRunning = type === 'observer:started';
+            obsEl.className = 'console-statusbar__observer' + (isRunning ? ' observer--active' : ' observer--inactive');
           }
         }
       } catch(e) { /* ignore parse errors */ }
@@ -1823,10 +2145,9 @@
     // Initialize multi-master — load existing masters
     await initMultiMaster();
 
-    // Button handlers (Phase 66: start-master-btn now spawns a new master)
+    // Button handlers
     document.getElementById('start-master-btn').addEventListener('click', spawnMaster);
     document.getElementById('stop-master-btn').addEventListener('click', function() { stopMaster(); });
-    document.getElementById('add-master-btn').addEventListener('click', spawnMaster);
     document.getElementById('spawn-worker-btn').addEventListener('click', spawnWorker);
     document.getElementById('dismiss-all-btn').addEventListener('click', dismissAllStopped);
 
@@ -1866,6 +2187,20 @@
     // Initial worker refresh + periodic polling
     refreshWorkers();
     workerRefreshTimer = setInterval(refreshWorkers, 5000);
+
+    // Master strip periodic refresh
+    refreshMasterStrip();
+    setInterval(refreshMasterStrip, 5000);
+
+    // Fetch initial observer status
+    fetch('/api/observer/status').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+      if (d) {
+        var obsEl = document.getElementById('observer-status');
+        if (obsEl) {
+          obsEl.className = 'console-statusbar__observer' + (d.running ? ' observer--active' : ' observer--inactive');
+        }
+      }
+    }).catch(function() {});
 
     // Real-time WS events + live feed
     setupWsEvents();

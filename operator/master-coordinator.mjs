@@ -167,6 +167,9 @@ export function createMasterCoordinator(ctx) {
         domain: value.domain || null,
         claimedTasks: value.claimedTasks || 0,
         workerCount: value.workerCount || 0,
+        currentFocus: value.currentFocus || null,
+        claimedFiles: value.claimedFiles || [],
+        recentDiscoveries: value.recentDiscoveries || [],
       });
     }
 

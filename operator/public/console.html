@@ -45,6 +45,10 @@
       </div>
     </header>
 
+    <div class="console-alerts" id="alert-banner" style="display:none">
+      <div class="console-alerts__list" id="alert-list"></div>
+    </div>
+
     <div class="console-layout">
       <!-- Master Terminal Panel -->
       <div class="console-master" id="master-panel">
@@ -55,13 +59,11 @@
             <p class="console-master__placeholder-hint">Masters plan work, create tasks, and coordinate worker terminals. Up to 4 masters supported.</p>
           </div>
         </div>
-        <!-- Master Tabs (Phase 66) -->
-        <div class="master-tabs-bar" id="master-tabs-bar" style="display:none">
-          <div class="master-tabs" id="master-tabs">
-            <!-- Tabs populated by JS -->
+        <!-- Master Command Strip -->
+        <div class="master-strip" id="master-strip" style="display:none">
+          <div class="master-strip__cells" id="master-strip-cells">
+            <!-- Cells populated by JS -->
           </div>
-          <button class="master-add-btn" id="add-master-btn" title="Add master (max 4)">+ Master</button>
-          <span class="master-count" id="master-count">0/4 masters</span>
         </div>
         <div class="master-panels" id="master-panels">
           <!-- Terminal panels populated by JS -->
@@ -143,6 +145,7 @@
         <span id="status-masters">0/4 masters</span>
         <span id="cost-display">Cost: $0.00</span>
         <span id="worker-count-display">Workers: 0</span>
+        <span class="console-statusbar__observer" id="observer-status" title="Observer watchdog">&#x25cf; Observer</span>
       </div>
     </div>
   </main>

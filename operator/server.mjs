@@ -82,6 +82,7 @@ import { createWorktreeManager } from './coordination/worktree-manager.mjs';
 import { createMasterCoordinator } from './master-coordinator.mjs';
 import { createMcpServer } from './mcp-server.mjs';
 import { createMcpRoutes } from './routes/mcp.mjs';
+import { createObserver } from './observer.mjs';
 import { EventBus } from '../shared/event-bus.mjs';
 
 // -- Constants -----------------------------------------------------------
@@ -514,6 +515,18 @@ export function createApp(options = {}) {
     masterCoordinator = createMasterCoordinator({ events, sharedMemory, claudePool, coordinator, log: () => {} });
   }
 
+  // Observer watchdog -- rule-based monitoring (stuck workers, circuit breaker, budget)
+  const observer = createObserver({
+    events,
+    claudePool,
+    coordinator,
+    costAggregator: coordinator && coordinator.costAggregator ? coordinator.costAggregator : null,
+    masterCoordinator,
+    sharedMemory,
+    log: () => {},
+  });
+  observer.start();
+
   // Terminal session store (Phase 48) -- session recording, resume, templates
   let terminalSessionStore = null;
   if (options.terminalSessionStore && typeof options.terminalSessionStore === 'object') {
@@ -682,6 +695,21 @@ ${raw.trim()}`;
       return res.json({ masters: [], totalMasters: 0, activeMasters: 0, staleMasters: 0 });
     }
     res.json(masterCoordinator.getMultiMasterStatus());
+  });
+
+  // Observer watchdog API routes
+  app.get('/api/observer/status', (_req, res) => {
+    res.json(observer.getStatus());
+  });
+  app.post('/api/observer/toggle', (_req, res) => {
+    const status = observer.getStatus();
+    if (status.running) {
+      observer.stop();
+      res.json({ running: false });
+    } else {
+      observer.start();
+      res.json({ running: true });
+    }
   });
 
   // MCP server (Phase 66) -- Model Context Protocol tool server
@@ -864,6 +892,9 @@ ${raw.trim()}`;
     // Clean up webhook manager
     if (webhookManager) webhookManager.destroy();
 
+    // Clean up observer
+    if (observer) observer.destroy();
+
     // Clean up master coordinator (Phase 66)
     if (masterCoordinator) masterCoordinator.destroy();
 
@@ -907,7 +938,7 @@ ${raw.trim()}`;
     });
   }
 
-  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, csrf, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, masterCoordinator, mcpServer, close };
+  return { app, server, events, wss, pool, coordinator, claudePool, sharedMemory, messageBus, auth, csrf, logger, migrationRunner, retentionPolicy, auditLog, deadLetterQueue, healthChecker, metricsCollector, webhookManager, preferences, notifications, responseCache, costForecaster, openApiGenerator, secretVault, searchEngine, terminalSessionStore, requestTimer, backupManager, settings, masterCoordinator, mcpServer, observer, close };
 }
 
 // -- CLI Entry Point -----------------------------------------------------
